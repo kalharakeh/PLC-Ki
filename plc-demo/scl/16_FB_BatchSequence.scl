@@ -49,6 +49,7 @@ VERSION : 0.1
    END_VAR
 
    VAR
+      StepNo : Int;   // Current step (kept here; copied to the Step output)
       LastStep : Int := -1;   // Step in the previous cycle (to restart the step timer)
       Paused : Bool;   // Set by Stop, cleared by Start
       TempAtStepStart : Real;   // Temperature when step 30 began
@@ -71,73 +72,75 @@ BEGIN
 	#Halted := #AnyFault OR NOT #EStopOK OR #Paused OR NOT #Auto;
 	
 	// --- Step timer: restarts whenever the step changes, frozen while halted ---
-	#tStep(IN := (#Step = #LastStep) AND NOT #Halted, PT := T#24D);
-	IF #Step <> #LastStep THEN
+	#tStep(IN := (#StepNo = #LastStep) AND NOT #Halted, PT := T#24D);
+	IF #StepNo <> #LastStep THEN
 	    #TempAtStepStart := #Temp;
 	END_IF;
-	#LastStep := #Step;
+	#LastStep := #StepNo;
 	#StepTime := #tStep.ET;
 	
 	// --- Start checks (only in step 0) ---
-	#StartNotAuto := (#Step = 0) AND #Start AND NOT #Auto;
-	#StartTankNotEmpty := (#Step = 0) AND #Start AND (#Level > "DB_Recipe".DrainLevel);
-	#StartRecipeInvalid := (#Step = 0) AND #Start AND NOT #RecipeValid;
+	#StartNotAuto := (#StepNo = 0) AND #Start AND NOT #Auto;
+	#StartTankNotEmpty := (#StepNo = 0) AND #Start AND (#Level > "DB_Recipe".DrainLevel);
+	#StartRecipeInvalid := (#StepNo = 0) AND #Start AND NOT #RecipeValid;
 	
 	// --- Transitions ---
 	#BatchDone := FALSE;
 	IF NOT #Halted THEN
-	    CASE #Step OF
+	    CASE #StepNo OF
 	        0:  // Idle
 	            IF #Start AND #Auto AND NOT #AnyFault AND #RecipeValid AND (#Level <= "DB_Recipe".DrainLevel) THEN
-	                #Step := 10;
+	                #StepNo := 10;
 	            END_IF;
 	        10: // Fill A
 	            IF #Level >= "DB_Recipe".LevelA THEN
-	                #Step := 20;
+	                #StepNo := 20;
 	            END_IF;
 	        20: // Fill B
 	            IF #Level >= "DB_Recipe".LevelB THEN
-	                #Step := 30;
+	                #StepNo := 30;
 	            END_IF;
 	        30: // Mix and heat
 	            IF (#Temp >= "DB_Recipe".TempSP) AND (#StepTime >= "DB_Recipe".MixTime) THEN
-	                #Step := 40;
+	                #StepNo := 40;
 	            END_IF;
 	        40: // Hold
 	            IF #FillerReady THEN
-	                #Step := 50;
+	                #StepNo := 50;
 	            END_IF;
 	        50: // Drain
 	            IF #Level <= "DB_Recipe".DrainLevel THEN
-	                #Step := 60;
+	                #StepNo := 60;
 	            END_IF;
 	        60: // Done
 	            #BatchDone := TRUE;
-	            #Step := 0;
+	            #StepNo := 0;
 	        ELSE
-	            #Step := 0;
+	            #StepNo := 0;
 	    END_CASE;
 	END_IF;
 	
-	#Running := #Step > 0;
+	#Running := #StepNo > 0;
 	
 	// --- Actions (all off while halted) ---
-	#OpenXV101 := NOT #Halted AND (#Step = 10);
-	#OpenXV102 := NOT #Halted AND (#Step = 20);
-	#RunM201 := NOT #Halted AND ((#Step = 30) OR (#Step = 40));
-	IF #Step = 30 THEN
+	#OpenXV101 := NOT #Halted AND (#StepNo = 10);
+	#OpenXV102 := NOT #Halted AND (#StepNo = 20);
+	#RunM201 := NOT #Halted AND ((#StepNo = 30) OR (#StepNo = 40));
+	IF #StepNo = 30 THEN
 	    #SpeedM201 := "DB_Recipe".MixSpeed;
 	ELSE
 	    #SpeedM201 := "DB_Recipe".HoldSpeed;
 	END_IF;
-	#HeatE301 := NOT #Halted AND (#Step = 30) AND (#Temp < "DB_Recipe".TempSP);
-	#RunP401 := NOT #Halted AND (#Step = 50);
+	#HeatE301 := NOT #Halted AND (#StepNo = 30) AND (#Temp < "DB_Recipe".TempSP);
+	#RunP401 := NOT #Halted AND (#StepNo = 50);
 	
 	// --- Step supervision ---
-	#TimeoutStep10 := (#Step = 10) AND (#StepTime > T#120S);
-	#TimeoutStep20 := (#Step = 20) AND (#StepTime > T#120S);
-	#TimeoutStep30 := (#Step = 30) AND (#StepTime > T#600S);
-	#TimeoutStep50 := (#Step = 50) AND (#StepTime > T#180S);
-	#WaitFillerTooLong := (#Step = 40) AND (#StepTime > T#60S) AND NOT #FillerReady;
-	#NoHeating := (#Step = 30) AND #HeatE301 AND (#StepTime > T#60S) AND (#Temp < #TempAtStepStart + 2.0);
+	#TimeoutStep10 := (#StepNo = 10) AND (#StepTime > T#120S);
+	#TimeoutStep20 := (#StepNo = 20) AND (#StepTime > T#120S);
+	#TimeoutStep30 := (#StepNo = 30) AND (#StepTime > T#600S);
+	#TimeoutStep50 := (#StepNo = 50) AND (#StepTime > T#180S);
+	#WaitFillerTooLong := (#StepNo = 40) AND (#StepTime > T#60S) AND NOT #FillerReady;
+	#NoHeating := (#StepNo = 30) AND #HeatE301 AND (#StepTime > T#60S) AND (#Temp < #TempAtStepStart + 2.0);
+	
+	#Step := #StepNo;
 END_FUNCTION_BLOCK

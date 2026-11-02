@@ -19,7 +19,7 @@ VERSION : 0.1
    END_VAR
 
    VAR_TEMP
-      dt : Real;
+      deltaT : Real;   // Time since the last call [s] (the name "dt" is reserved: DATE_AND_TIME)
       flowIn : Real;
       flowOut : Real;
       target : Real;
@@ -28,21 +28,21 @@ VERSION : 0.1
 
 BEGIN
 	// Time since the last call, limited to 0.5 s (the first call returns a meaningless value)
-	#dt := LREAL_TO_REAL(RUNTIME(#RtMem));
-	IF (#dt <= 0.0) OR (#dt > 0.5) THEN
-	    #dt := 0.0;
+	#deltaT := LREAL_TO_REAL(RUNTIME(#RtMem));
+	IF (#deltaT <= 0.0) OR (#deltaT > 0.5) THEN
+	    #deltaT := 0.0;
 	END_IF;
 	
 	// --- Valves: stroke 2 s, injected faults keep them where they are ---
 	IF "DB_IO".XV101_OpenCmd AND NOT "DB_FaultInjection".XV101_StuckClosed THEN
-	    #XV101_Pos := MIN(IN1 := 1.0, IN2 := #XV101_Pos + #dt / 2.0);
+	    #XV101_Pos := MIN(IN1 := 1.0, IN2 := #XV101_Pos + #deltaT / 2.0);
 	ELSIF NOT "DB_IO".XV101_OpenCmd THEN
-	    #XV101_Pos := MAX(IN1 := 0.0, IN2 := #XV101_Pos - #dt / 2.0);
+	    #XV101_Pos := MAX(IN1 := 0.0, IN2 := #XV101_Pos - #deltaT / 2.0);
 	END_IF;
 	IF "DB_IO".XV102_OpenCmd THEN
-	    #XV102_Pos := MIN(IN1 := 1.0, IN2 := #XV102_Pos + #dt / 2.0);
+	    #XV102_Pos := MIN(IN1 := 1.0, IN2 := #XV102_Pos + #deltaT / 2.0);
 	ELSIF NOT "DB_FaultInjection".XV102_StuckOpen THEN
-	    #XV102_Pos := MAX(IN1 := 0.0, IN2 := #XV102_Pos - #dt / 2.0);
+	    #XV102_Pos := MAX(IN1 := 0.0, IN2 := #XV102_Pos - #deltaT / 2.0);
 	END_IF;
 	"DB_IO".XV101_ZSO := #XV101_Pos >= 0.99;
 	"DB_IO".XV101_ZSC := #XV101_Pos <= 0.01;
@@ -63,15 +63,15 @@ BEGIN
 	    #target := 0.0;
 	END_IF;
 	IF "DB_IO".M201_SpeedPV < #target THEN
-	    "DB_IO".M201_SpeedPV := MIN(IN1 := #target, IN2 := "DB_IO".M201_SpeedPV + 400.0 * #dt);
+	    "DB_IO".M201_SpeedPV := MIN(IN1 := #target, IN2 := "DB_IO".M201_SpeedPV + 400.0 * #deltaT);
 	ELSE
-	    "DB_IO".M201_SpeedPV := MAX(IN1 := #target, IN2 := "DB_IO".M201_SpeedPV - 400.0 * #dt);
+	    "DB_IO".M201_SpeedPV := MAX(IN1 := #target, IN2 := "DB_IO".M201_SpeedPV - 400.0 * #deltaT);
 	END_IF;
 	
 	// --- Outlet pump: contactor feedback after 0.5 s ---
 	"DB_IO".P401_MotorTrip := "DB_FaultInjection".P401_Trip;
 	IF "DB_IO".P401_RunCmd AND NOT "DB_IO".P401_MotorTrip AND "DB_IO".EStop_OK THEN
-	    #P401_Delay := #P401_Delay + #dt;
+	    #P401_Delay := #P401_Delay + #deltaT;
 	ELSE
 	    #P401_Delay := 0.0;
 	END_IF;
@@ -84,13 +84,13 @@ BEGIN
 	ELSE
 	    #flowOut := 0.0;
 	END_IF;
-	#Level := LIMIT(MN := 0.0, IN := #Level + (#flowIn - #flowOut) * #dt, MX := 100.0);
+	#Level := LIMIT(MN := 0.0, IN := #Level + (#flowIn - #flowOut) * #deltaT, MX := 100.0);
 	
 	// --- Temperature: heater +0.5 degC/s when tank has product, cools towards 20 degC ---
 	IF "DB_IO".E301_OnCmd AND NOT "DB_IO".E301_OverTemp AND NOT "DB_FaultInjection".E301_HeaterFailed AND #Level > 5.0 THEN
-	    #Temp := #Temp + 0.5 * #dt;
+	    #Temp := #Temp + 0.5 * #deltaT;
 	END_IF;
-	#Temp := #Temp - 0.002 * (#Temp - 20.0) * #dt;
+	#Temp := #Temp - 0.002 * (#Temp - 20.0) * #deltaT;
 	"DB_IO".E301_OverTemp := #Temp > 95.0;
 	
 	// --- Analog transmitters: 0..27648, 32767 on wire break ---
@@ -106,7 +106,7 @@ BEGIN
 	END_IF;
 	
 	// --- Neighbours: MES heartbeat every 1 s, filler ready 8 s after we start holding ---
-	#HeartbeatTimer := #HeartbeatTimer + #dt;
+	#HeartbeatTimer := #HeartbeatTimer + #deltaT;
 	IF #HeartbeatTimer >= 1.0 THEN
 	    #HeartbeatTimer := 0.0;
 	    IF NOT "DB_FaultInjection".MES_HeartbeatLost THEN
@@ -117,7 +117,7 @@ BEGIN
 	    END_IF;
 	END_IF;
 	IF "DB_LineInterface".Station_Running AND NOT "DB_LineInterface".Station_Draining AND #Level > 50.0 THEN
-	    #ReadyTimer := #ReadyTimer + #dt;
+	    #ReadyTimer := #ReadyTimer + #deltaT;
 	ELSE
 	    #ReadyTimer := 0.0;
 	END_IF;
