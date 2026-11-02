@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using PlcKi.Core.Knowledge;
 using PlcKi.Core.Model;
 using PlcKi.Core.Status;
 
@@ -99,6 +100,18 @@ public sealed class MachineTools
             "for a word or tag. Use it to find where something is used, e.g. which steps or interlocks depend on a sensor.",
             Props(("query", new { type = "string", description = "Word, tag id or symbol to look for" })),
             new[] { "query" }),
+
+        new("lookup_siemens_diagnostic",
+            "General Siemens knowledge (not from this machine's program) about S7-1500/S7-1200 system and diagnostic " +
+            "messages: CPU diagnostic buffer events and STOP reasons, error OBs (OB80, OB82, OB83, OB86, OB121, OB122), " +
+            "CPU LEDs, PROFINET device failures, module/channel diagnostics (wire break, short circuit, overflow, missing " +
+            "supply), fail-safe (F-I/O passivation, PROFIsafe), SINAMICS drive faults (F07900, F30001...) and communication " +
+            "errors. Returns the meaning, likely causes, what to check and how to fix it. Use it when a message, code or " +
+            "symptom is not one of the machine's own alarms.",
+            Props(
+                ("query", new { type = "string", description = "Message text, fault code, OB number or symptom, e.g. \"IO device failure\", \"F07900\", \"wire break\", \"ERROR LED flashing\"" }),
+                ("category", new { type = "string", description = "Optional filter: CPU, PROFINET, Module, Safety, Drive or Communication" })),
+            new[] { "query" }),
     };
 
     /// <summary>Runs a tool. Never throws: problems come back as {"error": ...} so the assistant can react.</summary>
@@ -116,6 +129,7 @@ public sealed class MachineTools
                 "get_equipment" => Equipment(Str(input, "id") ?? ""),
                 "get_alarm" => Alarm(Str(input, "id") ?? ""),
                 "search_program" => Search(Str(input, "query") ?? ""),
+                "lookup_siemens_diagnostic" => SiemensLookup(Str(input, "query") ?? "", Str(input, "category")),
                 _ => new { error = $"Unknown tool {name}." },
             };
             return JsonSerializer.Serialize(result, Json);
@@ -163,6 +177,23 @@ public sealed class MachineTools
     }
 
     // ---- tools ----
+
+    private static object SiemensLookup(string query, string? category)
+    {
+        if (string.IsNullOrWhiteSpace(query)) return new { error = "Give a message text, code or symptom." };
+        var kb = SiemensDiagnostics.Default;
+        var found = kb.Search(query, category);
+        return new
+        {
+            source = $"{kb.File.Name} (general Siemens knowledge, version {kb.File.Version}), not this machine's program. " +
+                     "Confirm against the CPU diagnostic buffer or the device's own diagnostics.",
+            matches = found.Select(m => m.Entry),
+            note = found.Count == 0
+                ? "Nothing in the Siemens knowledge base matches. Ask for the exact diagnostic buffer text or code, " +
+                  "or check the TIA Portal help for that message."
+                : null,
+        };
+    }
 
     private object LiveStatus()
     {
