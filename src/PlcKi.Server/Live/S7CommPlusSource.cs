@@ -19,6 +19,7 @@ public sealed class S7CommPlusSource : IPlcSource
     private readonly ILogger _log;
     private S7CommPlusClient? _client;
     private readonly List<(TagDef Def, PlcTag Tag)> _tags = new();
+    private const int LookupFailuresBeforeGivingUp = 3;
 
     public S7CommPlusSource(PlcOptions opt, ILogger log)
     {
@@ -79,7 +80,17 @@ public sealed class S7CommPlusSource : IPlcSource
             catch (Exception ex)
             {
                 missing[def.Id] = $"symbol {def.Symbol}: {Describe(ex)}";
+                // When the first lookups all fail, the PLC is refusing lookups as such (the driver drops the
+                // session and logs in again for each one). Stop here, so the polling loop waits before it retries.
+                if (_tags.Count == 0 && missing.Count >= LookupFailuresBeforeGivingUp)
+                    break;
             }
+        }
+        if (_tags.Count == 0 && tags.Count > 0)
+        {
+            try { client.DisposeAsync().AsTask().GetAwaiter().GetResult(); } catch { /* ignore */ }
+            var first = missing.Values.FirstOrDefault() ?? "no tags";
+            throw new IOException($"Connected to {_opt.Address} ({NegotiatedSecurity}), but the PLC answered no tag lookup. First error: {first}");
         }
         _client = client;
         _log.LogInformation("Connected to {Address} ({Security}): {Found} of {Total} tags found.",

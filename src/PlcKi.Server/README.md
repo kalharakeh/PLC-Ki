@@ -115,6 +115,7 @@ anything. It is told never to suggest bridging or forcing a safety function or i
 | Ping fails | Network first: PLCSIM instance running, adapter set up as in `plc-demo/README.md` |
 | Ping works, connection times out | `probe` retries with the older challenge login by itself. If both fail, send the full probe output |
 | Login / legitimation refused | The CPU's access level needs a password: set `PLCKI_PLC_PASSWORD` |
+| `the PLC answered no tag lookup` | The login worked but the PLC refused to look up symbols. Run `probe`: it tries the older login by itself. If that works, set `Security` to `LegacyChallenge`; if not, check the CPU's protection settings in TIA |
 | `symbol ... not found` for some tags | The PLC program differs from the model: compare with the TIA project, re-download the demo |
 
 ## How it works

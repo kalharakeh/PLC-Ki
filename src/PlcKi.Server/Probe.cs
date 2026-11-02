@@ -21,7 +21,7 @@ public static class Probe
         catch (Exception ex)
         {
             Console.WriteLine();
-            Console.WriteLine("NOT CONNECTED: " + ex.Message);
+            Console.WriteLine("FAILED: " + ex.Message);
             // Auto should already fall back from TLS to the older login; try that login on its own to tell them apart.
             if (source is S7CommPlusSource s7)
             {
@@ -34,7 +34,7 @@ public static class Probe
                 }
                 catch (Exception ex2)
                 {
-                    Console.WriteLine("NOT CONNECTED: " + ex2.Message);
+                    Console.WriteLine("FAILED: " + ex2.Message);
                     Console.WriteLine("Check: ping the PLC address, the CPU is in RUN, and the address in appsettings.json.");
                     return 3;
                 }
