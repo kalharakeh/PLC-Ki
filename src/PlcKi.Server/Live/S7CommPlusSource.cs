@@ -88,14 +88,47 @@ public sealed class S7CommPlusSource : IPlcSource
         }
         if (_tags.Count == 0 && tags.Count > 0)
         {
+            var why = WhyNoTags(client, tags) ?? "the PLC answered no tag lookup. First error: " + (missing.Values.FirstOrDefault() ?? "none");
             try { client.DisposeAsync().AsTask().GetAwaiter().GetResult(); } catch { /* ignore */ }
-            var first = missing.Values.FirstOrDefault() ?? "no tags";
-            throw new IOException($"Connected to {_opt.Address} ({NegotiatedSecurity}), but the PLC answered no tag lookup. First error: {first}");
+            throw new PlcProgramException($"Connected to {_opt.Address}, but {why}");
         }
         _client = client;
         _log.LogInformation("Connected to {Address} ({Security}): {Found} of {Total} tags found.",
             _opt.Address, NegotiatedSecurity, _tags.Count, tags.Count);
         return missing;
+    }
+
+    /// <summary>
+    /// When no tag can be found, looks at the blocks on the PLC (read-only) to say why in plain words:
+    /// no program at all (e.g. an empty PLCSIM instance), or a program without the model's data blocks.
+    /// </summary>
+    private string? WhyNoTags(S7CommPlusClient client, IReadOnlyList<TagDef> tags)
+    {
+        IReadOnlyList<S7CommPlusBlockInfo> blocks;
+        try { blocks = client.BrowseBlocksAsync().GetAwaiter().GetResult(); }
+        catch (Exception ex)
+        {
+            _log.LogDebug(ex, "Block list not available.");
+            return "the PLC answered no tag lookup and no block list. Most likely no program is loaded: download the program to the PLC (for PLCSIM, from TIA Portal).";
+        }
+        if (blocks.Count == 0 || !blocks.Any(b => b.Type is S7CommPlusBlockType.DB or S7CommPlusBlockType.OB))
+            return "the PLC has no program loaded. Download the program to the PLC (for PLCSIM, from TIA Portal).";
+
+        var onPlc = blocks.Where(b => b.Type == S7CommPlusBlockType.DB).Select(b => b.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var wanted = tags.Select(t => DataBlockOf(t.Symbol)).Where(n => n != null).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var absent = wanted.Where(n => !onPlc.Contains(n!)).ToList();
+        if (absent.Count > 0)
+            return $"the program on the PLC is not the one in the machine model: data block(s) {string.Join(", ", absent)} are missing " +
+                   $"(the PLC has {blocks.Count} blocks). Download the right program, or start PLC-Ki with the model for this machine.";
+        return null;
+    }
+
+    /// <summary>"DB_IO" from "\"DB_IO\".PB_Start".</summary>
+    private static string? DataBlockOf(string symbol)
+    {
+        if (!symbol.StartsWith('"')) return symbol.Split('.')[0];
+        var end = symbol.IndexOf('"', 1);
+        return end > 1 ? symbol[1..end] : null;
     }
 
     public Snapshot Read()
@@ -157,4 +190,10 @@ public sealed class S7CommPlusSource : IPlcSource
             if (!string.IsNullOrWhiteSpace(e.Message) && !parts.Contains(e.Message)) parts.Add(e.Message);
         return string.Join(" -> ", parts);
     }
+}
+
+/// <summary>Connected, but the PLC's program does not fit the model (or there is none). Retrying fast will not help.</summary>
+public sealed class PlcProgramException : IOException
+{
+    public PlcProgramException(string message) : base(message) { }
 }

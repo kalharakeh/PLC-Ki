@@ -71,8 +71,13 @@ public sealed class PollingService : BackgroundService
                 }
                 catch (Exception ex)
                 {
+                    // A PLC without the right program will not change in 2 s: wait the longest, and say it once
+                    if (ex is PlcProgramException) backoffMs = 30_000;
+                    if (ex.Message != error)
+                        _log.LogWarning("{Error} Retrying every {Delay} s.", ex.Message, backoffMs / 1000);
+                    else
+                        _log.LogDebug("Still: {Error}", ex.Message);
                     error = ex.Message;
-                    _log.LogWarning("Cannot connect to {Address}: {Error} Retrying in {Delay} s.", _source.Address, ex.Message, backoffMs / 1000);
                     Publish(last, "disconnected", error, lastGood, missing);
                     if (ct.WaitHandle.WaitOne(backoffMs)) break;
                     backoffMs = Math.Min(backoffMs * 2, 30_000);
