@@ -1,7 +1,7 @@
 # PLC-Ki UI concept
 
 Clickable mockup: open [`index.html`](index.html) in a browser (no server needed). It uses the demo mixing
-station (`plc-demo/scl`) in three switchable states: **Mixing** (normal, waiting for temperature),
+station (`plc-demo/scl`) in three switchable states: **Mixing** (normal, waiting for temperature), **E-stop** (A01 with follow-up A08),
 **Valve fault** (A02 XV101 did not open, batch halted) and **Waiting** (step 40, filler not ready, warning A21).
 Values are simulated and tick every second. It opens on the **Active alarm** page in the Valve fault scenario.
 
@@ -50,6 +50,32 @@ The mixing station is only the example. For a program we have never seen:
    names the station.
 5. **Import review:** after import a short page lists what was found ("4 stations, 63 devices, 3 sequences,
    5 blocks not recognised"); names and groupings are corrected once and saved with the model.
+
+## Additions (2 Nov, second round)
+
+All of these are in the mockup. The new **E-stop** scenario shows the alarm chain.
+
+1. **Where to measure.** Every signal on the Active alarm page and in each faceplate shows its I/O address,
+   module, slot, channel, terminal and cabinet (from the hardware config and the tag table), or the
+   PROFINET device and telegram word for drives. The electrician knows where to put the meter.
+2. **First alarm first.** Active alarms are sorted root first. The root alarm gets a "1ST" badge, and
+   alarms it caused are folded under it with "came 1 s later; clears with the same fix" (E-stop A01 →
+   drive not ready A08). Links between alarms come from the code (A08's condition depends on the E-stop
+   signal) and from timing.
+3. **Fix notes.** Under "How to fix", a "Fixed before" list shows what technicians wrote last time
+   ("solenoid coil Y101 burnt, spares in store B3"), and a one-line box adds a new note.
+4. **Shift handover.** A new Shift view: a timeline of alarms, batches, mode changes, forces and
+   downloads since shift start, with a short Claude summary and key figures.
+5. **Downtime ranking.** In the same view: alarms ranked by stopped time, not by count; split by station
+   when there are several.
+6. **Forces and test bits.** A banner on every page when I/O is forced (if the CPU reports it) or a test bit
+   such as `DB_FaultInjection` is on, so a simulated fault is never mistaken for a real one.
+7. **Program changed.** The top bar shows "Program = archive" or "Program changed". When the blocks in the
+   PLC differ from the imported archive, a banner names them and asks for a new import, because
+   explanations for those blocks may be out of date.
+8. **Shop floor modes.** A TV button for a large screen on the line (no menu, big text, opens Active alarm
+   or Plant), bigger touch targets on tablets, and a language switch (EN/DE in the mockup; generated texts
+   are translated by Claude at import).
 
 ## Layout
 
