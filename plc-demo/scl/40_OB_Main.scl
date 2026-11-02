@@ -1,0 +1,10 @@
+ORGANIZATION_BLOCK "Main"
+TITLE = 'Main Program Sweep (Cycle)'
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+BEGIN
+	// 1. Simulated plant (does not exist on a real machine)
+	"Sim"();
+	// 2. The mixing station program
+	"Station"();
+END_ORGANIZATION_BLOCK

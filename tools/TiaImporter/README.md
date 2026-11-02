@@ -1,0 +1,42 @@
+# TiaImporter
+
+Command-line helper that uses **TIA Portal V20 Openness**. It never connects to or downloads to a PLC.
+
+```
+TiaImporter export --archive <project.zap20> --out <empty folder>
+TiaImporter setup-demo --project <project.ap20> --demo <plc-demo folder> [--plc <PLC name>]
+```
+
+`export` opens the archive without showing TIA (into a temporary folder; the archive is not changed) and writes,
+per PLC:
+
+```
+<out>\manifest.json            project, PLCs, CPU types, IP addresses, counts, problems (e.g. protected blocks)
+<out>\<PLC>\Blocks\...xml      every block, any language (LAD, FBD, SCL, STL, GRAPH), SimaticML, folders kept
+<out>\<PLC>\Types\...xml       PLC data types
+<out>\<PLC>\Tags\...xml        tag tables
+<out>\<PLC>\SclSource\*.scl    readable source of SCL blocks
+```
+
+## Requirements
+
+- Windows with **TIA Portal V20** including the Openness option (selected by default in the installer)
+- A valid STEP 7 Professional license
+- Your Windows user in the local group **Siemens TIA Openness** (Computer Management > Local Users and Groups),
+  then sign out and in again
+- The first time the tool starts TIA, TIA may ask you to allow access for `TiaImporter.exe`: allow it
+
+## Build
+
+Visual Studio 2022 (".NET desktop development" workload), or the .NET 8 SDK plus the .NET Framework 4.8
+Developer Pack:
+
+```
+cd tools\TiaImporter
+dotnet build -c Release
+```
+
+If TIA is not installed in `C:\Program Files\Siemens\Automation\Portal V20`, build with
+`-p:TiaInstallDir="D:\Your\Path\Portal V20"` and set the environment variable `TIA_INSTALL_DIR` to the same path.
+
+Not yet compiled against a real TIA install: the first build on your PC may need small fixes.

@@ -1,0 +1,38 @@
+// One Bool per alarm. The comment is the alarm text shown to the operator.
+// Bits latch in FB_AlarmHandler and clear on PB_Reset once the cause is gone.
+DATA_BLOCK "DB_Alarms"
+TITLE = 'Alarm bits (latched)'
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+NON_RETAIN
+   STRUCT
+      A01_EStop : Bool;   // FAULT: Emergency stop pressed
+      A02_XV101_NotOpen : Bool;   // FAULT: Inlet valve XV101 (ingredient A) did not open within 10 s
+      A03_XV101_NotClosed : Bool;   // FAULT: Inlet valve XV101 (ingredient A) did not close within 10 s
+      A04_XV102_NotOpen : Bool;   // FAULT: Inlet valve XV102 (ingredient B) did not open within 10 s
+      A05_XV102_NotClosed : Bool;   // FAULT: Inlet valve XV102 (ingredient B) did not close within 10 s
+      A06_M201_DriveFault : Bool;   // FAULT: Agitator M201 drive fault
+      A07_M201_SpeedDev : Bool;   // FAULT: Agitator M201 speed more than 10 % below setpoint for 15 s
+      A08_M201_NotReady : Bool;   // WARNING: Agitator M201 drive not ready
+      A09_E301_OverTemp : Bool;   // FAULT: Heater E301 overtemperature switch tripped
+      A10_P401_Trip : Bool;   // FAULT: Outlet pump P401 motor protection tripped
+      A11_P401_NoFeedback : Bool;   // FAULT: Outlet pump P401 no running feedback within 5 s
+      A12_LT101_WireBreak : Bool;   // FAULT: Level transmitter LT101 signal fault (wire break)
+      A13_LT101_HighHigh : Bool;   // FAULT: Tank level high-high (above 95 %)
+      A14_TT301_WireBreak : Bool;   // FAULT: Temperature transmitter TT301 signal fault (wire break)
+      A15_TT301_High : Bool;   // FAULT: Tank temperature high (above 90 degC)
+      A16_Step10_Timeout : Bool;   // FAULT: Step 10 Fill A took longer than 120 s
+      A17_Step20_Timeout : Bool;   // FAULT: Step 20 Fill B took longer than 120 s
+      A18_Step30_Timeout : Bool;   // FAULT: Step 30 Mix and heat took longer than 600 s
+      A19_Step50_Timeout : Bool;   // FAULT: Step 50 Drain took longer than 180 s
+      A20_E301_NoHeating : Bool;   // FAULT: Heater E301 on for 60 s but temperature rose less than 2 degC
+      A21_Filler_NotReady : Bool;   // WARNING: Waiting for filler ready for more than 60 s (step 40)
+      A22_MES_HeartbeatLost : Bool;   // WARNING: No heartbeat from MES for 5 s
+      A23_RecipeInvalid : Bool;   // WARNING: Recipe values invalid, batch cannot start
+      A24_NotInAuto : Bool;   // WARNING: Start pressed but selector is not in Auto
+      A25_TankNotEmpty : Bool;   // WARNING: Start pressed but tank is not empty (level above 2 %)
+      AnyFault : Bool;   // Summary: at least one FAULT alarm active (blocks the sequence)
+      AnyWarning : Bool;   // Summary: at least one WARNING alarm active
+   END_STRUCT;
+BEGIN
+END_DATA_BLOCK

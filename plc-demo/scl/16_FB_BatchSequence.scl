@@ -1,0 +1,143 @@
+FUNCTION_BLOCK "FB_BatchSequence"
+TITLE = 'Batch sequence: fill A, fill B, mix and heat, hold, drain'
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : Demo
+VERSION : 0.1
+// Steps:
+//   0  Idle          all off; waits for Start
+//  10  Fill A        XV101 open until level >= LevelA
+//  20  Fill B        XV102 open until level >= LevelB
+//  30  Mix and heat  M201 at MixSpeed, E301 heats to TempSP; leaves when hot AND MixTime done
+//  40  Hold          M201 at HoldSpeed; waits for filler ready
+//  50  Drain         P401 pumps out until level <= DrainLevel
+//  60  Done          batch counter +1, back to 0
+// While Halted (fault, E-stop or Stop pressed) the step is kept but all outputs are off.
+// Press Start again (after Reset) to continue from the same step.
+   VAR_INPUT
+      Start : Bool;   // Start button or MES start request
+      Stop : Bool;   // Stop button: pause the batch
+      Auto : Bool;   // Selector in Auto
+      AnyFault : Bool;   // Any FAULT alarm active
+      EStopOK : Bool;   // Emergency stop circuit healthy
+      Level : Real;   // Tank level [%]
+      Temp : Real;   // Tank temperature [degC]
+      FillerReady : Bool;   // Downstream filler ready to receive
+   END_VAR
+
+   VAR_OUTPUT
+      Step : Int;   // Current step number (see list above)
+      StepTime : Time;   // Time spent in the current step
+      Halted : Bool;   // Sequence paused: outputs off (fault, E-stop or Stop)
+      Running : Bool;   // A batch is active (step 10..60)
+      OpenXV101 : Bool;   // Command: open inlet valve A
+      OpenXV102 : Bool;   // Command: open inlet valve B
+      RunM201 : Bool;   // Command: run agitator
+      SpeedM201 : Real;   // Command: agitator speed [rpm]
+      HeatE301 : Bool;   // Command: heater on
+      RunP401 : Bool;   // Command: run outlet pump
+      BatchDone : Bool;   // Pulse when a batch finishes
+      RecipeValid : Bool;   // Recipe values are plausible
+      TimeoutStep10 : Bool;   // Step 10 longer than 120 s
+      TimeoutStep20 : Bool;   // Step 20 longer than 120 s
+      TimeoutStep30 : Bool;   // Step 30 longer than 600 s
+      TimeoutStep50 : Bool;   // Step 50 longer than 180 s
+      WaitFillerTooLong : Bool;   // Step 40 waiting for filler longer than 60 s
+      NoHeating : Bool;   // Heater on 60 s in step 30 but temperature rose less than 2 degC
+      StartNotAuto : Bool;   // Start pressed while not in Auto
+      StartTankNotEmpty : Bool;   // Start pressed while tank not empty
+      StartRecipeInvalid : Bool;   // Start pressed while recipe invalid
+   END_VAR
+
+   VAR
+      LastStep : Int := -1;   // Step in the previous cycle (to restart the step timer)
+      Paused : Bool;   // Set by Stop, cleared by Start
+      TempAtStepStart : Real;   // Temperature when step 30 began
+      tStep {InstructionName := 'TON_TIME'; LibVersion := '1.0'} : TON_TIME;
+   END_VAR
+
+BEGIN
+	// --- Recipe plausibility ---
+	#RecipeValid := ("DB_Recipe".LevelA > 0.0) AND ("DB_Recipe".LevelA < "DB_Recipe".LevelB)
+	    AND ("DB_Recipe".LevelB <= 90.0)
+	    AND ("DB_Recipe".TempSP >= 20.0) AND ("DB_Recipe".TempSP <= 85.0)
+	    AND ("DB_Recipe".MixSpeed >= 100.0) AND ("DB_Recipe".MixSpeed <= 1500.0);
+	
+	// --- Pause / halt ---
+	IF #Stop THEN
+	    #Paused := TRUE;
+	ELSIF #Start THEN
+	    #Paused := FALSE;
+	END_IF;
+	#Halted := #AnyFault OR NOT #EStopOK OR #Paused OR NOT #Auto;
+	
+	// --- Step timer: restarts whenever the step changes, frozen while halted ---
+	#tStep(IN := (#Step = #LastStep) AND NOT #Halted, PT := T#24D);
+	IF #Step <> #LastStep THEN
+	    #TempAtStepStart := #Temp;
+	END_IF;
+	#LastStep := #Step;
+	#StepTime := #tStep.ET;
+	
+	// --- Start checks (only in step 0) ---
+	#StartNotAuto := (#Step = 0) AND #Start AND NOT #Auto;
+	#StartTankNotEmpty := (#Step = 0) AND #Start AND (#Level > "DB_Recipe".DrainLevel);
+	#StartRecipeInvalid := (#Step = 0) AND #Start AND NOT #RecipeValid;
+	
+	// --- Transitions ---
+	#BatchDone := FALSE;
+	IF NOT #Halted THEN
+	    CASE #Step OF
+	        0:  // Idle
+	            IF #Start AND #Auto AND NOT #AnyFault AND #RecipeValid AND (#Level <= "DB_Recipe".DrainLevel) THEN
+	                #Step := 10;
+	            END_IF;
+	        10: // Fill A
+	            IF #Level >= "DB_Recipe".LevelA THEN
+	                #Step := 20;
+	            END_IF;
+	        20: // Fill B
+	            IF #Level >= "DB_Recipe".LevelB THEN
+	                #Step := 30;
+	            END_IF;
+	        30: // Mix and heat
+	            IF (#Temp >= "DB_Recipe".TempSP) AND (#StepTime >= "DB_Recipe".MixTime) THEN
+	                #Step := 40;
+	            END_IF;
+	        40: // Hold
+	            IF #FillerReady THEN
+	                #Step := 50;
+	            END_IF;
+	        50: // Drain
+	            IF #Level <= "DB_Recipe".DrainLevel THEN
+	                #Step := 60;
+	            END_IF;
+	        60: // Done
+	            #BatchDone := TRUE;
+	            #Step := 0;
+	        ELSE
+	            #Step := 0;
+	    END_CASE;
+	END_IF;
+	
+	#Running := #Step > 0;
+	
+	// --- Actions (all off while halted) ---
+	#OpenXV101 := NOT #Halted AND (#Step = 10);
+	#OpenXV102 := NOT #Halted AND (#Step = 20);
+	#RunM201 := NOT #Halted AND ((#Step = 30) OR (#Step = 40));
+	IF #Step = 30 THEN
+	    #SpeedM201 := "DB_Recipe".MixSpeed;
+	ELSE
+	    #SpeedM201 := "DB_Recipe".HoldSpeed;
+	END_IF;
+	#HeatE301 := NOT #Halted AND (#Step = 30) AND (#Temp < "DB_Recipe".TempSP);
+	#RunP401 := NOT #Halted AND (#Step = 50);
+	
+	// --- Step supervision ---
+	#TimeoutStep10 := (#Step = 10) AND (#StepTime > T#120S);
+	#TimeoutStep20 := (#Step = 20) AND (#StepTime > T#120S);
+	#TimeoutStep30 := (#Step = 30) AND (#StepTime > T#600S);
+	#TimeoutStep50 := (#Step = 50) AND (#StepTime > T#180S);
+	#WaitFillerTooLong := (#Step = 40) AND (#StepTime > T#60S) AND NOT #FillerReady;
+	#NoHeating := (#Step = 30) AND #HeatE301 AND (#StepTime > T#60S) AND (#Temp < #TempAtStepStart + 2.0);
+END_FUNCTION_BLOCK

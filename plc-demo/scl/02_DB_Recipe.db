@@ -1,0 +1,16 @@
+DATA_BLOCK "DB_Recipe"
+TITLE = 'Active batch recipe'
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+   STRUCT
+      RecipeNo : Int := 1;   // Active recipe number (written by MES via DB_LineInterface)
+      LevelA : Real := 40.0;   // Step 10: fill ingredient A until tank level reaches this [%]
+      LevelB : Real := 80.0;   // Step 20: fill ingredient B until tank level reaches this [%]
+      TempSP : Real := 60.0;   // Step 30: heat until temperature reaches this [degC]
+      MixTime : Time := T#120S;   // Step 30: minimum mixing time
+      MixSpeed : Real := 1200.0;   // Step 30: agitator speed while mixing [rpm]
+      HoldSpeed : Real := 300.0;   // Step 40: agitator speed while waiting for downstream [rpm]
+      DrainLevel : Real := 2.0;   // Step 50: tank counts as empty below this level [%]
+   END_STRUCT;
+BEGIN
+END_DATA_BLOCK

@@ -1,0 +1,22 @@
+// Test switches: set one to TRUE from a watch table to cause that fault on purpose.
+// Used to check that the troubleshooter explains the alarm, its cause and the fix.
+DATA_BLOCK "DB_FaultInjection"
+TITLE = 'Fault injection (testing only)'
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+NON_RETAIN
+   STRUCT
+      XV101_StuckClosed : Bool;   // Valve XV101 does not open (air supply lost / coil burnt)
+      XV102_StuckOpen : Bool;   // Valve XV102 does not close (seat blocked)
+      M201_DriveTrip : Bool;   // VFD of agitator M201 goes to fault (overcurrent)
+      M201_Overload : Bool;   // Agitator M201 cannot reach speed (product too viscous)
+      E301_HeaterFailed : Bool;   // Heater E301 element broken: on command but no heating
+      P401_Trip : Bool;   // Motor protection of pump P401 trips
+      P401_ContactorFault : Bool;   // Pump P401 contactor does not pull in: no running feedback
+      LT101_WireBreak : Bool;   // Level transmitter LT101 cable broken
+      TT301_WireBreak : Bool;   // Temperature transmitter TT301 cable broken
+      Filler_NeverReady : Bool;   // Downstream filler never signals ready
+      MES_HeartbeatLost : Bool;   // MES stops sending its heartbeat
+   END_STRUCT;
+BEGIN
+END_DATA_BLOCK

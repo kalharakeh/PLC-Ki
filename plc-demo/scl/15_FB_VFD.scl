@@ -1,0 +1,41 @@
+FUNCTION_BLOCK "FB_VFD"
+TITLE = 'Variable speed drive with speed monitoring'
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : Demo
+VERSION : 0.1
+   VAR_INPUT
+      Run : Bool;   // Request: run the drive
+      Permit : Bool := TRUE;   // Interlock: drive may only run when TRUE
+      SpeedSP : Real;   // Requested speed [rpm]
+      SpeedPV : Real;   // Actual speed from the drive [rpm]
+      Ready : Bool;   // Drive ready
+      DriveFault : Bool;   // Drive reports a fault
+      DeviationTime : Time := T#15S;   // How long speed may be too low before a fault
+   END_VAR
+
+   VAR_OUTPUT
+      RunOut : Bool;   // Run command to the drive
+      SpeedOut : Real;   // Speed setpoint to the drive [rpm]
+      AtSpeed : Bool;   // Actual speed within 10 % of setpoint
+      FaultDrive : Bool;   // Drive fault
+      FaultSpeedDev : Bool;   // Running, but speed more than 10 % below setpoint for DeviationTime
+      NotReady : Bool;   // Drive not ready (and no fault): check enable / E-stop / main switch
+   END_VAR
+
+   VAR
+      tDev {InstructionName := 'TON_TIME'; LibVersion := '1.0'} : TON_TIME;
+   END_VAR
+
+BEGIN
+	#FaultDrive := #DriveFault;
+	#NotReady := NOT #Ready AND NOT #DriveFault;
+	#RunOut := #Run AND #Permit AND #Ready;
+	IF #RunOut THEN
+	    #SpeedOut := #SpeedSP;
+	ELSE
+	    #SpeedOut := 0.0;
+	END_IF;
+	#AtSpeed := #RunOut AND (#SpeedPV >= 0.9 * #SpeedSP);
+	#tDev(IN := #RunOut AND NOT #AtSpeed, PT := #DeviationTime);
+	#FaultSpeedDev := #tDev.Q;
+END_FUNCTION_BLOCK

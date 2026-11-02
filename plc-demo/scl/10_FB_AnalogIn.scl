@@ -1,0 +1,35 @@
+FUNCTION_BLOCK "FB_AnalogIn"
+TITLE = 'Analog input scaling with limits and wire-break detection'
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : Demo
+VERSION : 0.1
+// Scales a raw value 0..27648 to engineering units RangeLo..RangeHi.
+// A raw value above 32511 (overflow, typical for a broken 4-20 mA loop) sets WireBreak.
+   VAR_INPUT
+      Raw : Int;   // Raw value from the analog input card
+      RangeLo : Real;   // Engineering value at raw 0
+      RangeHi : Real;   // Engineering value at raw 27648
+      LimitHigh : Real;   // High limit in engineering units
+      LimitLow : Real;   // Low limit in engineering units
+   END_VAR
+
+   VAR_OUTPUT
+      Value : Real;   // Scaled value in engineering units (held at last good value on wire break)
+      High : Bool;   // Value above LimitHigh
+      Low : Bool;   // Value below LimitLow
+      WireBreak : Bool;   // Signal fault: raw value out of range
+   END_VAR
+
+BEGIN
+	// Signal check: above 32511 means overflow, below -4864 means underflow
+	#WireBreak := (#Raw > 32511) OR (#Raw < -4864);
+	
+	// Scale only good values, otherwise keep the last good value
+	IF NOT #WireBreak THEN
+	    #Value := #RangeLo + (INT_TO_REAL(#Raw) / 27648.0) * (#RangeHi - #RangeLo);
+	END_IF;
+	
+	// Limits are not evaluated with a bad signal
+	#High := NOT #WireBreak AND (#Value > #LimitHigh);
+	#Low := NOT #WireBreak AND (#Value < #LimitLow);
+END_FUNCTION_BLOCK
