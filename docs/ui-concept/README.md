@@ -35,6 +35,22 @@ When something cannot be recognised, the view falls back to a generic form inste
 an unknown FB becomes a "device" with its inputs and outputs listed; a block with no detectable steps shows
 only its code view.
 
+## Unknown programs and several stations
+
+The mixing station is only the example. For a program we have never seen:
+1. **Stations:** each large FB instance called from OB1 (or from a line FB) becomes a station (Mixing, Sorting,
+   Filling...). Claude names and groups them from instance names, comments, symbol prefixes and the hardware
+   config (ET 200 / PROFINET device names).
+2. **Equipment:** FB instances inside a station are classified by interface (open/closed switches → valve,
+   run + feedback → motor, speed setpoint → drive...). A block library (customer or Siemens LBP) is learned once.
+3. **Pictures:** reuse the WinCC screens when the HMI project is in the archive; else a template when the
+   pattern is clear (tank, conveyor); else a station card with device tiles and the step strip.
+4. **Several stations:** Plant shows one card per station (state, step, alarms) with arrows for the signals
+   one station writes and another reads; clicking a station opens the same views scoped to it. Active alarm
+   names the station.
+5. **Import review:** after import a short page lists what was found ("4 stations, 63 devices, 3 sequences,
+   5 blocks not recognised"); names and groupings are corrected once and saved with the model.
+
 ## Layout
 
 - **Top bar:** machine, CPU and archive, connection state, the Read-only badge, clock, and the **Ask** button.
