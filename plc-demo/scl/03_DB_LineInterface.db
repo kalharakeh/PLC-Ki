@@ -1,0 +1,18 @@
+DATA_BLOCK "DB_LineInterface"
+TITLE = 'Data exchange with MES (upstream) and filler (downstream)'
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+NON_RETAIN
+   STRUCT
+      MES_RecipeNo : Int := 1;   // From MES: recipe number for the next batch
+      MES_StartRequest : Bool;   // From MES: request to start a batch (same as PB_Start)
+      MES_Heartbeat : Int;   // From MES: counter, must change at least every 5 s
+      Filler_ReadyToReceive : Bool;   // From filler: ready to receive product (needed to leave step 40)
+      Station_Running : Bool;   // To MES/filler: batch sequence active
+      Station_Draining : Bool;   // To filler: product is being pumped out (step 50)
+      Batch_Done : Bool;   // To MES: last batch finished (pulse, step 60)
+      Batch_Count : DInt;   // To MES: batches completed since power-up
+      Station_Heartbeat : Int;   // To MES/filler: counter incremented every 1 s
+   END_STRUCT;
+BEGIN
+END_DATA_BLOCK

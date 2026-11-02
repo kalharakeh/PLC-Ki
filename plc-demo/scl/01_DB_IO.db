@@ -1,0 +1,34 @@
+// Simulated field signals for the demo mixing station.
+// On a real machine these would be %I/%Q addresses; here FB_ProcessSim plays the plant.
+DATA_BLOCK "DB_IO"
+TITLE = 'Field signals (simulated)'
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+NON_RETAIN
+   STRUCT
+      PB_Start : Bool;   // Push button Start batch (operator panel)
+      PB_Stop : Bool;   // Push button Stop (finish current step, then hold)
+      PB_Reset : Bool;   // Push button Reset alarms
+      SW_Auto : Bool := TRUE;   // Selector switch Auto (TRUE) / Manual (FALSE)
+      EStop_OK : Bool := TRUE;   // Emergency stop circuit healthy (FALSE = E-stop pressed)
+      XV101_OpenCmd : Bool;   // Inlet valve XV101 ingredient A: open command
+      XV101_ZSO : Bool;   // Inlet valve XV101: open limit switch
+      XV101_ZSC : Bool := TRUE;   // Inlet valve XV101: closed limit switch
+      XV102_OpenCmd : Bool;   // Inlet valve XV102 ingredient B: open command
+      XV102_ZSO : Bool;   // Inlet valve XV102: open limit switch
+      XV102_ZSC : Bool := TRUE;   // Inlet valve XV102: closed limit switch
+      M201_RunCmd : Bool;   // Agitator M201 VFD: run command
+      M201_SpeedSP : Real;   // Agitator M201 VFD: speed setpoint [rpm]
+      M201_SpeedPV : Real;   // Agitator M201 VFD: actual speed [rpm]
+      M201_DriveReady : Bool := TRUE;   // Agitator M201 VFD: drive ready (no fault, enabled)
+      M201_DriveFault : Bool;   // Agitator M201 VFD: drive fault
+      E301_OnCmd : Bool;   // Heater E301: on command
+      E301_OverTemp : Bool;   // Heater E301: overtemperature safety switch tripped
+      P401_RunCmd : Bool;   // Outlet pump P401: run command
+      P401_RunFb : Bool;   // Outlet pump P401: running feedback (contactor aux contact)
+      P401_MotorTrip : Bool;   // Outlet pump P401: motor protection breaker tripped
+      LT101_Raw : Int;   // Tank level transmitter LT101: raw analog value (0..27648 = 0..100 %)
+      TT301_Raw : Int;   // Tank temperature transmitter TT301: raw analog value (0..27648 = 0..120 degC)
+   END_STRUCT;
+BEGIN
+END_DATA_BLOCK

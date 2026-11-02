@@ -1,0 +1,126 @@
+FUNCTION_BLOCK "FB_ProcessSim"
+TITLE = 'Plant simulation: plays the tank, valves, drives and the neighbours'
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : Demo
+VERSION : 0.1
+// Called from OB1 every cycle; measures its own call interval with RUNTIME.
+// Reads the commands in "DB_IO", writes feedbacks and analog values back,
+// and applies the faults switched on in "DB_FaultInjection".
+// THIS BLOCK DOES NOT EXIST ON A REAL MACHINE. The troubleshooter should ignore it.
+   VAR
+      RtMem : LReal;   // Memory for RUNTIME (time between calls)
+      Level : Real;   // Simulated tank level [%]
+      Temp : Real := 20.0;   // Simulated tank temperature [degC]
+      XV101_Pos : Real;   // Valve XV101 position 0..1 (full stroke takes 2 s)
+      XV102_Pos : Real;   // Valve XV102 position 0..1 (full stroke takes 2 s)
+      P401_Delay : Real;   // Time since P401 run command [s]
+      HeartbeatTimer : Real;   // Accumulates time for the 1 s heartbeats [s]
+      ReadyTimer : Real;   // Time the station has been waiting for the filler [s]
+   END_VAR
+
+   VAR_TEMP
+      dt : Real;
+      flowIn : Real;
+      flowOut : Real;
+      target : Real;
+      maxSpeed : Real;
+   END_VAR
+
+BEGIN
+	// Time since the last call, limited to 0.5 s (the first call returns a meaningless value)
+	#dt := LREAL_TO_REAL(RUNTIME(#RtMem));
+	IF (#dt <= 0.0) OR (#dt > 0.5) THEN
+	    #dt := 0.0;
+	END_IF;
+	
+	// --- Valves: stroke 2 s, injected faults keep them where they are ---
+	IF "DB_IO".XV101_OpenCmd AND NOT "DB_FaultInjection".XV101_StuckClosed THEN
+	    #XV101_Pos := MIN(IN1 := 1.0, IN2 := #XV101_Pos + #dt / 2.0);
+	ELSIF NOT "DB_IO".XV101_OpenCmd THEN
+	    #XV101_Pos := MAX(IN1 := 0.0, IN2 := #XV101_Pos - #dt / 2.0);
+	END_IF;
+	IF "DB_IO".XV102_OpenCmd THEN
+	    #XV102_Pos := MIN(IN1 := 1.0, IN2 := #XV102_Pos + #dt / 2.0);
+	ELSIF NOT "DB_FaultInjection".XV102_StuckOpen THEN
+	    #XV102_Pos := MAX(IN1 := 0.0, IN2 := #XV102_Pos - #dt / 2.0);
+	END_IF;
+	"DB_IO".XV101_ZSO := #XV101_Pos >= 0.99;
+	"DB_IO".XV101_ZSC := #XV101_Pos <= 0.01;
+	"DB_IO".XV102_ZSO := #XV102_Pos >= 0.99;
+	"DB_IO".XV102_ZSC := #XV102_Pos <= 0.01;
+	
+	// --- Agitator VFD: ramps 400 rpm/s, trips on injected fault ---
+	"DB_IO".M201_DriveFault := "DB_FaultInjection".M201_DriveTrip;
+	"DB_IO".M201_DriveReady := NOT "DB_IO".M201_DriveFault AND "DB_IO".EStop_OK;
+	IF "DB_FaultInjection".M201_Overload THEN
+	    #maxSpeed := 700.0;   // too viscous: cannot get above 700 rpm
+	ELSE
+	    #maxSpeed := 1500.0;
+	END_IF;
+	IF "DB_IO".M201_RunCmd AND "DB_IO".M201_DriveReady THEN
+	    #target := MIN(IN1 := "DB_IO".M201_SpeedSP, IN2 := #maxSpeed);
+	ELSE
+	    #target := 0.0;
+	END_IF;
+	IF "DB_IO".M201_SpeedPV < #target THEN
+	    "DB_IO".M201_SpeedPV := MIN(IN1 := #target, IN2 := "DB_IO".M201_SpeedPV + 400.0 * #dt);
+	ELSE
+	    "DB_IO".M201_SpeedPV := MAX(IN1 := #target, IN2 := "DB_IO".M201_SpeedPV - 400.0 * #dt);
+	END_IF;
+	
+	// --- Outlet pump: contactor feedback after 0.5 s ---
+	"DB_IO".P401_MotorTrip := "DB_FaultInjection".P401_Trip;
+	IF "DB_IO".P401_RunCmd AND NOT "DB_IO".P401_MotorTrip AND "DB_IO".EStop_OK THEN
+	    #P401_Delay := #P401_Delay + #dt;
+	ELSE
+	    #P401_Delay := 0.0;
+	END_IF;
+	"DB_IO".P401_RunFb := (#P401_Delay >= 0.5) AND NOT "DB_FaultInjection".P401_ContactorFault;
+	
+	// --- Tank level: A 2 %/s, B 1.5 %/s, pump out 2.5 %/s ---
+	#flowIn := 2.0 * #XV101_Pos + 1.5 * #XV102_Pos;
+	IF "DB_IO".P401_RunFb THEN
+	    #flowOut := 2.5;
+	ELSE
+	    #flowOut := 0.0;
+	END_IF;
+	#Level := LIMIT(MN := 0.0, IN := #Level + (#flowIn - #flowOut) * #dt, MX := 100.0);
+	
+	// --- Temperature: heater +0.5 degC/s when tank has product, cools towards 20 degC ---
+	IF "DB_IO".E301_OnCmd AND NOT "DB_IO".E301_OverTemp AND NOT "DB_FaultInjection".E301_HeaterFailed AND #Level > 5.0 THEN
+	    #Temp := #Temp + 0.5 * #dt;
+	END_IF;
+	#Temp := #Temp - 0.002 * (#Temp - 20.0) * #dt;
+	"DB_IO".E301_OverTemp := #Temp > 95.0;
+	
+	// --- Analog transmitters: 0..27648, 32767 on wire break ---
+	IF "DB_FaultInjection".LT101_WireBreak THEN
+	    "DB_IO".LT101_Raw := 32767;
+	ELSE
+	    "DB_IO".LT101_Raw := REAL_TO_INT(#Level / 100.0 * 27648.0);
+	END_IF;
+	IF "DB_FaultInjection".TT301_WireBreak THEN
+	    "DB_IO".TT301_Raw := 32767;
+	ELSE
+	    "DB_IO".TT301_Raw := REAL_TO_INT(#Temp / 120.0 * 27648.0);
+	END_IF;
+	
+	// --- Neighbours: MES heartbeat every 1 s, filler ready 8 s after we start holding ---
+	#HeartbeatTimer := #HeartbeatTimer + #dt;
+	IF #HeartbeatTimer >= 1.0 THEN
+	    #HeartbeatTimer := 0.0;
+	    IF NOT "DB_FaultInjection".MES_HeartbeatLost THEN
+	        "DB_LineInterface".MES_Heartbeat := "DB_LineInterface".MES_Heartbeat + 1;
+	        IF "DB_LineInterface".MES_Heartbeat >= 30000 THEN
+	            "DB_LineInterface".MES_Heartbeat := 0;
+	        END_IF;
+	    END_IF;
+	END_IF;
+	IF "DB_LineInterface".Station_Running AND NOT "DB_LineInterface".Station_Draining AND #Level > 50.0 THEN
+	    #ReadyTimer := #ReadyTimer + #dt;
+	ELSE
+	    #ReadyTimer := 0.0;
+	END_IF;
+	"DB_LineInterface".Filler_ReadyToReceive := NOT "DB_FaultInjection".Filler_NeverReady
+	    AND ((#ReadyTimer >= 8.0) OR "DB_LineInterface".Station_Draining);
+END_FUNCTION_BLOCK

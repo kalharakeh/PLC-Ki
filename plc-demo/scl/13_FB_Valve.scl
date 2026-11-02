@@ -1,0 +1,36 @@
+FUNCTION_BLOCK "FB_Valve"
+TITLE = 'On/off valve with limit switch monitoring'
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : Demo
+VERSION : 0.1
+   VAR_INPUT
+      Open : Bool;   // Request: open the valve
+      Permit : Bool := TRUE;   // Interlock: valve may only open when TRUE
+      ZSO : Bool;   // Open limit switch
+      ZSC : Bool;   // Closed limit switch
+      MonitorTime : Time := T#10S;   // Max travel time before a fault
+   END_VAR
+
+   VAR_OUTPUT
+      Out : Bool;   // Open command to the solenoid
+      IsOpen : Bool;   // Valve confirmed open
+      IsClosed : Bool;   // Valve confirmed closed
+      FaultNotOpen : Bool;   // Open command on, but open limit switch not reached in MonitorTime
+      FaultNotClosed : Bool;   // Open command off, but closed limit switch not reached in MonitorTime
+   END_VAR
+
+   VAR
+      tOpen {InstructionName := 'TON_TIME'; LibVersion := '1.0'} : TON_TIME;
+      tClose {InstructionName := 'TON_TIME'; LibVersion := '1.0'} : TON_TIME;
+   END_VAR
+
+BEGIN
+	#Out := #Open AND #Permit;
+	#IsOpen := #ZSO AND NOT #ZSC;
+	#IsClosed := #ZSC AND NOT #ZSO;
+	
+	#tOpen(IN := #Out AND NOT #IsOpen, PT := #MonitorTime);
+	#tClose(IN := NOT #Out AND NOT #IsClosed, PT := #MonitorTime);
+	#FaultNotOpen := #tOpen.Q;
+	#FaultNotClosed := #tClose.Q;
+END_FUNCTION_BLOCK

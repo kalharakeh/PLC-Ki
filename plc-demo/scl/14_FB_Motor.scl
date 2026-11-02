@@ -1,0 +1,31 @@
+FUNCTION_BLOCK "FB_Motor"
+TITLE = 'Direct-on-line motor with running feedback and trip monitoring'
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : Demo
+VERSION : 0.1
+   VAR_INPUT
+      Run : Bool;   // Request: run the motor
+      Permit : Bool := TRUE;   // Interlock: motor may only run when TRUE
+      RunFb : Bool;   // Running feedback (contactor auxiliary contact)
+      Trip : Bool;   // Motor protection breaker tripped
+      FeedbackTime : Time := T#5S;   // Max time from command to feedback
+   END_VAR
+
+   VAR_OUTPUT
+      Out : Bool;   // Run command to the contactor
+      Running : Bool;   // Motor confirmed running
+      FaultTrip : Bool;   // Motor protection tripped
+      FaultNoFeedback : Bool;   // Command on, but no running feedback within FeedbackTime
+   END_VAR
+
+   VAR
+      tFb {InstructionName := 'TON_TIME'; LibVersion := '1.0'} : TON_TIME;
+   END_VAR
+
+BEGIN
+	#FaultTrip := #Trip;
+	#Out := #Run AND #Permit AND NOT #Trip;
+	#Running := #Out AND #RunFb;
+	#tFb(IN := #Out AND NOT #RunFb, PT := #FeedbackTime);
+	#FaultNoFeedback := #tFb.Q;
+END_FUNCTION_BLOCK

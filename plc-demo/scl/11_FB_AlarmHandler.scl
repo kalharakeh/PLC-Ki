@@ -1,0 +1,82 @@
+FUNCTION_BLOCK "FB_AlarmHandler"
+TITLE = 'Latch alarm conditions into DB_Alarms'
+{ S7_Optimized_Access := 'TRUE' }
+AUTHOR : Demo
+VERSION : 0.1
+// Each alarm bit in "DB_Alarms" turns on when its condition is TRUE and stays on (latched)
+// until Reset is pressed AND the condition is gone.
+   VAR_INPUT
+      Reset : Bool;   // Reset button (PB_Reset)
+      EStop : Bool;
+      XV101_NotOpen : Bool;
+      XV101_NotClosed : Bool;
+      XV102_NotOpen : Bool;
+      XV102_NotClosed : Bool;
+      M201_DriveFault : Bool;
+      M201_SpeedDev : Bool;
+      M201_NotReady : Bool;
+      E301_OverTemp : Bool;
+      P401_Trip : Bool;
+      P401_NoFeedback : Bool;
+      LT101_WireBreak : Bool;
+      LT101_HighHigh : Bool;
+      TT301_WireBreak : Bool;
+      TT301_High : Bool;
+      Step10_Timeout : Bool;
+      Step20_Timeout : Bool;
+      Step30_Timeout : Bool;
+      Step50_Timeout : Bool;
+      E301_NoHeating : Bool;
+      Filler_NotReady : Bool;
+      MES_HeartbeatLost : Bool;
+      RecipeInvalid : Bool;
+      NotInAuto : Bool;
+      TankNotEmpty : Bool;
+   END_VAR
+
+   VAR_TEMP
+      clr : Bool;
+   END_VAR
+
+BEGIN
+	#clr := #Reset;
+	
+	// Latch: on with the condition, off only on reset when the condition has gone
+	"DB_Alarms".A01_EStop := #EStop OR ("DB_Alarms".A01_EStop AND NOT #clr);
+	"DB_Alarms".A02_XV101_NotOpen := #XV101_NotOpen OR ("DB_Alarms".A02_XV101_NotOpen AND NOT #clr);
+	"DB_Alarms".A03_XV101_NotClosed := #XV101_NotClosed OR ("DB_Alarms".A03_XV101_NotClosed AND NOT #clr);
+	"DB_Alarms".A04_XV102_NotOpen := #XV102_NotOpen OR ("DB_Alarms".A04_XV102_NotOpen AND NOT #clr);
+	"DB_Alarms".A05_XV102_NotClosed := #XV102_NotClosed OR ("DB_Alarms".A05_XV102_NotClosed AND NOT #clr);
+	"DB_Alarms".A06_M201_DriveFault := #M201_DriveFault OR ("DB_Alarms".A06_M201_DriveFault AND NOT #clr);
+	"DB_Alarms".A07_M201_SpeedDev := #M201_SpeedDev OR ("DB_Alarms".A07_M201_SpeedDev AND NOT #clr);
+	"DB_Alarms".A08_M201_NotReady := #M201_NotReady OR ("DB_Alarms".A08_M201_NotReady AND NOT #clr);
+	"DB_Alarms".A09_E301_OverTemp := #E301_OverTemp OR ("DB_Alarms".A09_E301_OverTemp AND NOT #clr);
+	"DB_Alarms".A10_P401_Trip := #P401_Trip OR ("DB_Alarms".A10_P401_Trip AND NOT #clr);
+	"DB_Alarms".A11_P401_NoFeedback := #P401_NoFeedback OR ("DB_Alarms".A11_P401_NoFeedback AND NOT #clr);
+	"DB_Alarms".A12_LT101_WireBreak := #LT101_WireBreak OR ("DB_Alarms".A12_LT101_WireBreak AND NOT #clr);
+	"DB_Alarms".A13_LT101_HighHigh := #LT101_HighHigh OR ("DB_Alarms".A13_LT101_HighHigh AND NOT #clr);
+	"DB_Alarms".A14_TT301_WireBreak := #TT301_WireBreak OR ("DB_Alarms".A14_TT301_WireBreak AND NOT #clr);
+	"DB_Alarms".A15_TT301_High := #TT301_High OR ("DB_Alarms".A15_TT301_High AND NOT #clr);
+	"DB_Alarms".A16_Step10_Timeout := #Step10_Timeout OR ("DB_Alarms".A16_Step10_Timeout AND NOT #clr);
+	"DB_Alarms".A17_Step20_Timeout := #Step20_Timeout OR ("DB_Alarms".A17_Step20_Timeout AND NOT #clr);
+	"DB_Alarms".A18_Step30_Timeout := #Step30_Timeout OR ("DB_Alarms".A18_Step30_Timeout AND NOT #clr);
+	"DB_Alarms".A19_Step50_Timeout := #Step50_Timeout OR ("DB_Alarms".A19_Step50_Timeout AND NOT #clr);
+	"DB_Alarms".A20_E301_NoHeating := #E301_NoHeating OR ("DB_Alarms".A20_E301_NoHeating AND NOT #clr);
+	"DB_Alarms".A21_Filler_NotReady := #Filler_NotReady OR ("DB_Alarms".A21_Filler_NotReady AND NOT #clr);
+	"DB_Alarms".A22_MES_HeartbeatLost := #MES_HeartbeatLost OR ("DB_Alarms".A22_MES_HeartbeatLost AND NOT #clr);
+	"DB_Alarms".A23_RecipeInvalid := #RecipeInvalid OR ("DB_Alarms".A23_RecipeInvalid AND NOT #clr);
+	"DB_Alarms".A24_NotInAuto := #NotInAuto OR ("DB_Alarms".A24_NotInAuto AND NOT #clr);
+	"DB_Alarms".A25_TankNotEmpty := #TankNotEmpty OR ("DB_Alarms".A25_TankNotEmpty AND NOT #clr);
+	
+	// Summary bits. Faults stop the sequence, warnings only inform.
+	"DB_Alarms".AnyFault := "DB_Alarms".A01_EStop OR "DB_Alarms".A02_XV101_NotOpen OR "DB_Alarms".A03_XV101_NotClosed
+	    OR "DB_Alarms".A04_XV102_NotOpen OR "DB_Alarms".A05_XV102_NotClosed OR "DB_Alarms".A06_M201_DriveFault
+	    OR "DB_Alarms".A07_M201_SpeedDev OR "DB_Alarms".A09_E301_OverTemp OR "DB_Alarms".A10_P401_Trip
+	    OR "DB_Alarms".A11_P401_NoFeedback OR "DB_Alarms".A12_LT101_WireBreak OR "DB_Alarms".A13_LT101_HighHigh
+	    OR "DB_Alarms".A14_TT301_WireBreak OR "DB_Alarms".A15_TT301_High OR "DB_Alarms".A16_Step10_Timeout
+	    OR "DB_Alarms".A17_Step20_Timeout OR "DB_Alarms".A18_Step30_Timeout OR "DB_Alarms".A19_Step50_Timeout
+	    OR "DB_Alarms".A20_E301_NoHeating;
+	"DB_Alarms".AnyWarning := "DB_Alarms".A08_M201_NotReady OR "DB_Alarms".A21_Filler_NotReady
+	    OR "DB_Alarms".A22_MES_HeartbeatLost OR "DB_Alarms".A23_RecipeInvalid OR "DB_Alarms".A24_NotInAuto
+	    OR "DB_Alarms".A25_TankNotEmpty;
+END_FUNCTION_BLOCK
