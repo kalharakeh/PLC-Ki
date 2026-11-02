@@ -51,14 +51,14 @@ Nothing in this tool connects to a PLC or downloads to one.";
                         var archive = Arg("--archive");
                         var outDir = Arg("--out");
                         if (archive == null || outDir == null) { Console.WriteLine(Usage); return 2; }
-                        return new Exporter(Console.Out).Run(new FileInfo(archive), new DirectoryInfo(outDir));
+                        return new Exporter(Console.Out).Run(new FileInfo(Path.GetFullPath(archive)), new DirectoryInfo(Path.GetFullPath(outDir)));
                     }
                 case "setup-demo":
                     {
                         var project = Arg("--project");
                         var demo = Arg("--demo");
                         if (project == null || demo == null) { Console.WriteLine(Usage); return 2; }
-                        return new DemoSetup(Console.Out).Run(new FileInfo(project), new DirectoryInfo(demo), Arg("--plc"));
+                        return new DemoSetup(Console.Out).Run(new FileInfo(Path.GetFullPath(project)), new DirectoryInfo(Path.GetFullPath(demo)), Arg("--plc"));
                     }
                 default:
                     Console.WriteLine(Usage);
