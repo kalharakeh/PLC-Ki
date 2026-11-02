@@ -24,7 +24,16 @@ per PLC:
 - A valid STEP 7 Professional license
 - Your Windows user in the local group **Siemens TIA Openness** (Computer Management > Local Users and Groups),
   then sign out and in again
-- The first time the tool starts TIA, TIA may ask you to allow access for `TiaImporter.exe`: allow it
+- The first time the tool starts TIA, TIA asks you to allow access for `TiaImporter.exe`, and again after every
+  rebuild. To skip that prompt, approve your own build once (asks for administrator rights):
+
+  ```
+  powershell -ExecutionPolicy Bypass -File tools\TiaImporter\allow-openness.ps1
+  ```
+
+  It writes the same Openness whitelist entry TIA writes when you answer "Yes to all" (path, date and SHA-256 of
+  the exe under `HKLM\SOFTWARE\Siemens\Automation\Openness\20.0\Whitelist`). Run it again after each rebuild.
+  Only the TIA PC needs this.
 
 ## Build
 
