@@ -1,0 +1,871 @@
+{
+  "name": "Siemens S7-1500 / S7-1200 system and diagnostic messages",
+  "version": "2026-11-02",
+  "about": "General Siemens knowledge for messages that do not come from the machine's own program: CPU diagnostic buffer events, error OBs, CPU LEDs, PROFINET faults, module and channel diagnostics, F-system (safety) messages, SINAMICS drive faults and communication errors. Each entry gives the meaning in plain English, likely causes, what to check and how to fix it. Wording of messages differs between firmware versions and languages, so entries are found by keywords, not exact text. Always confirm with the CPU diagnostic buffer or the device's own diagnostics (TIA Portal: Online & diagnostics, the CPU display, or the CPU web server).",
+  "entries": [
+    {
+      "id": "cpu-stop-general",
+      "category": "CPU",
+      "title": "CPU is in STOP",
+      "appliesTo": ["S7-1500", "S7-1200"],
+      "codes": [],
+      "keywords": ["stop", "cpu stop", "plc stop", "run/stop led yellow", "operating mode stop", "plc stopped", "machine dead"],
+      "meaning": "The PLC program is not running. Outputs go to their substitute values (usually off) and the machine stops. The CPU itself is still powered and reachable.",
+      "causes": [
+        "Mode switch or display set to STOP, or someone stopped it from TIA Portal",
+        "A program error with no error handling (see the programming error and I/O access error entries)",
+        "Cycle time exceeded twice in one cycle",
+        "A STP instruction in the program",
+        "Startup failed: hardware differs from the configuration, missing or wrong memory card, or a download left the program inconsistent",
+        "F-CPU: the safety program found a fault and stopped"
+      ],
+      "checks": [
+        "Read the diagnostic buffer (TIA Portal: Online & diagnostics > Diagnostics > Diagnostic buffer, the CPU display, or the CPU web server). The newest entries before 'STOP' give the reason.",
+        "Look at the CPU LEDs: RUN/STOP yellow = STOP, ERROR red flashing = a fault is pending, MAINT yellow = maintenance needed.",
+        "Check the mode switch (S7-1500 has it behind the front flap, S7-1200 has no switch)."
+      ],
+      "fixes": [
+        "Fix the cause named in the diagnostic buffer first; otherwise the CPU will stop again.",
+        "Then switch to RUN with the mode switch, the display, or TIA Portal (Online tools > CPU operator panel > RUN).",
+        "If the program had to be changed, download it and check that online and offline match."
+      ],
+      "cpuReaction": "Program stops, outputs off (or substitute values), communication still works."
+    },
+    {
+      "id": "cpu-cycle-time-exceeded",
+      "category": "CPU",
+      "title": "Maximum cycle time exceeded (time error, OB80)",
+      "appliesTo": ["S7-1500", "S7-1200"],
+      "codes": ["OB80"],
+      "keywords": ["cycle time exceeded", "maximum cycle time", "time error", "watchdog", "scan time", "cycle monitoring", "ob80", "cycle time overrun"],
+      "meaning": "One pass of the main program (OB1 and everything it calls, plus interrupts) took longer than the maximum cycle time set in the CPU properties (default 150 ms). The CPU calls the time error OB80. If the cycle runs past twice the maximum cycle time in the same cycle, the CPU goes to STOP whether or not OB80 exists.",
+      "causes": [
+        "A loop in the program that runs too long or never ends (FOR/WHILE/REPEAT with a wrong end condition, waiting for an input inside a loop)",
+        "Large data copies or string handling every cycle",
+        "Too many or too slow cyclic interrupts (OB30-OB38) or hardware interrupts piling up",
+        "Heavy communication load (many HMI/OPC UA/web clients) on a small CPU",
+        "Maximum cycle time set too low for the program"
+      ],
+      "checks": [
+        "Diagnostic buffer: entry 'Cycle time exceeded' with the OB and the time.",
+        "TIA Portal: Online & diagnostics > Cycle time shows shortest, current and longest cycle.",
+        "Look for loops in the block that was running (the buffer entry often names it)."
+      ],
+      "fixes": [
+        "Fix the long-running code: limit loop counts, spread big jobs over several cycles, never wait inside a loop.",
+        "Only if the program really needs it: raise the maximum cycle time in CPU properties > Cycle (a program download).",
+        "Add OB80 to log the event if you want the CPU to keep running after a single overrun."
+      ],
+      "cpuReaction": "OB80 is called. Twice the maximum cycle time in one cycle: STOP."
+    },
+    {
+      "id": "cpu-programming-error",
+      "category": "CPU",
+      "title": "Programming error (OB121)",
+      "appliesTo": ["S7-1500", "S7-1200"],
+      "codes": ["OB121"],
+      "keywords": ["programming error", "ob121", "area length error", "range error", "block does not exist", "db not loaded", "invalid pointer", "array index", "index out of range", "access error", "program execution error", "read access error", "write access error", "division by zero", "data block not loaded"],
+      "meaning": "An instruction could not be executed: for example an array index outside the array, a pointer or ANY to an address that does not exist, a call to a block or DB that is not in the CPU, or an access past the end of a DB. The diagnostic buffer names the block, the instruction (step address) and the kind of error.",
+      "causes": [
+        "Array index computed from a value that went out of range (e.g. recipe number 0 or above the array size)",
+        "Indirect addressing (PEEK/POKE, ANY, VARIANT, DB_ANY) pointing to a missing or too short DB",
+        "A DB was deleted, renumbered or not downloaded",
+        "Partial download left blocks inconsistent"
+      ],
+      "checks": [
+        "Diagnostic buffer: 'Programming error' entry with block name, step address and error type. Double-click it in TIA Portal to jump to the code.",
+        "Check the index or pointer values in a watch table at the moment the error happens."
+      ],
+      "fixes": [
+        "Check the index/pointer before using it (limit it to the array bounds), or handle errors locally with GET_ERR_ID / GET_ERROR in the block.",
+        "Download the full program so all blocks and DBs are consistent.",
+        "Add OB121 to log the error so the CPU does not stop, but still fix the cause."
+      ],
+      "cpuReaction": "S7-1500: STOP if OB121 is missing and the block does not handle the error itself. S7-1200: normally stays in RUN and only writes the buffer entry. Behaviour can depend on firmware, so read the buffer."
+    },
+    {
+      "id": "cpu-io-access-error",
+      "category": "CPU",
+      "title": "I/O access error (OB122)",
+      "appliesTo": ["S7-1500", "S7-1200"],
+      "codes": ["OB122"],
+      "keywords": ["i/o access error", "io access error", "ob122", "peripheral access", "direct access error", "access to i/o", ":p access"],
+      "meaning": "The program tried to read or write an I/O address directly (with :P or a direct-access instruction) and the module did not answer: it is missing, failed, or the address is not configured.",
+      "causes": [
+        "The module or PROFINET device at that address has failed or been pulled",
+        "Address used in the program does not exist in the hardware configuration",
+        "Device still starting up after power-on"
+      ],
+      "checks": [
+        "Diagnostic buffer: 'I/O access error' with the address and block.",
+        "Online & diagnostics: is the module at that address red?"
+      ],
+      "fixes": [
+        "Bring the module or device back (see module and PROFINET entries).",
+        "Correct the address in the program or the hardware configuration.",
+        "Add OB122 to log the error, and check the module's status before direct access."
+      ],
+      "cpuReaction": "Depends on CPU and firmware; usually stays in RUN with a buffer entry. Read the buffer."
+    },
+    {
+      "id": "cpu-diagnostic-interrupt",
+      "category": "CPU",
+      "title": "Diagnostic interrupt (OB82)",
+      "appliesTo": ["S7-1500", "S7-1200"],
+      "codes": ["OB82"],
+      "keywords": ["diagnostic interrupt", "ob82", "diagnostics alarm", "diagnostic error interrupt", "incoming diagnostic", "outgoing diagnostic"],
+      "meaning": "A module or channel reported a fault (incoming) or that a fault has gone (outgoing). The real cause is in the module diagnostics: wire break, short circuit, missing supply, overflow and so on.",
+      "causes": ["A channel or module fault on a module with diagnostics enabled; see the channel entries for the specific fault"],
+      "checks": [
+        "Diagnostic buffer: the entry names the module (hardware identifier, slot) and the fault.",
+        "Online & diagnostics on that module: Diagnostic status and Channel diagnostics.",
+        "The module's red DIAG/channel LEDs."
+      ],
+      "fixes": ["Fix the named channel or module fault. The entry goes outgoing by itself once the cause is gone."],
+      "cpuReaction": "S7-1500/S7-1200 stay in RUN even without OB82."
+    },
+    {
+      "id": "cpu-pull-plug",
+      "category": "CPU",
+      "title": "Module pulled or plugged (OB83)",
+      "appliesTo": ["S7-1500", "S7-1200", "ET 200SP", "ET 200MP"],
+      "codes": ["OB83"],
+      "keywords": ["pull/plug", "pull plug", "module removed", "module inserted", "module pulled", "module missing", "ob83", "module not present", "slot empty"],
+      "meaning": "A configured module was removed (or reinserted) while the system was running, or stopped answering on the backplane.",
+      "causes": [
+        "Module actually pulled or not fully engaged",
+        "Module failed",
+        "Backplane bus problem (bad U-connector on S7-1500, BaseUnit contact on ET 200SP)",
+        "Power to the module or station segment lost"
+      ],
+      "checks": [
+        "Diagnostic buffer and Online & diagnostics show which slot.",
+        "At the rack: is the module seated, are its LEDs on, is the front connector plugged?"
+      ],
+      "fixes": [
+        "Reseat or replace the module (same article number, or a compatible one).",
+        "Check the backplane connector and supply of that segment.",
+        "On S7-1500 central racks, power down before pulling modules unless the module allows hot swapping."
+      ],
+      "cpuReaction": "Stays in RUN; inputs of that module read as 0 or substitute value.",
+      "safety": "Switch off and lock out power before working in the cabinet unless you are authorised and the module is hot-swappable."
+    },
+    {
+      "id": "cpu-rack-station-failure",
+      "category": "CPU",
+      "title": "Rack or station failure (OB86)",
+      "appliesTo": ["S7-1500", "S7-1200"],
+      "codes": ["OB86"],
+      "keywords": ["rack failure", "station failure", "ob86", "distributed i/o failure", "dp slave failure", "io system failure", "station return", "station returned"],
+      "meaning": "A whole distributed I/O station (PROFINET IO device or PROFIBUS slave) stopped communicating. All its inputs read 0 or substitute values and its outputs go safe. When it comes back, a 'station return' entry follows.",
+      "causes": ["See 'PROFINET IO device failure'"],
+      "checks": ["See 'PROFINET IO device failure'"],
+      "fixes": ["See 'PROFINET IO device failure'"],
+      "cpuReaction": "S7-1500 stays in RUN even without OB86."
+    },
+    {
+      "id": "cpu-startup-config-mismatch",
+      "category": "CPU",
+      "title": "Startup blocked: configured and actual hardware differ",
+      "appliesTo": ["S7-1500", "S7-1200"],
+      "codes": ["OB100"],
+      "keywords": ["startup", "start-up", "configured and actual", "configuration differs", "wrong module", "module type mismatch", "hardware mismatch", "startup prevented", "startup inhibited", "comparison preset", "not compatible"],
+      "meaning": "At startup the CPU compares the hardware it finds with the downloaded configuration. Depending on the 'Comparison preset to actual module' setting, a wrong or missing module can stop the CPU from going to RUN.",
+      "causes": [
+        "A module was replaced with a different article number or firmware",
+        "A module in the configuration is missing",
+        "Configuration downloaded for a different hardware build"
+      ],
+      "checks": [
+        "Diagnostic buffer: 'module type differs' / 'module missing' with the slot.",
+        "Compare the article numbers on the modules with the device configuration in TIA Portal."
+      ],
+      "fixes": [
+        "Fit the configured module, or change the configuration to the module that is fitted and download it.",
+        "CPU properties > Startup > 'Comparison preset to actual configuration' decides whether a compatible module is accepted."
+      ],
+      "cpuReaction": "Stays in STOP until the configuration matches (when the CPU is set to require it)."
+    },
+    {
+      "id": "cpu-memory-card",
+      "category": "CPU",
+      "title": "Memory card missing, wrong, full or write-protected",
+      "appliesTo": ["S7-1500", "S7-1200"],
+      "codes": [],
+      "keywords": ["memory card", "smc", "simatic memory card", "card missing", "card removed", "load memory full", "card not valid", "card write-protected", "card full", "transfer card", "program card", "card error"],
+      "meaning": "S7-1500 always needs a SIMATIC Memory Card (it holds the program). S7-1200 can run from internal load memory, or use a card as program, transfer or firmware update card. A missing, faulty, full or wrongly prepared card stops the CPU or blocks downloads.",
+      "causes": [
+        "Card pulled during operation (S7-1500 goes to STOP)",
+        "Card is not a Siemens SIMATIC Memory Card or is damaged",
+        "Load memory full (big project, too many saved trace/data logs/recipes)",
+        "S7-1200: card configured as transfer or firmware update card instead of program card",
+        "Card left write-protected after copying a project onto it"
+      ],
+      "checks": [
+        "Diagnostic buffer and CPU display: card status and memory usage.",
+        "TIA Portal: Online & diagnostics > Memory shows load memory used."
+      ],
+      "fixes": [
+        "Insert the correct card, then power cycle or switch to RUN.",
+        "Free load memory (delete old data logs) or use a bigger card; download again.",
+        "Remove write protection or prepare the card again from TIA Portal (Card Reader/USB memory)."
+      ],
+      "cpuReaction": "S7-1500 without a card: STOP, cannot start."
+    },
+    {
+      "id": "cpu-retentive-memory-lost",
+      "category": "CPU",
+      "title": "Retentive data lost or reset (memory reset, reset to factory)",
+      "appliesTo": ["S7-1500", "S7-1200"],
+      "codes": ["MRES"],
+      "keywords": ["memory reset", "mres", "retentive data lost", "retain lost", "factory settings", "reset to factory", "data reset", "start values", "actual values lost", "reinitialize"],
+      "meaning": "Values kept through power-off (retentive DB data, counters, recipe data) were reset to their start values. This happens after a memory reset, a reset to factory settings, a download that reinitialises DBs, or a CPU or card change.",
+      "causes": [
+        "Download of changed DB structure (TIA Portal reinitialises the DB)",
+        "Memory reset from the switch, display or TIA Portal",
+        "S7-1200: power loss without enough backup (retentive memory is limited)"
+      ],
+      "checks": [
+        "Diagnostic buffer: 'memory reset' or 'reinitialisation' entries.",
+        "Compare DB actual values with a snapshot or backup."
+      ],
+      "fixes": [
+        "Restore values from a DB snapshot (TIA Portal: snapshot, then 'Copy snapshot to start values' / load) or re-enter recipes.",
+        "Use 'Download without reinitialization' with a memory reserve for future DB changes."
+      ]
+    },
+    {
+      "id": "cpu-time-of-day",
+      "category": "CPU",
+      "title": "CPU clock lost or not synchronised",
+      "appliesTo": ["S7-1500", "S7-1200"],
+      "codes": [],
+      "keywords": ["time of day", "clock", "time not set", "ntp", "time synchronization", "rtc", "date wrong", "time lost", "buffer time"],
+      "meaning": "The CPU's real-time clock is wrong or was reset. Time stamps in alarms and the diagnostic buffer are then wrong, and time-of-day interrupts run at the wrong time.",
+      "causes": [
+        "Long power-off: the clock is buffered only for a limited time (S7-1200 can use a battery board BB 1297)",
+        "NTP server not reachable or not configured"
+      ],
+      "checks": ["Online & diagnostics > Set time; CPU properties > Time of day / NTP settings."],
+      "fixes": ["Set the time from TIA Portal or the display, or configure NTP to a reachable server."]
+    },
+    {
+      "id": "cpu-leds",
+      "category": "CPU",
+      "title": "What the CPU LEDs mean (S7-1500 / S7-1200)",
+      "appliesTo": ["S7-1500", "S7-1200"],
+      "codes": [],
+      "keywords": ["led", "leds", "error led", "maint led", "run led", "red led", "flashing red", "flashing yellow", "yellow led", "green led", "run/stop", "lights"],
+      "meaning": "RUN/STOP green = RUN; yellow = STOP; flashing yellow/green = starting up or a download. ERROR red flashing = a fault is pending (diagnostic, configuration or program error); ERROR red steady together with others = hardware fault. MAINT yellow = maintenance demanded or requested (for example a PROFINET device with a maintenance alarm), or forcing is active on some models. All LEDs flashing together = 'flash LED' test from TIA Portal to find the CPU. Port LEDs (LINK/RX/TX, green/yellow) show the Ethernet link per port.",
+      "causes": [],
+      "checks": ["The diagnostic buffer explains every red or yellow LED; the S7-1500 display shows the same information under Diagnostics."],
+      "fixes": ["Find the entry in the diagnostic buffer and follow that entry's fix."]
+    },
+    {
+      "id": "cpu-force-active",
+      "category": "CPU",
+      "title": "Force job active",
+      "appliesTo": ["S7-1500", "S7-1200"],
+      "codes": [],
+      "keywords": ["force", "forced", "force active", "forcing", "force job", "maint led force"],
+      "meaning": "Someone forced inputs or outputs from TIA Portal. Forced values stay in place even after the program or the operator wants something else, and they survive a power cycle. The MAINT (S7-1500) or MAINT/force LED (S7-1200) shows it.",
+      "causes": ["Commissioning or troubleshooting left forces active"],
+      "checks": ["TIA Portal: Online, open the force table (Watch and force tables > Force table) to see what is forced."],
+      "fixes": ["Have a qualified person review the forced values and stop forcing (Stop forcing) once the reason is gone."],
+      "safety": "Forced outputs can move the machine regardless of program interlocks. Never force to bypass a safety function or interlock."
+    },
+    {
+      "id": "cpu-protection-access",
+      "category": "CPU",
+      "title": "Access protection / password / know-how protection",
+      "appliesTo": ["S7-1500", "S7-1200"],
+      "codes": [],
+      "keywords": ["password", "access level", "protection level", "access denied", "know-how protection", "copy protection", "no access", "read access", "full access", "hmi access"],
+      "meaning": "The CPU's access level (full, read, HMI, no access) or a block's know-how or copy protection prevents an action such as going online with write rights, downloading, or opening a block.",
+      "causes": ["Protection level set in CPU properties > Protection & Security", "Block protected by the OEM", "Copy protection bound to another CPU serial number or card"],
+      "checks": ["The message in TIA Portal names the protection; CPU properties show the access level."],
+      "fixes": ["Get the password from the owner of the project or the OEM. PLC-Ki only reads, so it needs read access at most."]
+    },
+    {
+      "id": "cpu-stp-instruction",
+      "category": "CPU",
+      "title": "STOP caused by STP instruction",
+      "appliesTo": ["S7-1500", "S7-1200"],
+      "codes": ["STP"],
+      "keywords": ["stp", "stop instruction", "stop caused by program", "stop by stp"],
+      "meaning": "The program itself put the CPU into STOP by calling the STP instruction, usually on purpose when it found a serious condition.",
+      "causes": ["The condition programmed in front of the STP call became true"],
+      "checks": ["Diagnostic buffer names the block; search the program for STP to see the condition."],
+      "fixes": ["Find and fix the condition that triggers it, then switch to RUN."]
+    },
+    {
+      "id": "cpu-download-consistency",
+      "category": "CPU",
+      "title": "Online and offline program differ / inconsistent download",
+      "appliesTo": ["S7-1500", "S7-1200"],
+      "codes": [],
+      "keywords": ["online offline differ", "not consistent", "inconsistent", "different online", "compare", "download failed", "blocks differ", "software not consistent", "loading error"],
+      "meaning": "The program in the CPU is not the same as the project open in TIA Portal (or the archive PLC-Ki was built from). Explanations based on the archive may then be wrong for the changed blocks.",
+      "causes": ["Changes downloaded from another PC", "Download aborted", "Archive is older than the running program"],
+      "checks": ["TIA Portal: Go online, the compare icons show which blocks differ; Online > Compare offline/online."],
+      "fixes": ["Upload from the device into a new project to get the running version, or download the intended version. Then make a fresh archive for PLC-Ki."]
+    },
+    {
+      "id": "pn-device-failure",
+      "category": "PROFINET",
+      "title": "PROFINET IO device failure (station failure)",
+      "appliesTo": ["S7-1500", "S7-1200", "ET 200SP", "ET 200MP", "SINAMICS", "PROFINET"],
+      "codes": ["OB86", "BF"],
+      "keywords": ["io device failure", "device failure", "station failure", "profinet device failed", "communication lost", "device not reachable", "bf led", "bus fault", "io device not available", "station return", "lost connection to device", "ar not established", "no connection to io device"],
+      "meaning": "The CPU (IO controller) lost cyclic communication with a PROFINET IO device: remote I/O, a drive, a valve terminal, a robot or another PLC. Its inputs read 0 or substitute values and the device puts its outputs in the safe state. The BF (bus fault) LED on the device and the ERROR LED on the CPU usually light up.",
+      "causes": [
+        "Device has no power (check its 24 V supply, fuses, main switch of a drive)",
+        "Cable unplugged, damaged or a bad connector; a switch in between failed or is unpowered",
+        "Device name changed or lost (after replacing a device)",
+        "IP address conflict on the network",
+        "Device in the wrong network segment or blocked by a firewall/managed switch",
+        "Too much network load or a loop causing the watchdog (update time x accepted cycles) to run out"
+      ],
+      "checks": [
+        "Diagnostic buffer: 'IO device failure' with device name and time; repeated come/go means a loose contact or intermittent network.",
+        "Online & diagnostics > Topology view shows where the line breaks.",
+        "At the device: power LED, BF LED, port LINK LEDs on both ends of each cable.",
+        "TIA Portal: Accessible devices to see whether it answers and with which name/IP."
+      ],
+      "fixes": [
+        "Restore power, cable or switch; replace a damaged cable or connector.",
+        "After a device swap, assign the PROFINET device name (Online > Assign device name) or use topology-based automatic commissioning ('device replacement without exchangeable medium').",
+        "Clear IP/name conflicts.",
+        "If it drops out intermittently, check cable routing near drives, shield grounding and the port statistics."
+      ],
+      "cpuReaction": "S7-1500/S7-1200 stay in RUN; OB86 is called if present."
+    },
+    {
+      "id": "pn-name-not-assigned",
+      "category": "PROFINET",
+      "title": "PROFINET device name missing or wrong",
+      "appliesTo": ["PROFINET", "ET 200SP", "SINAMICS", "S7-1500", "S7-1200"],
+      "codes": [],
+      "keywords": ["device name", "name of station", "name not assigned", "no device name", "wrong device name", "name conflict", "duplicate name", "assign device name", "nameofstation"],
+      "meaning": "The IO controller finds its devices by PROFINET device name. A new or reset device has no name (or the wrong one), so the controller cannot start communicating with it.",
+      "causes": ["Device replaced", "Device reset to factory settings", "Two devices with the same name", "Name typed differently in the configuration"],
+      "checks": ["TIA Portal: Online access > your adapter > Update accessible devices; compare names with the configuration.", "Device BF LED flashing usually means 'no communication / name missing'."],
+      "fixes": [
+        "Assign the name from the configuration (in the network view right-click the device > Assign device name).",
+        "Enable 'Support device replacement without exchangeable medium' with configured topology so replacements get their name automatically."
+      ]
+    },
+    {
+      "id": "pn-ip-conflict",
+      "category": "PROFINET",
+      "title": "IP address conflict / duplicate address",
+      "appliesTo": ["PROFINET", "S7-1500", "S7-1200"],
+      "codes": [],
+      "keywords": ["ip address conflict", "duplicate ip", "address conflict", "ip conflict", "duplicate address", "ip address already used", "ip already in use"],
+      "meaning": "Two devices on the same network use the same IP address. One or both stop communicating; on a CPU interface the port may be switched off for IP traffic.",
+      "causes": ["A laptop, HMI or replacement device set to an address already in use", "Wrong address typed during commissioning"],
+      "checks": ["Diagnostic buffer names the interface; 'Accessible devices' lists all devices and their addresses."],
+      "fixes": ["Give the newcomer a free address; keep an address list for the machine network."]
+    },
+    {
+      "id": "pn-topology-neighbor",
+      "category": "PROFINET",
+      "title": "Topology error: wrong or missing port neighbour",
+      "appliesTo": ["PROFINET", "S7-1500", "ET 200SP"],
+      "codes": [],
+      "keywords": ["topology", "neighbor", "neighbour", "port mismatch", "partner port", "wrong partner", "neighborhood", "port interconnection", "topology error", "unexpected neighbor"],
+      "meaning": "The configured topology says port X of one device connects to port Y of another, but the actual cabling is different or the link is down. Usually a maintenance message; it matters when automatic device replacement or IRT/MRP depends on the topology.",
+      "causes": ["Cable moved to another port", "Cable missing or broken", "Device added in the line"],
+      "checks": ["Online & diagnostics > Topology view (offline/online comparison)."],
+      "fixes": ["Plug cables as configured, or update the configured topology and download."]
+    },
+    {
+      "id": "pn-link-down",
+      "category": "PROFINET",
+      "title": "Port link down / cable fault",
+      "appliesTo": ["PROFINET", "S7-1500", "S7-1200", "ET 200SP", "SCALANCE"],
+      "codes": [],
+      "keywords": ["link down", "no link", "port disconnected", "cable", "network cable", "link lost", "port deactivated", "link led off", "connection broken", "rj45"],
+      "meaning": "An Ethernet port lost its physical connection to the next device. Every device behind that point in a line topology is lost too.",
+      "causes": ["Cable unplugged or damaged", "Connector badly crimped", "Next device unpowered", "Port disabled in configuration"],
+      "checks": ["Port LINK LEDs at both ends.", "Topology view shows the broken segment."],
+      "fixes": ["Replace or re-terminate the cable (industrial RJ45/M12), power the neighbour device."]
+    },
+    {
+      "id": "pn-mrp-ring-open",
+      "category": "PROFINET",
+      "title": "Media redundancy: ring open (MRP)",
+      "appliesTo": ["PROFINET", "S7-1500", "SCALANCE"],
+      "codes": ["MRP"],
+      "keywords": ["mrp", "ring open", "ring interrupted", "media redundancy", "redundancy lost", "ring break", "ring error"],
+      "meaning": "The PROFINET ring has a break. The machine keeps running over the other direction, but redundancy is lost: one more break will cut devices off.",
+      "causes": ["A cable or port in the ring failed", "A device in the ring was switched off"],
+      "checks": ["Diagnostic buffer of the MRP manager; topology view; port LEDs along the ring."],
+      "fixes": ["Find and fix the broken segment soon, during the next stop."]
+    },
+    {
+      "id": "pn-update-time-watchdog",
+      "category": "PROFINET",
+      "title": "PROFINET watchdog / update time / communication overload",
+      "appliesTo": ["PROFINET", "S7-1500", "S7-1200"],
+      "codes": [],
+      "keywords": ["update time", "watchdog time", "accepted update cycles", "jitter", "network load", "frames lost", "communication overload", "telegram failure", "intermittent"],
+      "meaning": "Cyclic data did not arrive within the watchdog time (update time x number of accepted missing cycles), so the device or controller dropped the connection. Typically intermittent.",
+      "causes": ["Network overload or broadcast storm", "A loop in unmanaged switches", "EMC disturbances on cables near drives", "Too short update time for the number of devices in a line"],
+      "checks": ["Count how often the failure comes and goes in the diagnostic buffer.", "Managed switch port statistics (errors, discards)."],
+      "fixes": ["Separate office/IT traffic from the machine network, remove loops, improve shielding and routing.", "Increase update time or accepted update cycles in the device's IO cycle settings if the process allows."]
+    },
+    {
+      "id": "pn-shared-device",
+      "category": "PROFINET",
+      "title": "Shared device / I-device not reachable",
+      "appliesTo": ["PROFINET", "S7-1500", "S7-1200"],
+      "codes": [],
+      "keywords": ["i-device", "shared device", "intelligent device", "higher-level io controller", "transfer area", "i device failure"],
+      "meaning": "A PLC that exchanges data with another PLC as an I-device (or a shared device used by two controllers) lost the connection to its partner. The transfer areas stop updating.",
+      "causes": ["Partner PLC in STOP or powered off", "Configuration of the transfer areas changed on only one side", "Network fault between them"],
+      "checks": ["Diagnostic buffers of both PLCs; status of the partner PLC."],
+      "fixes": ["Bring the partner back to RUN; download matching configurations on both sides (the I-device GSD must be re-exported after changes)."]
+    },
+    {
+      "id": "pn-maintenance-demanded",
+      "category": "PROFINET",
+      "title": "Maintenance required / maintenance demanded",
+      "appliesTo": ["PROFINET", "S7-1500", "ET 200SP", "SCALANCE"],
+      "codes": [],
+      "keywords": ["maintenance required", "maintenance demanded", "maint", "maintenance alarm", "maintenance request", "maint led"],
+      "meaning": "A device reports it still works but needs attention soon: for example a fibre-optic link losing power budget, MRP ring open, a fan, or a module with a long-term problem. The MAINT LED is yellow. The machine keeps running.",
+      "causes": ["Depends on the device; the diagnostic text names it"],
+      "checks": ["Online & diagnostics on the device named in the buffer."],
+      "fixes": ["Plan the repair for the next stop."]
+    },
+    {
+      "id": "pn-firmware-gsd-mismatch",
+      "category": "PROFINET",
+      "title": "Device firmware or GSD does not match the configuration",
+      "appliesTo": ["PROFINET", "ET 200SP", "SINAMICS"],
+      "codes": [],
+      "keywords": ["gsd", "gsdml", "firmware mismatch", "firmware version", "incompatible firmware", "wrong version", "device version", "module version"],
+      "meaning": "The device answers but rejects the configuration because its firmware or type does not match what the GSD/hardware catalog entry in the project expects.",
+      "causes": ["Replacement device with newer or older firmware", "Wrong device variant ordered"],
+      "checks": ["Diagnostic buffer and module information (Online & diagnostics > General) show actual firmware."],
+      "fixes": ["Update the device firmware, or change the configured version in TIA Portal and download."]
+    },
+    {
+      "id": "ch-wire-break",
+      "category": "Module",
+      "title": "Wire break (channel diagnostics)",
+      "appliesTo": ["S7-1500", "S7-1200", "ET 200SP", "ET 200MP"],
+      "codes": [],
+      "keywords": ["wire break", "wirebreak", "open circuit", "broken wire", "line break", "cable break", "32767", "7fff", "wire-break"],
+      "meaning": "The module detects that the circuit to a sensor or actuator is open. Analog inputs typically read 32767 (16#7FFF, 'overflow') when this happens, digital inputs with wire-break diagnostics need a sensor with a defined quiescent current or a resistor.",
+      "causes": ["Cable cut or pulled out of a terminal", "Connector loose", "Sensor/transmitter defective or unpowered (4-20 mA loop below about 1.2 mA)", "Fuse in the loop blown"],
+      "checks": [
+        "Module DIAG and channel LEDs; Online & diagnostics > Channel diagnostics names the channel.",
+        "Measure at the terminal: voltage/current; for 4-20 mA check the loop current.",
+        "Check the front connector is fully screwed in."
+      ],
+      "fixes": ["Repair the wiring or replace the sensor; the diagnostic goes away once the channel reads a valid value."],
+      "safety": "Isolate the circuit before working on terminals; 4-20 mA loops may be powered from elsewhere."
+    },
+    {
+      "id": "ch-short-to-ground",
+      "category": "Module",
+      "title": "Short circuit to ground / to M",
+      "appliesTo": ["S7-1500", "S7-1200", "ET 200SP", "ET 200MP"],
+      "codes": [],
+      "keywords": ["short circuit", "short-circuit", "short to ground", "short to m", "short circuit to ground", "ground fault", "overload output", "encoder supply short"],
+      "meaning": "A channel output, sensor supply or encoder supply is shorted to 0 V (M) or overloaded. The module switches that output off to protect itself.",
+      "causes": ["Damaged cable insulation", "Defective solenoid coil or sensor", "Wrong wiring after a change", "Water in a junction box or connector"],
+      "checks": ["Channel diagnostics names the channel.", "Disconnect the field cable and measure insulation/resistance."],
+      "fixes": ["Repair the cable or replace the load; the output recovers once the short is gone (some modules need the channel switched off and on)."],
+      "safety": "Isolate and lock out the circuit before measuring or repairing."
+    },
+    {
+      "id": "ch-short-to-l",
+      "category": "Module",
+      "title": "Short circuit to L+ (supply)",
+      "appliesTo": ["S7-1500", "ET 200SP", "ET 200MP"],
+      "codes": [],
+      "keywords": ["short to l+", "short circuit to l+", "short to supply", "short to 24v", "short circuit to p"],
+      "meaning": "An output channel is connected to the 24 V supply in the field, so it cannot be switched off. The load may run even when the program switches the output off.",
+      "causes": ["Cable damage touching a 24 V conductor", "Wiring error"],
+      "checks": ["Channel diagnostics; measure the output with the channel off."],
+      "fixes": ["Find and repair the wiring fault."],
+      "safety": "The actuator may be energised regardless of the program; isolate it before working on the machine."
+    },
+    {
+      "id": "ch-overflow-underflow",
+      "category": "Module",
+      "title": "Analog value overflow / underflow (measuring range exceeded)",
+      "appliesTo": ["S7-1500", "S7-1200", "ET 200SP", "ET 200MP"],
+      "codes": ["32767", "-32768", "32511", "27648"],
+      "keywords": ["overflow", "underflow", "high limit", "low limit", "measuring range", "out of range", "overrange", "underrange", "upper limit exceeded", "lower limit", "32767", "32511", "27648", "-32768"],
+      "meaning": "The analog signal is outside what the module can measure. Rated range is 0..27648 (or -27648..27648); 27649..32511 is overrange (still measured); 32767 means overflow, often a wire break or a short on 4-20 mA; -32768 means underflow (e.g. 4-20 mA below about 1.2 mA, or wire break on some modules).",
+      "causes": ["Sensor really out of range", "Wire break or short circuit", "Sensor type or range set wrong in the module parameters (e.g. 0-10 V configured, 4-20 mA wired)", "Transmitter fault or saturating"],
+      "checks": ["Raw value of the channel in a watch table.", "Module parameters (measurement type and range) against the wiring.", "Measure the signal at the terminal."],
+      "fixes": ["Repair wiring or sensor, or correct the module parameters and download."]
+    },
+    {
+      "id": "ch-missing-supply",
+      "category": "Module",
+      "title": "Supply voltage L+ / load voltage missing",
+      "appliesTo": ["S7-1500", "S7-1200", "ET 200SP", "ET 200MP"],
+      "codes": [],
+      "keywords": ["supply voltage", "load voltage", "missing supply", "l+ missing", "no load voltage", "supply voltage missing", "power module", "pm missing voltage", "24v missing", "1l+", "2l+", "potential group"],
+      "meaning": "The 24 V that powers a module's outputs or sensors is missing. On ET 200SP this is the potential group fed by a light BaseUnit or power module. All outputs in that group stay off and sensor inputs read 0.",
+      "causes": ["Fuse or circuit breaker for the load supply tripped", "Supply deliberately switched off by a safety relay or E-stop contactor (common: outputs are fed through the safety circuit)", "Loose supply terminal or front connector bridge"],
+      "checks": ["Module/power module diagnostic text and its PWR LED.", "Measure 24 V at the supply terminals.", "Is the E-stop or safety circuit open?"],
+      "fixes": ["Reset or replace the fuse after finding why it tripped; restore the safety circuit through the normal reset."],
+      "safety": "If the supply comes through a safety circuit, never bridge it; reset the safety function properly."
+    },
+    {
+      "id": "ch-overtemperature",
+      "category": "Module",
+      "title": "Module overtemperature",
+      "appliesTo": ["S7-1500", "ET 200SP", "ET 200MP"],
+      "codes": [],
+      "keywords": ["overtemperature", "over temperature", "temperature too high", "module too hot", "overheating", "thermal"],
+      "meaning": "The module's internal temperature is above its limit, often because outputs carry too much current or the cabinet is too hot.",
+      "causes": ["Cabinet cooling failed (fan, filter clogged, air conditioner)", "Outputs loaded above rating or too many outputs on together", "Module mounted outside its permitted orientation"],
+      "checks": ["Cabinet temperature; output currents; filter mats."],
+      "fixes": ["Restore cooling; reduce load or spread it across modules."]
+    },
+    {
+      "id": "ch-parameter-error",
+      "category": "Module",
+      "title": "Parameter assignment error / module not parameterised",
+      "appliesTo": ["S7-1500", "S7-1200", "ET 200SP", "ET 200MP"],
+      "codes": [],
+      "keywords": ["parameter assignment error", "parameterization error", "parameter error", "invalid parameter", "not parameterized", "wrong parameters", "parameter assignment"],
+      "meaning": "The module rejected the parameters the CPU sent (for example a measuring range or mode it does not support), so the module or channel does not work.",
+      "causes": ["Module firmware older than the configured version", "Parameters changed at runtime (WRREC) with invalid values", "Wrong module variant"],
+      "checks": ["Channel diagnostics; module firmware vs configured version."],
+      "fixes": ["Correct the parameters or module version in TIA Portal and download; update module firmware."]
+    },
+    {
+      "id": "ch-fuse-blown",
+      "category": "Module",
+      "title": "Fuse blown / fuse missing",
+      "appliesTo": ["S7-1500", "ET 200SP", "ET 200MP"],
+      "codes": [],
+      "keywords": ["fuse", "fuse blown", "fuse defective", "fuse missing", "blown fuse"],
+      "meaning": "A fuse in the module or front connector (some AC/relay modules) has blown; the channels behind it do not work.",
+      "causes": ["Short circuit or overload on the channels behind the fuse"],
+      "checks": ["Module diagnostics; inspect the fuse."],
+      "fixes": ["Find and remove the short, then replace the fuse with the same rating."],
+      "safety": "Isolate before replacing fuses."
+    },
+    {
+      "id": "ch-reference-junction",
+      "category": "Module",
+      "title": "Reference junction / thermocouple compensation error",
+      "appliesTo": ["S7-1500", "ET 200SP", "ET 200MP"],
+      "codes": [],
+      "keywords": ["reference junction", "cold junction", "thermocouple", "compensation", "reference channel", "rtd", "pt100", "resistance thermometer"],
+      "meaning": "A thermocouple input cannot compensate the cold junction temperature (the reference channel or internal sensor is faulty or misconfigured), so temperatures are wrong. Also covers RTD (Pt100) wiring faults on resistance inputs.",
+      "causes": ["Reference junction set to an external channel that is not wired", "Wrong thermocouple type parameterised", "RTD wire break or wrong 2/3/4-wire setting"],
+      "checks": ["Channel parameters (type, reference junction) vs wiring."],
+      "fixes": ["Correct parameters or wiring."]
+    },
+    {
+      "id": "ch-channel-unavailable",
+      "category": "Module",
+      "title": "Channel or module temporarily not available / substitute value",
+      "appliesTo": ["S7-1500", "ET 200SP", "ET 200MP"],
+      "codes": [],
+      "keywords": ["channel temporarily unavailable", "not available", "substitute value", "value status", "qi", "quality information", "bad value", "invalid value", "firmware update running"],
+      "meaning": "The channel cannot deliver a valid value right now (startup, firmware update, re-parameterisation, missing supply). With 'value status' enabled the module gives a status bit per channel (1 = valid).",
+      "causes": ["Module starting up or being updated", "Supply missing", "Channel switched off in parameters"],
+      "checks": ["Value status bits; module diagnostics."],
+      "fixes": ["Wait for startup to finish or fix the named cause."]
+    },
+    {
+      "id": "et200sp-servermodule-baseunit",
+      "category": "Module",
+      "title": "ET 200SP: server module missing, wrong BaseUnit or empty slot",
+      "appliesTo": ["ET 200SP"],
+      "codes": [],
+      "keywords": ["server module", "baseunit", "base unit", "empty slot", "bu cover", "missing server module", "wrong baseunit", "et 200sp station error", "light baseunit", "dark baseunit"],
+      "meaning": "An ET 200SP station needs a server module at the end and the BaseUnit types (light = opens a new potential group, dark = continues it) to match the configuration. A missing module, empty slot or wrong BaseUnit stops the station or the modules after it.",
+      "causes": ["Server module not fitted after changes", "Module pulled leaving an empty BaseUnit", "Light/dark BaseUnit swapped"],
+      "checks": ["Interface module diagnostics; station LEDs; compare the station with the configuration slot by slot."],
+      "fixes": ["Fit the server module or the missing module (or a BU cover if configured as empty), use the configured BaseUnit types."]
+    },
+    {
+      "id": "safety-fio-passivated",
+      "category": "Safety",
+      "title": "F-I/O passivated (safety module or channel in safe state)",
+      "appliesTo": ["S7-1500F", "S7-1200F", "ET 200SP F", "PROFIsafe"],
+      "codes": ["PASS_OUT", "ACK_REQ", "ACK_REI", "QBAD"],
+      "keywords": ["passivated", "passivation", "f-i/o", "fail-safe module", "safe state", "reintegration", "ack_rei", "ack_req", "qbad", "pass_out", "f-module", "f-di", "f-dq", "discrepancy", "discrepancy error", "safety module fault"],
+      "meaning": "A fail-safe module or channel detected a fault (discrepancy between two sensor channels, short circuit, wire break, PROFIsafe communication error) and switched to its safe state: fail-safe inputs read 0, outputs are off. After the fault is gone the module waits for a user acknowledgement (reintegration) before working again.",
+      "causes": [
+        "Discrepancy: the two contacts of a 2-channel sensor (E-stop, door switch) did not switch together within the discrepancy time",
+        "Wire break or short on an F-channel; cross-circuit between channels",
+        "PROFIsafe communication timeout or CRC error (often a network problem)",
+        "F-module replaced or PROFIsafe address set wrongly"
+      ],
+      "checks": [
+        "F-I/O DB values: PASS_OUT, QBAD (or QBAD_I_xx/QBAD_O_xx), ACK_REQ = 1 means waiting for acknowledgement.",
+        "Diagnostic buffer and module channel diagnostics name the channel and fault.",
+        "Test the sensor: do both channels switch together?"
+      ],
+      "fixes": [
+        "Repair the sensor, wiring or network cause.",
+        "Then reintegrate with the machine's normal reset/acknowledge button (it drives ACK_REI or ACK_GL in the safety program).",
+        "Recurring discrepancy faults mean a worn or misaligned sensor: replace or adjust it."
+      ],
+      "safety": "Do not bridge or defeat safety sensors or circuits. Changes to the safety program or F-parameters need a qualified person and a safety acceptance test."
+    },
+    {
+      "id": "safety-profisafe-address",
+      "category": "Safety",
+      "title": "PROFIsafe address (F-destination address) mismatch",
+      "appliesTo": ["S7-1500F", "S7-1200F", "ET 200SP F", "PROFIsafe"],
+      "codes": ["F_Dest_Add"],
+      "keywords": ["profisafe address", "f-destination address", "f_dest_add", "f-address", "assign profisafe address", "wrong profisafe address", "dip switch", "f-source address"],
+      "meaning": "The F-module's PROFIsafe destination address (set by DIP switches or assigned electronically and stored in the coding element) does not match the configuration, so the module stays passivated.",
+      "causes": ["Replacement module without the address set", "Coding element swapped or reset"],
+      "checks": ["Module diagnostics: 'PROFIsafe address mismatch' / 'wrong F_Dest_Add'."],
+      "fixes": ["Assign the PROFIsafe address from TIA Portal (Assign PROFIsafe address, confirming the module by flashing LED) or set the DIP switches to the configured address, then reintegrate."],
+      "safety": "Only a qualified person may assign F-addresses; confirm you are addressing the right module."
+    },
+    {
+      "id": "safety-program-stop",
+      "category": "Safety",
+      "title": "F-CPU: safety program stopped / safety mode error / signature mismatch",
+      "appliesTo": ["S7-1500F", "S7-1200F"],
+      "codes": [],
+      "keywords": ["safety program", "safety mode", "f-runtime group", "collective signature", "signature mismatch", "f-program", "safety stop", "data corruption detected", "safety program inconsistent", "deactivated safety mode"],
+      "meaning": "The F-CPU found an internal or safety program error (for example corrupted data, an F-cycle time exceeded, or an inconsistent safety program after a partial download). It puts the safety program and usually the CPU into STOP. A deactivated safety mode or a changed collective signature means the running safety program is not the accepted one.",
+      "causes": ["F-runtime group cycle time exceeded", "Safety program changed without a complete download", "Hardware fault in the F-CPU"],
+      "checks": ["Diagnostic buffer; Safety Administration editor in TIA Portal (collective signature, safety mode)."],
+      "fixes": ["A qualified person compares the signature with the accepted one, downloads the accepted safety program completely and repeats the acceptance test if anything changed."],
+      "safety": "The machine must not run with a safety program that is not the accepted version."
+    },
+    {
+      "id": "safety-estop-circuit",
+      "category": "Safety",
+      "title": "E-stop or guard door open (safety circuit not ready)",
+      "appliesTo": ["S7-1500F", "S7-1200F", "Safety relay"],
+      "codes": ["ESTOP1"],
+      "keywords": ["emergency stop", "e-stop", "estop", "guard door", "safety door", "light curtain", "safety circuit", "safety not ok", "safety relay", "estop1", "f_estop", "safe torque off", "sto"],
+      "meaning": "A safety function is active: an emergency stop is pressed, a guard is open, or a light curtain is interrupted. The safety program or relay removes energy (contactor off, drive STO) until the cause is cleared and the circuit is reset.",
+      "causes": ["Someone pressed an E-stop or opened a guard", "A safety switch is misaligned or faulty", "Discrepancy fault on a 2-channel device (see F-I/O passivated)"],
+      "checks": ["Which E-stops and guards are open (machine HMI or the F-DB inputs).", "Pull out and check every E-stop on the line, including remote ones."],
+      "fixes": ["Release the E-stop / close the guard, then press the safety reset and the machine reset."],
+      "safety": "Never bridge an E-stop, guard switch or safety relay. If a safety device is faulty, have it repaired by a qualified person."
+    },
+    {
+      "id": "drive-f07900-motor-blocked",
+      "category": "Drive",
+      "title": "SINAMICS F07900: Motor blocked",
+      "appliesTo": ["SINAMICS G120", "SINAMICS S120", "SINAMICS G115D"],
+      "codes": ["F07900", "F7900"],
+      "keywords": ["motor blocked", "motor stalled", "stall", "f07900", "locked rotor"],
+      "meaning": "The drive ran at its current limit for longer than the blocking time while the speed stayed below the blocking threshold: the motor cannot turn.",
+      "causes": ["Mechanical blockage (jammed product, seized bearing or gearbox, brake not released)", "Load too high for the motor/drive", "Motor brake not opening (brake control or supply)", "Wrong motor data or current limit too low"],
+      "checks": ["Can the shaft turn by hand (with power isolated)?", "Is the holding brake releasing?", "Drive parameters r0068 (current) and r0063 (speed) at the moment of the fault, via Startdrive or the BOP/IOP."],
+      "fixes": ["Remove the blockage, repair the mechanics or brake, then acknowledge the fault on the drive (or via the PLC reset).", "Only if the load is correct: check motor data and current limit (p0640) with a drive specialist."],
+      "safety": "Isolate and lock out the drive before touching the mechanics; a blocked load can move suddenly when freed."
+    },
+    {
+      "id": "drive-f07901-overspeed",
+      "category": "Drive",
+      "title": "SINAMICS F07901: Motor overspeed",
+      "appliesTo": ["SINAMICS G120", "SINAMICS S120"],
+      "codes": ["F07901", "F7901"],
+      "keywords": ["overspeed", "motor overspeed", "f07901", "speed too high"],
+      "meaning": "The motor turned faster than the maximum speed limit allows.",
+      "causes": ["Load driving the motor (lowering, unwinding) without enough braking", "Speed controller badly tuned", "Encoder fault"],
+      "checks": ["Process situation at the time; encoder signal; braking resistor."],
+      "fixes": ["Check braking (resistor, regenerative unit), controller settings and encoder; acknowledge."]
+    },
+    {
+      "id": "drive-f07011-motor-overtemp",
+      "category": "Drive",
+      "title": "SINAMICS F07011 / A07910: Motor overtemperature",
+      "appliesTo": ["SINAMICS G120", "SINAMICS S120"],
+      "codes": ["F07011", "F7011", "A07910", "A7910"],
+      "keywords": ["motor overtemperature", "motor temperature", "f07011", "a07910", "kty", "ptc", "pt1000", "motor too hot", "thermistor"],
+      "meaning": "The motor temperature (measured by a PTC/KTY/Pt1000 sensor, or calculated by the drive's thermal model) is above the limit. A07910 is the warning, F07011 the trip.",
+      "causes": ["Motor overloaded for too long", "Motor fan blocked or cooling fins dirty", "Running at low speed with a self-cooled motor", "Temperature sensor wire break (can look like overtemperature)"],
+      "checks": ["Motor temperature r0035; motor current; fan and fins; sensor wiring."],
+      "fixes": ["Let it cool, remove the overload, clean the cooling, repair the sensor wiring; acknowledge."]
+    },
+    {
+      "id": "drive-f30001-overcurrent",
+      "category": "Drive",
+      "title": "SINAMICS F30001 / F07801: Overcurrent",
+      "appliesTo": ["SINAMICS G120", "SINAMICS S120"],
+      "codes": ["F30001", "F07801", "F7801"],
+      "keywords": ["overcurrent", "over current", "f30001", "f07801", "power unit overcurrent", "motor overcurrent", "short circuit motor"],
+      "meaning": "The current in the power unit or motor went above the permitted limit and the drive switched off immediately.",
+      "causes": ["Short circuit or earth fault in the motor or motor cable", "Acceleration ramp too steep for the load", "Mechanical shock load", "Wrong motor data, or a contactor opening/closing between drive and motor while running"],
+      "checks": ["Insulation test of motor and cable (disconnected from the drive)", "Ramp-up time p1120 and load at the time of the trip"],
+      "fixes": ["Repair motor/cable faults, lengthen the ramp, never switch the motor contactor while the drive is running; acknowledge."],
+      "safety": "Isolate the drive and wait for the DC link to discharge (see the warning label, typically 5 minutes) before working on motor cables."
+    },
+    {
+      "id": "drive-f30002-dc-overvoltage",
+      "category": "Drive",
+      "title": "SINAMICS F30002: DC link overvoltage",
+      "appliesTo": ["SINAMICS G120", "SINAMICS S120"],
+      "codes": ["F30002"],
+      "keywords": ["dc link overvoltage", "overvoltage", "f30002", "dc bus overvoltage", "braking"],
+      "meaning": "The drive's DC link voltage went too high, usually because the motor fed energy back while braking and the drive had nowhere to put it.",
+      "causes": ["Ramp-down time too short for the load inertia", "Braking resistor missing, broken or not enabled", "Line voltage too high"],
+      "checks": ["Ramp-down time p1121; braking resistor and its parameters; line voltage."],
+      "fixes": ["Lengthen the ramp-down, fit or repair the braking resistor, or enable the Vdc_max controller; acknowledge."]
+    },
+    {
+      "id": "drive-f30003-dc-undervoltage",
+      "category": "Drive",
+      "title": "SINAMICS F30003: DC link undervoltage",
+      "appliesTo": ["SINAMICS G120", "SINAMICS S120"],
+      "codes": ["F30003"],
+      "keywords": ["dc link undervoltage", "undervoltage", "f30003", "dc bus undervoltage", "mains dip", "power dip"],
+      "meaning": "The DC link voltage dropped too low while running, usually because the mains supply dipped or a phase is missing.",
+      "causes": ["Mains dip or interruption", "Line contactor or fuse opened", "Phase missing"],
+      "checks": ["Mains voltage and fuses; line contactor; other drives tripping at the same time."],
+      "fixes": ["Restore the supply; acknowledge. If dips are frequent, consider kinetic buffering or automatic restart (by a drive specialist)."]
+    },
+    {
+      "id": "drive-f30004-heatsink",
+      "category": "Drive",
+      "title": "SINAMICS F30004: Heat sink overtemperature",
+      "appliesTo": ["SINAMICS G120", "SINAMICS S120"],
+      "codes": ["F30004"],
+      "keywords": ["heat sink", "heatsink", "f30004", "drive overtemperature", "inverter too hot", "power unit overtemperature", "fan"],
+      "meaning": "The power unit's heat sink is too hot.",
+      "causes": ["Drive fan failed", "Cabinet too hot or air flow blocked", "Load too high", "Pulse frequency set too high"],
+      "checks": ["Drive fan; cabinet temperature and filters; load current."],
+      "fixes": ["Replace the fan, restore cabinet cooling, reduce load; acknowledge after cooling."]
+    },
+    {
+      "id": "drive-f30005-i2t",
+      "category": "Drive",
+      "title": "SINAMICS F30005: Power unit overload (I2t)",
+      "appliesTo": ["SINAMICS G120", "SINAMICS S120"],
+      "codes": ["F30005"],
+      "keywords": ["i2t", "i2t overload", "f30005", "power unit overload", "drive overload"],
+      "meaning": "The power unit carried more current than its rating for too long, according to its thermal model.",
+      "causes": ["Load too high (process, mechanics)", "Duty cycle too heavy for the drive size", "Motor data wrong"],
+      "checks": ["Current over time (trace); mechanics; recent process changes."],
+      "fixes": ["Reduce the load or fix the mechanics; a permanent overload needs a bigger drive."]
+    },
+    {
+      "id": "drive-f30011-phase-loss",
+      "category": "Drive",
+      "title": "SINAMICS F30011: Line phase failure",
+      "appliesTo": ["SINAMICS G120", "SINAMICS S120"],
+      "codes": ["F30011"],
+      "keywords": ["phase failure", "phase loss", "missing phase", "f30011", "line phase", "mains phase"],
+      "meaning": "One of the three mains phases to the drive is missing.",
+      "causes": ["Blown fuse in one phase", "Loose terminal", "Contactor contact worn"],
+      "checks": ["Measure all three phase voltages at the drive input; fuses; contactor."],
+      "fixes": ["Replace the fuse or repair the connection; acknowledge."],
+      "safety": "Measuring mains voltage is work for an electrically qualified person."
+    },
+    {
+      "id": "drive-f30021-ground-fault",
+      "category": "Drive",
+      "title": "SINAMICS F30021: Ground fault",
+      "appliesTo": ["SINAMICS G120", "SINAMICS S120"],
+      "codes": ["F30021"],
+      "keywords": ["ground fault", "earth fault", "f30021", "insulation fault", "earth leakage"],
+      "meaning": "The drive detected current flowing to earth: the insulation of the motor or motor cable is damaged.",
+      "causes": ["Damaged motor cable", "Wet or damaged motor winding", "Moisture in a terminal box"],
+      "checks": ["Insulation resistance test of cable and motor (disconnected from the drive)."],
+      "fixes": ["Repair or replace the cable/motor; dry out terminal boxes; acknowledge."],
+      "safety": "Isolate and lock out; let the DC link discharge before disconnecting."
+    },
+    {
+      "id": "drive-f01910-setpoint-timeout",
+      "category": "Drive",
+      "title": "SINAMICS F01910: Fieldbus setpoint timeout",
+      "appliesTo": ["SINAMICS G120", "SINAMICS S120"],
+      "codes": ["F01910", "F1910", "A01920"],
+      "keywords": ["setpoint timeout", "fieldbus timeout", "f01910", "profidrive", "telegram", "communication drive", "no setpoint", "bus communication lost", "plc communication drive"],
+      "meaning": "The drive stopped receiving its control word and setpoint from the PLC over PROFINET/PROFIBUS, so it stopped the motor.",
+      "causes": ["PLC in STOP", "PROFINET cable or switch fault, device name lost", "PLC program not writing the telegram (wrong address or DPWR_DAT not called)"],
+      "checks": ["CPU in RUN? Is the drive shown failed in the PLC diagnostics (see IO device failure)?", "Drive BF LED and network LEDs."],
+      "fixes": ["Restore the PLC or network; acknowledge the drive fault from the PLC (control word bit 7) or locally."]
+    },
+    {
+      "id": "drive-f07860-external-fault",
+      "category": "Drive",
+      "title": "SINAMICS F07860 / F07861 / F07862: External fault",
+      "appliesTo": ["SINAMICS G120", "SINAMICS S120"],
+      "codes": ["F07860", "F07861", "F07862"],
+      "keywords": ["external fault", "f07860", "f07861", "f07862", "external fault 1", "external fault 2"],
+      "meaning": "A signal wired into the drive (digital input or a bit from the PLC) that is configured as 'external fault' became active. The drive itself is fine; the real cause is the device that sets that signal.",
+      "causes": ["Motor thermal switch, pressure switch or other monitoring device opened", "PLC set the external fault bit"],
+      "checks": ["Which input is connected to p2106/p2107/p2108 (via Startdrive)", "The wiring diagram for that input."],
+      "fixes": ["Clear the cause at the external device, then acknowledge."]
+    },
+    {
+      "id": "drive-sto-active",
+      "category": "Drive",
+      "title": "SINAMICS STO active (Safe Torque Off)",
+      "appliesTo": ["SINAMICS G120", "SINAMICS S120"],
+      "codes": ["STO"],
+      "keywords": ["sto", "safe torque off", "sto active", "safety integrated", "drive safety", "pulses inhibited", "switching on inhibited", "on inhibit"],
+      "meaning": "The drive's safety function has removed torque from the motor (STO), usually because an E-stop or guard is open, or via PROFIsafe from the F-CPU. The drive shows 'switching on inhibited' until STO is deselected and the drive is switched on again (OFF1 then ON).",
+      "causes": ["E-stop, guard or safety relay open", "PROFIsafe communication to the drive lost", "Safety Integrated test stop due"],
+      "checks": ["Safety circuit state; drive status word bit 'switching on inhibited'."],
+      "fixes": ["Clear the safety cause and reset it; the PLC must then send OFF1 followed by ON to the drive."],
+      "safety": "STO removes torque but does not isolate the drive from the mains; do not treat it as electrical isolation."
+    },
+    {
+      "id": "comm-put-get",
+      "category": "Communication",
+      "title": "PUT/GET access denied",
+      "appliesTo": ["S7-1500", "S7-1200"],
+      "codes": [],
+      "keywords": ["put/get", "put get", "permit access with put/get", "access denied", "hmi connection", "s7 communication", "scada access", "3rd party", "remote partner"],
+      "meaning": "A partner (another PLC, SCADA, older HMI driver or third-party tool) tried to read or write the CPU with classic S7 PUT/GET communication, which S7-1500/S7-1200 block by default.",
+      "causes": ["'Permit access with PUT/GET communication from remote partner' is not enabled", "Access to optimised DBs (PUT/GET needs non-optimised DBs)"],
+      "checks": ["CPU properties > Protection & Security > Connection mechanisms."],
+      "fixes": ["Enable PUT/GET only if the network is protected, and use non-optimised DBs for the exchanged data; download the hardware configuration."],
+      "safety": "PUT/GET allows writes without a password; enable it only on a protected machine network."
+    },
+    {
+      "id": "comm-connection-resources",
+      "category": "Communication",
+      "title": "Too many connections / connection resources exhausted",
+      "appliesTo": ["S7-1500", "S7-1200"],
+      "codes": [],
+      "keywords": ["connection resources", "too many connections", "maximum connections", "no free connection", "connection refused", "cannot connect", "connection limit"],
+      "meaning": "The CPU has a fixed number of communication connections (HMI, PG, web, OPC UA, open user communication). When they are all in use, new clients cannot connect.",
+      "causes": ["Several HMIs, laptops, SCADA and web clients at once", "Clients that do not close connections (open user communication with TCON without TDISCON)"],
+      "checks": ["Online & diagnostics > Communication > Connection resources shows used and free connections."],
+      "fixes": ["Close unused clients, fix the program so it reuses connections, or reserve connections in CPU properties."]
+    },
+    {
+      "id": "comm-hmi-connection-lost",
+      "category": "Communication",
+      "title": "HMI connection to the PLC lost",
+      "appliesTo": ["S7-1500", "S7-1200", "WinCC", "HMI"],
+      "codes": [],
+      "keywords": ["hmi", "panel", "wincc", "connection to plc lost", "hmi offline", "#####", "comm error hmi", "connection error", "panel offline"],
+      "meaning": "The HMI panel or SCADA cannot reach the PLC: values show #### or the HMI shows a connection error. The PLC may still be running normally.",
+      "causes": ["Network cable or switch problem", "PLC IP address changed or CPU in a different subnet", "Connection resources exhausted", "PLC powered off or memory card missing"],
+      "checks": ["Ping the PLC from another device; check the CPU LEDs; diagnostic buffer for connection entries."],
+      "fixes": ["Restore the network or address; free connection resources; then restart the HMI runtime if it does not reconnect."]
+    },
+    {
+      "id": "comm-ouc-tcp-error",
+      "category": "Communication",
+      "title": "Open user communication errors (TSEND_C / TRCV_C / TCON)",
+      "appliesTo": ["S7-1500", "S7-1200"],
+      "codes": [],
+      "keywords": ["tsend_c", "trcv_c", "tcon", "tdiscon", "open user communication", "tcp", "udp", "socket", "connection terminated", "partner not responding"],
+      "meaning": "A TCP/UDP/ISO-on-TCP link programmed in the PLC (for example to a scanner, robot, MES or another PLC) failed. The instruction's STATUS word gives the reason.",
+      "causes": ["Partner not reachable or not listening on that port", "Connection closed by partner", "Wrong connection parameters (IP, port, ID)", "Temporary communication error"],
+      "checks": ["The block's STATUS/ERROR outputs in a watch table, looked up in the TIA Portal help for that instruction.", "Can the partner be pinged? Is it running?"],
+      "fixes": ["Fix the partner or network; correct the parameters. The program should retry automatically after a temporary error."]
+    }
+  ]
+}

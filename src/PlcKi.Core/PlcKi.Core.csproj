@@ -6,4 +6,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>PlcKi.Core</RootNamespace>
   </PropertyGroup>
+  <ItemGroup>
+    <!-- Siemens system and diagnostic messages explained (general knowledge, used by the Ask tools) -->
+    <EmbeddedResource Include="..\..\knowledge\siemens-diagnostics.json" LogicalName="PlcKi.Core.Knowledge.siemens-diagnostics.json" />
+  </ItemGroup>
 </Project>
