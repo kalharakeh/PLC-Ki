@@ -6,12 +6,13 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>PlcKi.Server</RootNamespace>
     <AssemblyName>PlcKi.Server</AssemblyName>
-    <!-- The bundled OpenSSL DLLs are 64-bit, so the app must run as a 64-bit process -->
-    <PlatformTarget>x64</PlatformTarget>
   </PropertyGroup>
   <ItemGroup>
+    <!-- S7CommPlus driver (LGPL-3.0-or-later), fork of thomas-v2/S7CommPlusDriver by DotNetProjects -->
+    <PackageReference Include="DotNetProjects.S7CommPlusDriver" Version="6.1.0" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\PlcKi.Core\PlcKi.Core.csproj" />
-    <ProjectReference Include="..\..\third_party\S7CommPlusDriver\S7CommPlusDriver.csproj" />
   </ItemGroup>
   <ItemGroup>
     <!-- Copy the web page next to the exe so "dotnet run" and the built exe serve the same files -->

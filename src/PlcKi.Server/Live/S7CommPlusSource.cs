@@ -6,15 +6,18 @@ using S7CommPlusDriver.ClientApi;
 namespace PlcKi.Server.Live;
 
 /// <summary>
-/// Reads tags by symbol over S7CommPlus (the protocol TIA Portal itself uses), with TLS.
-/// Needs S7-1500 firmware 2.9+ or S7-1200 4.3+. Nothing has to be set up in the PLC program.
-/// Only Connect, symbol lookup and read are called; the driver copy has no write functions.
+/// Reads tags by symbol over S7CommPlus (the protocol TIA Portal and HMIs use).
+/// Uses DotNetProjects.S7CommPlusDriver. Security "Auto" tries TLS first and falls back to the older
+/// challenge login, which CPUs without secure PG/PC communication (and PLCSIM) use.
+/// Read-only: the driver's write gate (WriteEnabled) stays false, and this app calls no write or CPU start/stop API
+/// (tests/PlcKi.Tests/ReadOnlyTests.cs checks the compiled app for that).
+/// Used from the polling thread only, so the async calls are awaited synchronously.
 /// </summary>
 public sealed class S7CommPlusSource : IPlcSource
 {
     private readonly PlcOptions _opt;
     private readonly ILogger _log;
-    private S7CommPlusConnection? _conn;
+    private S7CommPlusClient? _client;
     private readonly List<(TagDef Def, PlcTag Tag)> _tags = new();
 
     public S7CommPlusSource(PlcOptions opt, ILogger log)
@@ -25,16 +28,43 @@ public sealed class S7CommPlusSource : IPlcSource
 
     public string Kind => "s7";
     public string Address => _opt.Address;
-    public bool IsConnected => _conn != null;
+    public bool IsConnected => _client?.IsConnected == true;
 
-    public Dictionary<string, string> Connect(IReadOnlyList<TagDef> tags)
+    /// <summary>Security mode actually used after connecting (Tls or LegacyChallenge).</summary>
+    public string? NegotiatedSecurity { get; private set; }
+
+    public static S7CommPlusSecurityMode ParseSecurity(string? text) =>
+        Enum.TryParse<S7CommPlusSecurityMode>(text, ignoreCase: true, out var m) ? m : S7CommPlusSecurityMode.Auto;
+
+    public Dictionary<string, string> Connect(IReadOnlyList<TagDef> tags) => Connect(tags, ParseSecurity(_opt.Security));
+
+    public Dictionary<string, string> Connect(IReadOnlyList<TagDef> tags, S7CommPlusSecurityMode security)
     {
         Disconnect();
-        var password = Environment.GetEnvironmentVariable("PLCKI_PLC_PASSWORD") ?? _opt.Password;
-        var conn = new S7CommPlusConnection();
-        int res = conn.Connect(_opt.Address, password ?? "", _opt.Username ?? "", _opt.TimeoutMs);
-        if (res != 0)
-            throw new IOException($"Connection to {_opt.Address} failed ({DescribeError(res)}).");
+        var password = Environment.GetEnvironmentVariable("PLCKI_PLC_PASSWORD") ?? _opt.Password ?? "";
+        var options = new S7CommPlusClientOptions
+        {
+            Address = _opt.Address,
+            Password = password,
+            Username = _opt.Username ?? "",
+            ConnectTimeout = TimeSpan.FromMilliseconds(_opt.TimeoutMs),
+            RequestTimeout = TimeSpan.FromMilliseconds(_opt.TimeoutMs),
+            AutoReconnect = false,          // the polling loop reconnects
+            // WriteEnabled is left at its default (false): PLC-Ki is read-only. The tests forbid setting it.
+            SecurityMode = security,
+            Logger = _log,
+        };
+        var client = new S7CommPlusClient(options);
+        try
+        {
+            client.ConnectAsync().GetAwaiter().GetResult();
+        }
+        catch (Exception ex)
+        {
+            try { client.DisposeAsync().AsTask().GetAwaiter().GetResult(); } catch { /* ignore */ }
+            throw new IOException($"Connection to {_opt.Address} failed ({security}): {Describe(ex)}", ex);
+        }
+        NegotiatedSecurity = options.NegotiatedSecurityMode?.ToString() ?? security.ToString();
 
         var missing = new Dictionary<string, string>();
         _tags.Clear();
@@ -42,38 +72,44 @@ public sealed class S7CommPlusSource : IPlcSource
         {
             try
             {
-                var tag = conn.getPlcTagBySymbol(def.Symbol);
-                if (tag == null) missing[def.Id] = $"symbol {def.Symbol} not found in the PLC";
-                else _tags.Add((def, tag));
+                var tag = client.GetTagBySymbolAsync(def.Symbol).GetAwaiter().GetResult();
+                _tags.Add((def, tag));
             }
             catch (Exception ex)
             {
-                missing[def.Id] = $"symbol {def.Symbol}: {ex.Message}";
+                missing[def.Id] = $"symbol {def.Symbol}: {Describe(ex)}";
             }
         }
-        _conn = conn;
-        _log.LogInformation("Connected to {Address}: {Found} of {Total} tags found.", _opt.Address, _tags.Count, tags.Count);
+        _client = client;
+        _log.LogInformation("Connected to {Address} ({Security}): {Found} of {Total} tags found.",
+            _opt.Address, NegotiatedSecurity, _tags.Count, tags.Count);
         return missing;
     }
 
     public Snapshot Read()
     {
-        var conn = _conn ?? throw new InvalidOperationException("Not connected.");
+        var client = _client ?? throw new InvalidOperationException("Not connected.");
         var snap = new Snapshot { Time = DateTimeOffset.Now };
         if (_tags.Count == 0) return snap;
 
-        int res = conn.ReadTags(_tags.Select(t => t.Tag));
-        if (res != 0)
+        S7CommPlusBatchResult<S7CommPlusTagReadResult> result;
+        try
+        {
+            result = client.ReadAsync(_tags.Select(t => t.Tag).ToList()).GetAwaiter().GetResult();
+        }
+        catch (Exception ex)
         {
             Disconnect();
-            throw new IOException($"Read failed ({DescribeError(res)}).");
+            throw new IOException($"Read failed: {Describe(ex)}", ex);
         }
 
-        foreach (var (def, tag) in _tags)
+        for (int i = 0; i < _tags.Count; i++)
         {
-            if ((tag.Quality & PlcTagQC.TAG_QUALITY_MASK) != PlcTagQC.TAG_QUALITY_GOOD)
+            var (def, tag) = _tags[i];
+            var item = i < result.Items.Count ? result.Items[i] : default;
+            if (!item.IsSuccess || (tag.Quality & PlcTagQC.TAG_QUALITY_MASK) != PlcTagQC.TAG_QUALITY_GOOD)
             {
-                snap.Errors[def.Id] = $"bad quality 0x{tag.Quality:X2}, error 0x{tag.LastReadError:X}";
+                snap.Errors[def.Id] = $"read error 0x{item.ItemError:X}, quality 0x{tag.Quality:X2}";
                 snap.Values[def.Id] = null;
                 continue;
             }
@@ -90,33 +126,23 @@ public sealed class S7CommPlusSource : IPlcSource
 
     public void Disconnect()
     {
-        var c = _conn;
-        _conn = null;
+        var c = _client;
+        _client = null;
         if (c == null) return;
-        try { c.Disconnect(); }
+        try { c.DisconnectAsync().GetAwaiter().GetResult(); }
         catch (Exception ex) { _log.LogDebug(ex, "Disconnect error ignored."); }
+        try { c.DisposeAsync().AsTask().GetAwaiter().GetResult(); }
+        catch (Exception ex) { _log.LogDebug(ex, "Dispose error ignored."); }
     }
 
     public void Dispose() => Disconnect();
 
-    private static string DescribeError(int code)
+    /// <summary>Exception message plus inner messages, which usually hold the useful part.</summary>
+    private static string Describe(Exception ex)
     {
-        // A few common S7 client error codes; the rest is shown as hex.
-        return code switch
-        {
-            0x00000001 => "could not create the TCP socket",
-            0x00000002 => "TCP connection timeout: the PLC does not answer, check IP address and network",
-            0x00000003 => "TCP connection refused or failed: check the IP address",
-            0x00000004 => "receive timeout: the PLC stopped answering",
-            0x00000005 => "receive error",
-            0x00000006 => "send timeout",
-            0x00000007 => "send error",
-            0x00000008 => "connection reset by the PLC",
-            0x00000009 => "not connected",
-            0x00002751 => "host unreachable: check the network route to the PLC",
-            0x00010000 => "ISO connection error",
-            0x00030000 => "invalid answer from the PLC (firmware too old, or access protection: try a password)",
-            _ => $"error 0x{code:X}",
-        };
+        var parts = new List<string>();
+        for (var e = ex; e != null && parts.Count < 4; e = e.InnerException)
+            if (!string.IsNullOrWhiteSpace(e.Message) && !parts.Contains(e.Message)) parts.Add(e.Message);
+        return string.Join(" -> ", parts);
     }
 }

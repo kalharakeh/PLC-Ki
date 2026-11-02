@@ -35,8 +35,7 @@ Full plan and architecture: [PLC Troubleshooter plan](https://claude.ai/artifact
 | `src/PlcKi.Core/` | Machine model, condition language and the plain-English status engine (no PLC code) |
 | `src/PlcKi.Server/` | The web app: live read-only PLC link, status page, `probe` connection test. See its README |
 | `models/` | Machine models (`demo-mixing-station.json`) and test snapshots taken from watch tables |
-| `tests/` | Unit tests (`dotnet test`) |
-| `third_party/S7CommPlusDriver/` | The S7CommPlus driver (LGPL-3.0), with its write functions removed |
+| `tests/` | Unit tests (`dotnet test`), including a check that the app calls no PLC write or start/stop function |
 
 ## Requirements
 

@@ -5,7 +5,7 @@ namespace PlcKi.Server.Live;
 
 /// <summary>
 /// Where tag values come from. Read-only by design: there is no write method,
-/// and the bundled driver has its write functions removed.
+/// and the driver's write gate stays closed.
 /// Implementations are used from one thread only (the polling loop).
 /// </summary>
 public interface IPlcSource : IDisposable
@@ -41,6 +41,8 @@ public sealed class PlcOptions
     /// <summary>Only needed when the CPU is protected. Better set with the PLCKI_PLC_PASSWORD environment variable.</summary>
     public string Password { get; set; } = "";
     public string Username { get; set; } = "";
+    /// <summary>Auto (TLS, then the older challenge login), Tls, or LegacyChallenge.</summary>
+    public string Security { get; set; } = "Auto";
     public int PollMs { get; set; } = 1000;
     public int TimeoutMs { get; set; } = 5000;
 }

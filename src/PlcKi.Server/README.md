@@ -44,6 +44,7 @@ Open <http://localhost:5080>. Stop it with Ctrl+C.
 | `PlcKi:Plc:Address` | `192.168.10.10` | PLC IP address |
 | `PlcKi:Plc:PollMs` | `1000` | Read interval |
 | `PlcKi:Plc:Password` | empty | Only if the CPU has an access password. Better: environment variable `PLCKI_PLC_PASSWORD` |
+| `PlcKi:Plc:Security` | `Auto` | `Auto` = TLS first, then the older challenge login. `Tls` or `LegacyChallenge` to force one |
 | `PlcKi:Model` | `models/demo-mixing-station.json` | Machine model |
 | `PlcKi:Source` | `s7` | `s7` = live PLC, `snapshot` = values from a JSON file |
 | `PlcKi:SnapshotFile` | `models/snapshots/step10-xv101-not-open.json` | Used when Source is `snapshot` |
@@ -64,16 +65,16 @@ so you can edit values and watch the page change.
 
 | Message | What to check |
 | --- | --- |
-| `TCP connection timeout` / `host unreachable` | `ping` the PLC. PLCSIM instance running, network adapter as in `plc-demo/README.md` |
-| `TCP connection refused` | Wrong IP address, or the CPU has no S7CommPlus on that interface |
-| `invalid answer from the PLC` | CPU firmware too old (S7-1500 needs V2.9+), or the CPU's access level needs a password: set `PLCKI_PLC_PASSWORD` |
+| Ping fails | Network first: PLCSIM instance running, adapter set up as in `plc-demo/README.md` |
+| Ping works, connection times out | `probe` retries with the older challenge login by itself. If both fail, send the full probe output |
+| Login / legitimation refused | The CPU's access level needs a password: set `PLCKI_PLC_PASSWORD` |
 | `symbol ... not found` for some tags | The PLC program differs from the model: compare with the TIA project, re-download the demo |
 
 ## How it works
 
 | File | What |
 | --- | --- |
-| `Live/S7CommPlusSource.cs` | Connects with the bundled driver, looks up each symbol once, then reads all tags in one request per poll |
+| `Live/S7CommPlusSource.cs` | Connects with the driver, looks up each symbol once, then reads all tags in one batch per poll |
 | `Live/PollingService.cs` | Background loop: read, evaluate, reconnect with 2 s → 30 s back-off |
 | `Live/SnapshotFileSource.cs` | Test source: values from a JSON file |
 | `Probe.cs` | The `probe` command |
@@ -83,5 +84,12 @@ so you can edit values and watch the page change.
 
 API: `/api/status` (everything on the page as JSON), `/api/values` (raw values with symbols), `/api/model`.
 
-**Read-only:** the app has no write function, and the bundled driver has its write functions removed
-(`tests/PlcKi.Tests/ReadOnlyTests.cs` checks this).
+## Driver
+
+[DotNetProjects.S7CommPlusDriver](https://www.nuget.org/packages/DotNetProjects.S7CommPlusDriver) 6.1.0 from NuGet
+(LGPL-3.0-or-later), a maintained fork of thomas-v2/S7CommPlusDriver. It is reverse-engineered, not a Siemens product.
+It does TLS in managed code (no OpenSSL DLLs) and supports the older challenge login with the PLCSIM key family.
+
+**Read-only:** the driver can write and start/stop the CPU only when `WriteEnabled` is set; it is off by default.
+PLC-Ki never sets it and calls none of those functions. `tests/PlcKi.Tests/ReadOnlyTests.cs` reads the compiled
+app and fails the build if that changes.

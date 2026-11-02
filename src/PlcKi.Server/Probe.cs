@@ -22,9 +22,30 @@ public static class Probe
         {
             Console.WriteLine();
             Console.WriteLine("NOT CONNECTED: " + ex.Message);
-            Console.WriteLine("Check: ping the PLC address, the CPU is in RUN, and the address in appsettings.json.");
-            return 3;
+            // Auto should already fall back from TLS to the older login; try that login on its own to tell them apart.
+            if (source is S7CommPlusSource s7)
+            {
+                Console.WriteLine();
+                Console.WriteLine("Trying again with the older challenge login only (no TLS)...");
+                try
+                {
+                    missing = s7.Connect(model.Tags, S7CommPlusDriver.S7CommPlusSecurityMode.LegacyChallenge);
+                    Console.WriteLine("That worked. Set \"Security\": \"LegacyChallenge\" in appsettings.json to always use it.");
+                }
+                catch (Exception ex2)
+                {
+                    Console.WriteLine("NOT CONNECTED: " + ex2.Message);
+                    Console.WriteLine("Check: ping the PLC address, the CPU is in RUN, and the address in appsettings.json.");
+                    return 3;
+                }
+            }
+            else
+            {
+                return 3;
+            }
         }
+        if (source is S7CommPlusSource connected)
+            Console.WriteLine($"Connected. Security: {connected.NegotiatedSecurity}.");
 
         Snapshot snap;
         try

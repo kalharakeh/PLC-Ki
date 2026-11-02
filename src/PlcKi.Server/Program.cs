@@ -38,16 +38,14 @@ catch (Exception ex)
     return 2;
 }
 
-if (!Environment.Is64BitProcess)
-    Console.Error.WriteLine("Warning: running as a 32-bit process. The bundled OpenSSL DLLs are 64-bit; use the x64 .NET runtime.");
-
 IPlcSource CreateSource(ILogger log) => opt.Source.Equals("snapshot", StringComparison.OrdinalIgnoreCase)
     ? new SnapshotFileSource(Resolve(opt.SnapshotFile))
     : new S7CommPlusSource(opt.Plc, log);
 
 if (probe)
 {
-    using var lf = LoggerFactory.Create(b => b.AddSimpleConsole(o => o.SingleLine = true));
+    // Probe is a diagnostic: show the driver's detailed connection log too
+    using var lf = LoggerFactory.Create(b => b.AddSimpleConsole(o => o.SingleLine = true).SetMinimumLevel(LogLevel.Debug));
     return Probe.Run(model, CreateSource(lf.CreateLogger("probe")));
 }
 
