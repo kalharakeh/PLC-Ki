@@ -148,6 +148,9 @@ for LAD and GRAPH blocks Claude only sees the interface and the calls for now, s
 | Ping fails | Network first: PLCSIM instance running, adapter set up as in `plc-demo/README.md` |
 | Ping works, connection times out | `probe` retries with the older challenge login by itself. If both fail, send the full probe output |
 | Login / legitimation refused | The CPU's access level needs a password: set `PLCKI_PLC_PASSWORD` |
+| `the PLC has no program loaded` | The PLC (or PLCSIM instance) is running without a program: download it from TIA Portal. PLC-Ki checks again every 30 s |
+| `the program on the PLC is not the one in the machine model` | The data blocks the model reads are not on the PLC: download the right program, or start PLC-Ki with the model for this machine |
+| `the PLC answered no tag lookup` | The login worked but the PLC refused to look up symbols. Run `probe`: it tries the older login by itself. If that works, set `Security` to `LegacyChallenge`; if not, check the CPU's protection settings in TIA |
 | `symbol ... not found` for some tags | The PLC program differs from the model: compare with the TIA project, re-download the demo |
 
 ## How it works
