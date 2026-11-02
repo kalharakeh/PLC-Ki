@@ -454,9 +454,12 @@ PRE_OPERATIONS = [
           ("CMP", "Ge", "Real", '"DB_Recipe".MixSpeed', "real:100.0"),
           ("CMP", "Le", "Real", '"DB_Recipe".MixSpeed', "real:1500.0")],
          [("COIL", "#RecipeValid")]),
-    # Start clears the pause, Stop sets it (Stop wins: it comes last)
+    # Start clears the pause; Stop, a fault or the E-stop set it (they win: they come last). So after a fault or
+    # E-stop, Reset alone does not restart the batch: the operator has to press Start (EN 60204-1).
     rung([("C", "#Start")], [("R", "#Paused")]),
     rung([("C", "#Stop")], [("S", "#Paused")]),
+    rung([("C", "#AnyFault")], [("S", "#Paused")]),
+    rung([("CN", "#EStopOK")], [("S", "#Paused")]),
     # Healthy: no fault, E-stop OK, not paused, in Auto. Halted is the opposite.
     rung([("CN", "#AnyFault"), ("C", "#EStopOK"), ("CN", "#Paused"), ("C", "#Auto")], [("COIL", "#Healthy")]),
     rung([("CN", "#Healthy")], [("COIL", "#Halted")]),
@@ -531,7 +534,7 @@ def graph_fb(version):
         member("StartRecipeInvalid", "Bool", "Start pressed while recipe invalid"),
     ]
     user_statics = [
-        member("Paused", "Bool", "Set by Stop, cleared by Start"),
+        member("Paused", "Bool", "Set by Stop, a fault or the E-stop; cleared by Start"),
         member("Healthy", "Bool", "No fault, E-stop OK, not paused and in Auto: the step interlocks are fulfilled"),
         member("HeatReq", "Bool", "Step 30 asks for heat (heater runs while below TempSP)"),
         member("TempAtStepStart", "Real", "Temperature when step 30 began [degC]"),
@@ -590,7 +593,8 @@ def graph_fb(version):
                    "valves until the recipe levels; Mix and heat runs the agitator and heats to TempSP for MixTime; "
                    "Hold waits for the filler; Drain pumps the tank empty; Done counts the batch. Every working "
                    "step is interlocked with Healthy: on a fault, E-stop, Stop or Auto off its actions switch off "
-                   "and the step is kept. Press Start (after Reset) to continue.")
+                   "and the step is kept. After a fault or E-stop, press Reset, then Start to continue; Reset alone "
+                   "does not restart the batch.")
     alarms = ('<AlarmsSettings><AlarmSupervisionCategories>'
               + "".join(f'<AlarmSupervisionCategory Id="{i}" DisplayClass="0" />' for i in range(1, 9))
               + '</AlarmSupervisionCategories><AlarmInterlockCategory Id="1" /><AlarmSubcategory1Interlock Id="0" />'

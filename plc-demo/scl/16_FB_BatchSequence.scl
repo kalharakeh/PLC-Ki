@@ -51,7 +51,7 @@ VERSION : 0.1
    VAR
       StepNo : Int;   // Current step (kept here; copied to the Step output)
       LastStep : Int := -1;   // Step in the previous cycle (to restart the step timer)
-      Paused : Bool;   // Set by Stop, cleared by Start
+      Paused : Bool;   // Set by Stop, a fault or the E-stop; cleared by Start
       TempAtStepStart : Real;   // Temperature when step 30 began
       tStep {InstructionName := 'TON_TIME'; LibVersion := '1.0'} : TON_TIME;
    END_VAR
@@ -64,7 +64,8 @@ BEGIN
 	    AND ("DB_Recipe".MixSpeed >= 100.0) AND ("DB_Recipe".MixSpeed <= 1500.0);
 	
 	// --- Pause / halt ---
-	IF #Stop THEN
+	// After a fault or E-stop, Reset alone must not restart the batch: Start is needed (EN 60204-1)
+	IF #Stop OR #AnyFault OR NOT #EStopOK THEN
 	    #Paused := TRUE;
 	ELSIF #Start THEN
 	    #Paused := FALSE;
