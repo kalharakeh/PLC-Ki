@@ -18,7 +18,7 @@ public static class PackageCheck
     private static readonly Regex SclHeader = new(@"^\s*(FUNCTION_BLOCK|FUNCTION|DATA_BLOCK|ORGANIZATION_BLOCK|TYPE)\s+""([^""]+)""", RegexOptions.Multiline | RegexOptions.IgnoreCase);
     private static readonly Regex SclEnd = new(@"^\s*END_(FUNCTION_BLOCK|FUNCTION|DATA_BLOCK|ORGANIZATION_BLOCK|TYPE)\b", RegexOptions.Multiline | RegexOptions.IgnoreCase);
     private static readonly Regex DbInstanceOf = new(@"^\s*""([^""]+)""\s*$", RegexOptions.Multiline);
-    private static readonly Regex DeclaredDt = new(@"^\s*dt\s*(\{[^}]*\})?\s*:", RegexOptions.Multiline | RegexOptions.IgnoreCase);
+    private static readonly Regex DeclaredDt = new(@"^\s*(dt|tod|ldt|dtl|date|time|string|real|int|bool|word|byte)\s*(\{[^}]*\})?\s*:(?!=)", RegexOptions.Multiline | RegexOptions.IgnoreCase);
     private static readonly Regex SelfResetTimer = new(@"#(\w+)\s*\(\s*IN\s*:=\s*NOT\s+#\1\.Q\b", RegexOptions.IgnoreCase);
     private static readonly Regex SclMemberOfType = new(@"^\s*([A-Za-z_]\w*)\s*(?:\{[^}]*\})?\s*:\s*""([^""]+)""\s*;", RegexOptions.Multiline);
     private static readonly Regex Address = new(@"^%(I|Q|M)(\d+\.[0-7]|[BWD]\d+)$", RegexOptions.IgnoreCase);
@@ -182,7 +182,7 @@ public static class PackageCheck
         var expected = f.Extension switch { ".db" => "DATA_BLOCK", ".udt" => "TYPE", _ => null };
         if (expected != null && kind != expected) problems.Add($"{f.Name}: a {f.Extension} file must hold a {expected}, not a {kind}.");
         if (f.Extension == ".scl" && kind is "DATA_BLOCK" or "TYPE") problems.Add($"{f.Name}: put a {kind} in a {(kind == "TYPE" ? ".udt" : ".db")} file.");
-        if (DeclaredDt.IsMatch(f.Text)) problems.Add($"{f.Name}: \"dt\" is a reserved word in SCL; rename that variable.");
+        foreach (Match m in DeclaredDt.Matches(f.Text)) problems.Add($"{f.Name}: \"{m.Groups[1].Value}\" is a reserved word in SCL (\"dt\" is DATE_AND_TIME); rename that variable.");
         foreach (Match m in SelfResetTimer.Matches(f.Text))
             problems.Add($"{f.Name}: #{m.Groups[1].Value}(IN := NOT #{m.Groups[1].Value}.Q ...) does not pulse reliably on S7-1500; use a separate timer reset or compare elapsed time.");
         if (Regex.IsMatch(f.Text, @"\bF_(SCL|LAD|FBD)\b|S7_F_|\{\s*S7_Safety", RegexOptions.IgnoreCase))

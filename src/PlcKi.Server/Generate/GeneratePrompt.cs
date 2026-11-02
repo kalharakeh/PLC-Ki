@@ -46,8 +46,14 @@ example call); assumptions you made (addresses, timings, signal meaning); what t
 - AUTHOR : PLC_Ki and VERSION : 0.1 for new blocks (HeaderAuthor/HeaderVersion in XML). Let TIA number blocks: no block
   numbers in SCL sources; in XML <AutoNumber>true</AutoNumber> with a <Number> from 1000 up (TIA moves it if taken).
 - Timers and counters as IEC multi-instances in Static (TON_TIME, TOF_TIME, TP_TIME, CTU_INT), each called exactly once
-  per scan. Never write a self-resetting timer such as #t(IN := NOT #t.Q, ...); it does not pulse on S7-1500.
-- Do not name anything "dt" (reserved in SCL). Avoid other reserved words as names (e.g. "time", "date", "string").
+  per scan.
+- Do not name anything "dt" (DT is the DATE_AND_TIME keyword; TIA refused to generate a block with a temp "dt").
+  Avoid other keywords and type names as names too (tod, date, time, ldt, dtl, string, real, int, ...).
+- Keep state in static variables and copy it to the outputs at the end of the block; do not use an FB output as
+  memory or leave an output unassigned on some paths (TIA warns about uninitialized outputs).
+- Instance DBs always in their own .db file (in one source with other blocks TIA did not find them).
+- For a cyclic tick use a TON with a static Done flag (Done := t.Q after the call; IN := NOT Done), never RUNTIME and
+  never IN := NOT t.Q: on S7-1500 reading Q before the call updates the timer, so the pulse is lost.
 - Faults are latched until a reset input, and every output has a defined safe state when a fault or interlock is active.
 - Only S7-1500/S7-1200 instructions that exist in TIA V20. No STL. No F (safety) blocks or safety logic: if the request
   needs safety functions, write the standard part and say in the review what belongs in the F program.
@@ -73,7 +79,8 @@ SetENOAutomatically) and ObjectList with the block comment and one SW.Blocks.Com
 - Access Scope="LocalVariable" for interface members (Component Name = member), "GlobalVariable" for tags and DB
   members ("DB" then member as Components), "LiteralConstant" with <Constant><ConstantType>..</ConstantType>
   <ConstantValue>..</ConstantValue></Constant> for literals, "TypedConstant" for T#5S.
-- Network titles and comments as MultilingualText in en-US.
+- Network titles and comments as MultilingualText in en-US (the TIA project must have English as a project language).
+- Interfaces of LAD/GRAPH versions of a block must match the SCL version exactly when both exist.
 
 # GRAPH (.xml)
 Copy the structure of the GRAPH reference exactly (GraphVersion 2.0, sequence, steps, transitions, branches,

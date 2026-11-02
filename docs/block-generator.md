@@ -57,6 +57,23 @@ bin\Release\net48\TiaImporter.exe import-blocks --project C:\...\MixingDemo.ap20
 If it reports errors, copy the folder back to the PC and run
 `dotnet run --project src\PlcKi.Server -- generate --out C:\temp\gen\valve --fix`, then import the new version.
 
+## Lessons from the demo that are built in
+
+What went wrong while bringing the demo into TIA V20 is now in Claude's instructions, the offline check or the importer:
+
+| Lesson | Where |
+| --- | --- |
+| Openness refuses relative paths (.NET Framework `FileInfo`) | importer uses full paths for every file and the project |
+| A GRAPH FB can't be a multi-instance (S7-1500) | prompt + offline check: own instance DB, called with it |
+| GraphVersion 2.0 imports on the 1516 FW 1.8 | GRAPH reference file is the one that compiled |
+| Instance DBs in one source with other blocks weren't found | one block per file, instance DB after its FB |
+| `dt` is a keyword (DATE_AND_TIME); TIA refused the block | prompt + offline check for keyword names |
+| `IN := NOT t.Q` timers don't pulse on S7-1500 | prompt + offline check; static Done flag instead |
+| Uninitialized FB outputs give warnings | prompt: state in statics, copied to outputs |
+| setup-demo stopped at the first refused file | import-blocks imports the rest and reports every refusal |
+| Texts are en-US | the TIA project needs English as a project language |
+| TIA asks to allow the exe after every rebuild | run `tools\TiaImporter\allow-openness.ps1` once after building |
+
 ## Coming next
 
 A live link between the PC and the VM, so the round trip runs without copying folders: import, compile, download to
