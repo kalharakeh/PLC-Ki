@@ -16,6 +16,14 @@ namespace TiaImporter
       Loads the demo program (SCL sources and XML blocks) into an existing project
       that already contains an S7-1500 CPU, compiles it and saves the project.
 
+  TiaImporter import-blocks --project <project.ap20> --package <package folder> [--plc <PLC name>]
+                            [--version v002] [--replace] [--keep-on-error]
+      Loads blocks written by "PlcKi.Server generate" (latest version, or --version) into the named project:
+      tag tables, data types, DBs, SCL/LAD/FBD/GRAPH blocks. Compiles and writes import-report.json into the
+      version folder. Refuses to overwrite existing blocks, types or tags the package was not asked to change
+      (unless --replace) and keeps a copy of each replaced block in before\. Saves the project only when
+      everything imported and compiled without errors (unless --keep-on-error).
+
 Nothing in this tool connects to a PLC or downloads to one.";
 
         private static int Main(string[] args)
@@ -59,6 +67,14 @@ Nothing in this tool connects to a PLC or downloads to one.";
                         var demo = Arg("--demo");
                         if (project == null || demo == null) { Console.WriteLine(Usage); return 2; }
                         return new DemoSetup(Console.Out).Run(new FileInfo(Path.GetFullPath(project)), new DirectoryInfo(Path.GetFullPath(demo)), Arg("--plc"));
+                    }
+                case "import-blocks":
+                    {
+                        var project = Arg("--project");
+                        var package = Arg("--package");
+                        if (project == null || package == null) { Console.WriteLine(Usage); return 2; }
+                        return new BlockImport(Console.Out).Run(new FileInfo(Path.GetFullPath(project)), new DirectoryInfo(Path.GetFullPath(package)),
+                            Arg("--plc"), Arg("--version"), Array.IndexOf(args, "--replace") >= 0, Array.IndexOf(args, "--keep-on-error") >= 0);
                     }
                 default:
                     Console.WriteLine(Usage);

@@ -5,7 +5,11 @@ Command-line helper that uses **TIA Portal V20 Openness**. It never connects to 
 ```
 TiaImporter export --archive <project.zap20> --out <empty folder>
 TiaImporter setup-demo --project <project.ap20> --demo <plc-demo folder> [--plc <PLC name>]
+TiaImporter import-blocks --project <project.ap20> --package <package folder> [--plc <PLC name>] [--version v002] [--replace] [--keep-on-error]
 ```
+
+`import-blocks` loads blocks written by `PlcKi.Server generate` into the project you name, compiles, and writes
+`import-report.json` for the next fix round. See [docs/block-generator.md](../../docs/block-generator.md).
 
 `export` opens the archive without showing TIA (into a temporary folder; the archive is not changed) and writes,
 per PLC:

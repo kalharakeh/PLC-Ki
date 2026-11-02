@@ -19,6 +19,14 @@
     <ProjectReference Include="..\PlcKi.Plant\PlcKi.Plant.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <!-- Block generator: default standard and reference blocks that are proven to import and compile in TIA V20 -->
+    <EmbeddedResource Include="..\..\knowledge\block-standard.md" LogicalName="PlcKi.Server.Generate.block-standard.md" />
+    <EmbeddedResource Include="..\..\plc-demo\scl\13_FB_Valve.scl" LogicalName="PlcKi.Server.Generate.ref.FB_Valve.scl" />
+    <EmbeddedResource Include="..\..\plc-demo\scl\17_DB_BatchSequence.db" LogicalName="PlcKi.Server.Generate.ref.DB_BatchSequence.db" />
+    <EmbeddedResource Include="..\..\plc-demo\lad\13_FB_Valve.xml" LogicalName="PlcKi.Server.Generate.ref.FB_Valve.xml" />
+    <EmbeddedResource Include="..\..\plc-demo\graph\16_FB_BatchSequence.xml" LogicalName="PlcKi.Server.Generate.ref.FB_BatchSequence.xml" />
+  </ItemGroup>
+  <ItemGroup>
     <!-- Copy the web page next to the exe so "dotnet run" and the built exe serve the same files -->
     <Content Update="wwwroot\**" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\models\*.json" Link="models\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />

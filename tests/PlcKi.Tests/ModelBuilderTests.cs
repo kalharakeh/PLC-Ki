@@ -18,7 +18,7 @@ public class ModelBuilderTests
     private static readonly string ModelFile = Path.Combine(AppContext.BaseDirectory, "models", "demo-mixing-station.json");
     private static readonly string ExportFile = Path.Combine(AppContext.BaseDirectory, "data", "demo-export.zip");
 
-    private sealed class FakeStreamingApi : HttpMessageHandler
+    internal sealed class FakeStreamingApi : HttpMessageHandler
     {
         private readonly Queue<string> _answers;
         public readonly List<JsonElement> Requests = new();
@@ -61,7 +61,7 @@ public class ModelBuilderTests
         }
     }
 
-    private static AnthropicClient Client(FakeStreamingApi api) => new()
+    internal static AnthropicClient Client(FakeStreamingApi api) => new()
     {
         ApiKey = "test-key",
         BaseUrl = "http://fake-api.local",

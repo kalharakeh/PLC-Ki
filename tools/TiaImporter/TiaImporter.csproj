@@ -2,7 +2,8 @@
   <!--
     Command-line tool that uses TIA Portal Openness (V20) to:
       export      open a .zap20 archive headless and export the whole PLC program to files
-      setup-demo  load the demo PLC program into an existing TIA project
+      setup-demo     load the demo PLC program into an existing TIA project
+      import-blocks  load generated blocks into a named TIA project, compile, write a report
     Needs: Windows, TIA Portal V20 with Openness, user in the "Siemens TIA Openness" group.
   -->
   <PropertyGroup>
