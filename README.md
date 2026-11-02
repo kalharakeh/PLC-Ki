@@ -35,6 +35,8 @@ Full plan and architecture: [PLC Troubleshooter plan](https://claude.ai/artifact
 | `tools/TiaImporter/` | TIA Openness tool: export a `.zap20` archive, load the demo into a TIA project |
 | `src/PlcKi.Core/` | Machine model, condition language, the plain-English status engine, recent history, and the lookups Claude uses (no PLC code) |
 | `src/PlcKi.Server/` | The web app: live read-only PLC link, status page, "ask about the machine", `probe` connection test. See its README |
+| `src/PlcKi.Plant/` | Plant PC features: login and users, settings page, Windows service |
+| `installer/` | Windows installer (runs PLC-Ki as a service). See [installer/README.md](installer/README.md) |
 | `models/` | Machine models (`demo-mixing-station.json`) and test snapshots taken from watch tables |
 | `tests/` | Unit tests (`dotnet test`), including a check that the app calls no PLC write or start/stop function |
 
@@ -55,7 +57,7 @@ Full plan and architecture: [PLC Troubleshooter plan](https://claude.ai/artifact
 | 3. Ask questions (Claude) | Works live with the real API |
 | 3b. Machine model from the archive (Claude) | `import` command: SCL read in full; LAD and GRAPH logic not decoded yet. First real run pending |
 | 4. Real plant archives, Web API fallback, S7-1200 hardware | Planned |
-| 5. Plant PC deployment | Planned |
+| 5. Plant PC deployment | Installer, Windows service, login and settings page. See [installer/README.md](installer/README.md) |
 
 ## Quick start (demo)
 

@@ -15,3 +15,47 @@ jobs:
           dotnet-version: 8.0.x
       - run: dotnet build PlcKi.sln -c Release
       - run: dotnet test PlcKi.sln -c Release --no-build
+
+  # Builds the Windows installer, installs it on the runner, checks that the service answers, uninstalls it.
+  # The tested installer is kept as a download on the workflow run page (Artifacts: PLC-Ki-Setup).
+  installer:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) { choco install innosetup -y --no-progress }
+      - name: Build installer
+        shell: pwsh
+        run: ./installer/build.ps1 -Version "0.1.${{ github.run_number }}"
+      - name: Install, check the service, uninstall
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem out\PLC-Ki-Setup-*.exe | Select-Object -First 1
+          $p = Start-Process $setup.FullName -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/LOG=install.log' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { Get-Content install.log; throw "Setup failed: $($p.ExitCode)" }
+          $svc = Get-Service PLC-Ki
+          "Service: $($svc.Status), account: $((Get-CimInstance Win32_Service -Filter "Name='PLC-Ki'").StartName)"
+          $state = $null
+          for ($i = 0; $i -lt 30 -and -not $state; $i++) {
+            try { $state = Invoke-RestMethod http://localhost:5080/api/auth/state } catch { Start-Sleep 2 }
+          }
+          if (-not $state) { Get-WinEvent -LogName Application -MaxEvents 20 | Format-List; throw "PLC-Ki did not answer on port 5080" }
+          $state | ConvertTo-Json
+          if (-not $state.service) { throw "PLC-Ki does not know it runs as a service" }
+          if (-not $state.setupNeeded) { throw "Expected a fresh install without users" }
+          $r = Invoke-WebRequest http://localhost:5080/api/status -SkipHttpErrorCheck
+          if ($r.StatusCode -ne 401) { throw "Status page should need a login, got $($r.StatusCode)" }
+          $u = Start-Process "${env:ProgramFiles}\PLC-Ki\unins000.exe" -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES' -Wait -PassThru
+          Start-Sleep 5
+          if (Get-Service PLC-Ki -ErrorAction SilentlyContinue) { throw "Service still there after uninstall" }
+          "Uninstalled cleanly"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PLC-Ki-Setup
+          path: out/PLC-Ki-Setup-*.exe
+          if-no-files-found: error

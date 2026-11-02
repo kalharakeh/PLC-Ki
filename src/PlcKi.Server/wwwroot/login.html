@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PLC-Ki login</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="plant.css">
+</head>
+<body>
+  <div class="narrow">
+    <div class="brand">
+      <span class="logo" aria-hidden="true">◆</span>
+      <div>
+        <h1>PLC-Ki</h1>
+        <p class="muted">Plain-English view of the PLC</p>
+      </div>
+    </div>
+
+    <section class="card">
+      <h2 id="title">Log in</h2>
+      <p id="intro" class="muted small hidden"></p>
+      <form id="form" class="form" autocomplete="on">
+        <div class="field">
+          <label for="name">User name</label>
+          <input id="name" type="text" autocomplete="username" required autofocus>
+        </div>
+        <div class="field">
+          <label for="password">Password</label>
+          <input id="password" type="password" autocomplete="current-password" required>
+        </div>
+        <div id="repeat-field" class="field hidden">
+          <label for="repeat">Password again</label>
+          <input id="repeat" type="password" autocomplete="new-password">
+          <p class="hint">At least 8 characters.</p>
+        </div>
+        <p id="error" class="msg-err hidden" role="alert"></p>
+        <button id="submit" class="btn" type="submit">Log in</button>
+      </form>
+    </section>
+  </div>
+  <script src="login.js"></script>
+</body>
+</html>
