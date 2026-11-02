@@ -52,7 +52,8 @@ namespace TiaImporter
                         foreach (var file in dir.GetFiles("*.xml").OrderBy(f => f.Name))
                         {
                             _log.WriteLine($"  block {file.Name}");
-                            sw.BlockGroup.Blocks.Import(file, ImportOptions.Override);
+                            // new FileInfo(FullName): on .NET Framework a FileInfo from GetFiles keeps a relative original path, which Openness rejects
+                            sw.BlockGroup.Blocks.Import(new FileInfo(file.FullName), ImportOptions.Override);
                         }
                     }
 
