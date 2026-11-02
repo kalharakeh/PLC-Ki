@@ -5,6 +5,9 @@ AUTHOR : Demo
 VERSION : 0.1
 // Each alarm bit in "DB_Alarms" turns on when its condition is TRUE and stays on (latched)
 // until Reset is pressed AND the condition is gone.
+// Step timeouts (A16-A19) are the exception: they latch on the moment the step runs over time, and Reset
+// clears them even though the step is still over time. The GRAPH step time stops while halted and keeps its
+// value, so a level-latched timeout could never be reset and the batch would be stuck in the step.
    VAR_INPUT
       Reset : Bool;   // Reset button (PB_Reset)
       EStop : Bool;
@@ -34,6 +37,13 @@ VERSION : 0.1
       TankNotEmpty : Bool;
    END_VAR
 
+   VAR
+      Step10_TimeoutOld : Bool;   // Timeout input in the previous cycle (rising edge = alarm)
+      Step20_TimeoutOld : Bool;
+      Step30_TimeoutOld : Bool;
+      Step50_TimeoutOld : Bool;
+   END_VAR
+
    VAR_TEMP
       clr : Bool;
    END_VAR
@@ -57,10 +67,14 @@ BEGIN
 	"DB_Alarms".A13_LT101_HighHigh := #LT101_HighHigh OR ("DB_Alarms".A13_LT101_HighHigh AND NOT #clr);
 	"DB_Alarms".A14_TT301_WireBreak := #TT301_WireBreak OR ("DB_Alarms".A14_TT301_WireBreak AND NOT #clr);
 	"DB_Alarms".A15_TT301_High := #TT301_High OR ("DB_Alarms".A15_TT301_High AND NOT #clr);
-	"DB_Alarms".A16_Step10_Timeout := #Step10_Timeout OR ("DB_Alarms".A16_Step10_Timeout AND NOT #clr);
-	"DB_Alarms".A17_Step20_Timeout := #Step20_Timeout OR ("DB_Alarms".A17_Step20_Timeout AND NOT #clr);
-	"DB_Alarms".A18_Step30_Timeout := #Step30_Timeout OR ("DB_Alarms".A18_Step30_Timeout AND NOT #clr);
-	"DB_Alarms".A19_Step50_Timeout := #Step50_Timeout OR ("DB_Alarms".A19_Step50_Timeout AND NOT #clr);
+	"DB_Alarms".A16_Step10_Timeout := (#Step10_Timeout AND NOT #Step10_TimeoutOld) OR ("DB_Alarms".A16_Step10_Timeout AND NOT #clr);
+	"DB_Alarms".A17_Step20_Timeout := (#Step20_Timeout AND NOT #Step20_TimeoutOld) OR ("DB_Alarms".A17_Step20_Timeout AND NOT #clr);
+	"DB_Alarms".A18_Step30_Timeout := (#Step30_Timeout AND NOT #Step30_TimeoutOld) OR ("DB_Alarms".A18_Step30_Timeout AND NOT #clr);
+	"DB_Alarms".A19_Step50_Timeout := (#Step50_Timeout AND NOT #Step50_TimeoutOld) OR ("DB_Alarms".A19_Step50_Timeout AND NOT #clr);
+	#Step10_TimeoutOld := #Step10_Timeout;
+	#Step20_TimeoutOld := #Step20_Timeout;
+	#Step30_TimeoutOld := #Step30_Timeout;
+	#Step50_TimeoutOld := #Step50_Timeout;
 	"DB_Alarms".A20_E301_NoHeating := #E301_NoHeating OR ("DB_Alarms".A20_E301_NoHeating AND NOT #clr);
 	"DB_Alarms".A21_Filler_NotReady := #Filler_NotReady OR ("DB_Alarms".A21_Filler_NotReady AND NOT #clr);
 	"DB_Alarms".A22_MES_HeartbeatLost := #MES_HeartbeatLost OR ("DB_Alarms".A22_MES_HeartbeatLost AND NOT #clr);

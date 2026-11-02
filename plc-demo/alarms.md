@@ -32,6 +32,10 @@ FAULT alarms halt the sequence (outputs off, step kept). WARNING alarms only inf
 | A24 Not in Auto | FB_BatchSequence | Start pressed in Manual | Selector in Manual | Switch to Auto | set `DB_IO.SW_Auto` FALSE |
 | A25 Tank not empty | FB_BatchSequence | Start pressed with level > 2 % | Previous batch not drained | Drain the tank | Start while a batch is half done after an abort |
 
+Step timeouts A16-A19 latch once, when the step runs over time. Reset clears them although the step is still over
+time, and Start continues the step; the same step does not raise its timeout again.
+
+
 Interlocks worth knowing (good test questions such as "why isn't the agitator running?"):
 
 - M201 runs only with level above 20 % and E-stop OK.
