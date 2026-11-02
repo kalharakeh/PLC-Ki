@@ -273,6 +273,52 @@ ol.fix li { margin: 3px 0; }
 .ask-f input { width: 100%; padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--bg); color: var(--text); font: inherit; }
 .x { border: 0; background: transparent; font-size: 20px; cursor: pointer; color: var(--muted); }
 
+/* banners, first-out, notes, shift, TV, touch */
+.banners { display: grid; gap: 6px; }
+.banner { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding: 8px 12px; border-radius: 10px; font-size: 13px; border: 1px solid; }
+.banner.w { background: var(--warn-bg); border-color: var(--warn); }
+.banner.f { background: var(--fault-bg); border-color: var(--fault); }
+.banner b { font-weight: 700; }
+.first { font-size: 10.5px; font-weight: 700; padding: 1px 6px; border-radius: 4px; background: var(--text); color: var(--card); letter-spacing: .04em; }
+.follow td:first-child { padding-left: 22px; }
+.followbox { margin-top: 10px; padding: 8px 10px; border-radius: 8px; background: var(--card); border: 1px dashed var(--line-strong); font-size: 13px; }
+.note-item { display: grid; grid-template-columns: auto minmax(0,1fr); gap: 2px 10px; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+.note-item:last-of-type { border-bottom: 0; }
+.note-item .who { font-weight: 600; white-space: nowrap; }
+.note-item .when { grid-column: 1; color: var(--muted); font-size: 12px; }
+.note-item p { grid-column: 2; grid-row: 1 / span 2; margin: 0; }
+.addnote { display: flex; gap: 6px; margin-top: 6px; }
+.addnote input { flex: 1; min-width: 0; padding: 7px 10px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--bg); color: var(--text); font: inherit; }
+.btn { border: 1px solid var(--accent); background: var(--accent); color: #fff; border-radius: 8px; padding: 6px 12px; cursor: pointer; font-weight: 600; }
+.io { font-family: var(--mono); font-size: 12px; white-space: nowrap; }
+.io small { display: block; font-family: var(--sans); color: var(--muted); font-size: 11.5px; white-space: normal; }
+.tl { list-style: none; margin: 0; padding: 0; position: relative; }
+.tl::before { content: ""; position: absolute; left: 61px; top: 4px; bottom: 4px; width: 2px; background: var(--line); }
+.tl li { display: grid; grid-template-columns: 52px 20px minmax(0,1fr); gap: 0 8px; align-items: start; padding: 5px 0; font-size: 13px; }
+.tl .t { font-family: var(--mono); font-size: 12px; color: var(--muted); padding-top: 1px; }
+.tl .dot { width: 12px; height: 12px; border-radius: 50%; margin: 3px 0 0 4px; background: var(--line-strong); position: relative; z-index: 1; box-shadow: 0 0 0 3px var(--card); }
+.tl .dot.f { background: var(--fault); } .tl .dot.w { background: var(--warn); } .tl .dot.ok { background: var(--ok); } .tl .dot.i { background: var(--accent); }
+.pareto { display: grid; gap: 8px; }
+.pareto .row { display: grid; grid-template-columns: minmax(0, 210px) minmax(0,1fr) 70px; gap: 10px; align-items: center; font-size: 13px; }
+.pareto .bar { height: 14px; border: 0; background: var(--sunk); }
+.pareto .bar i { background: var(--fault); border-radius: 4px; }
+.pareto .bar.w i { background: var(--warn); }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; }
+.kpi { background: var(--sunk); border-radius: 10px; padding: 10px 12px; }
+.kpi b { display: block; font-size: 22px; font-family: var(--mono); }
+.kpi span { font-size: 12px; color: var(--muted); }
+.topsel { background: var(--chrome-2); color: var(--chrome-fg); border: 1px solid var(--chrome-line); border-radius: 8px; padding: 4px 6px; font: inherit; font-size: 12.5px; }
+.tvbtn { background: var(--chrome-2); color: var(--chrome-fg); border: 1px solid var(--chrome-line); border-radius: 8px; padding: 4px 10px; cursor: pointer; font-size: 12.5px; }
+.tvbtn[aria-pressed="true"] { background: var(--chrome-fg); color: var(--chrome); }
+body.tv .rail { display: none; }
+body.tv .shell { grid-template-columns: minmax(0, 1fr); }
+body.tv main { font-size: 17px; }
+body.tv .view { max-width: none; }
+body.tv .vhead h2 { font-size: 30px; }
+body.tv .hero h2 { font-size: 30px !important; }
+body.tv .hero p { font-size: 20px !important; }
+body.tv .big { font-size: 22px; }
+@media (pointer: coarse) { .chip, .rail button, .scen button, .tile, .devbtn, .netbtn { min-height: 44px; } }
 @media (max-width: 980px) {
   .split, .split.l, .grid2 { grid-template-columns: minmax(0, 1fr); }
 }
@@ -362,17 +408,21 @@ body::before { background: var(--chrome); }
       <button data-act="sc" data-sc="mix">Mixing</button>
       <button data-act="sc" data-sc="xv101">Valve fault</button>
       <button data-act="sc" data-sc="filler">Waiting</button>
+      <button data-act="sc" data-sc="estop">E-stop</button>
     </div>
+    <span id="prog"></span>
     <span class="pill p-ok" title="Reading 83 tags every 500 ms">Live</span>
     <span class="pill p-info plain" title="This app only reads from the PLC">Read-only</span>
     <span class="small muted mono" id="clock"></span>
+    <select class="topsel" id="lang" aria-label="Language"><option value="en">EN</option><option value="de">DE</option></select>
+    <button class="tvbtn" data-act="tv" aria-pressed="false" title="Large-screen mode for a TV on the line">TV</button>
     <button class="askbtn" data-act="ask">Ask</button>
   </div>
 </header>
 
 <div class="shell">
   <nav class="rail" id="rail" aria-label="Views"></nav>
-  <main><div class="view" id="view"></div></main>
+  <main><div class="banners" id="banners" style="max-width:1240px;margin:0 auto 14px"></div><div class="view" id="view"></div></main>
 </div>
 
 <aside class="ask" id="ask" aria-label="Ask about the machine"></aside>
@@ -400,6 +450,36 @@ const BASE = {
     SpeedSP: 300, SpeedPV: 299, M201_Ready: true, M201_Fault: false, OverTemp: false, TT_WB: false, LT_WB: false,
     XV101_ZSO: false, XV101_ZSC: true, XV102_ZSO: false, XV102_ZSC: true, P401_Fb: false, P401_Trip: false,
     FillerReady: false, BatchCount: 41, alarms: [{ id: "A21", since: NOW0 - 18, ack: true }] },
+  estop: { Step: 30, StepTime: 160, Paused: false, Auto: true, EStopOK: false, AnyFault: true, Level: 80.4, Temp: 48.1,
+    SpeedSP: 0, SpeedPV: 0, M201_Ready: false, M201_Fault: false, OverTemp: false, TT_WB: false, LT_WB: false,
+    XV101_ZSO: false, XV101_ZSC: true, XV102_ZSO: false, XV102_ZSC: true, P401_Fb: false, P401_Trip: false,
+    FillerReady: false, BatchCount: 41, alarms: [{ id: "A01", since: NOW0 - 40, ack: false }, { id: "A08", since: NOW0 - 39, ack: false }] },
+};
+// Things the app watches besides alarms: forced I/O and test bits, and whether the PLC still runs the imported program.
+const WATCH = {
+  mix: { forces: [["%I2.5", "\"DB_IO\".P401_RunFb", "forced FALSE since 14:02"]], test: [], prog: null },
+  xv101: { forces: [], test: [["\"DB_FaultInjection\".XV101_StuckClosed", "TRUE"]], prog: null },
+  filler: { forces: [], test: [], prog: { blocks: ["FB_VFD"], when: "today 16:58" } },
+  estop: { forces: [], test: [], prog: null },
+};
+// Where to measure: from the hardware config (module, channel) and the I/O tag table / wiring comments (terminal, cabinet).
+const IO = {
+  '"DB_IO".XV101_OpenCmd': ["%Q4.0", "DQ 16x24VDC · slot 4 · ch 0 · terminal X2:1 · cabinet +CP1"],
+  '"DB_IO".XV101_ZSO': ["%I2.0", "DI 16x24VDC · slot 2 · ch 0 · terminal X1:3 · cabinet +CP1"],
+  '"DB_IO".XV101_ZSC': ["%I2.1", "DI 16x24VDC · slot 2 · ch 1 · terminal X1:4 · cabinet +CP1"],
+  '"DB_IO".EStop_OK': ["%I2.7", "DI 16x24VDC · slot 2 · ch 7 · safety relay K1 contact 13/14"],
+  '"DB_IO".M201_DriveReady': ["PN", "G120 drive \"M201\" · telegram 1 · status word bit 1"],
+  '"DB_IO".M201_SpeedPV': ["PN", "G120 drive \"M201\" · telegram 1 · actual speed word"],
+  '"DB_IO".E301_OnCmd': ["%Q4.4", "DQ 16x24VDC · slot 4 · ch 4 · contactor K301"],
+  '"Station".LT101.Value': ["%IW64", "AI 8xU/I · slot 6 · ch 0 · terminal X3:1/2 · 4..20 mA"],
+  '"Station".TT301.Value': ["%IW66", "AI 8xU/I · slot 6 · ch 1 · terminal X3:3/4 · Pt100 transmitter"],
+  '"DB_LineInterface".Filler_ReadyToReceive': ["PN", "PN/PN coupler to filler · input byte 0 bit 0"],
+};
+const NOTES = {
+  A02: [["Ahmed", "24 Oct", "Air hose to the XV101 valve terminal was kinked behind the tank. Re-routed it."], ["kassem", "31 Oct", "Solenoid coil Y101 burnt, replaced. Spare coils in store B3."]],
+  A21: [["Night shift", "Yesterday", "Filler was waiting for caps. Nothing wrong on the mixer."]],
+  A01: [["Maria", "28 Oct", "E-stop S02 at the tank was pressed by the cleaning crew."]],
+  A08: [],
 };
 
 // Alarm catalogue: generated from DB_Alarms comments + FB_AlarmHandler wiring; cause/fix drafted by Claude at import.
@@ -425,6 +505,14 @@ const AL = {
     causes: [[65, "Filler stopped or not in Auto", "Filler_ReadyToReceive has been FALSE the whole step."], [25, "Filler waiting for bottles or caps", ""], [10, "Signal lost between filler and PLC", "Unlikely: MES heartbeat is fine on the same network."]],
     fix: ["Check the filler is running and in Auto.", "Check that the filler sets DB_LineInterface.Filler_ReadyToReceive.", "No reset needed: the batch drains as soon as the filler is ready."] },
 };
+AL.A01 = { sev: "F", text: "Emergency stop", dev: "EStop", path: ["OB_Main", "Station · FB_Station", "EStop := NOT \"DB_IO\".EStop_OK", "DB_Alarms.A01"], net: 1, block: "FB_Station",
+  cond: "Emergency stop circuit open (\"DB_IO\".EStop_OK = FALSE)",
+  causes: [[70, "An E-stop button is pressed", "S01 on the operator panel or S02 at the tank."], [20, "Safety relay K1 tripped", "Door switch or relay fault."], [10, "Wire break in the E-stop circuit", ""]],
+  fix: ["Find and release the pressed E-stop (S01 panel, S02 tank).", "Reset the safety relay K1.", "Press Reset, then Start. The batch continues at step 30."] };
+AL.A08 = { sev: "F", text: "M201 not ready", dev: "M201", cause: "A01", path: ["OB_Main", "Station", "M201 · FB_VFD", "NotReady", "DB_Alarms.A08"], net: 3, block: "FB_VFD",
+  cond: "Drive not ready and no drive fault",
+  causes: [[90, "Follows the E-stop (A01)", "The E-stop circuit removes the drive enable. Clears once A01 is fixed."], [10, "Drive main switch off", ""]],
+  fix: ["Fix A01 first.", "If it stays after Reset: check the drive enable and main switch Q201."] };
 const HISTORY = [
   { id: "A21", on: "Today 15:48:02", dur: "2:41", sc: "" },
   { id: "A07", on: "Today 14:05:19", dur: "0:52", sc: "" },
@@ -435,7 +523,7 @@ const HISTORY = [
   { id: "A02", on: "31 Oct 16:20:08", dur: "12:40", sc: "" },
   { id: "A16", on: "31 Oct 16:21:58", dur: "10:50", sc: "" },
 ];
-const PERDAY = { A02: [0,1,0,0,0,0,1,0,0,0,1,0,0,1], A07: [1,0,0,2,1,0,0,1,0,0,0,1,1,1], A21: [2,1,3,0,1,2,1,0,2,1,1,0,1,1], A11: [0,0,0,0,0,0,0,0,0,0,0,0,1,0], A16: [0,0,0,0,0,0,0,0,0,0,1,0,0,0] };
+const PERDAY = { A01: [0,0,0,1,0,0,0,0,1,0,0,0,0,1], A08: [0,0,0,1,0,0,0,0,1,0,0,0,0,1], A02: [0,1,0,0,0,0,1,0,0,0,1,0,0,1], A07: [1,0,0,2,1,0,0,1,0,0,0,1,1,1], A21: [2,1,3,0,1,2,1,0,2,1,1,0,1,1], A11: [0,0,0,0,0,0,0,0,0,0,0,0,1,0], A16: [0,0,0,0,0,0,0,0,0,0,1,0,0,0] };
 
 const STEPS = [
   { n: 0, name: "Idle", what: "All off; waits for Start", limit: 0 },
@@ -448,7 +536,7 @@ const STEPS = [
 ];
 
 let V = {};
-const S = { sc: "xv101", view: "active", step: null, net: null, alarm: null, dev: "M201", block: "FB_BatchSequence", tags: ["Level", "Temp", "Speed", "XV101", "XV102", "E301", "P401"], ask: false, t: 0, asked: [] };
+const S = { sc: "xv101", view: "active", step: null, net: null, alarm: null, dev: "M201", block: "FB_BatchSequence", tags: ["Level", "Temp", "Speed", "XV101", "XV102", "E301", "P401"], ask: false, t: 0, asked: [], lang: "en", tv: false, notes: {} };
 
 function load(sc) {
   V = JSON.parse(JSON.stringify(BASE[sc]));
@@ -479,8 +567,16 @@ function tick() {
   if (S.sc === "mix") { V.Temp = Math.min(59.9, V.Temp + 0.09); V.Level = 80.4 + n; V.SpeedPV = 1194 + Math.round(Math.sin(S.t) * 3); }
   if (S.sc === "filler") { V.Temp = 60.3 - S.t * 0.004; V.SpeedPV = 299 + Math.round(Math.sin(S.t) * 1); }
   if (S.sc === "xv101") { V.Temp = 40.2 - S.t * 0.003; }
+  if (S.sc === "estop") { V.Temp = 48.1 - S.t * 0.01; }
   derive();
 }
+
+/* ---------- language: UI labels here; generated texts are translated by Claude at import ---------- */
+const DE = { "Active alarm": "Aktive Störung", "Plant": "Anlage", "Sequence": "Schrittkette", "Logic": "Logik", "Code": "Code", "Alarms": "Meldungen",
+  "Trends": "Trends", "Shift": "Schicht", "Equipment": "Aggregate", "What is going on": "Was passiert", "Where in the machine": "Wo in der Maschine",
+  "Where in the software": "Wo in der Software", "Values": "Werte", "Likely causes": "Mögliche Ursachen", "How to fix": "So beheben",
+  "Fixed before": "Früher behoben", "Built from": "Erzeugt aus", "Where to measure": "Wo messen" };
+const t = (k) => (S.lang === "de" && DE[k]) || k;
 
 /* ---------- helpers ---------- */
 const $ = (s) => document.querySelector(s);
@@ -617,6 +713,7 @@ const VIEWS = [
   ["code", "Code", '<path d="M8 6l-6 6 6 6M16 6l6 6-6 6"/>'],
   ["alarms", "Alarms", '<path d="M6 17V11a6 6 0 0 1 12 0v6l2 2H4zM10 21h4"/>'],
   ["trends", "Trends", '<path d="M3 17l6-6 4 4 8-8M3 21h18"/>'],
+  ["shift", "Shift", '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'],
   ["equipment", "Equipment", '<circle cx="12" cy="12" r="8"/><path d="M12 4v4M12 16v4M4 12h4M16 12h4"/>'],
 ];
 
@@ -626,11 +723,11 @@ function rail() {
   return VIEWS.map(([id, name, ic]) => {
     let badge = "";
     if ((id === "alarms" || id === "active") && (nf || nw)) badge = `<span class="cnt ${nf ? "" : "w"}">${nf + nw}</span>`;
-    return `<button data-act="nav" data-view="${id}" ${S.view === id ? 'aria-current="page"' : ""}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ic}</svg>${name}${badge}</button>`;
+    return `<button data-act="nav" data-view="${id}" ${S.view === id ? 'aria-current="page"' : ""}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ic}</svg>${t(name)}${badge}</button>`;
   }).join("") + `<div class="sep"></div><div class="foot">Mockup of the PLC-Ki UI concept. Values are simulated; switch scenarios at the top.</div>`;
 }
 
-function vhead(title, src) { return `<div class="vhead"><h2>${title}</h2><span class="src">Built from <b>${src}</b></span></div>`; }
+function vhead(title, src) { return `<div class="vhead"><h2>${t(title)}</h2><span class="src">${t("Built from")} <b>${src}</b></span></div>`; }
 
 /* ---------- Plant ---------- */
 function vPlant() {
@@ -638,6 +735,7 @@ function vPlant() {
   const lines = {
     mix: [`Batch ${V.BatchCount + 1}, step 30 Mix and heat for ${mmss(V.StepTime)}.`, `Agitator M201 at ${V.SpeedPV} rpm (setpoint ${V.SpeedSP}). Heater E301 on, tank at ${f1(V.Temp)} °C heating to ${f1(R.TempSP)} °C.`, `Next: step 40 Hold, once ${f1(R.TempSP)} °C is reached.`],
     xv101: [`Batch ${V.BatchCount + 1} halted in step 10 Fill A.`, `Inlet valve XV101 did not open (alarm A02 at ${clock(NOW0 - 4)}). All outputs are off.`, `Fix the valve, press Reset, then Start to continue.`],
+    estop: [`Batch ${V.BatchCount + 1} halted in step 30 Mix and heat by the emergency stop.`, `Agitator and heater are off, tank at ${f1(V.Temp)} °C and cooling.`, `Release the E-stop, reset relay K1, press Reset and Start.`],
     filler: [`Batch ${V.BatchCount + 1} is mixed and heated, holding in step 40 for ${mmss(V.StepTime)}.`, `Waiting for the filler to signal ready. Agitator M201 at hold speed ${V.SpeedPV} rpm.`, `Warning A21 Filler not ready.`],
   }[S.sc];
   const idx = STEPS.findIndex((s) => s.n === V.Step);
@@ -828,7 +926,7 @@ function ladSvg(net) {
 function leaves(n) { return n.k === "and" || n.k === "or" ? n.c.flatMap(leaves) : [n]; }
 function vLogic() {
   const N = nets();
-  if (S.net === null) S.net = { mix: 0, xv101: 1, filler: 0 }[S.sc];
+  if (S.net === null) S.net = { mix: 0, xv101: 1, filler: 5, estop: 1 }[S.sc];
   const net = N[S.net], out = pass(net.e);
   const lv = leaves(net.e);
   let expl;
@@ -966,12 +1064,18 @@ const VALS = {
     ["Tank level LT101", "\"Station\".LT101.Value", "80.2 %", f1(V.Level) + " %"], ["Temperature TT301", "\"Station\".TT301.Value", "60.3 °C", f1(V.Temp) + " °C"],
     ["Agitator M201 speed", "\"DB_IO\".M201_SpeedPV", "299 rpm", V.SpeedPV + " rpm"], ["MES heartbeat", "\"DB_LineInterface\".MES_Heartbeat", "ok", "ok"]],
 };
+VALS.A01 = () => [["E-stop circuit", "\"DB_IO\".EStop_OK", "FALSE", V.EStopOK ? "TRUE" : "FALSE"], ["Step", "\"Station\".Seq.Step", "30 · 2:00", `${V.Step} · ${mmss(V.StepTime)}`],
+  ["M201 drive ready", "\"DB_IO\".M201_DriveReady", "TRUE", V.M201_Ready ? "TRUE" : "FALSE"], ["Agitator M201 speed", "\"DB_IO\".M201_SpeedPV", "1194 rpm", V.SpeedPV + " rpm"],
+  ["Heater E301 command", "\"DB_IO\".E301_OnCmd", "TRUE", V.E301_On ? "TRUE" : "FALSE"], ["Temperature TT301", "\"Station\".TT301.Value", "53.6 °C", f1(V.Temp) + " °C"]];
+VALS.A08 = () => [["M201 drive ready", "\"DB_IO\".M201_DriveReady", "FALSE", V.M201_Ready ? "TRUE" : "FALSE"], ["E-stop circuit", "\"DB_IO\".EStop_OK", "FALSE", V.EStopOK ? "TRUE" : "FALSE"], ["Agitator M201 speed", "\"DB_IO\".M201_SpeedPV", "880 rpm", V.SpeedPV + " rpm"]];
 const GOING = {
+  A01: () => `At ${clock(NOW0 - 40)} the emergency stop circuit opened during step 30 Mix and heat. The sequence halted: agitator and heater are off and the batch waits in step 30. One second later the agitator drive reported not ready (A08); that is a result of the E-stop, not a second problem. The tank is cooling slowly, now ${f1(V.Temp)} °C.`,
+  A08: () => `The agitator drive lost its enable when the E-stop circuit opened (A01, one second earlier). Fix A01 first; A08 clears with the same Reset.`,
   A02: () => `At ${clock(NOW0 - 14)} the batch entered step 10 Fill A and told inlet valve XV101 to open. After 10 s the open limit switch had still not come on, and the closed switch never dropped, so the valve most likely did not move. The alarm halted the sequence: all outputs are off and the batch waits in step 10. Nothing else on the station is wrong.`,
   A21: () => `The batch is mixed, heated and ready (${f1(V.Level)} %, ${f1(V.Temp)} °C). It waits in step 40 Hold for the downstream filler to set Filler_ReadyToReceive, which has been FALSE for ${mmss(V.StepTime)}. This is a warning: nothing is stopped on this station, and draining starts by itself once the filler is ready.`,
 };
 function vActive() {
-  const act = activeAlarms().sort((x, y) => (x.sev === "F" ? 0 : 1) - (y.sev === "F" ? 0 : 1));
+  const act = activeAlarms().sort((x, y) => ((x.cause ? 1 : 0) - (y.cause ? 1 : 0)) || ((x.sev === "F" ? 0 : 1) - (y.sev === "F" ? 0 : 1)) || (x.since - y.since));
   if (!act.length) {
     const ms = machineState(), w = waitingText();
     return `${vhead("Active alarm", "DB_Alarms, read every 500 ms")}
@@ -985,8 +1089,13 @@ function vActive() {
   const dev = devices().find((d) => d.id === a.dev);
   const net = nets()[a.net];
   const vals = VALS[a.id] ? VALS[a.id]() : [];
-  const tabs = act.length > 1 ? `<div class="chips">${act.map((x) => `<button class="chip" data-act="alarm" data-id="${x.id}" aria-pressed="${x.id === a.id}">${x.id} ${esc(x.text)}</button>`).join("")}</div>` : "";
-  const machineSide = mimic(a.id === "A21" ? "Filler" : a.dev === "Seq" ? "" : a.dev) + (a.dev === "Seq"
+  const tabs = act.length > 1 ? `<div class="chips">${act.map((x, i) => `<button class="chip" data-act="alarm" data-id="${x.id}" aria-pressed="${x.id === a.id}">${i === 0 && !x.cause ? '<span class="first">1ST</span>' : x.cause ? "↳" : ""} ${x.id} ${esc(x.text)}</button>`).join("")}</div>` : "";
+  const follows = act.filter((x) => x.cause === a.id);
+  const followBox = follows.length ? `<div class="followbox"><b>${follows.length} follow-up alarm${follows.length > 1 ? "s" : ""} caused by this one</b> (folded): ${follows.map((x) => `<button class="link" data-act="alarm" data-id="${x.id}">${x.id} ${esc(x.text)}</button> came ${x.since - a.since} s later`).join(", ")}. They clear with the same fix.</div>`
+    : a.cause ? `<div class="followbox">This alarm follows <button class="link" data-act="alarm" data-id="${a.cause}">${a.cause} ${esc(AL[a.cause].text)}</button>. Fix that one first.</div>` : "";
+  const machineSide = mimic(a.id === "A21" ? "Filler" : a.dev === "Seq" || a.dev === "EStop" ? "" : a.dev) + (a.dev === "EStop"
+    ? `<div class="sect"><h3>Why the sequence is halted</h3>${condList(haltConds())}</div>`
+    : a.dev === "Seq"
     ? `<div class="sect"><h3>Step ${V.Step} ${stepOf(V.Step).name} waits for</h3>${condList(transition(V.Step))}</div>`
     : `<div class="sect"><h3>${a.dev}: why it works or not</h3>${faceplate(dev).match(/<div class="chain">[\s\S]*?<\/div><\/div>/)[0]}</div>`);
   return `${vhead("Active alarm", "DB_Alarms + the model: device, code location, values")}
@@ -994,31 +1103,63 @@ function vActive() {
   <section class="card hero" style="border-color:var(--${a.sev === "F" ? "fault" : "warn"});border-width:2px;background:linear-gradient(90deg,var(--${a.sev === "F" ? "fault" : "warn"}-bg),var(--card) 55%)">
     <div class="hic" style="background:var(--${a.sev === "F" ? "fault" : "warn"});color:#fff"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l10 18H2zM12 10v5M12 18v.5"/></svg></div><div style="min-width:0">
     <div class="vhead"><h2 style="font-size:21px"><span class="sev ${a.sev}" style="font-size:13px;vertical-align:3px">${a.id}</span> ${esc(a.text)}</h2>
-      <span class="pill ${a.sev === "F" ? "p-fault" : "p-warn"}">${a.sev === "F" ? "Fault · machine halted" : "Warning"} · since ${clock(a.since)} (${mmss(NOW0 + S.t - a.since)})${a.ack ? "" : " · not acknowledged"}</span></div>
+      <span class="pill ${a.sev === "F" ? "p-fault" : "p-warn"}" style="white-space:normal">${a.sev === "F" ? "Fault · machine halted" : "Warning"} · since ${clock(a.since)} (${mmss(NOW0 + S.t - a.since)})${a.ack ? "" : " · not acknowledged"}</span></div>
     <p class="muted" style="margin:4px 0 10px">${esc(a.cond)}</p>
-    <h3 style="text-transform:uppercase;letter-spacing:.06em;font-size:11.5px;color:var(--muted)">What is going on</h3>
+    <h3 style="text-transform:uppercase;letter-spacing:.06em;font-size:11.5px;color:var(--muted)">${t("What is going on")}</h3>
     <p style="margin:4px 0 0;font-size:15.5px;max-width:90ch">${esc(GOING[a.id] ? GOING[a.id]() : a.cond)}</p>
+    ${followBox}
   </div></section>
   <div class="grid2">
-    <section class="card"><h2>Where in the machine</h2>
-      <div class="path" style="margin-bottom:10px"><span>Mixing station</span><i>›</i><span>${esc(a.dev === "Seq" ? "Batch sequence" : a.dev + " · " + dev.role)}</span></div>
+    <section class="card"><h2>${t("Where in the machine")}</h2>
+      <div class="path" style="margin-bottom:10px"><span>Mixing station</span><i>›</i><span>${esc(a.dev === "Seq" ? "Batch sequence" : a.dev === "EStop" ? "E-stop circuit (S01 panel, S02 tank, relay K1)" : a.dev + " · " + dev.role)}</span></div>
       ${machineSide}
-      <div class="chips" style="margin-top:10px"><button class="chip" data-act="dev" data-id="${a.dev}">Open faceplate</button><button class="chip" data-act="nav" data-view="plant">Plant overview</button></div></section>
-    <section class="card"><h2>Where in the software</h2>
+      <div class="chips" style="margin-top:10px">${a.dev === "EStop" ? "" : `<button class="chip" data-act="dev" data-id="${a.dev}">Open faceplate</button>`}<button class="chip" data-act="nav" data-view="plant">Plant overview</button></div></section>
+    <section class="card"><h2>${t("Where in the software")}</h2>
       <div class="path" style="margin-bottom:10px">${a.path.map((p) => `<span>${esc(p)}</span>`).join("<i>›</i>")}</div>
       <div class="chart-wrap">${ladSvg(net)}</div>
       ${net.snap ? `<p class="small" style="margin:8px 0 0">${esc(net.snap)}</p>` : ""}
       <div class="chips" style="margin-top:10px"><button class="chip" data-act="golog" data-i="${a.net}">Open in Logic</button><button class="chip" data-act="goblock" data-id="${a.block}">Show the code</button><button class="chip" data-act="nav" data-view="sequence">Sequence</button></div></section>
   </div>
   <div class="grid2">
-    <section class="card"><h2>Values</h2><div class="tw"><table><thead><tr><th>Signal</th><th>When it came in</th><th>Now</th></tr></thead><tbody>
-      ${vals.map(([l, sym, at, now]) => `<tr><td>${esc(l)}<br><span class="mono small muted">${esc(sym)}</span></td><td class="mono" style="white-space:nowrap">${esc(at)}</td><td class="mono" style="white-space:nowrap;${at !== now && now !== "–" ? "color:var(--accent);font-weight:600" : ""}">${esc(now)}</td></tr>`).join("")}
+    <section class="card"><h2>${t("Values")} <span class="small muted" style="font-weight:400">· ${t("Where to measure")}</span></h2><div class="tw"><table><thead><tr><th>Signal</th><th>I/O</th><th>When it came in</th><th>Now</th></tr></thead><tbody>
+      ${vals.map(([l, sym, at, now]) => `<tr><td>${esc(l)}<br><span class="mono small muted">${esc(sym)}</span></td><td class="io">${IO[sym] ? `${esc(IO[sym][0])}<small>${esc(IO[sym][1])}</small>` : sym.startsWith("not") ? "–" : '<small>internal</small>'}</td><td class="mono" style="white-space:nowrap">${esc(at)}</td><td class="mono" style="white-space:nowrap;${at !== now && now !== "–" ? "color:var(--accent);font-weight:600" : ""}">${esc(now)}</td></tr>`).join("")}
     </tbody></table></div>
-    <p class="note">"When it came in" is captured by PLC-Ki at the alarm edge. Values that changed since are blue. Offline (no PLC connection): the page shows the last values read and says how old they are.</p></section>
-    <section class="card"><h2>Likely causes</h2>${a.causes.map(([p, c, e]) => `<div class="cause"><span class="pct">${p} %</span><span><b>${esc(c)}</b>${e ? `<br><span class="small muted">${esc(e)}</span>` : ""}</span></div>`).join("")}
-      <div class="sect"><h3>How to fix</h3><ol class="fix">${a.fix.map((f) => `<li>${esc(f)}</li>`).join("")}</ol></div>
+    <p class="note">"When it came in" is captured by PLC-Ki at the alarm edge. Values that changed since are blue. The I/O column comes from the hardware config and the tag table: it tells the electrician which module, channel and terminal to measure. Offline (no PLC connection): the page shows the last values read and says how old they are.</p></section>
+    <section class="card"><h2>${t("Likely causes")}</h2>${a.causes.map(([p, c, e]) => `<div class="cause"><span class="pct">${p} %</span><span><b>${esc(c)}</b>${e ? `<br><span class="small muted">${esc(e)}</span>` : ""}</span></div>`).join("")}
+      <div class="sect"><h3>${t("How to fix")}</h3><ol class="fix">${a.fix.map((f) => `<li>${esc(f)}</li>`).join("")}</ol></div>
+      ${notesHtml(a.id)}
       <div class="sect"><h3>History</h3><div class="small muted">${PERDAY[a.id].reduce((x, y) => x + y, 0)} times in 14 days · <button class="link" data-act="alarm" data-id="${a.id}" data-go="1">full history</button></div></div>
       <div class="chips" style="margin-top:10px"><button class="chip" data-act="askq" data-q="0">Ask about this alarm</button></div></section>
+  </div>`;
+}
+
+function notesHtml(id) {
+  const list = (NOTES[id] || []).concat(S.notes[id] || []);
+  return `<div class="sect"><h3>${t("Fixed before")}</h3>${list.length ? list.map(([w, d, n]) => `<div class="note-item"><span class="who">${esc(w)}</span><span class="when">${esc(d)}</span><p>${esc(n)}</p></div>`).join("") : '<p class="small muted" style="margin:0">No notes yet.</p>'}
+    <form class="addnote" data-note="${id}"><input id="note-${id}" placeholder="What fixed it? One line for next time" aria-label="Fix note"><button class="btn" type="submit">Save</button></form></div>`;
+}
+
+/* ---------- Shift handover and downtime ---------- */
+function vShift() {
+  const ev = [
+    ["06:00", "i", "Shift start · batch 38 in step 20"], ["06:41", "ok", "Batch 38 done (39 min)"], ["07:22", "ok", "Batch 39 done"],
+    ["09:44", "f", "A07 M201 speed deviation · 0:31 · Reset by operator"], ["11:31", "f", "A02 XV101 did not open · 4:10 · note: air hose kinked"],
+    ["12:10", "i", "Mode Manual (cleaning) · 22 min"], ["14:02", "w", "Force set: %I2.5 P401_RunFb FALSE"], ["14:05", "f", "A07 M201 speed deviation · 0:52"],
+    ["15:48", "w", "A21 Filler not ready · 2:41"], ["16:58", "i", "Program download: FB_VFD changed"], ["17:05", "ok", "Batch 41 done"],
+    ...({ mix: [["17:09", "i", "Batch 42 started"]], xv101: [["17:12", "f", "A02 XV101 did not open · active"]], filler: [["17:11", "w", "A21 Filler not ready · active"]], estop: [["17:11", "f", "A01 Emergency stop · active, A08 followed"]] }[S.sc]),
+  ];
+  const dt = [["A21 Filler not ready", 38, 6, "w"], ["A02 XV101 did not open", 17, 3, "f"], ["Manual mode (cleaning)", 22, 1, "w"], ["A07 M201 speed deviation", 12, 5, "f"], ["A01 Emergency stop", 9, 2, "f"], ["A11 P401 no feedback", 1.3, 1, "f"]].sort((a, b) => b[1] - a[1]);
+  const max = dt[0][1];
+  return `${vhead("Shift", "PLC-Ki's own event log: alarms, steps, modes, forces, downloads")}
+  <div class="chips"><button class="chip" aria-pressed="true">This shift (06:00 – now)</button><button class="chip">Last shift</button><button class="chip">Today</button><button class="chip">This week</button></div>
+  <div class="split">
+    <section class="card"><h2>Handover summary <span class="small muted" style="font-weight:400">written by Claude</span></h2>
+      <p style="margin:0 0 10px;font-size:15px;max-width:75ch">4 batches done (38 to 41), 1 fewer than plan. Most lost time was the filler (A21, 38 min this week, again today at 15:48) and XV101 not opening at 11:31, fixed by re-routing a kinked air hose. Watch out: input %I2.5 (P401 running feedback) has been <b>forced</b> since 14:02. FB_VFD was downloaded at 16:58: check that the imported archive is current.</p>
+      <div class="kpis"><div class="kpi"><b>4</b><span>batches done</span></div><div class="kpi"><b>39 min</b><span>average batch</span></div><div class="kpi"><b>84 %</b><span>running time</span></div><div class="kpi"><b>5</b><span>alarms</span></div></div>
+      <div class="sect"><h3>Timeline</h3><ul class="tl">${ev.map(([tm, c, x]) => `<li><span class="t">${tm}</span><span class="dot ${c}"></span><span>${esc(x)}</span></li>`).join("")}</ul></div></section>
+    <section class="card"><h2>Downtime ranking <span class="small muted" style="font-weight:400">this week</span></h2>
+      <div class="pareto">${dt.map(([n, m, c, k]) => `<div class="row"><span>${esc(n)}<br><span class="small muted">${c}×</span></span><div class="bar ${k === "w" ? "w" : ""}"><i style="width:${(m / max) * 100}%"></i></div><span class="mono small" style="text-align:right">${m >= 2 ? m + " min" : mmss(m * 60)}</span></div>`).join("")}</div>
+      <p class="note">Ranked by stopped time, not by count: A07 comes 5 times but costs less than the filler. With several stations, the same chart splits by station.</p></section>
   </div>`;
 }
 
@@ -1042,7 +1183,7 @@ function vAlarms() {
   return `${vhead("Alarms", "DB_Alarms + where each bit is set in the code")}
   <div class="split">
     <section class="card"><h2>Active and recent</h2><div class="tw"><table><thead><tr><th>Alarm</th><th>Text</th><th>Came</th><th>Duration</th></tr></thead><tbody>
-      ${rows.map((r) => `<tr class="click ${r.id === sel && (r.live || !live) ? "sel" : ""}" data-act="alarm" data-id="${r.id}"><td><span class="sev ${AL[r.id].sev}">${r.id}</span></td><td>${r.live ? "<b>" : ""}${esc(AL[r.id].text)}${r.live ? "</b>" : ""}</td><td class="num small">${esc(r.on)}</td><td class="num small">${r.live ? '<span class="pill p-fault plain">active</span>' : esc(r.dur)}</td></tr>`).join("")}
+      ${rows.map((r) => `<tr class="click ${r.id === sel && (r.live || !live) ? "sel" : ""} ${r.live && AL[r.id].cause ? "follow" : ""}" data-act="alarm" data-id="${r.id}"><td>${r.live && AL[r.id].cause ? "↳ " : ""}<span class="sev ${AL[r.id].sev}">${r.id}</span>${r.live && !AL[r.id].cause && act.some((x) => x.cause === r.id) ? ' <span class="first">1ST</span>' : ""}</td><td>${r.live ? "<b>" : ""}${esc(AL[r.id].text)}${r.live ? "</b>" : ""}</td><td class="num small">${esc(r.on)}</td><td class="num small">${r.live ? '<span class="pill p-fault plain">active</span>' : esc(r.dur)}</td></tr>`).join("")}
     </tbody></table></div>
     <p class="note">History is kept by PLC-Ki itself (it sees every alarm edge while polling), so it works without an HMI or alarm server. Filter by device, step or text.</p></section>
     <section class="card"><h2><span class="sev ${a.sev}">${sel}</span> ${esc(a.text)} ${live ? `<span class="pill p-fault">active since ${clock(live.since)}</span>` : `<span class="pill p-idle plain">not active</span>`}</h2>
@@ -1053,6 +1194,7 @@ function vAlarms() {
         <div class="chips"><button class="chip" data-act="golog" data-i="${a.net}">Show the logic</button><button class="chip" data-act="goblock" data-id="${a.block}">Show the code</button><button class="chip" data-act="dev" data-id="${a.dev}">Device ${a.dev}</button></div></div>
       <div class="sect"><h3>Likely causes</h3>${a.causes.map(([p, c, e]) => `<div class="cause"><span class="pct">${p} %</span><span><b>${esc(c)}</b>${e ? `<br><span class="small muted">${esc(e)}</span>` : ""}</span></div>`).join("")}</div>
       <div class="sect"><h3>How to fix</h3><ol class="fix">${a.fix.map((f) => `<li>${esc(f)}</li>`).join("")}</ol></div>
+      ${notesHtml(sel)}
       <div class="sect"><h3>History</h3><div class="small muted">${PERDAY[sel].reduce((x, y) => x + y, 0)} times in 14 days</div>${spark(PERDAY[sel])}</div>
       <p class="note">Cause list: Claude ranks the causes using the code, the alarm text, the values at alarm time and past occurrences. Plant staff can add a note ("air valve V12 sticks in winter") that is kept with the alarm.</p>
     </section>
@@ -1065,6 +1207,7 @@ function phases() {
   return {
     mix: [P(0, 358, [1.2, 1.2], [21.6, 21.4], [0, 0]), P(10, 160, [1.2, 40.2], [21.4, 21.3], [0, 0], { XV101: 1 }), P(20, 170, [40.2, 80.3], [21.3, 21.2], [0, 0], { XV102: 1 }), P(30, 212, [80.3, 80.4], [21.2, 53.6], [0, 1194], { E301: 1, ramp: 1 })],
     filler: [P(0, 162, [1.1, 1.1], [21.6, 21.5], [0, 0]), P(10, 160, [1.1, 40.1], [21.5, 21.4], [0, 0], { XV101: 1 }), P(20, 170, [40.1, 80.2], [21.4, 21.3], [0, 0], { XV102: 1 }), P(30, 330, [80.2, 80.2], [21.3, 60.3], [0, 1196], { E301: 1, ramp: 1 }), P(40, 78, [80.2, 80.2], [60.3, 60.1], [299, 299])],
+    estop: [P(0, 228, [1.2, 1.2], [21.6, 21.4], [0, 0]), P(10, 160, [1.2, 40.2], [21.4, 21.3], [0, 0], { XV101: 1 }), P(20, 170, [40.2, 80.3], [21.3, 21.2], [0, 0], { XV102: 1 }), P(30, 302, [80.3, 80.4], [21.2, 53.6], [0, 1194], { E301: 1, ramp: 1 }), P(30, 40, [80.4, 80.4], [53.6, 48.1], [0, 0], { halt: 1 })],
     xv101: [P(40, 120, [80.1, 80.1], [61, 60.5], [299, 299]), P(50, 170, [80.1, 0.8], [60.5, 58], [0, 0], { P401: 1 }), P(0, 596, [0.8, 0.8], [58, 40.2], [0, 0]), P(10, 10, [0.8, 0.8], [40.2, 40.2], [0, 0], { XV101: 1 }), P(10, 4, [0.8, 0.8], [40.2, 40.2], [0, 0], { halt: 1 })],
   }[S.sc];
 }
@@ -1184,6 +1327,7 @@ function vEquipment() {
       <p class="note">Grouped by block type. All FB_Valve instances share one faceplate layout, so a plant with 200 valves needs no extra work.</p></section>
     <section class="card"><h2>${icon(d.type, d.st).replace("<svg", '<svg style="width:28px;height:28px"')} <span class="mono">${d.id}</span> <span class="muted" style="font-weight:400">${esc(d.role)}</span></h2>
       ${faceplate(d)}
+      ${(() => { const rows = Object.entries(IO).filter(([k]) => k.includes(d.id + "_") || k.includes(d.id + ".")); return rows.length ? `<div class="sect"><h3>${t("Where to measure")}</h3><div class="tw"><table><tbody>${rows.map(([k, [a, b]]) => `<tr><td class="mono small">${esc(k)}</td><td class="io">${esc(a)}<small>${esc(b)}</small></td></tr>`).join("")}</tbody></table></div></div>` : ""; })()}
       <div class="sect"><h3>Where it is</h3><div class="path"><span>OB_Main</span><i>›</i><span>Station · FB_Station</span><i>›</i><span>${d.id}${d.fb ? " · " + d.fb : ""}</span></div></div>
     </section>
   </div>`;
@@ -1191,6 +1335,8 @@ function vEquipment() {
 
 /* ---------- Ask panel (placeholder for the chat being built separately) ---------- */
 const QA = {
+  estop: [["Why did everything stop?", () => `<p>Alarm <b>A01 Emergency stop</b> at ${clock(NOW0 - 40)}: input %I2.7 (safety relay K1) went FALSE during step 30. A08 M201 not ready followed 1 s later because the E-stop removes the drive enable; it is not a second fault.</p><p>Release S01 or S02, reset K1, press Reset, then Start. The batch continues at step 30. <button class="link" data-act="goalarm" data-id="A01">Alarm details</button></p>`],
+           ["Is the batch spoiled?", () => `<p>Probably not. The tank cooled from 53.6 °C to ${f1(V.Temp)} °C. Step 30 only leaves at 60 °C, so the heater will catch up after Start; it adds a few minutes.</p>`]],
   mix: [["When will this step finish?", () => `<p>Step 30 Mix and heat ends when both conditions are true:</p><p>✓ Mix time done (${mmss(V.StepTime)}, needs ${mmss(R.MixTime)}).<br>✕ Temperature: ${f1(V.Temp)} °C, needs ${f1(R.TempSP)} °C.</p><p>It is heating about 5.4 °C per minute, so about ${mmss(Math.max(0, (R.TempSP - V.Temp) / 5.4 * 60))} to go. <button class="link" data-act="nav" data-view="sequence">Step chart</button></p>`],
         ["Why is the heater on?", () => `<p>E301 heats because all four conditions in <span class="mono">FB_Station</span> are true: the sequence asks for heat (step 30, below 60 °C), M201 is at speed, no overtemperature, TT301 healthy. <button class="link" data-act="golog" data-i="0">Show the rung</button></p>`]],
   xv101: [["Why did the batch stop?", () => `<p>Alarm <b>A02 XV101 did not open</b> at 17:12:31 halted the sequence in step 10.</p><p>The PLC switched the open command on at 17:12:21, but the open limit switch never came on within 10 s. The closed switch is still on, so the valve most likely did not move at all: check the air supply first, then the solenoid.</p><p>After fixing: Reset, then Start. The batch continues at step 10. <button class="link" data-act="goalarm" data-id="A02">Alarm details</button></p>`],
@@ -1210,11 +1356,20 @@ function askPanel() {
 /* ============================================================
    Render + events
    ============================================================ */
-const RENDER = { active: vActive, plant: vPlant, sequence: vSequence, logic: vLogic, code: vCode, alarms: vAlarms, trends: vTrends, equipment: vEquipment };
+const RENDER = { shift: vShift, active: vActive, plant: vPlant, sequence: vSequence, logic: vLogic, code: vCode, alarms: vAlarms, trends: vTrends, equipment: vEquipment };
 function render(full) {
   $("#rail").innerHTML = rail();
   document.querySelectorAll(".scen button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.sc === S.sc));
   $("#clock").textContent = clock(NOW0 + S.t);
+  const W = WATCH[S.sc];
+  $("#prog").innerHTML = W.prog ? `<span class="pill p-warn" title="Program in the PLC differs from the imported archive">Program changed</span>` : `<span class="pill p-ok" title="Program in the PLC matches the imported archive">Program = archive</span>`;
+  $("#banners").innerHTML = [
+    ...W.forces.map(([a, sym, txt]) => `<div class="banner w"><b>Forced I/O</b><span class="mono">${a} ${esc(sym)}</span><span>${esc(txt)}. The PLC is not reading this input from the field.</span></div>`),
+    ...W.test.map(([sym, v]) => `<div class="banner w"><b>Test bit on</b><span class="mono">${esc(sym)} = ${v}</span><span>This fault may be simulated (fault injection DB).</span></div>`),
+    W.prog ? `<div class="banner w"><b>Program changed</b><span>${W.prog.blocks.join(", ")} in the PLC differs from the imported archive (download ${W.prog.when}). Explanations for these blocks may be out of date: import a new archive.</span></div>` : "",
+  ].join("");
+  $("#banners").hidden = !$("#banners").innerHTML;
+  document.body.classList.toggle("tv", S.tv);
   if (S.view === "trends" && !full) return;
   $("#view").innerHTML = RENDER[S.view]();
   if (S.view === "trends") hookTrend();
@@ -1231,6 +1386,7 @@ document.addEventListener("click", (e) => {
     case "nav": go(d.view); break;
     case "sc": load(d.sc); render(true); break;
     case "ask": S.ask = !S.ask; render(true); break;
+    case "tv": S.tv = !S.tv; el.setAttribute("aria-pressed", S.tv); if (S.tv) go(activeAlarms().length ? "active" : "plant"); else render(true); break;
     case "askq": S.ask = true; if (!S.asked.includes(+d.q)) S.asked.push(+d.q); render(true); break;
     case "step": S.step = +d.n; render(true); break;
     case "gostep": S.step = +d.n; go("sequence"); break;
@@ -1245,6 +1401,14 @@ document.addEventListener("click", (e) => {
     case "tag": { const i = S.tags.indexOf(d.id); if (i >= 0) S.tags.splice(i, 1); else S.tags.push(d.id); render(true); break; }
   }
 });
+document.addEventListener("submit", (e) => {
+  const f = e.target.closest("form[data-note]"); if (!f) return;
+  e.preventDefault();
+  const id = f.dataset.note, inp = f.querySelector("input"), txt = inp.value.trim();
+  if (!txt) return;
+  (S.notes[id] = S.notes[id] || []).push(["You", "just now", txt]); inp.value = ""; render(true);
+});
+document.addEventListener("change", (e) => { if (e.target.id === "lang") { S.lang = e.target.value; render(true); } });
 document.addEventListener("keydown", (e) => { if ((e.key === "Enter" || e.key === " ") && e.target.matches("g[data-act]")) { e.preventDefault(); e.target.dispatchEvent(new MouseEvent("click", { bubbles: true })); } });
 load("xv101");
 { const h = location.hash.slice(1); if (RENDER[h]) S.view = h; }
