@@ -8,7 +8,7 @@ using Xunit;
 /// </summary>
 public class GenerateTests
 {
-    private static readonly string ExportFile = Path.Combine(AppContext.BaseDirectory, "data", "demo-export.zip");
+    private static readonly string ExportFile = Path.Combine(AppContext.BaseDirectory, "data", "demo-export-scl.zip");
 
     private static string RepoRoot()
     {
