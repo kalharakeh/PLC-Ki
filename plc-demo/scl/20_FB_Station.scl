@@ -14,6 +14,7 @@ VERSION : 0.1
       Alarms : "FB_AlarmHandler";   // Latches alarm conditions into DB_Alarms
       tMesHb {InstructionName := 'TON_TIME'; LibVersion := '1.0'} : TON_TIME;   // MES heartbeat watchdog (5 s)
       tOwnHb {InstructionName := 'TON_TIME'; LibVersion := '1.0'} : TON_TIME;   // 1 s pulse for our own heartbeat
+      OwnHbDone : Bool;   // TRUE for one cycle after each 1 s pulse
       LastMesHb : Int;   // MES heartbeat value in the previous cycle
    END_VAR
 
@@ -59,8 +60,9 @@ BEGIN
 	// ---------- Line interface (data exchange) ----------
 	#tMesHb(IN := "DB_LineInterface".MES_Heartbeat = #LastMesHb, PT := T#5S);
 	#LastMesHb := "DB_LineInterface".MES_Heartbeat;
-	#tOwnHb(IN := NOT #tOwnHb.Q, PT := T#1S);
-	IF #tOwnHb.Q THEN
+	#tOwnHb(IN := NOT #OwnHbDone, PT := T#1S);
+	#OwnHbDone := #tOwnHb.Q;
+	IF #OwnHbDone THEN
 	    "DB_LineInterface".Station_Heartbeat := ("DB_LineInterface".Station_Heartbeat + 1) MOD 30000;
 	END_IF;
 	IF #Seq.Step = 0 THEN
