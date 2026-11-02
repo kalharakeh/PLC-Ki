@@ -67,7 +67,9 @@ public sealed class StatusEngine
         var alarms = _model.Alarms
             .Where(a => Get(a.Tag) is true)
             .OrderBy(a => a.Severity == "FAULT" ? 0 : 1).ThenBy(a => a.Id, StringComparer.Ordinal)
-            .Select(a => new AlarmStatus(a.Id, a.Severity, a.Text, a.Location, a.Condition, a.Causes, a.Fix))
+            .Select(a => new AlarmStatus(a.Id, a.Severity, Fill(a.Text, Get), a.Location,
+                a.Condition != null ? Fill(a.Condition, Get) : null,
+                a.Causes.Select(c => Fill(c, Get)).ToList(), a.Fix.Select(f => Fill(f, Get)).ToList()))
             .ToList();
         var exchange = _model.Exchange
             .Select(x => new ExchangeStatus(x.Partner, x.Direction, Label(x.Tag), Fmt(x.Tag, Get), x.Text))
@@ -127,7 +129,10 @@ public sealed class StatusEngine
                 var conds = tr.Conditions.Select(c => EvaluateCondition(c, get)).ToList();
                 bool? ready = conds.Any(c => c.Met == false) ? false : conds.Any(c => c.Met == null) ? null : true;
                 var toName = s.Steps.FirstOrDefault(x => x.No == tr.To)?.Name ?? tr.To.ToString();
-                next.Add(new NextStatus(tr.To, toName, ready, conds));
+                // "NOT Halted" in every transition is true to the program but only noise on screen: the halt and its
+                // reasons are shown on their own. It still counts for "ready".
+                var shown = tr.Conditions.Zip(conds).Where(p => !IsNotHalted(p.First.Expr, s.HaltedTag)).Select(p => p.Second).ToList();
+                next.Add(new NextStatus(tr.To, toName, ready, shown));
             }
         }
 
@@ -239,6 +244,14 @@ public sealed class StatusEngine
 
     private static string LowerFirst(string s) =>
         s.Length > 1 && char.IsUpper(s[0]) && !char.IsUpper(s[1]) ? char.ToLowerInvariant(s[0]) + s[1..] : s;
+
+    private static bool IsNotHalted(string expr, string? haltedTag)
+    {
+        if (haltedTag == null) return false;
+        var e = string.Concat(expr.Where(c => !char.IsWhiteSpace(c)));
+        return e.Equals("NOT" + haltedTag, StringComparison.OrdinalIgnoreCase)
+            || e.Equals("NOT(" + haltedTag + ")", StringComparison.OrdinalIgnoreCase);
+    }
 
     private static string JoinAnd(List<string> items) => items.Count switch
     {

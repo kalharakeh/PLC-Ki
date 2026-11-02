@@ -47,7 +47,7 @@ Tags
 - type is Bool, Int, DInt, Real, LReal or Time as listed (Int for SInt/Int/USInt/UInt/Byte/Word, DInt for DInt/UDInt/DWord).
 - id: short, unique, letters, digits and underscore, starting with a letter. Use the plant's names (XV101_ZSO, Level, TT301). Every id used anywhere in the model must be in tags.
 - Add a tag for everything the sequences, devices, alarms and exchange need, plus the main process values and setpoints. Leave out internal helpers (timers, edge flags, scratch values) unless a condition needs them.
-- label: plain words from the comment, with the device tag. Bools get trueText/falseText when it helps ("pressed"/"released", "open"/"not open"). Numbers get unit and decimals where known.
+- label: plain words from the comment, with the device tag, short enough to read well inside a sentence ("Time in step", not "Time in current step (stops while halted)"): no notes in brackets. Bools get trueText/falseText when it helps ("pressed"/"released", "open"/"not open"). Numbers get unit and decimals where known.
 
 Conditions (expr, request, command, when)
 - A small language over tag ids: NOT, AND, OR, XOR, = <> < <= > >=, + - * /, parentheses, TRUE, FALSE, numbers, time literals like T#10S or T#2M. No symbols, no # or quotes, no function calls.
@@ -66,7 +66,7 @@ Devices
 - One entry per field device the program drives: valves, motors, drives, pumps, heaters, conveyors, cylinders.
 - request: what the program asks for (sequence or manual output into the device block). command: the output to the field.
 - permits: every interlock between request and output, as programmed (one AND term each), with the reason it exists when the comment or name says so.
-- states: first match wins, last one "TRUE". level is ok (running/open as wanted), warn (moving, starting, not confirmed), fault, info or idle. A state text says what the device does ("requested but off"); do not list possible causes in it, the app shows the blocking permit by itself.
+- states: first match wins, last one "TRUE". level is ok (running/open as wanted), warn (moving, starting, not confirmed), fault, info or idle. A state text says what the device does ("requested but off"); do not list possible causes in it, the app shows the blocking permit by itself. Put the live values that matter into running states with {placeholders}: "running at {M201_Speed} (setpoint {M201_SpeedSP})", "heating ({Temp}, target {TempSP})".
 
 Alarms
 - One entry per alarm bit (alarm DB, alarm handler outputs, ProDiag or message tags). id: the alarm number or a short code; tag: the id of its Bool tag.
