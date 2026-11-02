@@ -58,6 +58,7 @@ Sequences
 - Find every step chain: a CASE over a step number in SCL, a GRAPH block, or a step number in LAD. stepTag is the readable step number; add the time-in-step and halted/paused tags when the program has them.
 - One entry per step with the step number the program uses, a short name, what it does (outputs it sets, setpoints with {TagId} placeholders), its time limit and the alarm that limit raises, and every transition with its conditions exactly as programmed.
 - haltReasons: each reason the sequence stops or pauses, as conditions, worded for the operator.
+- LAD, FBD and GRAPH blocks come as "Logic (decoded ...)": SCL-like text made from the networks. Read it like SCL. For GRAPH, take each transition's condition from its "when" part and each step's interlock and actions from its lines; do not use GRAPH's internal bits (step .X/.T/.U, transition .TT, interlock .L) as conditions when the decoded condition is made of readable tags.
 
 Devices
 - One entry per field device the program drives: valves, motors, drives, pumps, heaters, conveyors, cylinders.

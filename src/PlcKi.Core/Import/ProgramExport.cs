@@ -42,6 +42,8 @@ public sealed class ExportBlock
     public List<ExportCall> Calls { get; } = new();
     /// <summary>Readable SCL source, if the exporter wrote one.</summary>
     public string? SclSource { get; set; }
+    /// <summary>LAD, FBD and GRAPH logic decoded into SCL-like text (null for SCL blocks and blocks without networks).</summary>
+    public string? DecodedLogic { get; set; }
     /// <summary>Path of the XML file inside the export, for later decoding of LAD/GRAPH networks.</summary>
     public string File { get; init; } = "";
 }
@@ -183,11 +185,17 @@ public sealed class ProgramExport
                 foreach (var mem in sec.Elements(Ns + "Member"))
                     block.Interface.Add(ReadMember(mem, sec.Attribute("Name")?.Value ?? ""));
 
+        var logic = new StringBuilder();
+        var networkNo = 0;
         foreach (var cu in el.Descendants().Where(e => e.Name.LocalName == "SW.Blocks.CompileUnit"))
         {
+            networkNo++;
             var lang = cu.Element("AttributeList")?.Element("ProgrammingLanguage")?.Value;
             if (lang != null) block.NetworkLanguages.Add(lang);
+            try { DecodeNetwork(cu, lang, networkNo, logic); }
+            catch (Exception ex) { logic.AppendLine($"// Network {networkNo}: could not decode ({ex.Message})"); }
         }
+        if (logic.Length > 0) block.DecodedLogic = logic.ToString().TrimEnd();
         foreach (var call in el.Descendants().Where(e => e.Name.LocalName == "CallInfo"))
         {
             var inst = call.Elements().FirstOrDefault(e => e.Name.LocalName == "Instance");
@@ -198,6 +206,26 @@ public sealed class ProgramExport
             block.Calls.Add(new ExportCall(call.Attribute("BlockType")?.Value ?? "", call.Attribute("Name")?.Value ?? "", instName));
         }
         return block;
+    }
+
+    /// <summary>Appends one LAD/FBD network or the GRAPH sequence as text. SCL and STL networks are skipped (the SCL source covers them).</summary>
+    private static void DecodeNetwork(XElement cu, string? lang, int no, StringBuilder logic)
+    {
+        var source = cu.Element("AttributeList")?.Element("NetworkSource");
+        if (source == null) return;
+        var graph = source.Elements().FirstOrDefault(e => e.Name.LocalName == "Graph");
+        var flg = source.Elements().FirstOrDefault(e => e.Name.LocalName == "FlgNet");
+        if (graph == null && flg == null) return;
+
+        var title = Text(cu, "Title");
+        var comment = Text(cu, "Comment");
+        var head = $"// Network {no}" + (lang != null ? $" ({lang})" : "") + (title != null ? ": " + title : "") + (comment != null ? " - " + comment : "");
+        logic.AppendLine(head);
+        if (graph != null)
+            logic.AppendLine(NetworkDecoder.DecodeGraph(graph));
+        else
+            foreach (var s in NetworkDecoder.Decode(flg!)) logic.AppendLine(s);
+        logic.AppendLine();
     }
 
     private static ExportMember ReadMember(XElement mem, string section)
