@@ -6,6 +6,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>PlcKi.Server</RootNamespace>
     <AssemblyName>PlcKi.Server</AssemblyName>
+    <!-- "dotnet run" keeps the folder you run it from, so relative paths on the command line mean what you typed -->
+    <RunWorkingDirectory>$(MSBuildStartupDirectory)</RunWorkingDirectory>
   </PropertyGroup>
   <ItemGroup>
     <!-- S7CommPlus driver (LGPL-3.0-or-later), fork of thomas-v2/S7CommPlusDriver by DotNetProjects -->

@@ -3,14 +3,19 @@ using PlcKi.Core.Model;
 using PlcKi.Core.Status;
 using PlcKi.Server;
 using PlcKi.Server.Ask;
+using PlcKi.Server.Import;
 using PlcKi.Server.Live;
 
 // PLC-Ki server.
 //   PlcKi.Server                 start the web app (default http://localhost:5080)
 //   PlcKi.Server probe           connect once, read every tag, print the values and the status, exit
+//   PlcKi.Server import ...      write a machine model from a TIA program export with Claude (see Import/ImportCommand.cs)
 // Settings come from appsettings.json and can be overridden on the command line, e.g.
 //   PlcKi.Server --PlcKi:Plc:Address=192.168.10.10
 //   PlcKi.Server --PlcKi:Source=snapshot --PlcKi:SnapshotFile=models/snapshots/step50-drain.json
+
+if (args.Length > 0 && args[0].Equals("import", StringComparison.OrdinalIgnoreCase))
+    return await ImportCommand.RunAsync(args[1..]);
 
 bool probe = args.Length > 0 && args[0].Equals("probe", StringComparison.OrdinalIgnoreCase);
 var appArgs = probe ? args[1..] : args;

@@ -277,7 +277,7 @@ public sealed class AskService
         },
     };
 
-    private static Effort ParseEffort(string? s) => s?.Trim().ToLowerInvariant() switch
+    internal static Effort ParseEffort(string? s) => s?.Trim().ToLowerInvariant() switch
     {
         "low" => Effort.Low,
         "high" => Effort.High,

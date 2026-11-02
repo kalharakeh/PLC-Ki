@@ -11,7 +11,8 @@ Connects to the PLC **read-only**, reads every tag in the machine model once a s
 and it answers questions about the machine in a chat box (see [Ask about the machine](#ask-about-the-machine)).
 
 The meaning comes from the machine model, `models/demo-mixing-station.json`. For the demo it is written by hand
-from the SCL sources; later the archive importer will generate it from the `.zap20`.
+from the SCL sources; the `import` command can also have Claude write it from a TIA export (see
+[Machine model from a TIA export](#machine-model-from-a-tia-export)).
 
 ## Run it on your PC
 
@@ -108,6 +109,38 @@ anything. It is told never to suggest bridging or forcing a safety function or i
   fallback model instead, and the answer says so. This is switched on in `Ask/AskService.cs` (`Fallbacks`).
 - History starts when PLC-Ki starts and is kept in memory only (`HistoryMinutes`).
 
+## Machine model from a TIA export
+
+The machine model (tags, sequences, devices, alarms, texts) can be written by Claude from the program instead of by
+hand. Input is the export from `tools/TiaImporter export` (the zip or its folder); the TIA PC does not need an API
+key, only the PC that runs this command.
+
+```
+dotnet run --project src\PlcKi.Server -- import --export C:\Users\me\Downloads\export.zip --out models\generated.json
+dotnet run --project src\PlcKi.Server -- --PlcKi:Model=models\generated.json     # start PLC-Ki with it
+```
+
+| Option | What |
+| --- | --- |
+| `--plc <name>` | Which PLC, when the export has more than one |
+| `--compare <model.json>` | Compare the result with another model, e.g. `models\demo-mixing-station.json` |
+| `--effort low/medium/high/max` | How hard Claude thinks (default `high`; the import runs once, so quality first) |
+| `--model <id>` | Claude model (default `claude-opus-5-5`) |
+| `--digest-only <file>` | Only write the program text Claude would read; no API call, no key needed |
+
+How it works:
+
+1. `ProgramExport` reads the export: blocks, interfaces with comments, calls, SCL sources, tag tables, and every
+   member PLC-Ki can read (exact symbols and types).
+2. `ProgramDigest` writes that as compact text (the demo is about 12k tokens).
+3. Claude writes the model as JSON (`Import/ModelPrompt.cs` has the format and the rules).
+4. `ModelCheck` checks it against the program: every symbol must exist (with a "did you mean" hint), types come
+   from the program, and all conditions must parse. Problems go back to Claude with the draft, up to 3 rounds.
+5. The model is written only to the file you name. Review it before using it at a machine.
+
+It takes a few minutes and costs roughly $0.50 to $2 for a program the size of the demo. SCL is read in full;
+for LAD and GRAPH blocks Claude only sees the interface and the calls for now, so their logic is not decoded yet.
+
 ## If the connection fails
 
 | Message | What to check |
@@ -125,6 +158,8 @@ anything. It is told never to suggest bridging or forcing a safety function or i
 | `Live/PollingService.cs` | Background loop: read, evaluate, reconnect with 2 s → 30 s back-off |
 | `Live/SnapshotFileSource.cs` | Test source: values from a JSON file |
 | `Probe.cs` | The `probe` command |
+| `Import/ImportCommand.cs`, `Import/ModelBuilder.cs`, `Import/ModelPrompt.cs` | The `import` command: Claude writes the machine model from a program export |
+| `../PlcKi.Core/Import/` | Reads the export, writes the program digest, checks a model against the program |
 | `Ask/AskService.cs`, `Ask/SystemPrompt.cs` | The question loop with Claude (official `Anthropic` NuGet package) and its instructions |
 | `../PlcKi.Core/Ask/MachineTools.cs` | The read-only lookups Claude can use |
 | `../PlcKi.Core/Status/MachineHistory.cs` | Recent events and values, in memory |

@@ -50,9 +50,10 @@ Full plan and architecture: [PLC Troubleshooter plan](https://claude.ai/artifact
 | Phase | Status |
 | --- | --- |
 | 0. Setup: repo, PLCSIM Advanced VM on the network | Done |
-| 1. Demo program and `.zap20` importer | Demo runs full batches in PLCSIM. Importer written, not yet built against TIA |
-| 2. Live status page | Works live against the demo in PLCSIM (83 of 83 tags). Machine model is hand-written for now |
-| 3. Ask questions (Claude) | First version: chat box on the status page, tested against a fake API; first real test pending |
+| 1. Demo program and `.zap20` importer | Demo runs full batches in PLCSIM. Importer builds on TIA V20 and exports the demo (16 blocks) |
+| 2. Live status page | Works live against the demo in PLCSIM (83 of 83 tags) |
+| 3. Ask questions (Claude) | Works live with the real API |
+| 3b. Machine model from the archive (Claude) | `import` command: SCL read in full; LAD and GRAPH logic not decoded yet. First real run pending |
 | 4. Real plant archives, Web API fallback, S7-1200 hardware | Planned |
 | 5. Plant PC deployment | Planned |
 
@@ -74,3 +75,6 @@ Archive importer:
 1. Build `tools/TiaImporter` (see its README).
 2. Follow `plc-demo/README.md` to load the demo into TIA V20 and run it in PLCSIM Advanced.
 3. Archive the project and run `TiaImporter export --archive MixingDemo.zap20 --out C:\temp\demo-export`.
+4. On the PC with PLC-Ki, write the machine model from that export with Claude (needs `ANTHROPIC_API_KEY`):
+   `dotnet run --project src\PlcKi.Server -- import --export C:\temp\demo-export.zip --out models\generated.json`.
+   See "Machine model from a TIA export" in [src/PlcKi.Server/README.md](src/PlcKi.Server/README.md).
