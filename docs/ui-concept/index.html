@@ -1,0 +1,1089 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>PLC-Ki UI Concept</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: app shell. Left rail with the views, sticky status bar on top, one view at a time,
+   Ask panel slides in from the right. Colours follow the live status page (src/PlcKi.Server/wwwroot/style.css). */
+:root {
+  --bg: #f2f4f7; --card: #ffffff; --sunk: #eceff3; --text: #1b2330; --muted: #5b6678;
+  --line: #dfe3e9; --line-strong: #b7c0cc; --accent: #2563eb; --accent-bg: #e6edfc;
+  --ok: #15803d; --ok-bg: #e2f3e7; --warn: #a15c00; --warn-bg: #fff1d6;
+  --fault: #c0262d; --fault-bg: #fde6e6; --idle: #6b7280; --idle-bg: #eef0f3;
+  --wire-off: #b2bac6; --code-bg: #f7f8fa; --shadow: 0 1px 2px rgba(16,24,40,.06);
+  --c1: #2563eb; --c2: #c2410c; --c3: #7c3aed;
+  --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #10141b; --card: #182029; --sunk: #131921; --text: #e5e9ef; --muted: #98a3b4;
+  --line: #29323e; --line-strong: #44505f; --accent: #6ea0ff; --accent-bg: #1d2a42;
+  --ok: #4ccb78; --ok-bg: #163222; --warn: #f0b04a; --warn-bg: #382b12;
+  --fault: #ff6b6b; --fault-bg: #3c1b1d; --idle: #a1a8b3; --idle-bg: #222a34;
+  --wire-off: #4a5563; --code-bg: #141a22; --shadow: none;
+  --c1: #6ea0ff; --c2: #fb923c; --c3: #b794f6; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #10141b; --card: #182029; --sunk: #131921; --text: #e5e9ef; --muted: #98a3b4;
+  --line: #29323e; --line-strong: #44505f; --accent: #6ea0ff; --accent-bg: #1d2a42;
+  --ok: #4ccb78; --ok-bg: #163222; --warn: #f0b04a; --warn-bg: #382b12;
+  --fault: #ff6b6b; --fault-bg: #3c1b1d; --idle: #a1a8b3; --idle-bg: #222a34;
+  --wire-off: #4a5563; --code-bg: #141a22; --shadow: none;
+  --c1: #6ea0ff; --c2: #fb923c; --c3: #b794f6; color-scheme: dark; }
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 var(--sans); }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--card); }
+button { font: inherit; color: inherit; }
+a { color: var(--accent); }
+h1, h2, h3 { text-wrap: balance; margin: 0; }
+h1 { font-size: 17px; font-weight: 700; }
+h2 { font-size: 15px; font-weight: 600; }
+h3 { font-size: 13px; font-weight: 600; }
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+.small { font-size: 12.5px; }
+.num { font-variant-numeric: tabular-nums; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ---------- shell ---------- */
+.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--card); border-bottom: 1px solid var(--line);
+  padding-block: 10px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; }
+.brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.logo { width: 28px; height: 28px; flex: none; }
+.brand p { margin: 0; }
+.status { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 999px; font-size: 12.5px; font-weight: 600; white-space: nowrap; }
+.pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.pill.plain::before { display: none; }
+.p-ok { background: var(--ok-bg); color: var(--ok); }
+.p-warn { background: var(--warn-bg); color: var(--warn); }
+.p-fault { background: var(--fault-bg); color: var(--fault); }
+.p-idle { background: var(--idle-bg); color: var(--idle); }
+.p-info { background: var(--accent-bg); color: var(--accent); }
+.scen { display: flex; gap: 4px; align-items: center; background: var(--sunk); border: 1px solid var(--line); border-radius: 8px; padding: 3px; flex-wrap: wrap; }
+.scen span { padding: 0 6px; }
+.scen button { border: 0; background: transparent; padding: 4px 9px; border-radius: 6px; cursor: pointer; font-size: 12.5px; }
+.scen button[aria-pressed="true"] { background: var(--card); box-shadow: var(--shadow); font-weight: 600; outline: 1px solid var(--line); }
+.askbtn { border: 1px solid var(--accent); background: var(--accent); color: #fff; padding: 5px 14px; border-radius: 8px; cursor: pointer; font-weight: 600; }
+
+.shell { display: grid; grid-template-columns: 190px minmax(0, 1fr); min-height: calc(100% - 60px); }
+.rail { border-right: 1px solid var(--line); background: var(--card); padding-block: 14px; padding-left: max(10px, env(safe-area-inset-left, 0px)); padding-right: 10px;
+  display: flex; flex-direction: column; gap: 2px; position: sticky; top: 60px; align-self: start; height: calc(100vh - 60px); }
+.rail button { display: flex; align-items: center; gap: 10px; text-align: left; border: 0; background: transparent; padding: 8px 10px; border-radius: 8px; cursor: pointer; color: var(--muted); font-weight: 500; }
+.rail button:hover { background: var(--sunk); color: var(--text); }
+.rail button[aria-current="page"] { background: var(--accent-bg); color: var(--accent); font-weight: 600; }
+.rail svg { width: 18px; height: 18px; flex: none; }
+.rail .cnt { margin-left: auto; font-size: 11px; font-weight: 700; padding: 0 6px; border-radius: 999px; background: var(--fault); color: #fff; }
+.rail .cnt.w { background: var(--warn); }
+.rail .sep { height: 1px; background: var(--line); margin: 10px 4px; }
+.rail .foot { margin-top: auto; font-size: 11.5px; color: var(--muted); padding: 0 8px; }
+
+main { min-width: 0; padding-block: 18px 40px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.view { max-width: 1240px; margin: 0 auto; display: grid; gap: 14px; }
+.view > * { min-width: 0; }
+.vhead { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 16px; }
+.vhead h2 { font-size: 19px; font-weight: 700; }
+.src { font-size: 12px; color: var(--muted); display: inline-flex; gap: 6px; align-items: center; }
+.src b { font-weight: 600; color: var(--text); }
+.src::before { content: "⎘"; font-size: 13px; }
+
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; box-shadow: var(--shadow); min-width: 0; }
+.card > h2 { margin-bottom: 10px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.grid2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
+.split { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+.split.l { grid-template-columns: 260px minmax(0, 1fr); }
+.note { font-size: 12.5px; color: var(--muted); border-top: 1px dashed var(--line); padding-top: 10px; margin-top: 12px; }
+.link { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; font-weight: 500; text-decoration: underline; text-underline-offset: 2px; }
+.chip { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--line); background: var(--card); border-radius: 999px; padding: 3px 10px; font-size: 12.5px; cursor: pointer; }
+.chip[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-bg); color: var(--accent); font-weight: 600; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* ---------- plant ---------- */
+.now { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 14px; align-items: start; }
+.now .big { font-size: 17px; line-height: 1.45; margin: 0; max-width: 72ch; }
+.now ul { margin: 8px 0 0; padding-left: 18px; color: var(--muted); }
+.statebox { width: 92px; border-radius: 10px; padding: 10px 6px; text-align: center; font-weight: 700; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; }
+.statebox b { display: block; font-size: 26px; letter-spacing: 0; font-family: var(--mono); }
+.strip { display: flex; gap: 0; overflow-x: auto; padding-bottom: 4px; }
+.strip button { flex: 1 0 auto; border: 1px solid var(--line); background: var(--sunk); padding: 7px 12px; cursor: pointer; text-align: left; min-width: 96px; margin-left: -1px; }
+.strip button:first-child { border-radius: 8px 0 0 8px; margin-left: 0; }
+.strip button:last-child { border-radius: 0 8px 8px 0; }
+.strip .n { font-family: var(--mono); font-size: 11px; color: var(--muted); display: block; }
+.strip .done { background: var(--card); color: var(--muted); }
+.strip .act { background: var(--accent); border-color: var(--accent); color: #fff; position: relative; z-index: 1; }
+.strip .act .n { color: #fff; opacity: .8; }
+.strip .act.halt { background: var(--fault); border-color: var(--fault); }
+.unit { border: 1px solid var(--line); border-radius: 10px; padding: 12px; background: var(--sunk); }
+.unit-h { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.eq { display: grid; grid-template-columns: repeat(auto-fill, minmax(178px, 1fr)); gap: 10px; }
+.tile { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 4px 10px; background: var(--card); border: 1px solid var(--line); border-radius: 9px; padding: 10px; text-align: left; cursor: pointer; border-left-width: 4px; }
+.tile:hover { border-color: var(--line-strong); }
+.tile.s-ok { border-left-color: var(--ok); } .tile.s-fault { border-left-color: var(--fault); } .tile.s-warn { border-left-color: var(--warn); } .tile.s-idle { border-left-color: var(--line-strong); }
+.tile svg { width: 40px; height: 40px; grid-row: span 3; }
+.tile .nm { font-weight: 700; font-family: var(--mono); font-size: 13px; }
+.tile .rl { font-size: 12px; color: var(--muted); line-height: 1.3; }
+.tile .vl { font-size: 13px; font-weight: 600; }
+.xch { display: grid; grid-template-columns: minmax(0,1fr) auto minmax(0,1fr) auto minmax(0,1fr); gap: 8px; align-items: center; }
+.party { border: 1px solid var(--line); border-radius: 9px; padding: 10px; background: var(--sunk); text-align: center; }
+.party b { display: block; }
+.arrow { font-size: 18px; color: var(--muted); text-align: center; line-height: 1.1; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th { text-align: left; font-size: 11.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 600; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+td { padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.tw { overflow-x: auto; }
+tr.sel td { background: var(--accent-bg); }
+tr.click { cursor: pointer; }
+tr.click:hover td { background: var(--sunk); }
+
+/* ---------- conditions ---------- */
+.conds { display: grid; gap: 4px; margin: 6px 0; }
+.cond { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 6px 8px; border-radius: 7px; background: var(--sunk); }
+.cond .ic { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700; color: #fff; }
+.cond.t .ic { background: var(--ok); } .cond.f .ic { background: var(--fault); }
+.cond.f { background: var(--fault-bg); }
+.cond .lv { font-family: var(--mono); font-size: 12.5px; white-space: nowrap; }
+.cond .sym { font-family: var(--mono); font-size: 11.5px; color: var(--muted); display: block; }
+.op { font-size: 11px; font-weight: 700; color: var(--muted); letter-spacing: .08em; padding-left: 38px; }
+.waiting { border-radius: 9px; padding: 10px 12px; background: var(--accent-bg); }
+.waiting.f { background: var(--fault-bg); }
+.waiting.w { background: var(--warn-bg); }
+.waiting p { margin: 2px 0 0; }
+.bar { height: 8px; border-radius: 4px; background: var(--sunk); overflow: hidden; position: relative; border: 1px solid var(--line); }
+.bar i { position: absolute; inset: 0 auto 0 0; background: var(--accent); }
+.bar.w i { background: var(--warn); }
+.kv { display: grid; grid-template-columns: auto minmax(0,1fr); gap: 4px 14px; font-size: 13px; margin: 0; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; }
+
+/* ---------- sequence ---------- */
+.chart-wrap { overflow-x: auto; }
+svg text { fill: var(--text); font-family: var(--sans); }
+svg .mu { fill: var(--muted); }
+svg .mono { font-family: var(--mono); }
+.sfc-step { cursor: pointer; }
+.sfc-step rect { fill: var(--card); stroke: var(--line-strong); stroke-width: 1.5; }
+.sfc-step.done rect { fill: var(--sunk); }
+.sfc-step.act rect { fill: var(--accent); stroke: var(--accent); }
+.sfc-step.act.halt rect { fill: var(--fault); stroke: var(--fault); }
+.sfc-step.act text { fill: #fff; }
+.sfc-step.sel rect.frame { stroke: var(--accent); stroke-width: 2.5; }
+.sfc-tr { cursor: pointer; }
+.sfc-line { stroke: var(--line-strong); stroke-width: 1.5; fill: none; }
+
+/* ---------- logic ---------- */
+.nets { display: grid; gap: 4px; }
+.netbtn { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 8px; align-items: center; text-align: left; border: 1px solid var(--line); background: var(--card); border-radius: 8px; padding: 8px 10px; cursor: pointer; }
+.netbtn[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-bg); }
+.netbtn .b { font-size: 11.5px; color: var(--muted); font-family: var(--mono); grid-column: 1 / -1; }
+.lad { max-width: none; height: auto; display: block; }
+.lad .w-on { stroke: var(--ok); stroke-width: 3; }
+.lad .w-off { stroke: var(--wire-off); stroke-width: 2; }
+.lad .w-blk { stroke: var(--fault); stroke-width: 3; }
+.lad .lbl { font-size: 12px; font-weight: 600; font-family: var(--mono); }
+.lad .val { font-size: 11.5px; font-family: var(--mono); }
+.lad .v-on { fill: var(--ok); } .lad .v-off { fill: var(--muted); } .lad .v-blk { fill: var(--fault); font-weight: 600; }
+.lad .boxr { fill: var(--card); }
+.lad .blkmark { fill: var(--fault-bg); }
+
+/* ---------- code ---------- */
+.tree { list-style: none; margin: 0; padding: 0; font-size: 13px; }
+.tree ul { list-style: none; margin: 0; padding-left: 16px; border-left: 1px solid var(--line); margin-left: 8px; }
+.tree button { border: 0; background: transparent; padding: 4px 6px; border-radius: 6px; cursor: pointer; display: flex; gap: 6px; align-items: center; width: 100%; text-align: left; }
+.tree button:hover { background: var(--sunk); }
+.tree button[aria-pressed="true"] { background: var(--accent-bg); color: var(--accent); font-weight: 600; }
+.lang { font-size: 10px; font-weight: 700; padding: 0 5px; border-radius: 4px; border: 1px solid var(--line-strong); color: var(--muted); font-family: var(--mono); }
+.code { background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px; overflow-x: auto; font-family: var(--mono); font-size: 12.5px; line-height: 1.75; padding: 8px 0; }
+.code .ln { display: grid; grid-template-columns: 38px minmax(0, 1fr); white-space: pre; padding-right: 12px; }
+.code .ln > span:first-child { color: var(--muted); text-align: right; padding-right: 12px; user-select: none; opacity: .7; }
+.code .ln.hot { background: var(--accent-bg); }
+.code .ln.hot > span:first-child { color: var(--accent); opacity: 1; font-weight: 600; }
+.code .kw { color: var(--c3); font-weight: 600; }
+.code .cm { color: var(--muted); font-style: italic; }
+.lv { display: inline-block; font-size: 11px; line-height: 1.5; padding: 0 5px; margin: 0 3px; border-radius: 4px; background: var(--idle-bg); color: var(--idle); font-weight: 600; vertical-align: 1px; }
+.lv.t { background: var(--ok-bg); color: var(--ok); }
+.lv.f { background: var(--fault-bg); color: var(--fault); }
+.lv.n { background: var(--accent-bg); color: var(--accent); }
+.summary ul { margin: 6px 0 0; padding-left: 18px; }
+.summary li { margin: 2px 0; }
+
+/* ---------- alarms ---------- */
+.sev { font-size: 11px; font-weight: 700; letter-spacing: .05em; padding: 1px 7px; border-radius: 4px; }
+.sev.F { background: var(--fault); color: #fff; } .sev.W { background: var(--warn); color: #fff; }
+.path { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; font-family: var(--mono); font-size: 12.5px; }
+.path span { padding: 2px 7px; border-radius: 5px; background: var(--sunk); border: 1px solid var(--line); }
+.path i { color: var(--muted); font-style: normal; }
+ol.fix { margin: 4px 0 0; padding-left: 20px; }
+ol.fix li { margin: 3px 0; }
+.cause { display: grid; grid-template-columns: 46px minmax(0,1fr); gap: 8px; align-items: start; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.cause:last-child { border-bottom: 0; }
+.cause .pct { font-family: var(--mono); font-weight: 600; font-size: 12.5px; }
+.sect { display: grid; gap: 6px; padding-top: 12px; margin-top: 12px; border-top: 1px solid var(--line); }
+.sect > h3 { text-transform: uppercase; letter-spacing: .06em; font-size: 11.5px; color: var(--muted); }
+.empty { padding: 18px; text-align: center; color: var(--muted); background: var(--sunk); border-radius: 8px; }
+
+/* ---------- trends ---------- */
+.trend { width: 100%; min-width: 640px; height: auto; display: block; }
+.trend .grid { stroke: var(--line); stroke-width: 1; }
+.trend .axis { font-size: 11px; fill: var(--muted); font-family: var(--mono); }
+.trend .lab { font-size: 12px; font-weight: 600; }
+.trend .xh { stroke: var(--text); stroke-width: 1; stroke-dasharray: 3 3; }
+.readout { font-family: var(--mono); font-size: 12.5px; display: flex; flex-wrap: wrap; gap: 4px 16px; min-height: 20px; }
+
+/* ---------- equipment ---------- */
+.devlist { display: grid; gap: 4px; }
+.devbtn { display: grid; grid-template-columns: 28px minmax(0,1fr) auto; gap: 8px; align-items: center; text-align: left; border: 1px solid var(--line); background: var(--card); border-radius: 8px; padding: 6px 8px; cursor: pointer; }
+.devbtn svg { width: 28px; height: 28px; }
+.devbtn > span { min-width: 0; overflow-wrap: anywhere; }
+.devbtn[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-bg); }
+.chain { display: flex; flex-wrap: wrap; gap: 0; align-items: stretch; }
+.link-step { flex: 1 1 120px; border: 1px solid var(--line); background: var(--sunk); padding: 8px 10px; position: relative; margin-right: 12px; border-radius: 8px; font-size: 12.5px; margin-bottom: 6px; }
+.link-step::after { content: "›"; position: absolute; right: -11px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 16px; }
+.link-step:last-child::after { display: none; }
+.link-step.t { background: var(--ok-bg); border-color: transparent; }
+.link-step.f { background: var(--fault-bg); border-color: var(--fault); }
+.link-step b { display: block; font-size: 12px; }
+.gauge { display: grid; gap: 4px; }
+.gauge .bar { height: 14px; }
+.gauge .sp { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--text); }
+.bigv { font-size: 28px; font-weight: 600; font-family: var(--mono); line-height: 1.1; }
+.bigv small { font-size: 14px; color: var(--muted); font-weight: 500; }
+.lamp { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; margin-right: 14px; }
+.lamp::before { content: ""; width: 12px; height: 12px; border-radius: 50%; background: var(--wire-off); }
+.lamp.on::before { background: var(--ok); box-shadow: 0 0 0 3px var(--ok-bg); }
+.lamp.bad::before { background: var(--fault); box-shadow: 0 0 0 3px var(--fault-bg); }
+
+/* ---------- ask ---------- */
+.ask { position: fixed; top: 0; right: 0; bottom: 0; width: min(420px, 100%); background: var(--card); border-left: 1px solid var(--line); z-index: 20;
+  display: flex; flex-direction: column; box-shadow: -8px 0 24px rgba(0,0,0,.08); transform: translateX(100%); transition: transform .2s ease;
+  padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); padding-right: env(safe-area-inset-right, 0px); }
+.ask.open { transform: none; }
+.ask-h { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.ask-b { flex: 1; overflow-y: auto; padding: 14px 16px; display: grid; gap: 10px; align-content: start; }
+.bub { border-radius: 10px; padding: 9px 12px; max-width: 92%; }
+.bub.q { justify-self: end; background: var(--accent); color: #fff; }
+.bub.a { background: var(--sunk); }
+.bub.a p { margin: 0 0 6px; } .bub.a p:last-child { margin: 0; }
+.ask-f { padding: 12px 16px; border-top: 1px solid var(--line); display: grid; gap: 8px; }
+.ask-f input { width: 100%; padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--bg); color: var(--text); font: inherit; }
+.x { border: 0; background: transparent; font-size: 20px; cursor: pointer; color: var(--muted); }
+
+@media (max-width: 980px) {
+  .split, .split.l, .grid2 { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 760px) {
+  .shell { grid-template-columns: minmax(0, 1fr); }
+  .rail { position: sticky; top: 0; height: auto; flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--line); padding: 6px max(10px, env(safe-area-inset-left, 0px)); z-index: 4; }
+  .rail .sep, .rail .foot { display: none; }
+  .rail button { white-space: nowrap; padding: 6px 10px; }
+  .xch { grid-template-columns: minmax(0,1fr); }
+  .arrow { transform: rotate(90deg); }
+  .now { grid-template-columns: minmax(0, 1fr); }
+  .top { position: static; }
+}
+@media (prefers-reduced-motion: reduce) { .ask { transition: none; } }
+</style>
+
+<header class="top">
+  <div class="brand">
+    <svg class="logo" viewBox="0 0 28 28" aria-hidden="true"><rect x="2" y="2" width="24" height="24" rx="6" fill="var(--accent)"/><path d="M8 19V9h5a3 3 0 0 1 0 6H8M16 9v10M16 14l5-5M16 14l5 5" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <div><h1>PLC-Ki <span class="muted" style="font-weight:500">· Demo mixing station</span></h1>
+      <p class="small muted">CPU 1516-3 PN/DP at 192.168.10.10 · program from MixingDemo.zap20 (2 Nov, 16:40)</p></div>
+  </div>
+  <div class="status">
+    <div class="scen" role="group" aria-label="Demo scenario">
+      <span class="small muted">Scenario</span>
+      <button data-act="sc" data-sc="mix">Mixing</button>
+      <button data-act="sc" data-sc="xv101">Valve fault</button>
+      <button data-act="sc" data-sc="filler">Waiting</button>
+    </div>
+    <span class="pill p-ok" title="Reading 83 tags every 500 ms">Live</span>
+    <span class="pill p-info plain" title="This app only reads from the PLC">Read-only</span>
+    <span class="small muted mono" id="clock"></span>
+    <button class="askbtn" data-act="ask">Ask</button>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="rail" id="rail" aria-label="Views"></nav>
+  <main><div class="view" id="view"></div></main>
+</div>
+
+<aside class="ask" id="ask" aria-label="Ask about the machine"></aside>
+
+<script>
+"use strict";
+/* ============================================================
+   Mock data: the demo mixing station (plc-demo/scl) in three states.
+   In the real app all of this comes from the machine model (import)
+   plus live values (S7CommPlus). Nothing here is hand-drawn per plant.
+   ============================================================ */
+const R = { LevelA: 40, LevelB: 80, TempSP: 60, MixTime: 120, MixSpeed: 1200, HoldSpeed: 300, DrainLevel: 2 };
+const NOW0 = 17 * 3600 + 12 * 60 + 35;
+
+const BASE = {
+  mix: { Step: 30, StepTime: 212, Paused: false, Auto: true, EStopOK: true, AnyFault: false, Level: 80.4, Temp: 53.6,
+    SpeedSP: 1200, SpeedPV: 1194, M201_Ready: true, M201_Fault: false, OverTemp: false, TT_WB: false, LT_WB: false,
+    XV101_ZSO: false, XV101_ZSC: true, XV102_ZSO: false, XV102_ZSC: true, P401_Fb: false, P401_Trip: false,
+    FillerReady: false, BatchCount: 41, alarms: [] },
+  xv101: { Step: 10, StepTime: 14, Paused: false, Auto: true, EStopOK: true, AnyFault: true, Level: 0.8, Temp: 40.2,
+    SpeedSP: 0, SpeedPV: 0, M201_Ready: true, M201_Fault: false, OverTemp: false, TT_WB: false, LT_WB: false,
+    XV101_ZSO: false, XV101_ZSC: true, XV102_ZSO: false, XV102_ZSC: true, P401_Fb: false, P401_Trip: false,
+    FillerReady: false, BatchCount: 42, alarms: [{ id: "A02", since: NOW0 - 4, ack: false }] },
+  filler: { Step: 40, StepTime: 78, Paused: false, Auto: true, EStopOK: true, AnyFault: false, Level: 80.2, Temp: 60.3,
+    SpeedSP: 300, SpeedPV: 299, M201_Ready: true, M201_Fault: false, OverTemp: false, TT_WB: false, LT_WB: false,
+    XV101_ZSO: false, XV101_ZSC: true, XV102_ZSO: false, XV102_ZSC: true, P401_Fb: false, P401_Trip: false,
+    FillerReady: false, BatchCount: 41, alarms: [{ id: "A21", since: NOW0 - 18, ack: true }] },
+};
+
+// Alarm catalogue: generated from DB_Alarms comments + FB_AlarmHandler wiring; cause/fix drafted by Claude at import.
+const AL = {
+  A02: { sev: "F", text: "XV101 did not open", dev: "XV101",
+    path: ["OB_Main", "Station", "XV101 · FB_Valve", "FaultNotOpen", "DB_Alarms.A02"], net: 4, block: "FB_Valve",
+    cond: "Open command on, open limit switch not reached within 10 s",
+    causes: [[55, "No compressed air at the valve", "Closed switch ZSC is still on, so the valve did not move at all."],
+             [30, "Solenoid coil or its 24 V supply", "The PLC output was on for 10 s; check the coil LED."],
+             [15, "Open limit switch ZSO out of position", "Less likely: the closed switch would have dropped."]],
+    fix: ["Check air pressure at the valve terminal.", "Check that the solenoid LED lights when the batch asks for XV101.", "Check limit switch ZSO and its wiring.", "Press Reset, then Start. The batch continues at step 10 Fill A."] },
+  A07: { sev: "F", text: "M201 speed deviation", dev: "M201", path: ["OB_Main", "Station", "M201 · FB_VFD", "FaultSpeedDev", "DB_Alarms.A07"], net: 3, block: "FB_Station",
+    cond: "Running, speed below 90 % of setpoint for 15 s",
+    causes: [[50, "Product too viscous", "Happens mostly at the start of step 30 with a full tank."], [30, "Mechanical drag in gearbox or bearing", ""], [20, "Drive current limit", ""]],
+    fix: ["Check the product and the recipe speed.", "Check gearbox and bearings.", "Check the drive current limit.", "Reset and Start."] },
+  A11: { sev: "F", text: "P401 no running feedback", dev: "P401", path: ["OB_Main", "Station", "P401 · FB_Motor", "FaultNoFeedback", "DB_Alarms.A11"], net: 0, block: "FB_Station",
+    cond: "Run command on, no running feedback within 5 s", causes: [[60, "Contactor auxiliary contact", ""], [40, "Contactor coil or wiring", ""]],
+    fix: ["Check the contactor and its auxiliary contact.", "Reset and Start."] },
+  A16: { sev: "F", text: "Step 10 timeout (Fill A)", dev: "Seq", path: ["OB_Main", "Station", "Seq · FB_BatchSequence", "TimeoutStep10", "DB_Alarms.A16"], net: 1, block: "FB_BatchSequence",
+    cond: "Step 10 longer than 120 s", causes: [[70, "XV101 not open", ""], [30, "Supply tank A empty", ""]], fix: ["Check XV101 and ingredient A supply."] },
+  A21: { sev: "W", text: "Filler not ready", dev: "Seq", path: ["OB_Main", "Station", "Seq · FB_BatchSequence", "WaitFillerTooLong", "DB_Alarms.A21"], net: 1, block: "FB_BatchSequence",
+    cond: "Step 40 waiting more than 60 s for the filler",
+    causes: [[65, "Filler stopped or not in Auto", "Filler_ReadyToReceive has been FALSE the whole step."], [25, "Filler waiting for bottles or caps", ""], [10, "Signal lost between filler and PLC", "Unlikely: MES heartbeat is fine on the same network."]],
+    fix: ["Check the filler is running and in Auto.", "Check that the filler sets DB_LineInterface.Filler_ReadyToReceive.", "No reset needed: the batch drains as soon as the filler is ready."] },
+};
+const HISTORY = [
+  { id: "A21", on: "Today 15:48:02", dur: "2:41", sc: "" },
+  { id: "A07", on: "Today 14:05:19", dur: "0:52", sc: "" },
+  { id: "A02", on: "Today 11:31:44", dur: "4:10", sc: "" },
+  { id: "A21", on: "Yesterday 22:14:55", dur: "6:03", sc: "" },
+  { id: "A11", on: "Yesterday 19:02:10", dur: "1:15", sc: "" },
+  { id: "A07", on: "Yesterday 09:44:37", dur: "0:31", sc: "" },
+  { id: "A02", on: "31 Oct 16:20:08", dur: "12:40", sc: "" },
+  { id: "A16", on: "31 Oct 16:21:58", dur: "10:50", sc: "" },
+];
+const PERDAY = { A02: [0,1,0,0,0,0,1,0,0,0,1,0,0,1], A07: [1,0,0,2,1,0,0,1,0,0,0,1,1,1], A21: [2,1,3,0,1,2,1,0,2,1,1,0,1,1], A11: [0,0,0,0,0,0,0,0,0,0,0,0,1,0], A16: [0,0,0,0,0,0,0,0,0,0,1,0,0,0] };
+
+const STEPS = [
+  { n: 0, name: "Idle", what: "All off; waits for Start", limit: 0 },
+  { n: 10, name: "Fill A", what: "XV101 open until level reaches LevelA", limit: 120, alarm: "A16" },
+  { n: 20, name: "Fill B", what: "XV102 open until level reaches LevelB", limit: 120, alarm: "A17" },
+  { n: 30, name: "Mix and heat", what: "M201 at MixSpeed, E301 heats to TempSP; leaves when hot and MixTime done", limit: 600, alarm: "A18" },
+  { n: 40, name: "Hold", what: "M201 at HoldSpeed; waits for the filler", limit: 60, alarm: "A21" },
+  { n: 50, name: "Drain", what: "P401 pumps out until level is below DrainLevel", limit: 180, alarm: "A19" },
+  { n: 60, name: "Done", what: "Batch counter +1, back to Idle", limit: 0 },
+];
+
+let V = {};
+const S = { sc: "mix", view: "plant", step: null, net: null, alarm: null, dev: "M201", block: "FB_BatchSequence", tags: ["Level", "Temp", "Speed", "XV101", "XV102", "E301", "P401"], ask: false, t: 0, asked: [] };
+
+function load(sc) {
+  V = JSON.parse(JSON.stringify(BASE[sc]));
+  S.sc = sc; S.t = 0; S.step = null; S.alarm = null; S.net = null; S.asked = [];
+  derive();
+}
+function derive() {
+  V.Halted = V.AnyFault || !V.EStopOK || V.Paused || !V.Auto;
+  const st = V.Step, h = V.Halted;
+  V.Seq_XV101 = !h && st === 10; V.Seq_XV102 = !h && st === 20;
+  V.Seq_M201 = !h && (st === 30 || st === 40);
+  V.Seq_E301 = !h && st === 30 && V.Temp < R.TempSP;
+  V.Seq_P401 = !h && st === 50;
+  V.LT_High = V.Level > 95;
+  V.XV_Permit = !V.LT_High && !V.LT_WB;
+  V.XV101_Out = V.Seq_XV101 && V.XV_Permit; V.XV102_Out = V.Seq_XV102 && V.XV_Permit;
+  V.M201_Permit = V.Level > 20 && V.EStopOK;
+  V.M201_RunOut = V.Seq_M201 && V.M201_Permit && V.M201_Ready;
+  V.M201_AtSpeed = V.M201_RunOut && V.SpeedPV >= 0.9 * V.SpeedSP;
+  V.E301_On = V.Seq_E301 && V.M201_AtSpeed && !V.OverTemp && !V.TT_WB;
+  V.P401_Permit = V.Level > 0.5 && V.EStopOK;
+  V.P401_Out = V.Seq_P401 && V.P401_Permit && !V.P401_Trip;
+}
+function tick() {
+  S.t++;
+  if (!V.Halted) V.StepTime++;
+  const n = Math.sin(S.t * 1.7) * 0.05;
+  if (S.sc === "mix") { V.Temp = Math.min(59.9, V.Temp + 0.09); V.Level = 80.4 + n; V.SpeedPV = 1194 + Math.round(Math.sin(S.t) * 3); }
+  if (S.sc === "filler") { V.Temp = 60.3 - S.t * 0.004; V.SpeedPV = 299 + Math.round(Math.sin(S.t) * 1); }
+  if (S.sc === "xv101") { V.Temp = 40.2 - S.t * 0.003; }
+  derive();
+}
+
+/* ---------- helpers ---------- */
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const mmss = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+const clock = (s) => { s = ((s % 86400) + 86400) % 86400; return [Math.floor(s / 3600), Math.floor(s / 60) % 60, s % 60].map((x) => String(x).padStart(2, "0")).join(":"); };
+const f1 = (x) => x.toFixed(1);
+const stepOf = (n) => STEPS.find((s) => s.n === n);
+const activeAlarms = () => V.alarms.map((a) => ({ ...a, ...AL[a.id] }));
+
+function machineState() {
+  if (V.Halted) return { cls: "fault", word: "Halted", pill: "p-fault" };
+  if (V.alarms.some((a) => AL[a.id].sev === "W")) return { cls: "warn", word: "Waiting", pill: "p-warn" };
+  if (V.Step > 0) return { cls: "ok", word: "Running", pill: "p-ok" };
+  return { cls: "idle", word: "Idle", pill: "p-idle" };
+}
+
+// Transition conditions: the same structure the importer builds from a GRAPH transition or an SCL CASE branch.
+function leaf(ok, label, sym, live) { return { ok, label, sym, live }; }
+function transition(n) {
+  switch (n) {
+    case 0: return { to: 10, op: "AND", short: "Start, Auto, no fault, recipe ok, tank empty", c: [
+      leaf(false, "Start pressed (button or MES)", "#Start", "FALSE"), leaf(V.Auto, "Mode selector in Auto", "#Auto", V.Auto ? "TRUE" : "FALSE"),
+      leaf(!V.AnyFault, "No fault alarm active", "NOT #AnyFault", V.AnyFault ? "fault" : "none"), leaf(true, "Recipe valid", "#RecipeValid", "TRUE"),
+      leaf(V.Level <= R.DrainLevel, "Tank empty", "#Level <= DrainLevel", `${f1(V.Level)} % ≤ ${f1(R.DrainLevel)} %`)] };
+    case 10: return { to: 20, op: "AND", c: [leaf(V.Level >= R.LevelA, "Level reached LevelA", "#Level >= \"DB_Recipe\".LevelA", `${f1(V.Level)} % ≥ ${f1(R.LevelA)} %`)] };
+    case 20: return { to: 30, op: "AND", c: [leaf(V.Level >= R.LevelB, "Level reached LevelB", "#Level >= \"DB_Recipe\".LevelB", `${f1(V.Level)} % ≥ ${f1(R.LevelB)} %`)] };
+    case 30: return { to: 40, op: "AND", c: [
+      leaf(V.Temp >= R.TempSP, "Temperature reached TempSP", "#Temp >= \"DB_Recipe\".TempSP", `${f1(V.Temp)} °C ≥ ${f1(R.TempSP)} °C`),
+      leaf(V.StepTime >= R.MixTime, "Mix time done", "#StepTime >= \"DB_Recipe\".MixTime", `${mmss(V.StepTime)} ≥ ${mmss(R.MixTime)}`)] };
+    case 40: return { to: 50, op: "AND", c: [leaf(V.FillerReady, "Filler ready to receive", "\"DB_LineInterface\".Filler_ReadyToReceive", V.FillerReady ? "TRUE" : "FALSE")] };
+    case 50: return { to: 60, op: "AND", c: [leaf(V.Level <= R.DrainLevel, "Tank empty", "#Level <= \"DB_Recipe\".DrainLevel", `${f1(V.Level)} % ≤ ${f1(R.DrainLevel)} %`)] };
+    case 60: return { to: 0, op: "AND", c: [leaf(true, "Always (one cycle)", "TRUE", "TRUE")] };
+  }
+}
+function haltConds() {
+  return { op: "OR", c: [leaf(V.AnyFault, "A fault alarm is active", "#AnyFault", V.AnyFault ? "TRUE" : "FALSE"),
+    leaf(!V.EStopOK, "Emergency stop pressed", "NOT #EStopOK", V.EStopOK ? "healthy" : "pressed"),
+    leaf(V.Paused, "Paused with Stop", "#Paused", V.Paused ? "TRUE" : "FALSE"), leaf(!V.Auto, "Selector not in Auto", "NOT #Auto", V.Auto ? "Auto" : "Manual")] };
+}
+function condList(t, invertColour) {
+  return `<div class="conds">${t.c.map((l, i) => `${i ? `<div class="op">${t.op}</div>` : ""}
+    <div class="cond ${l.ok ? "t" : "f"}"><span class="ic">${l.ok ? "✓" : "✕"}</span>
+    <span>${esc(l.label)}<span class="sym">${esc(l.sym)}</span></span><span class="lv">${esc(l.live)}</span></div>`).join("")}</div>`;
+}
+function waitingText() {
+  if (V.Halted) {
+    const a = activeAlarms().find((x) => x.sev === "F");
+    return { cls: "f", h: `Halted in step ${V.Step} ${stepOf(V.Step).name}`, p: a ? `Alarm ${a.id} ${a.text} stopped the sequence at ${clock(a.since)}. All outputs are off. Fix the cause, press Reset, then Start to continue from step ${V.Step}.` : "All outputs are off." };
+  }
+  if (V.Step === 30) {
+    const left = R.TempSP - V.Temp, rate = 5.4;
+    return { cls: "", h: `Waiting for temperature ${f1(R.TempSP)} °C`, p: `Mix time is done. The tank is at ${f1(V.Temp)} °C and heating at about ${rate} °C/min, so step 40 Hold should start in about ${mmss(Math.max(0, left / rate * 60))}.` };
+  }
+  if (V.Step === 40) return { cls: "w", h: "Waiting for the filler", p: `The batch is ready (${f1(V.Level)} %, ${f1(V.Temp)} °C). Step 40 leaves only when the filler sets Filler_ReadyToReceive. It has waited ${mmss(V.StepTime)}; warning A21 came after 1:00.` };
+  return { cls: "", h: "", p: "" };
+}
+
+/* ---------- icons: one symbol per device type, coloured by state ---------- */
+function icon(type, st) {
+  const col = { ok: "var(--ok)", fault: "var(--fault)", warn: "var(--warn)", idle: "var(--idle)" }[st] || "var(--idle)";
+  const bg = { ok: "var(--ok-bg)", fault: "var(--fault-bg)", warn: "var(--warn-bg)", idle: "var(--idle-bg)" }[st] || "var(--idle-bg)";
+  const g = {
+    valve: `<path d="M8 12 L20 20 L8 28 Z M32 12 L20 20 L32 28 Z" fill="${bg}" stroke="${col}" stroke-width="2" stroke-linejoin="round"/><path d="M20 20 V9 M14 9 H26" stroke="${col}" stroke-width="2"/>`,
+    vfd: `<circle cx="20" cy="20" r="13" fill="${bg}" stroke="${col}" stroke-width="2"/><text x="20" y="19" text-anchor="middle" font-size="11" font-weight="700" style="fill:${col}">M</text><path d="M14 25 q3 -3 6 0 t6 0" stroke="${col}" stroke-width="1.6" fill="none"/>`,
+    pump: `<circle cx="20" cy="20" r="13" fill="${bg}" stroke="${col}" stroke-width="2"/><path d="M20 7 L33 20 L20 33" fill="none" stroke="${col}" stroke-width="2"/>`,
+    heater: `<rect x="7" y="9" width="26" height="22" rx="3" fill="${bg}" stroke="${col}" stroke-width="2"/><path d="M11 24 l3 -8 l3 8 l3 -8 l3 8 l3 -8 l3 8" fill="none" stroke="${col}" stroke-width="1.8"/>`,
+    analog: `<circle cx="20" cy="20" r="13" fill="${bg}" stroke="${col}" stroke-width="2"/><path d="M7 20 H33" stroke="${col}" stroke-width="1.4"/>`,
+    seq: `<rect x="12" y="5" width="16" height="9" rx="2" fill="${bg}" stroke="${col}" stroke-width="2"/><rect x="12" y="26" width="16" height="9" rx="2" fill="${bg}" stroke="${col}" stroke-width="2"/><path d="M20 14 V26 M15 20 H25" stroke="${col}" stroke-width="2"/>`,
+  }[type];
+  return `<svg viewBox="0 0 40 40" aria-hidden="true">${g}</svg>`;
+}
+
+/* ---------- equipment: generated from the FB instances inside FB_Station ---------- */
+function devices() {
+  const run = V.Step > 0;
+  return [
+    { id: "Seq", type: "seq", fb: "FB_BatchSequence", role: "Batch sequence (steps 0..60)", st: V.Halted ? "fault" : V.alarms.some((a) => AL[a.id].sev === "W") ? "warn" : run ? "ok" : "idle",
+      val: `Step ${V.Step} ${stepOf(V.Step).name} · ${mmss(V.StepTime)}`, word: V.Halted ? "halted" : run ? "running" : "idle" },
+    { id: "XV101", type: "valve", fb: "FB_Valve", role: "Inlet valve ingredient A", st: V.alarms.some((a) => a.id === "A02") ? "fault" : V.XV101_Out ? "ok" : "idle",
+      val: V.alarms.some((a) => a.id === "A02") ? "did not open" : V.XV101_ZSO ? "open" : "closed", word: "" },
+    { id: "XV102", type: "valve", fb: "FB_Valve", role: "Inlet valve ingredient B", st: V.XV102_Out ? "ok" : "idle", val: V.XV102_ZSO ? "open" : "closed" },
+    { id: "M201", type: "vfd", fb: "FB_VFD", role: "Agitator on a VFD", st: V.M201_RunOut ? "ok" : "idle", val: V.M201_RunOut ? `${V.SpeedPV} rpm (SP ${V.SpeedSP})` : "stopped" },
+    { id: "E301", type: "heater", fb: null, role: "Heater (from I/O names, no device block)", st: V.E301_On ? "ok" : "idle", val: V.E301_On ? "heating" : "off" },
+    { id: "P401", type: "pump", fb: "FB_Motor", role: "Outlet pump", st: V.P401_Out ? "ok" : "idle", val: V.P401_Out ? "running" : "stopped" },
+    { id: "LT101", type: "analog", fb: "FB_AnalogIn", role: "Tank level, 0..100 %", st: "ok", val: `${f1(V.Level)} %` },
+    { id: "TT301", type: "analog", fb: "FB_AnalogIn", role: "Tank temperature, 0..120 °C", st: "ok", val: `${f1(V.Temp)} °C` },
+  ];
+}
+
+/* ============================================================
+   Views
+   ============================================================ */
+const VIEWS = [
+  ["plant", "Plant", '<path d="M3 21V9l6 4V9l6 4V5h6v16z"/>'],
+  ["sequence", "Sequence", '<rect x="7" y="2" width="10" height="6" rx="1"/><rect x="7" y="16" width="10" height="6" rx="1"/><path d="M12 8v8M8 12h8"/>'],
+  ["logic", "Logic", '<path d="M2 12h5M17 12h5M7 7v10M10 7v10M14 7v10M17 7v10"/>'],
+  ["code", "Code", '<path d="M8 6l-6 6 6 6M16 6l6 6-6 6"/>'],
+  ["alarms", "Alarms", '<path d="M6 17V11a6 6 0 0 1 12 0v6l2 2H4zM10 21h4"/>'],
+  ["trends", "Trends", '<path d="M3 17l6-6 4 4 8-8M3 21h18"/>'],
+  ["equipment", "Equipment", '<circle cx="12" cy="12" r="8"/><path d="M12 4v4M12 16v4M4 12h4M16 12h4"/>'],
+];
+
+function rail() {
+  const act = activeAlarms();
+  const nf = act.filter((a) => a.sev === "F").length, nw = act.filter((a) => a.sev === "W").length;
+  return VIEWS.map(([id, name, ic]) => {
+    let badge = "";
+    if (id === "alarms" && (nf || nw)) badge = `<span class="cnt ${nf ? "" : "w"}">${nf + nw}</span>`;
+    return `<button data-act="nav" data-view="${id}" ${S.view === id ? 'aria-current="page"' : ""}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ic}</svg>${name}${badge}</button>`;
+  }).join("") + `<div class="sep"></div><div class="foot">Mockup of the PLC-Ki UI concept. Values are simulated; switch scenarios at the top.</div>`;
+}
+
+function vhead(title, src) { return `<div class="vhead"><h2>${title}</h2><span class="src">Built from <b>${src}</b></span></div>`; }
+
+/* ---------- Plant ---------- */
+function vPlant() {
+  const ms = machineState(), w = waitingText();
+  const lines = {
+    mix: [`Batch ${V.BatchCount + 1}, step 30 Mix and heat for ${mmss(V.StepTime)}.`, `Agitator M201 at ${V.SpeedPV} rpm (setpoint ${V.SpeedSP}). Heater E301 on, tank at ${f1(V.Temp)} °C heating to ${f1(R.TempSP)} °C.`, `Next: step 40 Hold, once ${f1(R.TempSP)} °C is reached.`],
+    xv101: [`Batch ${V.BatchCount + 1} halted in step 10 Fill A.`, `Inlet valve XV101 did not open (alarm A02 at ${clock(NOW0 - 4)}). All outputs are off.`, `Fix the valve, press Reset, then Start to continue.`],
+    filler: [`Batch ${V.BatchCount + 1} is mixed and heated, holding in step 40 for ${mmss(V.StepTime)}.`, `Waiting for the filler to signal ready. Agitator M201 at hold speed ${V.SpeedPV} rpm.`, `Warning A21 Filler not ready.`],
+  }[S.sc];
+  const idx = STEPS.findIndex((s) => s.n === V.Step);
+  const strip = STEPS.map((s, i) => `<button data-act="gostep" data-n="${s.n}" class="${i < idx ? "done" : i === idx ? "act" + (V.Halted ? " halt" : "") : ""}"><span class="n">S${s.n}</span>${s.name}${i === idx ? ` · ${mmss(V.StepTime)}` : ""}</button>`).join("");
+  const tiles = devices().map((d) => `<button class="tile s-${d.st}" data-act="dev" data-id="${d.id}">${icon(d.type, d.st)}<span class="nm">${d.id}</span><span class="rl">${esc(d.role)}</span><span class="vl" style="color:var(--${d.st === "idle" ? "muted" : d.st})">${esc(d.val)}</span></button>`).join("");
+  const act = activeAlarms();
+  return `${vhead("Plant", "OB_Main call tree → FB_Station with 7 device instances")}
+  <section class="card now" aria-label="What the machine is doing">
+    <div class="statebox" style="background:var(--${ms.cls}-bg);color:var(--${ms.cls})"><b>S${V.Step}</b>${ms.word}</div>
+    <div><p class="big">${esc(lines[0])} ${esc(lines[1])}</p><ul><li>${esc(lines[2])}</li><li>Batches since power-up: ${V.BatchCount}. Recipe 1.</li></ul></div>
+  </section>
+  <section class="card" aria-label="Sequence"><h2>Sequence <button class="link small" data-act="nav" data-view="sequence">open step chart</button></h2><div class="strip">${strip}</div>
+    ${w.h ? `<div class="waiting ${w.cls}" style="margin-top:10px"><b>${esc(w.h)}</b><p>${esc(w.p)}</p></div>` : ""}</section>
+  <div class="split">
+    <section class="unit" aria-label="Mixing station equipment">
+      <div class="unit-h"><h2>Mixing station <span class="muted mono small">"Station" · FB_Station</span></h2><span class="small muted">Click a device for its faceplate</span></div>
+      <div class="eq">${tiles}</div>
+    </section>
+    <div style="display:grid;gap:14px;align-content:start">
+      <section class="card"><h2>Active alarms <span class="pill ${act.length ? (act.some((a) => a.sev === "F") ? "p-fault" : "p-warn") : "p-ok"} plain">${act.length || "none"}</span></h2>
+        ${act.length ? act.map((a) => `<div class="cond f" style="cursor:pointer;grid-template-columns:auto minmax(0,1fr) auto" data-act="goalarm" data-id="${a.id}"><span class="sev ${a.sev}">${a.id}</span><span><b>${esc(a.text)}</b><span class="sym">since ${clock(a.since)} · ${a.ack ? "acknowledged" : "not acknowledged"}</span></span><span class="link small">why?</span></div>`).join("") : `<div class="empty small">No alarms. Last one: A21 Filler not ready, today 15:48.</div>`}
+      </section>
+      <section class="card"><h2>Data exchange</h2>
+        <div class="xch">
+          <div class="party"><b>MES</b><span class="small muted">heartbeat ok · 0.9 s</span></div>
+          <div class="arrow" title="Recipe number, start request">⇄</div>
+          <div class="party" style="border-color:var(--accent)"><b>Station</b><span class="small muted">recipe 1 · ${V.BatchCount} batches done</span></div>
+          <div class="arrow">⇄</div>
+          <div class="party" style="${S.sc === "filler" ? "border-color:var(--warn);background:var(--warn-bg)" : ""}"><b>Filler</b><span class="small ${S.sc === "filler" ? "" : "muted"}">${V.FillerReady ? "ready" : "not ready"}</span></div>
+        </div>
+        <div class="tw" style="margin-top:10px"><table><thead><tr><th>Signal</th><th>Dir</th><th>Value</th></tr></thead><tbody>
+          <tr><td class="mono small">MES_RecipeNo</td><td>MES → us</td><td class="mono">1</td></tr>
+          <tr><td class="mono small">Filler_ReadyToReceive</td><td>Filler → us</td><td class="mono">${V.FillerReady}</td></tr>
+          <tr><td class="mono small">Station_Running</td><td>us → both</td><td class="mono">${V.Step > 0}</td></tr>
+          <tr><td class="mono small">Station_Heartbeat</td><td>us → both</td><td class="mono">${(12840 + S.t) % 30000}</td></tr>
+        </tbody></table></div>
+        <p class="note">Partners and directions come from DB_LineInterface comments ("From MES:", "To filler:").</p>
+      </section>
+    </div>
+  </div>`;
+}
+
+/* ---------- Sequence ---------- */
+function sfcSvg() {
+  const W = 420, sx = 130, sw = 170, sh = 40, gap = 74;
+  let s = "", y = 16;
+  const idx = STEPS.findIndex((st) => st.n === V.Step);
+  const sel = S.step ?? V.Step;
+  STEPS.forEach((st, i) => {
+    const cls = ["sfc-step", i < idx ? "done" : "", i === idx ? "act" : "", i === idx && V.Halted ? "halt" : "", st.n === sel ? "sel" : ""].join(" ");
+    const init = st.n === 0 ? `<rect x="${sx + 4}" y="${y + 4}" width="${sw - 8}" height="${sh - 8}" rx="2" style="fill:none"/>` : "";
+    s += `<g class="${cls}" data-act="step" data-n="${st.n}" tabindex="0" role="button" aria-label="Step ${st.n} ${st.name}">
+      <rect class="frame" x="${sx}" y="${y}" width="${sw}" height="${sh}" rx="4"/>${init}
+      <text x="${sx + 12}" y="${y + 25}" font-size="13" font-weight="600"><tspan class="mono" font-size="12">S${st.n}</tspan>  ${st.name}</text>
+      ${i === idx ? `<text x="${sx + sw - 10}" y="${y + 25}" font-size="12" text-anchor="end" class="mono">${mmss(V.StepTime)}</text>` : ""}</g>`;
+    const t = transition(st.n);
+    const ok = t.c.every((l) => l.ok);
+    const ty = y + sh + gap / 2;
+    if (i < STEPS.length - 1) {
+      s += `<line class="sfc-line" x1="${sx + sw / 2}" y1="${y + sh}" x2="${sx + sw / 2}" y2="${y + sh + gap}"/>`;
+    } else {
+      s += `<path class="sfc-line" d="M${sx + sw / 2} ${y + sh} V${ty + 14} H${sx - 40} V${16 + sh / 2 + 6} H${sx}"/><path d="M${sx - 7} ${16 + sh / 2 + 1} l7 5 l-7 5z" style="fill:var(--line-strong)"/>`;
+    }
+    const live = i === idx && !V.Halted;
+    const col = live ? (ok ? "var(--ok)" : "var(--fault)") : "var(--text)";
+    s += `<g class="sfc-tr" data-act="step" data-n="${st.n}"><line x1="${sx + sw / 2 - 18}" y1="${ty}" x2="${sx + sw / 2 + 18}" y2="${ty}" stroke="${col}" stroke-width="${live ? 5 : 3}"/>
+      <text x="${sx + sw / 2 + 28}" y="${ty + 4}" font-size="12" ${live ? `style="fill:${col};font-weight:600"` : 'class="mu"'}>${esc(t.short || t.c.map((l) => l.label).join(" and "))}</text>
+      <text x="${sx - 12}" y="${ty + 4}" font-size="11" text-anchor="end" class="mu mono">T${i + 1}</text></g>`;
+    y += sh + gap;
+  });
+  return `<svg viewBox="0 0 ${W + 220} ${y}" style="width:100%;min-width:560px;height:auto" role="img" aria-label="Step chart">${s}</svg>`;
+}
+function vSequence() {
+  const sel = S.step ?? V.Step, st = stepOf(sel), isAct = sel === V.Step, t = transition(sel), w = waitingText();
+  const acts = {
+    0: [], 10: [["N", "Open inlet valve XV101", V.Seq_XV101]], 20: [["N", "Open inlet valve XV102", V.Seq_XV102]],
+    30: [["N", `Run agitator M201 at MixSpeed ${R.MixSpeed} rpm`, V.Seq_M201 && V.Step === 30], ["C", `Heat with E301 while below ${R.TempSP} °C`, V.Seq_E301]],
+    40: [["N", `Run agitator M201 at HoldSpeed ${R.HoldSpeed} rpm`, V.Seq_M201 && V.Step === 40]], 50: [["N", "Run outlet pump P401", V.Seq_P401]], 60: [["P", "Batch counter +1, pulse Batch_Done to MES", false]],
+  }[sel];
+  const pct = st.limit ? Math.min(100, (V.StepTime / st.limit) * 100) : 0;
+  return `${vhead("Sequence", "FB_BatchSequence CASE #StepNo (GRAPH blocks map 1:1)")}
+  ${V.Halted ? `<div class="waiting f"><b>Sequence halted: outputs off, step kept</b>${condList(haltConds())}</div>` : ""}
+  <div class="split">
+    <section class="card"><h2>Step chart <span class="small muted" style="font-weight:400">click a step or transition</span></h2><div class="chart-wrap">${sfcSvg()}</div>
+      <p class="note">Double frame = initial step. The live transition is green when it would fire and red while it blocks. For a GRAPH block the chart, step names, actions and supervision times are read straight from the GRAPH XML; branches and jumps are drawn the same way.</p></section>
+    <section class="card"><h2><span class="mono">S${sel}</span> ${st.name} ${isAct ? `<span class="pill ${V.Halted ? "p-fault" : "p-info"}">${V.Halted ? "active, halted" : "active"}</span>` : `<span class="pill p-idle plain">not active</span>`}</h2>
+      <p class="muted" style="margin:0 0 6px">${esc(st.what)}</p>
+      ${isAct && w.h ? `<div class="waiting ${w.cls}"><b>${esc(w.h)}</b><p>${esc(w.p)}</p></div>` : ""}
+      ${st.limit ? `<div class="sect"><h3>Time in step</h3><div class="bar ${pct > 70 ? "w" : ""}"><i style="width:${isAct ? pct : 0}%"></i></div>
+        <div class="small muted num">${isAct ? mmss(V.StepTime) : "–"} of ${mmss(st.limit)} before alarm ${st.alarm}</div></div>` : ""}
+      ${acts.length ? `<div class="sect"><h3>Actions</h3>${acts.map(([q, txt, on]) => `<div class="cond ${on ? "t" : ""}" style="grid-template-columns:22px minmax(0,1fr) auto"><span class="mono small" style="font-weight:700">${q}</span><span>${esc(txt)}</span><span class="lv">${on ? "on" : "off"}</span></div>`).join("")}</div>` : ""}
+      <div class="sect"><h3>Transition to S${t.to} ${stepOf(t.to).name}</h3>${condList(t)}</div>
+      <div class="sect"><h3>Jump to</h3><div class="chips"><button class="chip" data-act="nav" data-view="code">SCL with live values</button><button class="chip" data-act="nav" data-view="trends">Trend of this batch</button><button class="chip" data-act="askq" data-q="0">Ask why</button></div></div>
+    </section>
+  </div>`;
+}
+
+/* ---------- Logic (LAD rung view) ---------- */
+// Expression tree → LAD. Works for LAD/FBD networks from SimaticML and for SCL boolean assignments.
+const NO = (lbl, v, txt) => ({ k: "c", neg: false, lbl, v, txt });
+const NC = (lbl, v, txt) => ({ k: "c", neg: true, lbl, v, txt });
+const CMP = (lbl, v, txt) => ({ k: "cmp", lbl, v, txt });
+const TON = (lbl, v, txt) => ({ k: "box", lbl, v, txt });
+const AND = (...c) => ({ k: "and", c }), OR = (...c) => ({ k: "or", c });
+const pass = (n) => n.k === "c" ? (n.neg ? !n.v : n.v) : (n.k === "cmp" || n.k === "box") ? n.v : n.k === "and" ? n.c.every(pass) : n.c.some(pass);
+
+function nets() {
+  return [
+    { blk: "FB_Station", title: "Heater E301 on command", coil: "\"DB_IO\".E301_OnCmd",
+      e: AND(NO("#Seq.HeatE301", V.Seq_E301), NO("#M201.AtSpeed", V.M201_AtSpeed), NC("\"DB_IO\".E301_OverTemp", V.OverTemp), NC("#TT301.WireBreak", V.TT_WB)),
+      why: { "#Seq.HeatE301": "sequence", "#M201.AtSpeed": 3 } },
+    { blk: "FB_BatchSequence", title: "Sequence halted", coil: "#Halted",
+      e: OR(NO("#AnyFault", V.AnyFault), NC("#EStopOK", V.EStopOK), NO("#Paused", V.Paused), NC("#Auto", V.Auto)), why: { "#AnyFault": "alarms" } },
+    { blk: "FB_Station", title: "Agitator M201 permit", coil: "#M201.Permit",
+      e: AND(CMP("#LT101.Value > 20.0", V.Level > 20, `${f1(V.Level)} > 20.0`), NO("\"DB_IO\".EStop_OK", V.EStopOK)), why: {} },
+    { blk: "FB_VFD \"Station\".M201", title: "Agitator M201 run command", coil: "#RunOut",
+      e: AND(NO("#Run", V.Seq_M201), NO("#Permit", V.M201_Permit), NO("#Ready", V.M201_Ready)), why: { "#Run": "sequence", "#Permit": 2 } },
+    { blk: "FB_Valve \"Station\".XV101", title: "XV101 did-not-open monitoring", coil: "#FaultNotOpen",
+      e: AND(NO("#Out", V.XV101_Out), NC("#IsOpen", V.XV101_ZSO && !V.XV101_ZSC), TON("#tOpen  TON", V.XV101_Out && !V.XV101_ZSO, "PT 10 s")), why: { "#Out": "sequence" },
+      snap: S.sc === "xv101" ? "When A02 came in at 17:12:31 this rung was: #Out TRUE, #IsOpen FALSE, #tOpen.ET 10 s → #FaultNotOpen TRUE. The batch then halted, which switched #Out off, so it reads FALSE now. The alarm stays latched in DB_Alarms until Reset." : "" },
+  ];
+}
+function ladLayout(n) {
+  const H = 78, PAD = 16;
+  if (n.k === "c" || n.k === "cmp" || n.k === "box") return { w: Math.max(n.k === "box" ? 132 : 112, n.lbl.length * 7.6 + 22), h: H };
+  const L = n.c.map(ladLayout);
+  if (n.k === "and") return { w: L.reduce((a, b) => a + b.w, 0), h: Math.max(...L.map((l) => l.h)), L };
+  return { w: Math.max(...L.map((l) => l.w)) + PAD * 2, h: L.reduce((a, b) => a + b.h, 0), L };
+}
+function ladDraw(n, lay, x, y, pw, firstBlock) {
+  const M = 38; let s = "";
+  const cls = (on) => on ? "w-on" : "w-off";
+  if (n.k === "c" || n.k === "cmp" || n.k === "box") {
+    const p = pass(n), blk = pw && !p && firstBlock.done === false;
+    if (blk) firstBlock.done = true;
+    const wl = pw ? "w-on" : "w-off", sym = p ? (pw ? "w-on" : "w-off") : (blk ? "w-blk" : "w-off"), wr = pw && p ? "w-on" : "w-off";
+    const cx = x + lay.w / 2;
+    if (blk) s += `<rect class="blkmark" x="${x + 4}" y="${y + 2}" width="${lay.w - 8}" height="${lay.h - 4}" rx="6"/>`;
+    s += `<text class="lbl" x="${cx}" y="${y + 14}" text-anchor="middle">${esc(n.lbl)}</text>`;
+    if (n.k === "box") {
+      s += `<line class="${wl}" x1="${x}" y1="${y + M}" x2="${x + 22}" y2="${y + M}"/><rect class="boxr ${sym}" x="${x + 22}" y="${y + M - 16}" width="${lay.w - 44}" height="32" rx="3"/>
+        <text x="${cx}" y="${y + M + 4}" text-anchor="middle" font-size="11" class="mono">${esc(n.txt)}</text><line class="${wr}" x1="${x + lay.w - 22}" y1="${y + M}" x2="${x + lay.w}" y2="${y + M}"/>`;
+    } else {
+      const a = cx - 9, b = cx + 9;
+      s += `<line class="${wl}" x1="${x}" y1="${y + M}" x2="${a}" y2="${y + M}"/><line class="${sym}" x1="${a}" y1="${y + M - 13}" x2="${a}" y2="${y + M + 13}"/><line class="${sym}" x1="${b}" y1="${y + M - 13}" x2="${b}" y2="${y + M + 13}"/>
+        <line class="${wr}" x1="${b}" y1="${y + M}" x2="${x + lay.w}" y2="${y + M}"/>`;
+      if (n.neg) s += `<line class="${sym}" x1="${a - 3}" y1="${y + M + 11}" x2="${b + 3}" y2="${y + M - 11}"/>`;
+      if (n.k === "cmp") s += `<text x="${cx}" y="${y + M + 4}" text-anchor="middle" font-size="9" font-weight="700" class="mono">CMP</text>`;
+    }
+    const vt = n.k === "c" ? (n.v ? "TRUE" : "FALSE") : n.k === "box" ? (n.v ? "running" : "ET 0 s") : n.txt;
+    s += `<text class="val ${blk ? "v-blk" : p ? "v-on" : "v-off"}" x="${cx}" y="${y + 70}" text-anchor="middle">${esc(vt)}${blk ? "  ← blocks" : ""}</text>`;
+    return { s, out: pw && p };
+  }
+  if (n.k === "and") {
+    let cx = x, cur = pw;
+    n.c.forEach((c, i) => { const r = ladDraw(c, lay.L[i], cx, y, cur, firstBlock); s += r.s; cur = r.out; cx += lay.L[i].w; });
+    if (lay.w > lay.L.reduce((a, b) => a + b.w, 0)) s += `<line class="${cls(cur)}" x1="${cx}" y1="${y + M}" x2="${x + lay.w}" y2="${y + M}"/>`;
+    return { s, out: cur };
+  }
+  const PAD = 16; let cy = y, outs = [];
+  const fbo = pass(n) ? { done: true } : firstBlock; // a passing OR has no blocker in it
+  n.c.forEach((c, i) => {
+    const l = lay.L[i]; const r = ladDraw(c, l, x + PAD, cy, pw, fbo); outs.push(r.out);
+    s += `<line class="${cls(pw)}" x1="${x}" y1="${cy + M}" x2="${x + PAD}" y2="${cy + M}"/>${r.s}<line class="${cls(r.out)}" x1="${x + PAD + l.w}" y1="${cy + M}" x2="${x + lay.w}" y2="${cy + M}"/>`;
+    cy += l.h;
+  });
+  const out = outs.some(Boolean), lastM = y + lay.h - lay.L[lay.L.length - 1].h + M;
+  s += `<line class="${cls(pw)}" x1="${x}" y1="${y + M}" x2="${x}" y2="${lastM}"/><line class="${cls(out)}" x1="${x + lay.w}" y1="${y + M}" x2="${x + lay.w}" y2="${lastM}"/>`;
+  return { s, out };
+}
+function ladSvg(net) {
+  const lay = ladLayout(net.e), x0 = 14, M = 38;
+  const fb = { done: false };
+  const r = ladDraw(net.e, lay, x0 + 10, 6, true, fb);
+  const cx = x0 + 10 + lay.w, coilW = Math.max(150, net.coil.length * 7.6 + 30), W = cx + coilW + 20, H = lay.h + 12;
+  const on = r.out, c = on ? "w-on" : "w-off";
+  let s = `<line class="w-on" x1="${x0}" y1="4" x2="${x0}" y2="${H - 4}" style="stroke-width:4"/><line class="w-on" x1="${x0}" y1="${6 + M}" x2="${x0 + 10}" y2="${6 + M}"/>${r.s}`;
+  const cc = cx + coilW / 2;
+  s += `<line class="${c}" x1="${cx}" y1="${6 + M}" x2="${cc - 17}" y2="${6 + M}"/><path class="${c}" d="M${cc - 9} ${6 + M - 14} q-9 14 0 28 M${cc + 9} ${6 + M - 14} q9 14 0 28" fill="none"/>
+    <line class="${c}" x1="${cc + 17}" y1="${6 + M}" x2="${W - 8}" y2="${6 + M}"/><line class="w-off" x1="${W - 6}" y1="4" x2="${W - 6}" y2="${H - 4}" style="stroke-width:4"/>
+    <text class="lbl" x="${cc}" y="${20}" text-anchor="middle">${esc(net.coil)}</text><text class="val ${on ? "v-on" : "v-off"}" x="${cc}" y="${6 + 70}" text-anchor="middle">${on ? "TRUE" : "FALSE"}</text>`;
+  return `<svg class="lad" width="${W}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Ladder network ${esc(net.title)}">${s}</svg>`;
+}
+function leaves(n) { return n.k === "and" || n.k === "or" ? n.c.flatMap(leaves) : [n]; }
+function vLogic() {
+  const N = nets();
+  if (S.net === null) S.net = { mix: 0, xv101: 1, filler: 0 }[S.sc];
+  const net = N[S.net], out = pass(net.e);
+  const lv = leaves(net.e);
+  let expl;
+  if (net.e.k === "or") {
+    const t = lv.filter(pass);
+    expl = out ? `<b>${esc(net.coil)} is TRUE</b> because ${t.map((l) => `<span class="mono">${esc(l.lbl)}</span>`).join(" and ")} ${t.length > 1 ? "are" : "is"} on. Any one branch is enough.` : `<b>${esc(net.coil)} is FALSE</b>: none of the branches is on.`;
+  } else {
+    const b = lv.find((l) => !pass(l));
+    expl = out ? `<b>${esc(net.coil)} is TRUE</b>: every contact in the row passes.` : `<b>${esc(net.coil)} is FALSE</b>. The first contact that blocks is <span class="mono">${esc(b.lbl)}</span>${net.why[b.lbl] !== undefined ? `. <button class="link" data-act="why" data-to="${net.why[b.lbl]}">Why is that ${b.neg ? "TRUE" : "FALSE"}?</button>` : "."}`;
+  }
+  return `${vhead("Logic", "networks and boolean assignments of every block")}
+  <div class="split l">
+    <section class="card"><h2>Networks</h2><div class="nets">${N.map((n, i) => `<button class="netbtn" data-act="net" data-i="${i}" aria-pressed="${i === S.net}"><span class="b">${esc(n.blk)}</span><span>${esc(n.title)}</span><span class="pill ${pass(n.e) ? "p-ok" : "p-idle"}">${pass(n.e) ? "on" : "off"}</span></button>`).join("")}</div>
+      <p class="note">The list shows the networks that drive outputs, alarms and sequence conditions. Search finds any tag.</p></section>
+    <section class="card"><h2>${esc(net.title)} <span class="muted mono small" style="font-weight:400">${esc(net.blk)}</span></h2>
+      <div class="chart-wrap">${ladSvg(net)}</div>
+      <div class="waiting ${out ? "" : "f"}" style="margin-top:10px"><p style="margin:0">${expl}</p></div>
+      ${net.snap ? `<div class="sect"><h3>At alarm time</h3><p style="margin:0">${esc(net.snap)}</p></div>` : ""}
+      <p class="note">Green wire carries power, red marks the contact that stops it. The demo is SCL, so this rung is drawn from the SCL expression. Real LAD and FBD networks come from the archive and are drawn the way TIA shows them, with the same colouring. FBD can switch to gate view.</p>
+    </section>
+  </div>`;
+}
+
+/* ---------- Code (SCL with live values) ---------- */
+const CODE = {
+  FB_BatchSequence: {
+    sum: ["Runs one batch: fill A, fill B, mix and heat, hold for the filler, drain.", "Stop, a fault, E-stop or Manual pause the batch: outputs off, the step is kept. Start continues it.", "Each step has a time limit that raises an alarm (A16..A21).", "Start is refused (with an alarm) in Manual, with a full tank or with a bad recipe."],
+    lines: [
+      ["// --- Pause / halt ---"],
+      ["#Halted := #AnyFault{{AnyFault}} OR NOT #EStopOK{{EStopOK}} OR #Paused{{Paused}} OR NOT #Auto{{Auto}};", "halt"],
+      [""],
+      ["// --- Transitions ---"],
+      ["IF NOT #Halted{{Halted}} THEN"],
+      ["    CASE #StepNo{{Step}} OF"],
+      ["        10: // Fill A", 10],
+      ["            IF #Level{{Level}} >= \"DB_Recipe\".LevelA{{LevelA}} THEN", 10],
+      ["                #StepNo := 20;", 10],
+      ["            END_IF;", 10],
+      ["        20: // Fill B", 20],
+      ["            IF #Level{{Level}} >= \"DB_Recipe\".LevelB{{LevelB}} THEN", 20],
+      ["                #StepNo := 30;", 20],
+      ["            END_IF;", 20],
+      ["        30: // Mix and heat", 30],
+      ["            IF (#Temp{{Temp}} >= \"DB_Recipe\".TempSP{{TempSP}}){{c30a}} AND (#StepTime{{StepTime}} >= \"DB_Recipe\".MixTime{{MixTime}}){{c30b}} THEN", 30],
+      ["                #StepNo := 40;", 30],
+      ["            END_IF;", 30],
+      ["        40: // Hold", 40],
+      ["            IF #FillerReady{{FillerReady}} THEN", 40],
+      ["                #StepNo := 50;", 40],
+      ["            END_IF;", 40],
+      ["        // ... steps 0, 50, 60"],
+      ["    END_CASE;"],
+      ["END_IF;"],
+      [""],
+      ["// --- Actions (all off while halted) ---"],
+      ["#OpenXV101{{oXV101}} := NOT #Halted AND (#StepNo = 10);"],
+      ["#RunM201{{oM201}} := NOT #Halted AND ((#StepNo = 30) OR (#StepNo = 40));"],
+      ["#HeatE301{{oE301}} := NOT #Halted AND (#StepNo = 30) AND (#Temp < \"DB_Recipe\".TempSP);"],
+    ] },
+  FB_Valve: {
+    sum: ["On/off valve with two limit switches.", "Opens only when asked and permitted (Out = Open AND Permit).", "Raises FaultNotOpen / FaultNotClosed when a limit switch is not reached within 10 s."],
+    inst: "\"Station\".XV101",
+    lines: [
+      ["#Out{{vOut}} := #Open{{vOpen}} AND #Permit{{vPermit}};"],
+      ["#IsOpen{{vIsOpen}} := #ZSO{{vZSO}} AND NOT #ZSC{{vZSC}};"],
+      ["#IsClosed := #ZSC AND NOT #ZSO;"],
+      [""],
+      ["#tOpen(IN := #Out AND NOT #IsOpen, PT := #MonitorTime{{vMon}});", "hot"],
+      ["#tClose(IN := NOT #Out AND NOT #IsClosed, PT := #MonitorTime);"],
+      ["#FaultNotOpen{{vFNO}} := #tOpen.Q;", "hot"],
+      ["#FaultNotClosed := #tClose.Q;"],
+    ] },
+  FB_Station: {
+    sum: ["The whole mixing station: calls the analog inputs, the sequence and each device with its interlocks.", "Exchanges recipe, start, heartbeat and batch count with MES and the filler.", "Collects every fault into FB_AlarmHandler (DB_Alarms)."],
+    lines: [
+      ["// Agitator may only run with the blades covered (level above 20 %)"],
+      ["#M201(Run := #Seq.RunM201{{oM201}}, Permit := #LT101.Value{{Level}} > 20.0 AND \"DB_IO\".EStop_OK{{EStopOK}},"],
+      ["      SpeedSP := #Seq.SpeedM201{{SP}}, SpeedPV := \"DB_IO\".M201_SpeedPV{{PV}}, ...);"],
+      [""],
+      ["// Heater only with the agitator running and no overtemperature"],
+      ["\"DB_IO\".E301_OnCmd{{E301}} := #Seq.HeatE301{{oE301}} AND #M201.AtSpeed{{AtSpeed}}", "hot"],
+      ["    AND NOT \"DB_IO\".E301_OverTemp{{OverTemp}} AND NOT #TT301.WireBreak{{TTWB}};", "hot"],
+    ] },
+};
+function chip(k) {
+  const b = (x) => [x ? "TRUE" : "FALSE", x ? "t" : "f"], n = (x) => [x, "n"];
+  const m = {
+    AnyFault: b(V.AnyFault), EStopOK: b(V.EStopOK), Paused: b(V.Paused), Auto: b(V.Auto), Halted: b(V.Halted), Step: n(V.Step),
+    Level: n(f1(V.Level)), LevelA: n(f1(R.LevelA)), LevelB: n(f1(R.LevelB)), Temp: n(f1(V.Temp)), TempSP: n(f1(R.TempSP)),
+    StepTime: n("T#" + V.StepTime + "s"), MixTime: n("T#" + R.MixTime + "s"), c30a: b(V.Temp >= R.TempSP), c30b: b(V.StepTime >= R.MixTime),
+    FillerReady: b(V.FillerReady), oXV101: b(V.Seq_XV101), oM201: b(V.Seq_M201), oE301: b(V.Seq_E301),
+    vOut: b(V.XV101_Out), vOpen: b(V.Seq_XV101), vPermit: b(V.XV_Permit), vIsOpen: b(V.XV101_ZSO && !V.XV101_ZSC), vZSO: b(V.XV101_ZSO), vZSC: b(V.XV101_ZSC),
+    vMon: n("T#10s"), vFNO: b(false), SP: n(V.SpeedSP), PV: n(V.SpeedPV), E301: b(V.E301_On), AtSpeed: b(V.M201_AtSpeed), OverTemp: b(V.OverTemp), TTWB: b(V.TT_WB),
+  }[k];
+  return m ? `<span class="lv ${m[1]}">${esc(m[0])}</span>` : "";
+}
+const KW = /\b(IF|THEN|ELSIF|ELSE|END_IF|CASE|OF|END_CASE|AND|OR|NOT|TRUE|FALSE)\b/g;
+function codeLine(txt, i, hot) {
+  let code = txt, cm = "";
+  const ci = txt.indexOf("//");
+  if (ci >= 0) { code = txt.slice(0, ci); cm = txt.slice(ci); }
+  let h = esc(code).replace(KW, '<span class="kw">$1</span>').replace(/\{\{(\w+)\}\}/g, (_, k) => chip(k));
+  if (cm) h += `<span class="cm">${esc(cm)}</span>`;
+  return `<div class="ln ${hot ? "hot" : ""}"><span>${i + 1}</span><span>${h}</span></div>`;
+}
+function vCode() {
+  const blk = CODE[S.block] ? S.block : "FB_BatchSequence", C = CODE[blk];
+  const tree = (id, label, lang, kids) => `<li><button data-act="block" data-id="${id}" aria-pressed="${S.block === id}"><span class="lang">${lang}</span><span>${label}</span></button>${kids ? `<ul>${kids}</ul>` : ""}</li>`;
+  const kids = [["FB_AnalogIn", "LT101, TT301 · FB_AnalogIn", "SCL"], ["FB_BatchSequence", "Seq · FB_BatchSequence", "SCL"], ["FB_Valve", "XV101, XV102 · FB_Valve", "SCL"], ["FB_VFD", "M201 · FB_VFD", "SCL"], ["FB_Motor", "P401 · FB_Motor", "SCL"], ["FB_AlarmHandler", "Alarms · FB_AlarmHandler", "SCL"]]
+    .map(([id, l, lg]) => tree(id, l, lg)).join("");
+  const body = CODE[S.block] ? `<div class="code">${C.lines.map((l, i) => codeLine(l[0], i, l[1] === "hot" || l[1] === "halt" && V.Halted || (typeof l[1] === "number" && l[1] === V.Step))).join("")}</div>`
+    : `<div class="empty">Same view for ${esc(S.block)}: source with live values for the selected instance. (Only three blocks are filled in for this mockup.)</div>`;
+  return `${vhead("Code", "block sources from the archive + live instance values")}
+  <div class="split l">
+    <section class="card"><h2>Call tree</h2><ul class="tree">${tree("OB_Main", "OB_Main · cycle", "SCL", tree("FB_Station", "Station · FB_Station", "SCL", kids) + tree("FB_ProcessSim", "Sim · FB_ProcessSim", "SCL"))}</ul>
+      <p class="note">Language tags come from the archive (LAD, FBD, SCL, GRAPH, STL). LAD/FBD blocks open in the Logic view, GRAPH blocks in Sequence.</p></section>
+    <div style="display:grid;gap:14px;min-width:0">
+      <section class="card summary"><h2>${esc(blk)} ${C.inst ? `<span class="muted mono small" style="font-weight:400">instance ${esc(C.inst)}</span>` : ""}</h2>
+        <ul>${C.sum.map((s) => `<li>${esc(s)}</li>`).join("")}</ul>
+        <p class="note" style="margin-top:8px">Summary written by Claude at import from the code and its comments; stored with the model, so it costs nothing at runtime.</p></section>
+      <section class="card"><h2>Source <span class="small muted" style="font-weight:400">live values next to each operand · highlighted lines run in the current step</span></h2>${body}</section>
+    </div>
+  </div>`;
+}
+
+/* ---------- Alarms ---------- */
+function spark(arr) {
+  const max = Math.max(1, ...arr), w = 12, h = 34;
+  return `<svg viewBox="0 0 ${arr.length * w} ${h + 14}" style="width:100%;max-width:${arr.length * w * 1.6}px;height:auto" role="img" aria-label="Occurrences per day, last 14 days">${arr.map((v, i) => `<rect x="${i * w + 2}" y="${h - (v / max) * h}" width="${w - 4}" height="${(v / max) * h || 1}" rx="1.5" style="fill:${i === arr.length - 1 ? "var(--accent)" : "var(--line-strong)"}"/>`).join("")}
+    <text x="0" y="${h + 12}" font-size="9" class="mu">14 days ago</text><text x="${arr.length * w}" y="${h + 12}" font-size="9" text-anchor="end" class="mu">today</text></svg>`;
+}
+function vAlarms() {
+  const act = activeAlarms();
+  const sel = S.alarm || (act[0] && act[0].id) || "A07";
+  const a = AL[sel], live = act.find((x) => x.id === sel);
+  const nowLive = {
+    A02: [leaf(false, "Open limit switch XV101_ZSO", "\"DB_IO\".XV101_ZSO", "FALSE"), leaf(true, "Closed limit switch still on", "\"DB_IO\".XV101_ZSC", "TRUE"), leaf(false, "Sequence asks XV101 open", "#Seq.OpenXV101", "FALSE (halted)")],
+    A21: [leaf(false, "Filler ready to receive", "\"DB_LineInterface\".Filler_ReadyToReceive", "FALSE"), leaf(true, "Waiting in step 40", "#StepNo = 40", "40 · " + mmss(V.StepTime))],
+  }[sel];
+  const snap = { A02: [["XV101_OpenCmd", "TRUE"], ["XV101_ZSO", "FALSE"], ["XV101_ZSC", "TRUE"], ["Step", "10 · 0:10"], ["Level", "0.8 %"], ["Air pressure", "not in PLC"]],
+    A21: [["Step", "40 · 1:00"], ["Filler_ReadyToReceive", "FALSE"], ["Level", "80.2 %"], ["Temp", "60.3 °C"]] }[sel];
+  const rows = (live ? [] : []).concat(act.map((x) => ({ id: x.id, on: "Today " + clock(x.since), dur: "active", live: true })), HISTORY.map((h) => ({ ...h, live: false })));
+  return `${vhead("Alarms", "DB_Alarms + where each bit is set in the code")}
+  <div class="split">
+    <section class="card"><h2>Active and recent</h2><div class="tw"><table><thead><tr><th>Alarm</th><th>Text</th><th>Came</th><th>Duration</th></tr></thead><tbody>
+      ${rows.map((r) => `<tr class="click ${r.id === sel && (r.live || !live) ? "sel" : ""}" data-act="alarm" data-id="${r.id}"><td><span class="sev ${AL[r.id].sev}">${r.id}</span></td><td>${r.live ? "<b>" : ""}${esc(AL[r.id].text)}${r.live ? "</b>" : ""}</td><td class="num small">${esc(r.on)}</td><td class="num small">${r.live ? '<span class="pill p-fault plain">active</span>' : esc(r.dur)}</td></tr>`).join("")}
+    </tbody></table></div>
+    <p class="note">History is kept by PLC-Ki itself (it sees every alarm edge while polling), so it works without an HMI or alarm server. Filter by device, step or text.</p></section>
+    <section class="card"><h2><span class="sev ${a.sev}">${sel}</span> ${esc(a.text)} ${live ? `<span class="pill p-fault">active since ${clock(live.since)}</span>` : `<span class="pill p-idle plain">not active</span>`}</h2>
+      <p class="muted" style="margin:0">${esc(a.cond)}</p>
+      ${nowLive && live ? `<div class="sect"><h3>Why it is on now</h3>${condList({ op: "·", c: nowLive }).replace(/<div class="op">·<\/div>/g, "")}</div>` : ""}
+      ${snap && live ? `<div class="sect"><h3>Values when it came in</h3><dl class="kv mono">${snap.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("")}</dl></div>` : ""}
+      <div class="sect"><h3>Raised in</h3><div class="path">${a.path.map((p) => `<span>${esc(p)}</span>`).join("<i>›</i>")}</div>
+        <div class="chips"><button class="chip" data-act="golog" data-i="${a.net}">Show the logic</button><button class="chip" data-act="goblock" data-id="${a.block}">Show the code</button><button class="chip" data-act="dev" data-id="${a.dev}">Device ${a.dev}</button></div></div>
+      <div class="sect"><h3>Likely causes</h3>${a.causes.map(([p, c, e]) => `<div class="cause"><span class="pct">${p} %</span><span><b>${esc(c)}</b>${e ? `<br><span class="small muted">${esc(e)}</span>` : ""}</span></div>`).join("")}</div>
+      <div class="sect"><h3>How to fix</h3><ol class="fix">${a.fix.map((f) => `<li>${esc(f)}</li>`).join("")}</ol></div>
+      <div class="sect"><h3>History</h3><div class="small muted">${PERDAY[sel].reduce((x, y) => x + y, 0)} times in 14 days</div>${spark(PERDAY[sel])}</div>
+      <p class="note">Cause list: Claude ranks the causes using the code, the alarm text, the values at alarm time and past occurrences. Plant staff can add a note ("air valve V12 sticks in winter") that is kept with the alarm.</p>
+    </section>
+  </div>`;
+}
+
+/* ---------- Trends ---------- */
+function phases() {
+  const P = (s, d, L, T, N, o = {}) => ({ s, d, L, T, N, ...o });
+  return {
+    mix: [P(0, 358, [1.2, 1.2], [21.6, 21.4], [0, 0]), P(10, 160, [1.2, 40.2], [21.4, 21.3], [0, 0], { XV101: 1 }), P(20, 170, [40.2, 80.3], [21.3, 21.2], [0, 0], { XV102: 1 }), P(30, 212, [80.3, 80.4], [21.2, 53.6], [0, 1194], { E301: 1, ramp: 1 })],
+    filler: [P(0, 162, [1.1, 1.1], [21.6, 21.5], [0, 0]), P(10, 160, [1.1, 40.1], [21.5, 21.4], [0, 0], { XV101: 1 }), P(20, 170, [40.1, 80.2], [21.4, 21.3], [0, 0], { XV102: 1 }), P(30, 330, [80.2, 80.2], [21.3, 60.3], [0, 1196], { E301: 1, ramp: 1 }), P(40, 78, [80.2, 80.2], [60.3, 60.1], [299, 299])],
+    xv101: [P(40, 120, [80.1, 80.1], [61, 60.5], [299, 299]), P(50, 170, [80.1, 0.8], [60.5, 58], [0, 0], { P401: 1 }), P(0, 596, [0.8, 0.8], [58, 40.2], [0, 0]), P(10, 10, [0.8, 0.8], [40.2, 40.2], [0, 0], { XV101: 1 }), P(10, 4, [0.8, 0.8], [40.2, 40.2], [0, 0], { halt: 1 })],
+  }[S.sc];
+}
+function series() {
+  const out = []; let t = -900;
+  phases().forEach((p) => {
+    for (let k = 0; k < p.d; k += 5) {
+      const f = k / p.d, nz = Math.sin((t + k) * 0.37) * 0.15;
+      const N = p.ramp ? (k < 15 ? p.N[1] * k / 15 : p.N[1] + Math.sin(k) * 4) : p.N[0] + (p.N[1] - p.N[0]) * f;
+      out.push({ t: t + k, step: p.s, halt: !!p.halt, L: p.L[0] + (p.L[1] - p.L[0]) * f + nz, T: p.T[0] + (p.T[1] - p.T[0]) * Math.pow(f, p.E301 ? 0.85 : 1) + nz, N, XV101: !!p.XV101, XV102: !!p.XV102, E301: !!p.E301 && (p.ramp ? k > 15 : true), P401: !!p.P401 });
+    }
+    t += p.d;
+  });
+  return out;
+}
+const TAGS = { Level: ["Tank level LT101", "%", 0, 100, "--c1", "L"], Temp: ["Temperature TT301", "°C", 0, 80, "--c2", "T"], Speed: ["Agitator M201 speed", "rpm", 0, 1500, "--c3", "N"] };
+const DIG = { XV101: "XV101 open cmd", XV102: "XV102 open cmd", E301: "E301 heater cmd", P401: "P401 run cmd" };
+function trendSvg() {
+  const D = series(), W = 960, L = 64, Rr = 16, pw = W - L - Rr, X = (t) => L + ((t + 900) / 900) * pw;
+  let y = 8, s = "";
+  // step band
+  let segs = []; D.forEach((d, i) => { if (!i || d.step !== D[i - 1].step || d.halt !== D[i - 1].halt) segs.push({ ...d, t0: d.t }); segs[segs.length - 1].t1 = d.t + 5; });
+  s += `<text class="lab" x="${L - 8}" y="${y + 16}" text-anchor="end">Step</text>`;
+  segs.forEach((g) => { const x0 = X(g.t0), x1 = X(Math.min(0, g.t1)); s += `<rect x="${x0}" y="${y}" width="${Math.max(1, x1 - x0)}" height="22" style="fill:${g.halt ? "var(--fault-bg)" : g.step ? "var(--accent-bg)" : "var(--sunk)"};stroke:var(--card)"/>${x1 - x0 > 40 ? `<text x="${(x0 + x1) / 2}" y="${y + 15}" text-anchor="middle" font-size="11" class="mono" ${g.halt ? 'style="fill:var(--fault)"' : ""}>${g.halt ? "halt" : "S" + g.step}</text>` : ""}`; });
+  y += 52;
+  const ticks = [-12 * 60 - 35, -7 * 60 - 35, -2 * 60 - 35];
+  const top = y;
+  S.tags.filter((k) => TAGS[k]).forEach((k) => {
+    const [name, unit, lo, hi, col, key] = TAGS[k], h = 92, Y = (v) => y + h - ((v - lo) / (hi - lo)) * h;
+    s += `<text class="lab" x="${L}" y="${y - 4}">${name} <tspan class="mu" font-weight="400">${unit}</tspan></text>`;
+    [lo, (lo + hi) / 2, hi].forEach((v) => { s += `<line class="grid" x1="${L}" x2="${W - Rr}" y1="${Y(v)}" y2="${Y(v)}"/><text class="axis" x="${L - 8}" y="${Y(v) + 4}" text-anchor="end">${v}</text>`; });
+    if (k === "Temp") s += `<line x1="${L}" x2="${W - Rr}" y1="${Y(R.TempSP)}" y2="${Y(R.TempSP)}" style="stroke:var(${col})" stroke-dasharray="5 4" opacity=".7"/><text class="axis" x="${W - Rr - 4}" y="${Y(R.TempSP) - 4}" text-anchor="end">TempSP ${R.TempSP}</text>`;
+    const pts = D.map((d) => `${X(d.t).toFixed(1)},${Y(d[key]).toFixed(1)}`).join(" ");
+    s += `<polygon points="${X(D[0].t)},${y + h} ${pts} ${X(D[D.length - 1].t)},${y + h}" style="fill:var(${col})" opacity=".08"/><polyline points="${pts}" fill="none" style="stroke:var(${col})" stroke-width="2"/>`;
+    const last = D[D.length - 1]; s += `<circle cx="${X(last.t)}" cy="${Y(last[key])}" r="4" style="fill:var(${col})"/>`;
+    y += h + 30;
+  });
+  S.tags.filter((k) => DIG[k]).forEach((k) => {
+    s += `<text class="axis" x="${L - 8}" y="${y + 11}" text-anchor="end" style="font-family:var(--sans)">${k}</text><line class="grid" x1="${L}" x2="${W - Rr}" y1="${y + 14}" y2="${y + 14}"/>`;
+    let run = null; D.forEach((d, i) => { if (d[k] && run === null) run = d.t; if ((!d[k] || i === D.length - 1) && run !== null) { s += `<rect x="${X(run)}" y="${y + 3}" width="${Math.max(2, X(d.t) - X(run))}" height="11" rx="2" style="fill:var(--ok)"/>`; run = null; } });
+    y += 20;
+  });
+  ticks.forEach((t) => { s += `<line class="grid" x1="${X(t)}" x2="${X(t)}" y1="${top - 14}" y2="${y}" stroke-dasharray="2 4"/><text class="axis" x="${X(t)}" y="${y + 14}" text-anchor="middle">${clock(NOW0 + t).slice(0, 5)}</text>`; });
+  s += `<text class="axis" x="${W - Rr}" y="${y + 14}" text-anchor="end">now</text>`;
+  activeAlarms().forEach((a) => { const x = X(a.since - NOW0); s += `<line x1="${x}" x2="${x}" y1="4" y2="${y}" style="stroke:var(--${a.sev === "F" ? "fault" : "warn"})" stroke-width="1.5"/><text x="${x - 4}" y="${top - 6}" text-anchor="end" font-size="11" font-weight="700" style="fill:var(--${a.sev === "F" ? "fault" : "warn"})">${a.id}</text>`; });
+  s += `<line id="xh" class="xh" x1="0" x2="0" y1="4" y2="${y}" visibility="hidden"/><rect id="hit" x="${L}" y="0" width="${pw}" height="${y}" fill="transparent"/>`;
+  return `<svg class="trend" id="trend" viewBox="0 0 ${W} ${y + 22}" data-l="${L}" data-pw="${pw}" role="img" aria-label="Trend of the last 15 minutes">${s}</svg>`;
+}
+function vTrends() {
+  const chips = Object.entries(TAGS).map(([k, v]) => [k, v[0]]).concat(Object.entries(DIG)).map(([k, l]) => `<button class="chip" data-act="tag" data-id="${k}" aria-pressed="${S.tags.includes(k)}">${esc(l)}</button>`).join("");
+  return `${vhead("Trends", "any tag in the model; PLC-Ki records them while it runs")}
+  <section class="card"><div class="vhead" style="margin-bottom:8px"><div class="chips">${chips}</div><div class="chips"><button class="chip">5 min</button><button class="chip" aria-pressed="true">15 min</button><button class="chip">1 h</button><button class="chip">This batch</button><button class="chip">Compare with batch ${V.BatchCount - 1}</button></div></div>
+    <div class="readout" id="readout"><span class="muted">Point at the chart to read values.</span></div>
+    <div class="chart-wrap">${trendSvg()}</div>
+    <p class="note">Steps run along the top so each curve reads against what the sequence was doing. Alarms are marked where they came in. Clicking any value anywhere in the app (a contact, a code chip, a faceplate) adds it here.</p></section>`;
+}
+function hookTrend() {
+  const svg = $("#trend"); if (!svg) return;
+  const D = series(), L = +svg.dataset.l, pw = +svg.dataset.pw;
+  svg.addEventListener("pointermove", (e) => {
+    const r = svg.getBoundingClientRect(), vb = svg.viewBox.baseVal, x = (e.clientX - r.left) * (vb.width / r.width);
+    if (x < L || x > L + pw) return;
+    const t = -900 + ((x - L) / pw) * 900, d = D.reduce((a, b) => Math.abs(b.t - t) < Math.abs(a.t - t) ? b : a);
+    const xh = $("#xh"); xh.setAttribute("x1", x); xh.setAttribute("x2", x); xh.setAttribute("visibility", "visible");
+    $("#readout").innerHTML = `<b>${clock(NOW0 + d.t)}</b><span>Step ${d.halt ? "10 (halted)" : d.step}</span><span style="color:var(--c1)">Level ${f1(d.L)} %</span><span style="color:var(--c2)">Temp ${f1(d.T)} °C</span><span style="color:var(--c3)">Speed ${Math.round(d.N)} rpm</span>`;
+  });
+}
+
+/* ---------- Equipment (faceplates by device type) ---------- */
+function chainHtml(items) {
+  let stopped = false;
+  return `<div class="chain">${items.map(([lbl, ok, det]) => { const cls = stopped ? "" : ok ? "t" : "f"; if (!ok && !stopped) stopped = true; return `<div class="link-step ${cls}"><b>${esc(lbl)}</b><span class="small">${esc(det)}</span></div>`; }).join("")}</div>`;
+}
+function lamps(list) { return list.map(([l, on, bad]) => `<span class="lamp ${bad ? "bad" : on ? "on" : ""}">${esc(l)}</span>`).join(""); }
+function devAlarms(ids) { return `<div class="conds">${ids.map((id) => { const on = V.alarms.some((a) => a.id === id); const t = AL[id] ? AL[id].text : { A03: "XV101 did not close", A06: "M201 drive fault", A08: "M201 not ready", A10: "P401 trip", A12: "LT101 signal fault", A13: "Level high-high", A14: "TT301 signal fault", A15: "Temperature high", A09: "E301 overtemperature", A20: "E301 no heating", A04: "XV102 did not open", A05: "XV102 did not close" }[id]; return `<div class="cond ${on ? "f" : "t"}" style="cursor:pointer" data-act="goalarm" data-id="${AL[id] ? id : ""}"><span class="ic">${on ? "!" : "✓"}</span><span>${id} ${esc(t)}</span><span class="lv">${on ? "active" : "ok"}</span></div>`; }).join("")}</div>`; }
+function faceplate(d) {
+  switch (d.type) {
+    case "vfd": {
+      const pct = (V.SpeedPV / 1500) * 100, sp = (V.SpeedSP / 1500) * 100;
+      return `<div class="grid2"><div class="gauge"><div class="bigv">${V.SpeedPV} <small>rpm</small></div><div class="bar"><i style="width:${pct}%;background:var(--c3)"></i><span class="sp" style="left:${sp}%"></span></div><div class="small muted num">setpoint ${V.SpeedSP} rpm · range 0..1500</div></div>
+        <div>${lamps([["Run command", V.M201_RunOut], ["At speed", V.M201_AtSpeed], ["Drive ready", V.M201_Ready], ["Drive fault", false, V.M201_Fault]])}</div></div>
+        <div class="sect"><h3>Why it runs or not</h3>${chainHtml([["Sequence asks run", V.Seq_M201, `#Seq.RunM201 · step ${V.Step}${V.Halted ? " (halted)" : ""}`], ["Permit", V.M201_Permit, `level ${f1(V.Level)} > 20 % and E-stop ok`], ["Drive ready", V.M201_Ready, "\"DB_IO\".M201_DriveReady"], ["Run command out", V.M201_RunOut, "\"DB_IO\".M201_RunCmd"]])}</div>
+        <div class="sect"><h3>Alarms of this device</h3>${devAlarms(["A06", "A07", "A08"])}</div>`;
+    }
+    case "valve": {
+      const n = d.id, fault = V.alarms.some((a) => a.id === "A02") && n === "XV101";
+      const out = n === "XV101" ? V.XV101_Out : V.XV102_Out, seq = n === "XV101" ? V.Seq_XV101 : V.Seq_XV102;
+      return `<div class="grid2"><div><div class="bigv">${fault ? "did not open" : V[n + "_ZSO"] ? "open" : "closed"}</div><div class="small muted">travel time limit 10 s</div></div>
+        <div>${lamps([["Open command", out], ["Open switch ZSO", V[n + "_ZSO"]], ["Closed switch ZSC", V[n + "_ZSC"]], ["Fault", false, fault]])}</div></div>
+        <div class="sect"><h3>Why it opens or not</h3>${chainHtml([["Sequence asks open", seq, `step ${V.Step}${V.Halted ? " (halted)" : ""}`], ["Permit", V.XV_Permit, "level not high and LT101 healthy"], ["Open command out", out, `"DB_IO".${n}_OpenCmd`], ["Open switch reached", V[n + "_ZSO"], `"DB_IO".${n}_ZSO`]])}</div>
+        <div class="sect"><h3>Alarms of this device</h3>${devAlarms(n === "XV101" ? ["A02", "A03"] : ["A04", "A05"])}</div>`;
+    }
+    case "heater":
+      return `<div class="grid2"><div><div class="bigv">${V.E301_On ? "heating" : "off"}</div><div class="small muted">tank ${f1(V.Temp)} °C · TempSP ${R.TempSP} °C</div></div><div>${lamps([["On command", V.E301_On], ["Overtemperature", false, V.OverTemp]])}</div></div>
+        <div class="sect"><h3>Why it heats or not</h3>${chainHtml([["Sequence asks heat", V.Seq_E301, V.Step === 30 ? "step 30 and below TempSP" : `only in step 30 (now ${V.Step})`], ["Agitator at speed", V.M201_AtSpeed, "#M201.AtSpeed"], ["No overtemperature", !V.OverTemp, "\"DB_IO\".E301_OverTemp"], ["TT301 healthy", !V.TT_WB, "#TT301.WireBreak"]])}</div>
+        <div class="sect"><h3>Alarms of this device</h3>${devAlarms(["A09", "A20"])}</div>
+        <p class="note">E301 has no device block. The importer found it from the tags E301_OnCmd and E301_OverTemp and the network that writes E301_OnCmd, and built this faceplate from that.</p>`;
+    case "pump":
+      return `<div class="grid2"><div><div class="bigv">${V.P401_Out ? "running" : "stopped"}</div></div><div>${lamps([["Run command", V.P401_Out], ["Running feedback", V.P401_Fb], ["Motor protection", false, V.P401_Trip]])}</div></div>
+        <div class="sect"><h3>Why it runs or not</h3>${chainHtml([["Sequence asks run", V.Seq_P401, V.Step === 50 ? "step 50" : `only in step 50 (now ${V.Step})`], ["Permit", V.P401_Permit, "level > 0.5 % and E-stop ok"], ["Not tripped", !V.P401_Trip, "\"DB_IO\".P401_MotorTrip"], ["Run command out", V.P401_Out, "\"DB_IO\".P401_RunCmd"]])}</div>
+        <div class="sect"><h3>Alarms of this device</h3>${devAlarms(["A10", "A11"])}</div>`;
+    case "analog": {
+      const lvl = d.id === "LT101", v = lvl ? V.Level : V.Temp, hi = lvl ? 100 : 120, lim = lvl ? 95 : 90;
+      return `<div class="gauge"><div class="bigv">${f1(v)} <small>${lvl ? "%" : "°C"}</small></div><div class="bar"><i style="width:${(v / hi) * 100}%;background:var(--${lvl ? "c1" : "c2"})"></i><span class="sp" style="left:${(lim / hi) * 100}%;background:var(--fault)"></span></div>
+        <div class="small muted num">range 0..${hi} · high limit ${lim} · raw ${Math.round((v / hi) * 27648)}</div></div>
+        <div class="sect"><h3>Alarms of this device</h3>${devAlarms(lvl ? ["A12", "A13"] : ["A14", "A15"])}</div>`;
+    }
+    case "seq":
+      return `<p style="margin:0">The sequence has its own view with the step chart and transition conditions.</p><div class="chips" style="margin-top:8px"><button class="chip" data-act="nav" data-view="sequence">Open the step chart</button></div>`;
+  }
+}
+function vEquipment() {
+  const D = devices(), d = D.find((x) => x.id === S.dev) || D[3];
+  return `${vhead("Equipment", "FB instances + their interface comments; one faceplate per block type")}
+  <div class="split l">
+    <section class="card"><h2>Devices</h2><div class="devlist">${D.map((x) => `<button class="devbtn" data-act="dev" data-id="${x.id}" aria-pressed="${x.id === d.id}">${icon(x.type, x.st)}<span><b class="mono">${x.id}</b><br><span class="small muted">${esc(x.fb || "no block")}</span></span><span class="small" style="color:var(--${x.st === "idle" ? "muted" : x.st})">${esc(x.id === "Seq" ? "S" + V.Step : x.val.split(" (")[0])}</span></button>`).join("")}</div>
+      <p class="note">Grouped by block type. All FB_Valve instances share one faceplate layout, so a plant with 200 valves needs no extra work.</p></section>
+    <section class="card"><h2>${icon(d.type, d.st).replace("<svg", '<svg style="width:28px;height:28px"')} <span class="mono">${d.id}</span> <span class="muted" style="font-weight:400">${esc(d.role)}</span></h2>
+      ${faceplate(d)}
+      <div class="sect"><h3>Where it is</h3><div class="path"><span>OB_Main</span><i>›</i><span>Station · FB_Station</span><i>›</i><span>${d.id}${d.fb ? " · " + d.fb : ""}</span></div></div>
+    </section>
+  </div>`;
+}
+
+/* ---------- Ask panel (placeholder for the chat being built separately) ---------- */
+const QA = {
+  mix: [["When will this step finish?", () => `<p>Step 30 Mix and heat ends when both conditions are true:</p><p>✓ Mix time done (${mmss(V.StepTime)}, needs ${mmss(R.MixTime)}).<br>✕ Temperature: ${f1(V.Temp)} °C, needs ${f1(R.TempSP)} °C.</p><p>It is heating about 5.4 °C per minute, so about ${mmss(Math.max(0, (R.TempSP - V.Temp) / 5.4 * 60))} to go. <button class="link" data-act="nav" data-view="sequence">Step chart</button></p>`],
+        ["Why is the heater on?", () => `<p>E301 heats because all four conditions in <span class="mono">FB_Station</span> are true: the sequence asks for heat (step 30, below 60 °C), M201 is at speed, no overtemperature, TT301 healthy. <button class="link" data-act="golog" data-i="0">Show the rung</button></p>`]],
+  xv101: [["Why did the batch stop?", () => `<p>Alarm <b>A02 XV101 did not open</b> at 17:12:31 halted the sequence in step 10.</p><p>The PLC switched the open command on at 17:12:21, but the open limit switch never came on within 10 s. The closed switch is still on, so the valve most likely did not move at all: check the air supply first, then the solenoid.</p><p>After fixing: Reset, then Start. The batch continues at step 10. <button class="link" data-act="goalarm" data-id="A02">Alarm details</button></p>`],
+          ["Has this happened before?", () => `<p>Yes, 4 times in 14 days, the longest on 31 Oct (12:40 min, together with A16 step 10 timeout). All four were on XV101; XV102 never had it. That points at XV101 itself or its air line rather than the supply. <button class="link" data-act="nav" data-view="alarms">History</button></p>`]],
+  filler: [["What are we waiting for?", () => `<p>The batch is ready (${f1(V.Level)} %, ${f1(V.Temp)} °C) and waits in step 40 Hold for the filler signal <span class="mono">Filler_ReadyToReceive</span>. It has been FALSE for the whole step (${mmss(V.StepTime)}).</p><p>Warning A21 came after 1:00. Nothing is wrong on this station: check the filler. Draining starts by itself once it is ready.</p>`],
+           ["Is the product getting cold?", () => `<p>Slowly. Heating is off in step 40; the tank dropped from 60.3 °C to ${f1(V.Temp)} °C. At this rate it stays above 55 °C for about 20 minutes.</p>`]],
+};
+function askPanel() {
+  const qs = QA[S.sc];
+  const conv = S.asked.map((i) => `<div class="bub q">${esc(qs[i][0])}</div><div class="bub a">${qs[i][1]()}</div>`).join("");
+  return `<div class="ask-h"><h2>Ask about the machine</h2><button class="x" data-act="ask" aria-label="Close">×</button></div>
+    <div class="ask-b">${conv || `<p class="muted small" style="margin:0">Answers use the live values, the program and the alarm history, and link to the view that shows the proof.</p>`}</div>
+    <div class="ask-f"><div class="chips">${qs.map((q, i) => `<button class="chip" data-act="askq" data-q="${i}">${esc(q[0])}</button>`).join("")}</div>
+      <input id="askinput" placeholder="Type a question (mockup: use the suggestions)" aria-label="Question"></div>`;
+}
+
+/* ============================================================
+   Render + events
+   ============================================================ */
+const RENDER = { plant: vPlant, sequence: vSequence, logic: vLogic, code: vCode, alarms: vAlarms, trends: vTrends, equipment: vEquipment };
+function render(full) {
+  $("#rail").innerHTML = rail();
+  document.querySelectorAll(".scen button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.sc === S.sc));
+  $("#clock").textContent = clock(NOW0 + S.t);
+  if (S.view === "trends" && !full) return;
+  $("#view").innerHTML = RENDER[S.view]();
+  if (S.view === "trends") hookTrend();
+  const ask = $("#ask");
+  ask.classList.toggle("open", S.ask);
+  if (full || S.ask) { const keep = ask.querySelector("#askinput")?.value || ""; ask.innerHTML = askPanel(); ask.querySelector("#askinput").value = keep; }
+}
+function go(view) { if (location.hash !== "#" + view) location.hash = view; else { S.view = view; render(true); } }
+window.addEventListener("hashchange", () => { const h = location.hash.slice(1); if (RENDER[h]) { S.view = h; render(true); window.scrollTo(0, 0); } });
+document.addEventListener("click", (e) => {
+  const el = e.target.closest("[data-act]"); if (!el) return;
+  const d = el.dataset;
+  switch (d.act) {
+    case "nav": go(d.view); break;
+    case "sc": load(d.sc); render(true); break;
+    case "ask": S.ask = !S.ask; render(true); break;
+    case "askq": S.ask = true; if (!S.asked.includes(+d.q)) S.asked.push(+d.q); render(true); break;
+    case "step": S.step = +d.n; render(true); break;
+    case "gostep": S.step = +d.n; go("sequence"); break;
+    case "net": S.net = +d.i; render(true); break;
+    case "golog": S.net = +d.i; S.ask = false; go("logic"); break;
+    case "why": if (d.to === "sequence" || d.to === "alarms") go(d.to); else { S.net = +d.to; render(true); } break;
+    case "alarm": S.alarm = d.id; render(true); break;
+    case "goalarm": if (!d.id) break; S.alarm = d.id; S.ask = false; go("alarms"); break;
+    case "block": S.block = d.id; render(true); break;
+    case "goblock": S.block = d.id; go("code"); break;
+    case "dev": S.dev = d.id; go("equipment"); break;
+    case "tag": { const i = S.tags.indexOf(d.id); if (i >= 0) S.tags.splice(i, 1); else S.tags.push(d.id); render(true); break; }
+  }
+});
+document.addEventListener("keydown", (e) => { if ((e.key === "Enter" || e.key === " ") && e.target.matches("g[data-act]")) { e.preventDefault(); e.target.dispatchEvent(new MouseEvent("click", { bubbles: true })); } });
+load("mix");
+{ const h = location.hash.slice(1); if (RENDER[h]) S.view = h; }
+render(true);
+let busy = false;
+document.addEventListener("pointerdown", () => { busy = true; });
+document.addEventListener("pointerup", () => { setTimeout(() => { busy = false; }, 50); });
+setInterval(() => { tick(); if (!busy && !document.activeElement?.matches("input")) render(false); }, 1000);
+</script>
+
+</html>
