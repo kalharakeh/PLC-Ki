@@ -3,12 +3,13 @@ TITLE = 'Plant simulation: plays the tank, valves, drives and the neighbours'
 { S7_Optimized_Access := 'TRUE' }
 AUTHOR : Demo
 VERSION : 0.1
-// Called from OB1 every cycle; measures its own call interval with RUNTIME.
+// Called from OB1 every cycle. A free-running 100 ms timer moves the simulation forward
+// in fixed 0.1 s steps, so it does not depend on the PLC cycle time.
 // Reads the commands in "DB_IO", writes feedbacks and analog values back,
 // and applies the faults switched on in "DB_FaultInjection".
 // THIS BLOCK DOES NOT EXIST ON A REAL MACHINE. The troubleshooter should ignore it.
    VAR
-      RtMem : LReal;   // Memory for RUNTIME (time between calls)
+      tTick {InstructionName := 'TON_TIME'; LibVersion := '1.0'} : TON_TIME;   // 100 ms simulation clock
       Level : Real;   // Simulated tank level [%]
       Temp : Real := 20.0;   // Simulated tank temperature [degC]
       XV101_Pos : Real;   // Valve XV101 position 0..1 (full stroke takes 2 s)
@@ -19,7 +20,7 @@ VERSION : 0.1
    END_VAR
 
    VAR_TEMP
-      deltaT : Real;   // Time since the last call [s] (the name "dt" is reserved: DATE_AND_TIME)
+      deltaT : Real;   // Simulation step this call: 0.1 s every 100 ms, else 0 (name "dt" is reserved)
       flowIn : Real;
       flowOut : Real;
       target : Real;
@@ -27,9 +28,11 @@ VERSION : 0.1
    END_VAR
 
 BEGIN
-	// Time since the last call, limited to 0.5 s (the first call returns a meaningless value)
-	#deltaT := LREAL_TO_REAL(RUNTIME(#RtMem));
-	IF (#deltaT <= 0.0) OR (#deltaT > 0.5) THEN
+	// Simulation clock: one step of 0.1 s every 100 ms, nothing in between
+	#tTick(IN := NOT #tTick.Q, PT := T#100MS);
+	IF #tTick.Q THEN
+	    #deltaT := 0.1;
+	ELSE
 	    #deltaT := 0.0;
 	END_IF;
 	
