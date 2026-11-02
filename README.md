@@ -32,7 +32,11 @@ Full plan and architecture: [PLC Troubleshooter plan](https://claude.ai/artifact
 | --- | --- |
 | `plc-demo/` | Demo PLC program (mixing station) for PLCSIM Advanced, with plant simulation, fault injection and an alarm answer key |
 | `tools/TiaImporter/` | TIA Openness tool: export a `.zap20` archive, load the demo into a TIA project |
-| `server/` | The web app (phase 2) |
+| `src/PlcKi.Core/` | Machine model, condition language and the plain-English status engine (no PLC code) |
+| `src/PlcKi.Server/` | The web app: live read-only PLC link, status page, `probe` connection test. See its README |
+| `models/` | Machine models (`demo-mixing-station.json`) and test snapshots taken from watch tables |
+| `tests/` | Unit tests (`dotnet test`) |
+| `third_party/S7CommPlusDriver/` | The S7CommPlus driver (LGPL-3.0), with its write functions removed |
 
 ## Requirements
 
@@ -45,14 +49,25 @@ Full plan and architecture: [PLC Troubleshooter plan](https://claude.ai/artifact
 
 | Phase | Status |
 | --- | --- |
-| 0. Setup: repo, PLCSIM Advanced VM on the network | In progress |
-| 1. Demo program and `.zap20` importer | First version written, not yet built against TIA |
-| 2. Live status page | Planned |
+| 0. Setup: repo, PLCSIM Advanced VM on the network | Done |
+| 1. Demo program and `.zap20` importer | Demo runs full batches in PLCSIM. Importer written, not yet built against TIA |
+| 2. Live status page | First version: works on test data, first live test on PLCSIM pending. Machine model is hand-written for now |
 | 3. Ask questions (Claude) | Planned |
 | 4. Real plant archives, Web API fallback, S7-1200 hardware | Planned |
 | 5. Plant PC deployment | Planned |
 
 ## Quick start (demo)
+
+Live status page, against the demo PLC in PLCSIM (needs the [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)):
+
+```
+dotnet run --project src\PlcKi.Server -- probe     # connection test: reads every tag once
+dotnet run --project src\PlcKi.Server              # then open http://localhost:5080
+```
+
+Details: [src/PlcKi.Server/README.md](src/PlcKi.Server/README.md).
+
+Archive importer:
 
 1. Build `tools/TiaImporter` (see its README).
 2. Follow `plc-demo/README.md` to load the demo into TIA V20 and run it in PLCSIM Advanced.

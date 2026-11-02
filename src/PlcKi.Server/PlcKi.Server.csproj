@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <!-- PLC-Ki web server: reads the PLC (read-only) and serves the live status page. -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>PlcKi.Server</RootNamespace>
+    <AssemblyName>PlcKi.Server</AssemblyName>
+    <!-- The bundled OpenSSL DLLs are 64-bit, so the app must run as a 64-bit process -->
+    <PlatformTarget>x64</PlatformTarget>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\PlcKi.Core\PlcKi.Core.csproj" />
+    <ProjectReference Include="..\..\third_party\S7CommPlusDriver\S7CommPlusDriver.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Copy the web page next to the exe so "dotnet run" and the built exe serve the same files -->
+    <Content Update="wwwroot\**" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\models\*.json" Link="models\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\models\snapshots\*.json" Link="models\snapshots\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>
