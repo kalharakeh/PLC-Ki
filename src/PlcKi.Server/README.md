@@ -144,3 +144,11 @@ It does TLS in managed code (no OpenSSL DLLs) and supports the older challenge l
 **Read-only:** the driver can write and start/stop the CPU only when `WriteEnabled` is set; it is off by default.
 PLC-Ki never sets it and calls none of those functions. `tests/PlcKi.Tests/ReadOnlyTests.cs` reads the compiled
 app and fails the build if that changes.
+
+## Login and settings page
+
+The first time PLC-Ki starts it asks (on this PC only) for an administrator login. After that every page needs a
+login, and administrators get a **Settings** page for the PLC address, machine model, Claude API key, network access
+and users. Values saved there go to `%LOCALAPPDATA%\PLC-Ki\settings.json` when started by hand, and are used after
+a restart. Command-line options and environment variables still win. For installing on a plant PC as a Windows
+service, see [installer/README.md](../../installer/README.md).

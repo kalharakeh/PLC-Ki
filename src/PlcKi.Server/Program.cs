@@ -1,6 +1,7 @@
 using PlcKi.Core.Ask;
 using PlcKi.Core.Model;
 using PlcKi.Core.Status;
+using PlcKi.Plant;
 using PlcKi.Server;
 using PlcKi.Server.Ask;
 using PlcKi.Server.Live;
@@ -21,6 +22,9 @@ var builder = WebApplication.CreateBuilder(new WebApplicationOptions
     ContentRootPath = AppContext.BaseDirectory,
     WebRootPath = Path.Combine(AppContext.BaseDirectory, "wwwroot"),
 });
+
+// Plant PC features (src/PlcKi.Plant): Windows service, settings page values, login
+builder.AddPlant();
 
 var opt = new PlcKiOptions();
 builder.Configuration.GetSection("PlcKi").Bind(opt);
@@ -71,6 +75,7 @@ if (string.IsNullOrEmpty(builder.Configuration["urls"]) && string.IsNullOrEmpty(
     builder.WebHost.UseUrls("http://localhost:5080");
 
 var app = builder.Build();
+app.UsePlant();     // login check before any page or API
 app.UseDefaultFiles();
 // "no-cache": the browser asks each time whether a page file changed (cheap, ETag), so after an update
 // it never keeps showing an old stylesheet or script
@@ -127,6 +132,8 @@ app.MapDelete("/api/ask/{id}", (string id, AskService ask) =>
     ask.Forget(id);
     return Results.NoContent();
 });
+
+app.MapPlant();     // /api/auth/... and /api/admin/... (settings, users)
 
 app.Lifetime.ApplicationStarted.Register(() =>
 {
