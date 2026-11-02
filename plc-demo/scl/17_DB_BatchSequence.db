@@ -1,0 +1,10 @@
+DATA_BLOCK "DB_BatchSequence"
+TITLE = 'Instance of the batch sequence (SCL or GRAPH)'
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+NON_RETAIN
+"FB_BatchSequence"
+
+BEGIN
+
+END_DATA_BLOCK

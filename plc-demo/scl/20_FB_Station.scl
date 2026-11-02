@@ -6,7 +6,6 @@ VERSION : 0.1
    VAR
       LT101 : "FB_AnalogIn";   // Tank level transmitter, 0..100 %
       TT301 : "FB_AnalogIn";   // Tank temperature transmitter, 0..120 degC
-      Seq : "FB_BatchSequence";   // Batch sequence (steps 0..60)
       XV101 : "FB_Valve";   // Inlet valve ingredient A
       XV102 : "FB_Valve";   // Inlet valve ingredient B
       M201 : "FB_VFD";   // Agitator on a VFD
@@ -24,36 +23,37 @@ BEGIN
 	#TT301(Raw := "DB_IO".TT301_Raw, RangeLo := 0.0, RangeHi := 120.0, LimitHigh := 90.0, LimitLow := 0.0);
 	
 	// ---------- Sequence ----------
-	#Seq(Start := "DB_IO".PB_Start OR "DB_LineInterface".MES_StartRequest,
-	     Stop := "DB_IO".PB_Stop,
-	     Auto := "DB_IO".SW_Auto,
-	     AnyFault := "DB_Alarms".AnyFault,
-	     EStopOK := "DB_IO".EStop_OK,
-	     Level := #LT101.Value,
-	     Temp := #TT301.Value,
-	     FillerReady := "DB_LineInterface".Filler_ReadyToReceive);
+	// Own instance DB, not a multi-instance: GRAPH blocks (plc-demo/graph) cannot be multi-instances.
+	"DB_BatchSequence"(Start := "DB_IO".PB_Start OR "DB_LineInterface".MES_StartRequest,
+	                   Stop := "DB_IO".PB_Stop,
+	                   Auto := "DB_IO".SW_Auto,
+	                   AnyFault := "DB_Alarms".AnyFault,
+	                   EStopOK := "DB_IO".EStop_OK,
+	                   Level := #LT101.Value,
+	                   Temp := #TT301.Value,
+	                   FillerReady := "DB_LineInterface".Filler_ReadyToReceive);
 	
 	// ---------- Devices with interlocks ----------
 	// Inlet valves may not open when the level is high (overflow protection)
-	#XV101(Open := #Seq.OpenXV101, Permit := NOT #LT101.High AND NOT #LT101.WireBreak,
+	#XV101(Open := "DB_BatchSequence".OpenXV101, Permit := NOT #LT101.High AND NOT #LT101.WireBreak,
 	       ZSO := "DB_IO".XV101_ZSO, ZSC := "DB_IO".XV101_ZSC);
-	#XV102(Open := #Seq.OpenXV102, Permit := NOT #LT101.High AND NOT #LT101.WireBreak,
+	#XV102(Open := "DB_BatchSequence".OpenXV102, Permit := NOT #LT101.High AND NOT #LT101.WireBreak,
 	       ZSO := "DB_IO".XV102_ZSO, ZSC := "DB_IO".XV102_ZSC);
 	"DB_IO".XV101_OpenCmd := #XV101.Out;
 	"DB_IO".XV102_OpenCmd := #XV102.Out;
 	
 	// Agitator may only run with the blades covered (level above 20 %)
-	#M201(Run := #Seq.RunM201, Permit := #LT101.Value > 20.0 AND "DB_IO".EStop_OK,
-	      SpeedSP := #Seq.SpeedM201, SpeedPV := "DB_IO".M201_SpeedPV,
+	#M201(Run := "DB_BatchSequence".RunM201, Permit := #LT101.Value > 20.0 AND "DB_IO".EStop_OK,
+	      SpeedSP := "DB_BatchSequence".SpeedM201, SpeedPV := "DB_IO".M201_SpeedPV,
 	      Ready := "DB_IO".M201_DriveReady, DriveFault := "DB_IO".M201_DriveFault);
 	"DB_IO".M201_RunCmd := #M201.RunOut;
 	"DB_IO".M201_SpeedSP := #M201.SpeedOut;
 	
 	// Heater only with the agitator running (no local overheating) and no overtemperature
-	"DB_IO".E301_OnCmd := #Seq.HeatE301 AND #M201.AtSpeed AND NOT "DB_IO".E301_OverTemp AND NOT #TT301.WireBreak;
+	"DB_IO".E301_OnCmd := "DB_BatchSequence".HeatE301 AND #M201.AtSpeed AND NOT "DB_IO".E301_OverTemp AND NOT #TT301.WireBreak;
 	
 	// Pump may not run dry
-	#P401(Run := #Seq.RunP401, Permit := #LT101.Value > 0.5 AND "DB_IO".EStop_OK,
+	#P401(Run := "DB_BatchSequence".RunP401, Permit := #LT101.Value > 0.5 AND "DB_IO".EStop_OK,
 	      RunFb := "DB_IO".P401_RunFb, Trip := "DB_IO".P401_MotorTrip);
 	"DB_IO".P401_RunCmd := #P401.Out;
 	
@@ -65,13 +65,13 @@ BEGIN
 	IF #OwnHbDone THEN
 	    "DB_LineInterface".Station_Heartbeat := ("DB_LineInterface".Station_Heartbeat + 1) MOD 30000;
 	END_IF;
-	IF #Seq.Step = 0 THEN
+	IF "DB_BatchSequence".Step = 0 THEN
 	    "DB_Recipe".RecipeNo := "DB_LineInterface".MES_RecipeNo;
 	END_IF;
-	"DB_LineInterface".Station_Running := #Seq.Running;
-	"DB_LineInterface".Station_Draining := #Seq.Step = 50;
-	"DB_LineInterface".Batch_Done := #Seq.BatchDone;
-	IF #Seq.BatchDone THEN
+	"DB_LineInterface".Station_Running := "DB_BatchSequence".Running;
+	"DB_LineInterface".Station_Draining := "DB_BatchSequence".Step = 50;
+	"DB_LineInterface".Batch_Done := "DB_BatchSequence".BatchDone;
+	IF "DB_BatchSequence".BatchDone THEN
 	    "DB_LineInterface".Batch_Count := "DB_LineInterface".Batch_Count + 1;
 	END_IF;
 	
@@ -92,14 +92,14 @@ BEGIN
 	        LT101_HighHigh := #LT101.High,
 	        TT301_WireBreak := #TT301.WireBreak,
 	        TT301_High := #TT301.High,
-	        Step10_Timeout := #Seq.TimeoutStep10,
-	        Step20_Timeout := #Seq.TimeoutStep20,
-	        Step30_Timeout := #Seq.TimeoutStep30,
-	        Step50_Timeout := #Seq.TimeoutStep50,
-	        E301_NoHeating := #Seq.NoHeating,
-	        Filler_NotReady := #Seq.WaitFillerTooLong,
+	        Step10_Timeout := "DB_BatchSequence".TimeoutStep10,
+	        Step20_Timeout := "DB_BatchSequence".TimeoutStep20,
+	        Step30_Timeout := "DB_BatchSequence".TimeoutStep30,
+	        Step50_Timeout := "DB_BatchSequence".TimeoutStep50,
+	        E301_NoHeating := "DB_BatchSequence".NoHeating,
+	        Filler_NotReady := "DB_BatchSequence".WaitFillerTooLong,
 	        MES_HeartbeatLost := #tMesHb.Q,
-	        RecipeInvalid := #Seq.StartRecipeInvalid,
-	        NotInAuto := #Seq.StartNotAuto,
-	        TankNotEmpty := #Seq.StartTankNotEmpty);
+	        RecipeInvalid := "DB_BatchSequence".StartRecipeInvalid,
+	        NotInAuto := "DB_BatchSequence".StartNotAuto,
+	        TankNotEmpty := "DB_BatchSequence".StartTankNotEmpty);
 END_FUNCTION_BLOCK
