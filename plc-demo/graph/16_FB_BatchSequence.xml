@@ -1,0 +1,3067 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Document>
+  <Engineering version="V20"/>
+  <SW.Blocks.FB ID="0">
+    <AttributeList>
+      <GraphVersion>2.0</GraphVersion>
+      <HeaderAuthor>Demo</HeaderAuthor>
+      <HeaderFamily/>
+      <HeaderName/>
+      <HeaderVersion>0.2</HeaderVersion>
+      <Interface>
+        <Sections xmlns="http://www.siemens.com/automation/Openness/SW/Interface/v5">
+          <Section Name="Base">
+            <Sections Datatype="GRAPH_BASE" Version="1.0">
+              <Section Name="Input"/>
+              <Section Name="Output"/>
+              <Section Name="InOut"/>
+              <Section Name="Static"/>
+            </Sections>
+          </Section>
+          <Section Name="Input">
+            <Member Name="OFF_SQ" Datatype="Bool"/>
+            <Member Name="INIT_SQ" Datatype="Bool"/>
+            <Member Name="ACK_EF" Datatype="Bool"/>
+            <Member Name="S_PREV" Datatype="Bool"/>
+            <Member Name="S_NEXT" Datatype="Bool"/>
+            <Member Name="SW_AUTO" Datatype="Bool"/>
+            <Member Name="SW_TAP" Datatype="Bool"/>
+            <Member Name="SW_TOP" Datatype="Bool"/>
+            <Member Name="SW_MAN" Datatype="Bool"/>
+            <Member Name="S_SEL" Datatype="Int"/>
+            <Member Name="S_ON" Datatype="Bool"/>
+            <Member Name="S_OFF" Datatype="Bool"/>
+            <Member Name="T_PUSH" Datatype="Bool"/>
+            <Member Name="Start" Datatype="Bool">
+              <Comment>
+                <MultiLanguageText Lang="en-US">Start button or MES start request</MultiLanguageText>
+              </Comment>
+            </Member>
+            <Member Name="Stop" Datatype="Bool">
+              <Comment>
+                <MultiLanguageText Lang="en-US">Stop button: pause the batch</MultiLanguageText>
+              </Comment>
+            </Member>
+            <Member Name="Auto" Datatype="Bool">
+              <Comment>
+                <MultiLanguageText Lang="en-US">Selector in Auto</MultiLanguageText>
+              </Comment>
+            </Member>
+            <Member Name="AnyFault" Datatype="Bool">
+              <Comment>
+                <MultiLanguageText Lang="en-US">Any FAULT alarm active</MultiLanguageText>
+              </Comment>
+            </Member>
+            <Member Name="EStopOK" Datatype="Bool">
+              <Comment>
+                <MultiLanguageText Lang="en-US">Emergency stop circuit healthy</MultiLanguageText>
+              </Comment>
+            </Member>
+            <Member Name="Level" Datatype="Real">
+              <Comment>
+                <MultiLanguageText Lang="en-US">Tank level [%]</MultiLanguageText>
+              </Comment>
+            </Member>
+            <Member Name="Temp" Datatype="Real">
+              <Comment>
+                <MultiLanguageText Lang="en-US">Tank temperature [degC]</MultiLanguageText>
+              </Comment>
+            </Member>
+            <Member Name="FillerReady" Datatype="Bool">
+              <Comment>
+                <MultiLanguageText Lang="en-US">Downstream filler ready to receive</MultiLanguageText>
+              </Comment>
+            </Member>
+          </Section>
+          <Section Name="Output">
+            <Member Name="S_NO" Datatype="Int"/>
+            <Member Name="S_MORE" Datatype="Bool"/>
+            <Member Name="S_ACTIVE" Datatype="Bool"/>
+            <Member Name="ERR_FLT" Datatype="Bool"/>
+            <Member Name="AUTO_ON" Datatype="Bool"/>
+            <Member Name="TAP_ON" Datatype="Bool"/>
+            <Member Name="TOP_ON" Datatype="Bool"/>
+            <Member Name="MAN_ON" Datatype="Bool"/>
+            <Member Name="Step" Datatype="Int">
+              <Comment>
+                <MultiLanguageText Lang="en-US">Current step: 0 Idle, 10 Fill A, 20 Fill B, 30 Mix and heat, 40 Hold, 50 Drain, 60 Done</MultiLanguageText>
+              </Comment>
+            </Member>
+            <Member Name="StepTime" Datatype="Time">
+              <Comment>
+                <MultiLanguageText Lang="en-US">Time in the current step without interlock error (pauses while halted)</MultiLanguageText>
+              </Comment>
+            </Member>
+            <Member Name="Halted" Datatype="Bool">
+              <Comment>
+                <MultiLanguageText Lang="en-US">Sequence paused: outputs off (fault, E-stop, Stop or not in Auto)</MultiLanguageText>
+              </Comment>
+            </Member>
+            <Member Name="Running" Datatype="Bool">
+              <Comment>
+                <MultiLanguageText Lang="en-US">A batch is active (step 10..60)</MultiLanguageText>
+              </Comment>
+            </Member>
+            <Member Name="OpenXV101" Datatype="Bool">
+              <Comment>
+                <MultiLanguageText Lang="en-US">Command: open inlet valve A</MultiLanguageText>
+              </Comment>
+            </Member>
+            <Member Name="OpenXV102" Datatype="Bool">
+              <Comment>
+                <MultiLanguageText Lang="en-US">Command: open inlet valve B</MultiLanguageText>
+              </Comment>
+            </Member>
+            <Member Name="RunM201" Datatype="Bool">
+              <Comment>
+                <MultiLanguageText Lang="en-US">Command: run agitator</MultiLanguageText>
+              </Comment>
+            </Member>
+            <Member Name="SpeedM201" Datatype="Real">
+              <Comment>
+                <MultiLanguageText Lang="en-US">Command: agitator speed [rpm]</MultiLanguageText>
+              </Comment>
+            </Member>
+            <Member Name="HeatE301" Datatype="Bool">
+              <Comment>
+                <MultiLanguageText Lang="en-US">Command: heater on</MultiLanguageText>
+              </Comment>
+            </Member>
+            <Member Name="RunP401" Datatype="Bool">
+              <Comment>
+                <MultiLanguageText Lang="en-US">Command: run outlet pump</MultiLanguageText>
+              </Comment>
+            </Member>
+            <Member Name="BatchDone" Datatype="Bool">
+              <Comment>
+                <MultiLanguageText Lang="en-US">Pulse when a batch finishes</MultiLanguageText>
+              </Comment>
+            </Member>
+            <Member Name="RecipeValid" Datatype="Bool">
+              <Comment>
+                <MultiLanguageText Lang="en-US">Recipe values are plausible</MultiLanguageText>
+              </Comment>
+            </Member>
+            <Member Name="TimeoutStep10" Datatype="Bool">
+              <Comment>
+                <MultiLanguageText Lang="en-US">Step 10 longer than 120 s</MultiLanguageText>
+              </Comment>
+            </Member>
+            <Member Name="TimeoutStep20" Datatype="Bool">
+              <Comment>
+                <MultiLanguageText Lang="en-US">Step 20 longer than 120 s</MultiLanguageText>
+              </Comment>
+            </Member>
+            <Member Name="TimeoutStep30" Datatype="Bool">
+              <Comment>
+                <MultiLanguageText Lang="en-US">Step 30 longer than 600 s</MultiLanguageText>
+              </Comment>
+            </Member>
+            <Member Name="TimeoutStep50" Datatype="Bool">
+              <Comment>
+                <MultiLanguageText Lang="en-US">Step 50 longer than 180 s</MultiLanguageText>
+              </Comment>
+            </Member>
+            <Member Name="WaitFillerTooLong" Datatype="Bool">
+              <Comment>
+                <MultiLanguageText Lang="en-US">Step 40 waiting for filler longer than 60 s</MultiLanguageText>
+              </Comment>
+            </Member>
+            <Member Name="NoHeating" Datatype="Bool">
+              <Comment>
+                <MultiLanguageText Lang="en-US">Heater on 60 s in step 30 but temperature rose less than 2 degC</MultiLanguageText>
+              </Comment>
+            </Member>
+            <Member Name="StartNotAuto" Datatype="Bool">
+              <Comment>
+                <MultiLanguageText Lang="en-US">Start pressed while not in Auto</MultiLanguageText>
+              </Comment>
+            </Member>
+            <Member Name="StartTankNotEmpty" Datatype="Bool">
+              <Comment>
+                <MultiLanguageText Lang="en-US">Start pressed while tank not empty</MultiLanguageText>
+              </Comment>
+            </Member>
+            <Member Name="StartRecipeInvalid" Datatype="Bool">
+              <Comment>
+                <MultiLanguageText Lang="en-US">Start pressed while recipe invalid</MultiLanguageText>
+              </Comment>
+            </Member>
+          </Section>
+          <Section Name="InOut"/>
+          <Section Name="Static">
+            <Member Name="Paused" Datatype="Bool">
+              <Comment>
+                <MultiLanguageText Lang="en-US">Set by Stop, cleared by Start</MultiLanguageText>
+              </Comment>
+            </Member>
+            <Member Name="Healthy" Datatype="Bool">
+              <Comment>
+                <MultiLanguageText Lang="en-US">No fault, E-stop OK, not paused and in Auto: the step interlocks are fulfilled</MultiLanguageText>
+              </Comment>
+            </Member>
+            <Member Name="HeatReq" Datatype="Bool">
+              <Comment>
+                <MultiLanguageText Lang="en-US">Step 30 asks for heat (heater runs while below TempSP)</MultiLanguageText>
+              </Comment>
+            </Member>
+            <Member Name="TempAtStepStart" Datatype="Real">
+              <Comment>
+                <MultiLanguageText Lang="en-US">Temperature when step 30 began [degC]</MultiLanguageText>
+              </Comment>
+            </Member>
+            <Member Name="TempRiseLimit" Datatype="Real">
+              <Comment>
+                <MultiLanguageText Lang="en-US">TempAtStepStart + 2 degC</MultiLanguageText>
+              </Comment>
+            </Member>
+            <Member Name="RT_DATA" Datatype="G7_RTDataPlus_V2" Version="1.0"/>
+            <Member Name="T1_StartBatch" Datatype="G7_TransitionPlus_V2" Version="1.0"/>
+            <Member Name="T2_LevelA_Reached" Datatype="G7_TransitionPlus_V2" Version="1.0"/>
+            <Member Name="T3_LevelB_Reached" Datatype="G7_TransitionPlus_V2" Version="1.0"/>
+            <Member Name="T4_HotAndMixed" Datatype="G7_TransitionPlus_V2" Version="1.0"/>
+            <Member Name="T5_FillerReady" Datatype="G7_TransitionPlus_V2" Version="1.0"/>
+            <Member Name="T6_TankEmpty" Datatype="G7_TransitionPlus_V2" Version="1.0"/>
+            <Member Name="T7_BatchCounted" Datatype="G7_TransitionPlus_V2" Version="1.0"/>
+            <Member Name="Idle" Datatype="G7_StepPlus_V2" Version="1.0"/>
+            <Member Name="FillA" Datatype="G7_StepPlus_V2" Version="1.0"/>
+            <Member Name="FillB" Datatype="G7_StepPlus_V2" Version="1.0"/>
+            <Member Name="MixHeat" Datatype="G7_StepPlus_V2" Version="1.0"/>
+            <Member Name="Hold" Datatype="G7_StepPlus_V2" Version="1.0"/>
+            <Member Name="Drain" Datatype="G7_StepPlus_V2" Version="1.0"/>
+            <Member Name="Done" Datatype="G7_StepPlus_V2" Version="1.0"/>
+          </Section>
+          <Section Name="Temp"/>
+          <Section Name="Constant"/>
+        </Sections>
+      </Interface>
+      <Name>FB_BatchSequence</Name>
+      <Namespace/>
+      <Number>104</Number>
+      <ProgrammingLanguage>GRAPH</ProgrammingLanguage>
+      <SetENOAutomatically>false</SetENOAutomatically>
+    </AttributeList>
+    <ObjectList>
+      <MultilingualText ID="1" CompositionName="Comment">
+        <ObjectList>
+          <MultilingualTextItem ID="2" CompositionName="Items">
+            <AttributeList>
+              <Culture>en-US</Culture>
+              <Text>GRAPH version. Same inputs and outputs as scl/16_FB_BatchSequence.scl.</Text>
+            </AttributeList>
+          </MultilingualTextItem>
+        </ObjectList>
+      </MultilingualText>
+      <SW.Blocks.CompileUnit ID="3" CompositionName="CompileUnits">
+        <AttributeList>
+          <NetworkSource>
+            <Graph xmlns="http://www.siemens.com/automation/Openness/SW/NetworkSource/Graph/v5">
+              <PreOperations>
+                <PermanentOperation ProgrammingLanguage="LAD">
+                  <FlgNet>
+                    <Parts>
+                      <Access Scope="GlobalVariable" UId="21">
+                        <Symbol>
+                          <Component Name="DB_Recipe"/>
+                          <Component Name="LevelA"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="LiteralConstant" UId="22">
+                        <Constant>
+                          <ConstantType>Real</ConstantType>
+                          <ConstantValue>0.0</ConstantValue>
+                        </Constant>
+                      </Access>
+                      <Access Scope="GlobalVariable" UId="23">
+                        <Symbol>
+                          <Component Name="DB_Recipe"/>
+                          <Component Name="LevelA"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="GlobalVariable" UId="24">
+                        <Symbol>
+                          <Component Name="DB_Recipe"/>
+                          <Component Name="LevelB"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="GlobalVariable" UId="25">
+                        <Symbol>
+                          <Component Name="DB_Recipe"/>
+                          <Component Name="LevelB"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="LiteralConstant" UId="26">
+                        <Constant>
+                          <ConstantType>Real</ConstantType>
+                          <ConstantValue>90.0</ConstantValue>
+                        </Constant>
+                      </Access>
+                      <Access Scope="GlobalVariable" UId="27">
+                        <Symbol>
+                          <Component Name="DB_Recipe"/>
+                          <Component Name="TempSP"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="LiteralConstant" UId="28">
+                        <Constant>
+                          <ConstantType>Real</ConstantType>
+                          <ConstantValue>20.0</ConstantValue>
+                        </Constant>
+                      </Access>
+                      <Access Scope="GlobalVariable" UId="29">
+                        <Symbol>
+                          <Component Name="DB_Recipe"/>
+                          <Component Name="TempSP"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="LiteralConstant" UId="30">
+                        <Constant>
+                          <ConstantType>Real</ConstantType>
+                          <ConstantValue>85.0</ConstantValue>
+                        </Constant>
+                      </Access>
+                      <Access Scope="GlobalVariable" UId="31">
+                        <Symbol>
+                          <Component Name="DB_Recipe"/>
+                          <Component Name="MixSpeed"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="LiteralConstant" UId="32">
+                        <Constant>
+                          <ConstantType>Real</ConstantType>
+                          <ConstantValue>100.0</ConstantValue>
+                        </Constant>
+                      </Access>
+                      <Access Scope="GlobalVariable" UId="33">
+                        <Symbol>
+                          <Component Name="DB_Recipe"/>
+                          <Component Name="MixSpeed"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="LiteralConstant" UId="34">
+                        <Constant>
+                          <ConstantType>Real</ConstantType>
+                          <ConstantValue>1500.0</ConstantValue>
+                        </Constant>
+                      </Access>
+                      <Access Scope="LocalVariable" UId="35">
+                        <Symbol>
+                          <Component Name="RecipeValid"/>
+                        </Symbol>
+                      </Access>
+                      <Part Name="Gt" UId="36">
+                        <TemplateValue Name="SrcType" Type="Type">Real</TemplateValue>
+                      </Part>
+                      <Part Name="Lt" UId="37">
+                        <TemplateValue Name="SrcType" Type="Type">Real</TemplateValue>
+                      </Part>
+                      <Part Name="Le" UId="38">
+                        <TemplateValue Name="SrcType" Type="Type">Real</TemplateValue>
+                      </Part>
+                      <Part Name="Ge" UId="39">
+                        <TemplateValue Name="SrcType" Type="Type">Real</TemplateValue>
+                      </Part>
+                      <Part Name="Le" UId="40">
+                        <TemplateValue Name="SrcType" Type="Type">Real</TemplateValue>
+                      </Part>
+                      <Part Name="Ge" UId="41">
+                        <TemplateValue Name="SrcType" Type="Type">Real</TemplateValue>
+                      </Part>
+                      <Part Name="Le" UId="42">
+                        <TemplateValue Name="SrcType" Type="Type">Real</TemplateValue>
+                      </Part>
+                      <Part Name="Coil" UId="43"/>
+                    </Parts>
+                    <Wires>
+                      <Wire UId="44">
+                        <Powerrail/>
+                        <NameCon UId="36" Name="pre"/>
+                      </Wire>
+                      <Wire UId="45">
+                        <IdentCon UId="21"/>
+                        <NameCon UId="36" Name="in1"/>
+                      </Wire>
+                      <Wire UId="46">
+                        <IdentCon UId="22"/>
+                        <NameCon UId="36" Name="in2"/>
+                      </Wire>
+                      <Wire UId="47">
+                        <NameCon UId="36" Name="out"/>
+                        <NameCon UId="37" Name="pre"/>
+                      </Wire>
+                      <Wire UId="48">
+                        <IdentCon UId="23"/>
+                        <NameCon UId="37" Name="in1"/>
+                      </Wire>
+                      <Wire UId="49">
+                        <IdentCon UId="24"/>
+                        <NameCon UId="37" Name="in2"/>
+                      </Wire>
+                      <Wire UId="50">
+                        <NameCon UId="37" Name="out"/>
+                        <NameCon UId="38" Name="pre"/>
+                      </Wire>
+                      <Wire UId="51">
+                        <IdentCon UId="25"/>
+                        <NameCon UId="38" Name="in1"/>
+                      </Wire>
+                      <Wire UId="52">
+                        <IdentCon UId="26"/>
+                        <NameCon UId="38" Name="in2"/>
+                      </Wire>
+                      <Wire UId="53">
+                        <NameCon UId="38" Name="out"/>
+                        <NameCon UId="39" Name="pre"/>
+                      </Wire>
+                      <Wire UId="54">
+                        <IdentCon UId="27"/>
+                        <NameCon UId="39" Name="in1"/>
+                      </Wire>
+                      <Wire UId="55">
+                        <IdentCon UId="28"/>
+                        <NameCon UId="39" Name="in2"/>
+                      </Wire>
+                      <Wire UId="56">
+                        <NameCon UId="39" Name="out"/>
+                        <NameCon UId="40" Name="pre"/>
+                      </Wire>
+                      <Wire UId="57">
+                        <IdentCon UId="29"/>
+                        <NameCon UId="40" Name="in1"/>
+                      </Wire>
+                      <Wire UId="58">
+                        <IdentCon UId="30"/>
+                        <NameCon UId="40" Name="in2"/>
+                      </Wire>
+                      <Wire UId="59">
+                        <NameCon UId="40" Name="out"/>
+                        <NameCon UId="41" Name="pre"/>
+                      </Wire>
+                      <Wire UId="60">
+                        <IdentCon UId="31"/>
+                        <NameCon UId="41" Name="in1"/>
+                      </Wire>
+                      <Wire UId="61">
+                        <IdentCon UId="32"/>
+                        <NameCon UId="41" Name="in2"/>
+                      </Wire>
+                      <Wire UId="62">
+                        <NameCon UId="41" Name="out"/>
+                        <NameCon UId="42" Name="pre"/>
+                      </Wire>
+                      <Wire UId="63">
+                        <IdentCon UId="33"/>
+                        <NameCon UId="42" Name="in1"/>
+                      </Wire>
+                      <Wire UId="64">
+                        <IdentCon UId="34"/>
+                        <NameCon UId="42" Name="in2"/>
+                      </Wire>
+                      <Wire UId="65">
+                        <NameCon UId="42" Name="out"/>
+                        <NameCon UId="43" Name="in"/>
+                      </Wire>
+                      <Wire UId="66">
+                        <IdentCon UId="35"/>
+                        <NameCon UId="43" Name="operand"/>
+                      </Wire>
+                    </Wires>
+                  </FlgNet>
+                </PermanentOperation>
+                <PermanentOperation ProgrammingLanguage="LAD">
+                  <FlgNet>
+                    <Parts>
+                      <Access Scope="LocalVariable" UId="21">
+                        <Symbol>
+                          <Component Name="Start"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="LocalVariable" UId="22">
+                        <Symbol>
+                          <Component Name="Paused"/>
+                        </Symbol>
+                      </Access>
+                      <Part Name="Contact" UId="23"/>
+                      <Part Name="RCoil" UId="24"/>
+                    </Parts>
+                    <Wires>
+                      <Wire UId="25">
+                        <Powerrail/>
+                        <NameCon UId="23" Name="in"/>
+                      </Wire>
+                      <Wire UId="26">
+                        <IdentCon UId="21"/>
+                        <NameCon UId="23" Name="operand"/>
+                      </Wire>
+                      <Wire UId="27">
+                        <NameCon UId="23" Name="out"/>
+                        <NameCon UId="24" Name="in"/>
+                      </Wire>
+                      <Wire UId="28">
+                        <IdentCon UId="22"/>
+                        <NameCon UId="24" Name="operand"/>
+                      </Wire>
+                    </Wires>
+                  </FlgNet>
+                </PermanentOperation>
+                <PermanentOperation ProgrammingLanguage="LAD">
+                  <FlgNet>
+                    <Parts>
+                      <Access Scope="LocalVariable" UId="21">
+                        <Symbol>
+                          <Component Name="Stop"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="LocalVariable" UId="22">
+                        <Symbol>
+                          <Component Name="Paused"/>
+                        </Symbol>
+                      </Access>
+                      <Part Name="Contact" UId="23"/>
+                      <Part Name="SCoil" UId="24"/>
+                    </Parts>
+                    <Wires>
+                      <Wire UId="25">
+                        <Powerrail/>
+                        <NameCon UId="23" Name="in"/>
+                      </Wire>
+                      <Wire UId="26">
+                        <IdentCon UId="21"/>
+                        <NameCon UId="23" Name="operand"/>
+                      </Wire>
+                      <Wire UId="27">
+                        <NameCon UId="23" Name="out"/>
+                        <NameCon UId="24" Name="in"/>
+                      </Wire>
+                      <Wire UId="28">
+                        <IdentCon UId="22"/>
+                        <NameCon UId="24" Name="operand"/>
+                      </Wire>
+                    </Wires>
+                  </FlgNet>
+                </PermanentOperation>
+                <PermanentOperation ProgrammingLanguage="LAD">
+                  <FlgNet>
+                    <Parts>
+                      <Access Scope="LocalVariable" UId="21">
+                        <Symbol>
+                          <Component Name="AnyFault"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="LocalVariable" UId="22">
+                        <Symbol>
+                          <Component Name="EStopOK"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="LocalVariable" UId="23">
+                        <Symbol>
+                          <Component Name="Paused"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="LocalVariable" UId="24">
+                        <Symbol>
+                          <Component Name="Auto"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="LocalVariable" UId="25">
+                        <Symbol>
+                          <Component Name="Healthy"/>
+                        </Symbol>
+                      </Access>
+                      <Part Name="Contact" UId="26">
+                        <Negated Name="operand"/>
+                      </Part>
+                      <Part Name="Contact" UId="27"/>
+                      <Part Name="Contact" UId="28">
+                        <Negated Name="operand"/>
+                      </Part>
+                      <Part Name="Contact" UId="29"/>
+                      <Part Name="Coil" UId="30"/>
+                    </Parts>
+                    <Wires>
+                      <Wire UId="31">
+                        <Powerrail/>
+                        <NameCon UId="26" Name="in"/>
+                      </Wire>
+                      <Wire UId="32">
+                        <IdentCon UId="21"/>
+                        <NameCon UId="26" Name="operand"/>
+                      </Wire>
+                      <Wire UId="33">
+                        <NameCon UId="26" Name="out"/>
+                        <NameCon UId="27" Name="in"/>
+                      </Wire>
+                      <Wire UId="34">
+                        <IdentCon UId="22"/>
+                        <NameCon UId="27" Name="operand"/>
+                      </Wire>
+                      <Wire UId="35">
+                        <NameCon UId="27" Name="out"/>
+                        <NameCon UId="28" Name="in"/>
+                      </Wire>
+                      <Wire UId="36">
+                        <IdentCon UId="23"/>
+                        <NameCon UId="28" Name="operand"/>
+                      </Wire>
+                      <Wire UId="37">
+                        <NameCon UId="28" Name="out"/>
+                        <NameCon UId="29" Name="in"/>
+                      </Wire>
+                      <Wire UId="38">
+                        <IdentCon UId="24"/>
+                        <NameCon UId="29" Name="operand"/>
+                      </Wire>
+                      <Wire UId="39">
+                        <NameCon UId="29" Name="out"/>
+                        <NameCon UId="30" Name="in"/>
+                      </Wire>
+                      <Wire UId="40">
+                        <IdentCon UId="25"/>
+                        <NameCon UId="30" Name="operand"/>
+                      </Wire>
+                    </Wires>
+                  </FlgNet>
+                </PermanentOperation>
+                <PermanentOperation ProgrammingLanguage="LAD">
+                  <FlgNet>
+                    <Parts>
+                      <Access Scope="LocalVariable" UId="21">
+                        <Symbol>
+                          <Component Name="Healthy"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="LocalVariable" UId="22">
+                        <Symbol>
+                          <Component Name="Halted"/>
+                        </Symbol>
+                      </Access>
+                      <Part Name="Contact" UId="23">
+                        <Negated Name="operand"/>
+                      </Part>
+                      <Part Name="Coil" UId="24"/>
+                    </Parts>
+                    <Wires>
+                      <Wire UId="25">
+                        <Powerrail/>
+                        <NameCon UId="23" Name="in"/>
+                      </Wire>
+                      <Wire UId="26">
+                        <IdentCon UId="21"/>
+                        <NameCon UId="23" Name="operand"/>
+                      </Wire>
+                      <Wire UId="27">
+                        <NameCon UId="23" Name="out"/>
+                        <NameCon UId="24" Name="in"/>
+                      </Wire>
+                      <Wire UId="28">
+                        <IdentCon UId="22"/>
+                        <NameCon UId="24" Name="operand"/>
+                      </Wire>
+                    </Wires>
+                  </FlgNet>
+                </PermanentOperation>
+                <PermanentOperation ProgrammingLanguage="LAD">
+                  <FlgNet>
+                    <Parts>
+                      <Access Scope="LocalVariable" UId="21">
+                        <Symbol>
+                          <Component Name="MixHeat"/>
+                          <Component Name="X"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="LocalVariable" UId="22">
+                        <Symbol>
+                          <Component Name="Temp"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="LocalVariable" UId="23">
+                        <Symbol>
+                          <Component Name="TempAtStepStart"/>
+                        </Symbol>
+                      </Access>
+                      <Part Name="Contact" UId="24">
+                        <Negated Name="operand"/>
+                      </Part>
+                      <Part Name="Move" UId="25">
+                        <TemplateValue Name="Card" Type="Cardinality">1</TemplateValue>
+                      </Part>
+                    </Parts>
+                    <Wires>
+                      <Wire UId="26">
+                        <Powerrail/>
+                        <NameCon UId="24" Name="in"/>
+                      </Wire>
+                      <Wire UId="27">
+                        <IdentCon UId="21"/>
+                        <NameCon UId="24" Name="operand"/>
+                      </Wire>
+                      <Wire UId="28">
+                        <NameCon UId="24" Name="out"/>
+                        <NameCon UId="25" Name="en"/>
+                      </Wire>
+                      <Wire UId="29">
+                        <IdentCon UId="22"/>
+                        <NameCon UId="25" Name="in"/>
+                      </Wire>
+                      <Wire UId="30">
+                        <NameCon UId="25" Name="out1"/>
+                        <IdentCon UId="23"/>
+                      </Wire>
+                    </Wires>
+                  </FlgNet>
+                </PermanentOperation>
+                <PermanentOperation ProgrammingLanguage="LAD">
+                  <FlgNet>
+                    <Parts>
+                      <Access Scope="LocalVariable" UId="21">
+                        <Symbol>
+                          <Component Name="TempAtStepStart"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="LiteralConstant" UId="22">
+                        <Constant>
+                          <ConstantType>Real</ConstantType>
+                          <ConstantValue>2.0</ConstantValue>
+                        </Constant>
+                      </Access>
+                      <Access Scope="LocalVariable" UId="23">
+                        <Symbol>
+                          <Component Name="TempRiseLimit"/>
+                        </Symbol>
+                      </Access>
+                      <Part Name="Add" UId="24">
+                        <TemplateValue Name="Card" Type="Cardinality">2</TemplateValue>
+                        <TemplateValue Name="SrcType" Type="Type">Real</TemplateValue>
+                      </Part>
+                    </Parts>
+                    <Wires>
+                      <Wire UId="25">
+                        <Powerrail/>
+                        <NameCon UId="24" Name="en"/>
+                      </Wire>
+                      <Wire UId="26">
+                        <IdentCon UId="21"/>
+                        <NameCon UId="24" Name="in1"/>
+                      </Wire>
+                      <Wire UId="27">
+                        <IdentCon UId="22"/>
+                        <NameCon UId="24" Name="in2"/>
+                      </Wire>
+                      <Wire UId="28">
+                        <NameCon UId="24" Name="out"/>
+                        <IdentCon UId="23"/>
+                      </Wire>
+                    </Wires>
+                  </FlgNet>
+                </PermanentOperation>
+              </PreOperations>
+              <Sequence>
+                <Title/>
+                <Comment>
+                  <MultiLanguageText Lang="en-US">Batch sequence of the mixing station. Idle waits for Start; Fill A and Fill B open the inlet valves until the recipe levels; Mix and heat runs the agitator and heats to TempSP for MixTime; Hold waits for the filler; Drain pumps the tank empty; Done counts the batch. Every working step is interlocked with Healthy: on a fault, E-stop, Stop or Auto off its actions switch off and the step is kept. Press Start (after Reset) to continue.</MultiLanguageText>
+                </Comment>
+                <Steps>
+                  <Step Number="1" Init="true" Name="Idle" MaximumStepTime="T#10S" WarningTime="T#10S">
+                    <Actions>
+                      <Action/>
+                    </Actions>
+                    <Supervisions>
+                      <Supervision ProgrammingLanguage="LAD">
+                        <FlgNet>
+                          <Parts>
+                            <Part Name="SvCoil" UId="21"/>
+                          </Parts>
+                          <Wires>
+                            <Wire UId="22">
+                              <Powerrail/>
+                              <NameCon UId="21" Name="in"/>
+                            </Wire>
+                          </Wires>
+                        </FlgNet>
+                      </Supervision>
+                    </Supervisions>
+                    <Interlocks>
+                      <Interlock ProgrammingLanguage="LAD">
+                        <FlgNet>
+                          <Parts>
+                            <Part Name="IlCoil" UId="21"/>
+                          </Parts>
+                          <Wires>
+                            <Wire UId="22">
+                              <Powerrail/>
+                              <NameCon UId="21" Name="in"/>
+                            </Wire>
+                          </Wires>
+                        </FlgNet>
+                      </Interlock>
+                    </Interlocks>
+                  </Step>
+                  <Step Number="10" Init="false" Name="FillA" MaximumStepTime="T#120S" WarningTime="T#120S">
+                    <Actions>
+                      <Action Interlock="true" Qualifier="N">
+                        <Token Text="#OpenXV101"/>
+                        <Token Text="&#xA;"/>
+                      </Action>
+                      <Action/>
+                    </Actions>
+                    <Supervisions>
+                      <Supervision ProgrammingLanguage="LAD">
+                        <FlgNet>
+                          <Parts>
+                            <Part Name="SvCoil" UId="21"/>
+                          </Parts>
+                          <Wires>
+                            <Wire UId="22">
+                              <Powerrail/>
+                              <NameCon UId="21" Name="in"/>
+                            </Wire>
+                          </Wires>
+                        </FlgNet>
+                      </Supervision>
+                    </Supervisions>
+                    <Interlocks>
+                      <Interlock ProgrammingLanguage="LAD">
+                        <AlarmText>
+                          <MultiLanguageText Lang="en-US">Sequence halted: fault, E-stop, Stop or not in Auto</MultiLanguageText>
+                        </AlarmText>
+                        <FlgNet>
+                          <Parts>
+                            <Access Scope="LocalVariable" UId="21">
+                              <Symbol>
+                                <Component Name="Healthy"/>
+                              </Symbol>
+                            </Access>
+                            <Part Name="Contact" UId="22"/>
+                            <Part Name="IlCoil" UId="23"/>
+                          </Parts>
+                          <Wires>
+                            <Wire UId="24">
+                              <Powerrail/>
+                              <NameCon UId="22" Name="in"/>
+                            </Wire>
+                            <Wire UId="25">
+                              <IdentCon UId="21"/>
+                              <NameCon UId="22" Name="operand"/>
+                            </Wire>
+                            <Wire UId="26">
+                              <NameCon UId="22" Name="out"/>
+                              <NameCon UId="23" Name="in"/>
+                            </Wire>
+                          </Wires>
+                        </FlgNet>
+                      </Interlock>
+                    </Interlocks>
+                  </Step>
+                  <Step Number="20" Init="false" Name="FillB" MaximumStepTime="T#120S" WarningTime="T#120S">
+                    <Actions>
+                      <Action Interlock="true" Qualifier="N">
+                        <Token Text="#OpenXV102"/>
+                        <Token Text="&#xA;"/>
+                      </Action>
+                      <Action/>
+                    </Actions>
+                    <Supervisions>
+                      <Supervision ProgrammingLanguage="LAD">
+                        <FlgNet>
+                          <Parts>
+                            <Part Name="SvCoil" UId="21"/>
+                          </Parts>
+                          <Wires>
+                            <Wire UId="22">
+                              <Powerrail/>
+                              <NameCon UId="21" Name="in"/>
+                            </Wire>
+                          </Wires>
+                        </FlgNet>
+                      </Supervision>
+                    </Supervisions>
+                    <Interlocks>
+                      <Interlock ProgrammingLanguage="LAD">
+                        <AlarmText>
+                          <MultiLanguageText Lang="en-US">Sequence halted: fault, E-stop, Stop or not in Auto</MultiLanguageText>
+                        </AlarmText>
+                        <FlgNet>
+                          <Parts>
+                            <Access Scope="LocalVariable" UId="21">
+                              <Symbol>
+                                <Component Name="Healthy"/>
+                              </Symbol>
+                            </Access>
+                            <Part Name="Contact" UId="22"/>
+                            <Part Name="IlCoil" UId="23"/>
+                          </Parts>
+                          <Wires>
+                            <Wire UId="24">
+                              <Powerrail/>
+                              <NameCon UId="22" Name="in"/>
+                            </Wire>
+                            <Wire UId="25">
+                              <IdentCon UId="21"/>
+                              <NameCon UId="22" Name="operand"/>
+                            </Wire>
+                            <Wire UId="26">
+                              <NameCon UId="22" Name="out"/>
+                              <NameCon UId="23" Name="in"/>
+                            </Wire>
+                          </Wires>
+                        </FlgNet>
+                      </Interlock>
+                    </Interlocks>
+                  </Step>
+                  <Step Number="30" Init="false" Name="MixHeat" MaximumStepTime="T#600S" WarningTime="T#600S">
+                    <Actions>
+                      <Action Interlock="true" Qualifier="N">
+                        <Token Text="#RunM201"/>
+                        <Token Text="&#xA;"/>
+                      </Action>
+                      <Action Interlock="true" Qualifier="N">
+                        <Token Text="#HeatReq"/>
+                        <Token Text="&#xA;"/>
+                      </Action>
+                      <Action/>
+                    </Actions>
+                    <Supervisions>
+                      <Supervision ProgrammingLanguage="LAD">
+                        <FlgNet>
+                          <Parts>
+                            <Part Name="SvCoil" UId="21"/>
+                          </Parts>
+                          <Wires>
+                            <Wire UId="22">
+                              <Powerrail/>
+                              <NameCon UId="21" Name="in"/>
+                            </Wire>
+                          </Wires>
+                        </FlgNet>
+                      </Supervision>
+                    </Supervisions>
+                    <Interlocks>
+                      <Interlock ProgrammingLanguage="LAD">
+                        <AlarmText>
+                          <MultiLanguageText Lang="en-US">Sequence halted: fault, E-stop, Stop or not in Auto</MultiLanguageText>
+                        </AlarmText>
+                        <FlgNet>
+                          <Parts>
+                            <Access Scope="LocalVariable" UId="21">
+                              <Symbol>
+                                <Component Name="Healthy"/>
+                              </Symbol>
+                            </Access>
+                            <Part Name="Contact" UId="22"/>
+                            <Part Name="IlCoil" UId="23"/>
+                          </Parts>
+                          <Wires>
+                            <Wire UId="24">
+                              <Powerrail/>
+                              <NameCon UId="22" Name="in"/>
+                            </Wire>
+                            <Wire UId="25">
+                              <IdentCon UId="21"/>
+                              <NameCon UId="22" Name="operand"/>
+                            </Wire>
+                            <Wire UId="26">
+                              <NameCon UId="22" Name="out"/>
+                              <NameCon UId="23" Name="in"/>
+                            </Wire>
+                          </Wires>
+                        </FlgNet>
+                      </Interlock>
+                    </Interlocks>
+                  </Step>
+                  <Step Number="40" Init="false" Name="Hold" MaximumStepTime="T#60S" WarningTime="T#60S">
+                    <Actions>
+                      <Action Interlock="true" Qualifier="N">
+                        <Token Text="#RunM201"/>
+                        <Token Text="&#xA;"/>
+                      </Action>
+                      <Action/>
+                    </Actions>
+                    <Supervisions>
+                      <Supervision ProgrammingLanguage="LAD">
+                        <FlgNet>
+                          <Parts>
+                            <Part Name="SvCoil" UId="21"/>
+                          </Parts>
+                          <Wires>
+                            <Wire UId="22">
+                              <Powerrail/>
+                              <NameCon UId="21" Name="in"/>
+                            </Wire>
+                          </Wires>
+                        </FlgNet>
+                      </Supervision>
+                    </Supervisions>
+                    <Interlocks>
+                      <Interlock ProgrammingLanguage="LAD">
+                        <AlarmText>
+                          <MultiLanguageText Lang="en-US">Sequence halted: fault, E-stop, Stop or not in Auto</MultiLanguageText>
+                        </AlarmText>
+                        <FlgNet>
+                          <Parts>
+                            <Access Scope="LocalVariable" UId="21">
+                              <Symbol>
+                                <Component Name="Healthy"/>
+                              </Symbol>
+                            </Access>
+                            <Part Name="Contact" UId="22"/>
+                            <Part Name="IlCoil" UId="23"/>
+                          </Parts>
+                          <Wires>
+                            <Wire UId="24">
+                              <Powerrail/>
+                              <NameCon UId="22" Name="in"/>
+                            </Wire>
+                            <Wire UId="25">
+                              <IdentCon UId="21"/>
+                              <NameCon UId="22" Name="operand"/>
+                            </Wire>
+                            <Wire UId="26">
+                              <NameCon UId="22" Name="out"/>
+                              <NameCon UId="23" Name="in"/>
+                            </Wire>
+                          </Wires>
+                        </FlgNet>
+                      </Interlock>
+                    </Interlocks>
+                  </Step>
+                  <Step Number="50" Init="false" Name="Drain" MaximumStepTime="T#180S" WarningTime="T#180S">
+                    <Actions>
+                      <Action Interlock="true" Qualifier="N">
+                        <Token Text="#RunP401"/>
+                        <Token Text="&#xA;"/>
+                      </Action>
+                      <Action/>
+                    </Actions>
+                    <Supervisions>
+                      <Supervision ProgrammingLanguage="LAD">
+                        <FlgNet>
+                          <Parts>
+                            <Part Name="SvCoil" UId="21"/>
+                          </Parts>
+                          <Wires>
+                            <Wire UId="22">
+                              <Powerrail/>
+                              <NameCon UId="21" Name="in"/>
+                            </Wire>
+                          </Wires>
+                        </FlgNet>
+                      </Supervision>
+                    </Supervisions>
+                    <Interlocks>
+                      <Interlock ProgrammingLanguage="LAD">
+                        <AlarmText>
+                          <MultiLanguageText Lang="en-US">Sequence halted: fault, E-stop, Stop or not in Auto</MultiLanguageText>
+                        </AlarmText>
+                        <FlgNet>
+                          <Parts>
+                            <Access Scope="LocalVariable" UId="21">
+                              <Symbol>
+                                <Component Name="Healthy"/>
+                              </Symbol>
+                            </Access>
+                            <Part Name="Contact" UId="22"/>
+                            <Part Name="IlCoil" UId="23"/>
+                          </Parts>
+                          <Wires>
+                            <Wire UId="24">
+                              <Powerrail/>
+                              <NameCon UId="22" Name="in"/>
+                            </Wire>
+                            <Wire UId="25">
+                              <IdentCon UId="21"/>
+                              <NameCon UId="22" Name="operand"/>
+                            </Wire>
+                            <Wire UId="26">
+                              <NameCon UId="22" Name="out"/>
+                              <NameCon UId="23" Name="in"/>
+                            </Wire>
+                          </Wires>
+                        </FlgNet>
+                      </Interlock>
+                    </Interlocks>
+                  </Step>
+                  <Step Number="60" Init="false" Name="Done" MaximumStepTime="T#10S" WarningTime="T#10S">
+                    <Actions>
+                      <Action Qualifier="N">
+                        <Token Text="#BatchDone"/>
+                        <Token Text="&#xA;"/>
+                      </Action>
+                      <Action/>
+                    </Actions>
+                    <Supervisions>
+                      <Supervision ProgrammingLanguage="LAD">
+                        <FlgNet>
+                          <Parts>
+                            <Part Name="SvCoil" UId="21"/>
+                          </Parts>
+                          <Wires>
+                            <Wire UId="22">
+                              <Powerrail/>
+                              <NameCon UId="21" Name="in"/>
+                            </Wire>
+                          </Wires>
+                        </FlgNet>
+                      </Supervision>
+                    </Supervisions>
+                    <Interlocks>
+                      <Interlock ProgrammingLanguage="LAD">
+                        <FlgNet>
+                          <Parts>
+                            <Part Name="IlCoil" UId="21"/>
+                          </Parts>
+                          <Wires>
+                            <Wire UId="22">
+                              <Powerrail/>
+                              <NameCon UId="21" Name="in"/>
+                            </Wire>
+                          </Wires>
+                        </FlgNet>
+                      </Interlock>
+                    </Interlocks>
+                  </Step>
+                </Steps>
+                <Transitions>
+                  <Transition IsMissing="false" Name="T1_StartBatch" Number="1" ProgrammingLanguage="LAD">
+                    <FlgNet>
+                      <Parts>
+                        <Access Scope="LocalVariable" UId="21">
+                          <Symbol>
+                            <Component Name="Halted"/>
+                          </Symbol>
+                        </Access>
+                        <Access Scope="LocalVariable" UId="22">
+                          <Symbol>
+                            <Component Name="Start"/>
+                          </Symbol>
+                        </Access>
+                        <Access Scope="LocalVariable" UId="23">
+                          <Symbol>
+                            <Component Name="RecipeValid"/>
+                          </Symbol>
+                        </Access>
+                        <Access Scope="LocalVariable" UId="24">
+                          <Symbol>
+                            <Component Name="Level"/>
+                          </Symbol>
+                        </Access>
+                        <Access Scope="GlobalVariable" UId="25">
+                          <Symbol>
+                            <Component Name="DB_Recipe"/>
+                            <Component Name="DrainLevel"/>
+                          </Symbol>
+                        </Access>
+                        <Part Name="Contact" UId="26">
+                          <Negated Name="operand"/>
+                        </Part>
+                        <Part Name="Contact" UId="27"/>
+                        <Part Name="Contact" UId="28"/>
+                        <Part Name="Le" UId="29">
+                          <TemplateValue Name="SrcType" Type="Type">Real</TemplateValue>
+                        </Part>
+                        <Part Name="TrCoil" UId="30"/>
+                      </Parts>
+                      <Wires>
+                        <Wire UId="31">
+                          <Powerrail/>
+                          <NameCon UId="26" Name="in"/>
+                        </Wire>
+                        <Wire UId="32">
+                          <IdentCon UId="21"/>
+                          <NameCon UId="26" Name="operand"/>
+                        </Wire>
+                        <Wire UId="33">
+                          <NameCon UId="26" Name="out"/>
+                          <NameCon UId="27" Name="in"/>
+                        </Wire>
+                        <Wire UId="34">
+                          <IdentCon UId="22"/>
+                          <NameCon UId="27" Name="operand"/>
+                        </Wire>
+                        <Wire UId="35">
+                          <NameCon UId="27" Name="out"/>
+                          <NameCon UId="28" Name="in"/>
+                        </Wire>
+                        <Wire UId="36">
+                          <IdentCon UId="23"/>
+                          <NameCon UId="28" Name="operand"/>
+                        </Wire>
+                        <Wire UId="37">
+                          <NameCon UId="28" Name="out"/>
+                          <NameCon UId="29" Name="pre"/>
+                        </Wire>
+                        <Wire UId="38">
+                          <IdentCon UId="24"/>
+                          <NameCon UId="29" Name="in1"/>
+                        </Wire>
+                        <Wire UId="39">
+                          <IdentCon UId="25"/>
+                          <NameCon UId="29" Name="in2"/>
+                        </Wire>
+                        <Wire UId="40">
+                          <NameCon UId="29" Name="out"/>
+                          <NameCon UId="30" Name="in"/>
+                        </Wire>
+                      </Wires>
+                    </FlgNet>
+                  </Transition>
+                  <Transition IsMissing="false" Name="T2_LevelA_Reached" Number="2" ProgrammingLanguage="LAD">
+                    <FlgNet>
+                      <Parts>
+                        <Access Scope="LocalVariable" UId="21">
+                          <Symbol>
+                            <Component Name="Halted"/>
+                          </Symbol>
+                        </Access>
+                        <Access Scope="LocalVariable" UId="22">
+                          <Symbol>
+                            <Component Name="Level"/>
+                          </Symbol>
+                        </Access>
+                        <Access Scope="GlobalVariable" UId="23">
+                          <Symbol>
+                            <Component Name="DB_Recipe"/>
+                            <Component Name="LevelA"/>
+                          </Symbol>
+                        </Access>
+                        <Part Name="Contact" UId="24">
+                          <Negated Name="operand"/>
+                        </Part>
+                        <Part Name="Ge" UId="25">
+                          <TemplateValue Name="SrcType" Type="Type">Real</TemplateValue>
+                        </Part>
+                        <Part Name="TrCoil" UId="26"/>
+                      </Parts>
+                      <Wires>
+                        <Wire UId="27">
+                          <Powerrail/>
+                          <NameCon UId="24" Name="in"/>
+                        </Wire>
+                        <Wire UId="28">
+                          <IdentCon UId="21"/>
+                          <NameCon UId="24" Name="operand"/>
+                        </Wire>
+                        <Wire UId="29">
+                          <NameCon UId="24" Name="out"/>
+                          <NameCon UId="25" Name="pre"/>
+                        </Wire>
+                        <Wire UId="30">
+                          <IdentCon UId="22"/>
+                          <NameCon UId="25" Name="in1"/>
+                        </Wire>
+                        <Wire UId="31">
+                          <IdentCon UId="23"/>
+                          <NameCon UId="25" Name="in2"/>
+                        </Wire>
+                        <Wire UId="32">
+                          <NameCon UId="25" Name="out"/>
+                          <NameCon UId="26" Name="in"/>
+                        </Wire>
+                      </Wires>
+                    </FlgNet>
+                  </Transition>
+                  <Transition IsMissing="false" Name="T3_LevelB_Reached" Number="3" ProgrammingLanguage="LAD">
+                    <FlgNet>
+                      <Parts>
+                        <Access Scope="LocalVariable" UId="21">
+                          <Symbol>
+                            <Component Name="Halted"/>
+                          </Symbol>
+                        </Access>
+                        <Access Scope="LocalVariable" UId="22">
+                          <Symbol>
+                            <Component Name="Level"/>
+                          </Symbol>
+                        </Access>
+                        <Access Scope="GlobalVariable" UId="23">
+                          <Symbol>
+                            <Component Name="DB_Recipe"/>
+                            <Component Name="LevelB"/>
+                          </Symbol>
+                        </Access>
+                        <Part Name="Contact" UId="24">
+                          <Negated Name="operand"/>
+                        </Part>
+                        <Part Name="Ge" UId="25">
+                          <TemplateValue Name="SrcType" Type="Type">Real</TemplateValue>
+                        </Part>
+                        <Part Name="TrCoil" UId="26"/>
+                      </Parts>
+                      <Wires>
+                        <Wire UId="27">
+                          <Powerrail/>
+                          <NameCon UId="24" Name="in"/>
+                        </Wire>
+                        <Wire UId="28">
+                          <IdentCon UId="21"/>
+                          <NameCon UId="24" Name="operand"/>
+                        </Wire>
+                        <Wire UId="29">
+                          <NameCon UId="24" Name="out"/>
+                          <NameCon UId="25" Name="pre"/>
+                        </Wire>
+                        <Wire UId="30">
+                          <IdentCon UId="22"/>
+                          <NameCon UId="25" Name="in1"/>
+                        </Wire>
+                        <Wire UId="31">
+                          <IdentCon UId="23"/>
+                          <NameCon UId="25" Name="in2"/>
+                        </Wire>
+                        <Wire UId="32">
+                          <NameCon UId="25" Name="out"/>
+                          <NameCon UId="26" Name="in"/>
+                        </Wire>
+                      </Wires>
+                    </FlgNet>
+                  </Transition>
+                  <Transition IsMissing="false" Name="T4_HotAndMixed" Number="4" ProgrammingLanguage="LAD">
+                    <FlgNet>
+                      <Parts>
+                        <Access Scope="LocalVariable" UId="21">
+                          <Symbol>
+                            <Component Name="Halted"/>
+                          </Symbol>
+                        </Access>
+                        <Access Scope="LocalVariable" UId="22">
+                          <Symbol>
+                            <Component Name="Temp"/>
+                          </Symbol>
+                        </Access>
+                        <Access Scope="GlobalVariable" UId="23">
+                          <Symbol>
+                            <Component Name="DB_Recipe"/>
+                            <Component Name="TempSP"/>
+                          </Symbol>
+                        </Access>
+                        <Access Scope="LocalVariable" UId="24">
+                          <Symbol>
+                            <Component Name="MixHeat"/>
+                            <Component Name="U"/>
+                          </Symbol>
+                        </Access>
+                        <Access Scope="GlobalVariable" UId="25">
+                          <Symbol>
+                            <Component Name="DB_Recipe"/>
+                            <Component Name="MixTime"/>
+                          </Symbol>
+                        </Access>
+                        <Part Name="Contact" UId="26">
+                          <Negated Name="operand"/>
+                        </Part>
+                        <Part Name="Ge" UId="27">
+                          <TemplateValue Name="SrcType" Type="Type">Real</TemplateValue>
+                        </Part>
+                        <Part Name="Ge" UId="28">
+                          <TemplateValue Name="SrcType" Type="Type">Time</TemplateValue>
+                        </Part>
+                        <Part Name="TrCoil" UId="29"/>
+                      </Parts>
+                      <Wires>
+                        <Wire UId="30">
+                          <Powerrail/>
+                          <NameCon UId="26" Name="in"/>
+                        </Wire>
+                        <Wire UId="31">
+                          <IdentCon UId="21"/>
+                          <NameCon UId="26" Name="operand"/>
+                        </Wire>
+                        <Wire UId="32">
+                          <NameCon UId="26" Name="out"/>
+                          <NameCon UId="27" Name="pre"/>
+                        </Wire>
+                        <Wire UId="33">
+                          <IdentCon UId="22"/>
+                          <NameCon UId="27" Name="in1"/>
+                        </Wire>
+                        <Wire UId="34">
+                          <IdentCon UId="23"/>
+                          <NameCon UId="27" Name="in2"/>
+                        </Wire>
+                        <Wire UId="35">
+                          <NameCon UId="27" Name="out"/>
+                          <NameCon UId="28" Name="pre"/>
+                        </Wire>
+                        <Wire UId="36">
+                          <IdentCon UId="24"/>
+                          <NameCon UId="28" Name="in1"/>
+                        </Wire>
+                        <Wire UId="37">
+                          <IdentCon UId="25"/>
+                          <NameCon UId="28" Name="in2"/>
+                        </Wire>
+                        <Wire UId="38">
+                          <NameCon UId="28" Name="out"/>
+                          <NameCon UId="29" Name="in"/>
+                        </Wire>
+                      </Wires>
+                    </FlgNet>
+                  </Transition>
+                  <Transition IsMissing="false" Name="T5_FillerReady" Number="5" ProgrammingLanguage="LAD">
+                    <FlgNet>
+                      <Parts>
+                        <Access Scope="LocalVariable" UId="21">
+                          <Symbol>
+                            <Component Name="Halted"/>
+                          </Symbol>
+                        </Access>
+                        <Access Scope="LocalVariable" UId="22">
+                          <Symbol>
+                            <Component Name="FillerReady"/>
+                          </Symbol>
+                        </Access>
+                        <Part Name="Contact" UId="23">
+                          <Negated Name="operand"/>
+                        </Part>
+                        <Part Name="Contact" UId="24"/>
+                        <Part Name="TrCoil" UId="25"/>
+                      </Parts>
+                      <Wires>
+                        <Wire UId="26">
+                          <Powerrail/>
+                          <NameCon UId="23" Name="in"/>
+                        </Wire>
+                        <Wire UId="27">
+                          <IdentCon UId="21"/>
+                          <NameCon UId="23" Name="operand"/>
+                        </Wire>
+                        <Wire UId="28">
+                          <NameCon UId="23" Name="out"/>
+                          <NameCon UId="24" Name="in"/>
+                        </Wire>
+                        <Wire UId="29">
+                          <IdentCon UId="22"/>
+                          <NameCon UId="24" Name="operand"/>
+                        </Wire>
+                        <Wire UId="30">
+                          <NameCon UId="24" Name="out"/>
+                          <NameCon UId="25" Name="in"/>
+                        </Wire>
+                      </Wires>
+                    </FlgNet>
+                  </Transition>
+                  <Transition IsMissing="false" Name="T6_TankEmpty" Number="6" ProgrammingLanguage="LAD">
+                    <FlgNet>
+                      <Parts>
+                        <Access Scope="LocalVariable" UId="21">
+                          <Symbol>
+                            <Component Name="Halted"/>
+                          </Symbol>
+                        </Access>
+                        <Access Scope="LocalVariable" UId="22">
+                          <Symbol>
+                            <Component Name="Level"/>
+                          </Symbol>
+                        </Access>
+                        <Access Scope="GlobalVariable" UId="23">
+                          <Symbol>
+                            <Component Name="DB_Recipe"/>
+                            <Component Name="DrainLevel"/>
+                          </Symbol>
+                        </Access>
+                        <Part Name="Contact" UId="24">
+                          <Negated Name="operand"/>
+                        </Part>
+                        <Part Name="Le" UId="25">
+                          <TemplateValue Name="SrcType" Type="Type">Real</TemplateValue>
+                        </Part>
+                        <Part Name="TrCoil" UId="26"/>
+                      </Parts>
+                      <Wires>
+                        <Wire UId="27">
+                          <Powerrail/>
+                          <NameCon UId="24" Name="in"/>
+                        </Wire>
+                        <Wire UId="28">
+                          <IdentCon UId="21"/>
+                          <NameCon UId="24" Name="operand"/>
+                        </Wire>
+                        <Wire UId="29">
+                          <NameCon UId="24" Name="out"/>
+                          <NameCon UId="25" Name="pre"/>
+                        </Wire>
+                        <Wire UId="30">
+                          <IdentCon UId="22"/>
+                          <NameCon UId="25" Name="in1"/>
+                        </Wire>
+                        <Wire UId="31">
+                          <IdentCon UId="23"/>
+                          <NameCon UId="25" Name="in2"/>
+                        </Wire>
+                        <Wire UId="32">
+                          <NameCon UId="25" Name="out"/>
+                          <NameCon UId="26" Name="in"/>
+                        </Wire>
+                      </Wires>
+                    </FlgNet>
+                  </Transition>
+                  <Transition IsMissing="false" Name="T7_BatchCounted" Number="7" ProgrammingLanguage="LAD">
+                    <FlgNet>
+                      <Parts>
+                        <Access Scope="LocalVariable" UId="21">
+                          <Symbol>
+                            <Component Name="Done"/>
+                            <Component Name="X"/>
+                          </Symbol>
+                        </Access>
+                        <Part Name="Contact" UId="22"/>
+                        <Part Name="TrCoil" UId="23"/>
+                      </Parts>
+                      <Wires>
+                        <Wire UId="24">
+                          <Powerrail/>
+                          <NameCon UId="22" Name="in"/>
+                        </Wire>
+                        <Wire UId="25">
+                          <IdentCon UId="21"/>
+                          <NameCon UId="22" Name="operand"/>
+                        </Wire>
+                        <Wire UId="26">
+                          <NameCon UId="22" Name="out"/>
+                          <NameCon UId="23" Name="in"/>
+                        </Wire>
+                      </Wires>
+                    </FlgNet>
+                  </Transition>
+                </Transitions>
+                <Branches/>
+                <Connections>
+                  <Connection>
+                    <NodeFrom>
+                      <StepRef Number="1"/>
+                    </NodeFrom>
+                    <NodeTo>
+                      <TransitionRef Number="1"/>
+                    </NodeTo>
+                    <LinkType>Direct</LinkType>
+                  </Connection>
+                  <Connection>
+                    <NodeFrom>
+                      <TransitionRef Number="1"/>
+                    </NodeFrom>
+                    <NodeTo>
+                      <StepRef Number="10"/>
+                    </NodeTo>
+                    <LinkType>Direct</LinkType>
+                  </Connection>
+                  <Connection>
+                    <NodeFrom>
+                      <StepRef Number="10"/>
+                    </NodeFrom>
+                    <NodeTo>
+                      <TransitionRef Number="2"/>
+                    </NodeTo>
+                    <LinkType>Direct</LinkType>
+                  </Connection>
+                  <Connection>
+                    <NodeFrom>
+                      <TransitionRef Number="2"/>
+                    </NodeFrom>
+                    <NodeTo>
+                      <StepRef Number="20"/>
+                    </NodeTo>
+                    <LinkType>Direct</LinkType>
+                  </Connection>
+                  <Connection>
+                    <NodeFrom>
+                      <StepRef Number="20"/>
+                    </NodeFrom>
+                    <NodeTo>
+                      <TransitionRef Number="3"/>
+                    </NodeTo>
+                    <LinkType>Direct</LinkType>
+                  </Connection>
+                  <Connection>
+                    <NodeFrom>
+                      <TransitionRef Number="3"/>
+                    </NodeFrom>
+                    <NodeTo>
+                      <StepRef Number="30"/>
+                    </NodeTo>
+                    <LinkType>Direct</LinkType>
+                  </Connection>
+                  <Connection>
+                    <NodeFrom>
+                      <StepRef Number="30"/>
+                    </NodeFrom>
+                    <NodeTo>
+                      <TransitionRef Number="4"/>
+                    </NodeTo>
+                    <LinkType>Direct</LinkType>
+                  </Connection>
+                  <Connection>
+                    <NodeFrom>
+                      <TransitionRef Number="4"/>
+                    </NodeFrom>
+                    <NodeTo>
+                      <StepRef Number="40"/>
+                    </NodeTo>
+                    <LinkType>Direct</LinkType>
+                  </Connection>
+                  <Connection>
+                    <NodeFrom>
+                      <StepRef Number="40"/>
+                    </NodeFrom>
+                    <NodeTo>
+                      <TransitionRef Number="5"/>
+                    </NodeTo>
+                    <LinkType>Direct</LinkType>
+                  </Connection>
+                  <Connection>
+                    <NodeFrom>
+                      <TransitionRef Number="5"/>
+                    </NodeFrom>
+                    <NodeTo>
+                      <StepRef Number="50"/>
+                    </NodeTo>
+                    <LinkType>Direct</LinkType>
+                  </Connection>
+                  <Connection>
+                    <NodeFrom>
+                      <StepRef Number="50"/>
+                    </NodeFrom>
+                    <NodeTo>
+                      <TransitionRef Number="6"/>
+                    </NodeTo>
+                    <LinkType>Direct</LinkType>
+                  </Connection>
+                  <Connection>
+                    <NodeFrom>
+                      <TransitionRef Number="6"/>
+                    </NodeFrom>
+                    <NodeTo>
+                      <StepRef Number="60"/>
+                    </NodeTo>
+                    <LinkType>Direct</LinkType>
+                  </Connection>
+                  <Connection>
+                    <NodeFrom>
+                      <StepRef Number="60"/>
+                    </NodeFrom>
+                    <NodeTo>
+                      <TransitionRef Number="7"/>
+                    </NodeTo>
+                    <LinkType>Direct</LinkType>
+                  </Connection>
+                  <Connection>
+                    <NodeFrom>
+                      <TransitionRef Number="7"/>
+                    </NodeFrom>
+                    <NodeTo>
+                      <StepRef Number="1"/>
+                    </NodeTo>
+                    <LinkType>Jump</LinkType>
+                  </Connection>
+                </Connections>
+              </Sequence>
+              <PostOperations>
+                <PermanentOperation ProgrammingLanguage="LAD">
+                  <FlgNet>
+                    <Parts>
+                      <Access Scope="LocalVariable" UId="21">
+                        <Symbol>
+                          <Component Name="Idle"/>
+                          <Component Name="X"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="LiteralConstant" UId="22">
+                        <Constant>
+                          <ConstantType>Int</ConstantType>
+                          <ConstantValue>0</ConstantValue>
+                        </Constant>
+                      </Access>
+                      <Access Scope="LocalVariable" UId="23">
+                        <Symbol>
+                          <Component Name="Step"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="LocalVariable" UId="24">
+                        <Symbol>
+                          <Component Name="Idle"/>
+                          <Component Name="U"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="LocalVariable" UId="25">
+                        <Symbol>
+                          <Component Name="StepTime"/>
+                        </Symbol>
+                      </Access>
+                      <Part Name="Contact" UId="26"/>
+                      <Part Name="Move" UId="27">
+                        <TemplateValue Name="Card" Type="Cardinality">1</TemplateValue>
+                      </Part>
+                      <Part Name="Move" UId="28">
+                        <TemplateValue Name="Card" Type="Cardinality">1</TemplateValue>
+                      </Part>
+                    </Parts>
+                    <Wires>
+                      <Wire UId="29">
+                        <Powerrail/>
+                        <NameCon UId="26" Name="in"/>
+                      </Wire>
+                      <Wire UId="30">
+                        <IdentCon UId="21"/>
+                        <NameCon UId="26" Name="operand"/>
+                      </Wire>
+                      <Wire UId="31">
+                        <NameCon UId="26" Name="out"/>
+                        <NameCon UId="27" Name="en"/>
+                        <NameCon UId="28" Name="en"/>
+                      </Wire>
+                      <Wire UId="32">
+                        <IdentCon UId="22"/>
+                        <NameCon UId="27" Name="in"/>
+                      </Wire>
+                      <Wire UId="33">
+                        <NameCon UId="27" Name="out1"/>
+                        <IdentCon UId="23"/>
+                      </Wire>
+                      <Wire UId="34">
+                        <IdentCon UId="24"/>
+                        <NameCon UId="28" Name="in"/>
+                      </Wire>
+                      <Wire UId="35">
+                        <NameCon UId="28" Name="out1"/>
+                        <IdentCon UId="25"/>
+                      </Wire>
+                    </Wires>
+                  </FlgNet>
+                </PermanentOperation>
+                <PermanentOperation ProgrammingLanguage="LAD">
+                  <FlgNet>
+                    <Parts>
+                      <Access Scope="LocalVariable" UId="21">
+                        <Symbol>
+                          <Component Name="FillA"/>
+                          <Component Name="X"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="LiteralConstant" UId="22">
+                        <Constant>
+                          <ConstantType>Int</ConstantType>
+                          <ConstantValue>10</ConstantValue>
+                        </Constant>
+                      </Access>
+                      <Access Scope="LocalVariable" UId="23">
+                        <Symbol>
+                          <Component Name="Step"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="LocalVariable" UId="24">
+                        <Symbol>
+                          <Component Name="FillA"/>
+                          <Component Name="U"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="LocalVariable" UId="25">
+                        <Symbol>
+                          <Component Name="StepTime"/>
+                        </Symbol>
+                      </Access>
+                      <Part Name="Contact" UId="26"/>
+                      <Part Name="Move" UId="27">
+                        <TemplateValue Name="Card" Type="Cardinality">1</TemplateValue>
+                      </Part>
+                      <Part Name="Move" UId="28">
+                        <TemplateValue Name="Card" Type="Cardinality">1</TemplateValue>
+                      </Part>
+                    </Parts>
+                    <Wires>
+                      <Wire UId="29">
+                        <Powerrail/>
+                        <NameCon UId="26" Name="in"/>
+                      </Wire>
+                      <Wire UId="30">
+                        <IdentCon UId="21"/>
+                        <NameCon UId="26" Name="operand"/>
+                      </Wire>
+                      <Wire UId="31">
+                        <NameCon UId="26" Name="out"/>
+                        <NameCon UId="27" Name="en"/>
+                        <NameCon UId="28" Name="en"/>
+                      </Wire>
+                      <Wire UId="32">
+                        <IdentCon UId="22"/>
+                        <NameCon UId="27" Name="in"/>
+                      </Wire>
+                      <Wire UId="33">
+                        <NameCon UId="27" Name="out1"/>
+                        <IdentCon UId="23"/>
+                      </Wire>
+                      <Wire UId="34">
+                        <IdentCon UId="24"/>
+                        <NameCon UId="28" Name="in"/>
+                      </Wire>
+                      <Wire UId="35">
+                        <NameCon UId="28" Name="out1"/>
+                        <IdentCon UId="25"/>
+                      </Wire>
+                    </Wires>
+                  </FlgNet>
+                </PermanentOperation>
+                <PermanentOperation ProgrammingLanguage="LAD">
+                  <FlgNet>
+                    <Parts>
+                      <Access Scope="LocalVariable" UId="21">
+                        <Symbol>
+                          <Component Name="FillB"/>
+                          <Component Name="X"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="LiteralConstant" UId="22">
+                        <Constant>
+                          <ConstantType>Int</ConstantType>
+                          <ConstantValue>20</ConstantValue>
+                        </Constant>
+                      </Access>
+                      <Access Scope="LocalVariable" UId="23">
+                        <Symbol>
+                          <Component Name="Step"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="LocalVariable" UId="24">
+                        <Symbol>
+                          <Component Name="FillB"/>
+                          <Component Name="U"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="LocalVariable" UId="25">
+                        <Symbol>
+                          <Component Name="StepTime"/>
+                        </Symbol>
+                      </Access>
+                      <Part Name="Contact" UId="26"/>
+                      <Part Name="Move" UId="27">
+                        <TemplateValue Name="Card" Type="Cardinality">1</TemplateValue>
+                      </Part>
+                      <Part Name="Move" UId="28">
+                        <TemplateValue Name="Card" Type="Cardinality">1</TemplateValue>
+                      </Part>
+                    </Parts>
+                    <Wires>
+                      <Wire UId="29">
+                        <Powerrail/>
+                        <NameCon UId="26" Name="in"/>
+                      </Wire>
+                      <Wire UId="30">
+                        <IdentCon UId="21"/>
+                        <NameCon UId="26" Name="operand"/>
+                      </Wire>
+                      <Wire UId="31">
+                        <NameCon UId="26" Name="out"/>
+                        <NameCon UId="27" Name="en"/>
+                        <NameCon UId="28" Name="en"/>
+                      </Wire>
+                      <Wire UId="32">
+                        <IdentCon UId="22"/>
+                        <NameCon UId="27" Name="in"/>
+                      </Wire>
+                      <Wire UId="33">
+                        <NameCon UId="27" Name="out1"/>
+                        <IdentCon UId="23"/>
+                      </Wire>
+                      <Wire UId="34">
+                        <IdentCon UId="24"/>
+                        <NameCon UId="28" Name="in"/>
+                      </Wire>
+                      <Wire UId="35">
+                        <NameCon UId="28" Name="out1"/>
+                        <IdentCon UId="25"/>
+                      </Wire>
+                    </Wires>
+                  </FlgNet>
+                </PermanentOperation>
+                <PermanentOperation ProgrammingLanguage="LAD">
+                  <FlgNet>
+                    <Parts>
+                      <Access Scope="LocalVariable" UId="21">
+                        <Symbol>
+                          <Component Name="MixHeat"/>
+                          <Component Name="X"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="LiteralConstant" UId="22">
+                        <Constant>
+                          <ConstantType>Int</ConstantType>
+                          <ConstantValue>30</ConstantValue>
+                        </Constant>
+                      </Access>
+                      <Access Scope="LocalVariable" UId="23">
+                        <Symbol>
+                          <Component Name="Step"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="LocalVariable" UId="24">
+                        <Symbol>
+                          <Component Name="MixHeat"/>
+                          <Component Name="U"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="LocalVariable" UId="25">
+                        <Symbol>
+                          <Component Name="StepTime"/>
+                        </Symbol>
+                      </Access>
+                      <Part Name="Contact" UId="26"/>
+                      <Part Name="Move" UId="27">
+                        <TemplateValue Name="Card" Type="Cardinality">1</TemplateValue>
+                      </Part>
+                      <Part Name="Move" UId="28">
+                        <TemplateValue Name="Card" Type="Cardinality">1</TemplateValue>
+                      </Part>
+                    </Parts>
+                    <Wires>
+                      <Wire UId="29">
+                        <Powerrail/>
+                        <NameCon UId="26" Name="in"/>
+                      </Wire>
+                      <Wire UId="30">
+                        <IdentCon UId="21"/>
+                        <NameCon UId="26" Name="operand"/>
+                      </Wire>
+                      <Wire UId="31">
+                        <NameCon UId="26" Name="out"/>
+                        <NameCon UId="27" Name="en"/>
+                        <NameCon UId="28" Name="en"/>
+                      </Wire>
+                      <Wire UId="32">
+                        <IdentCon UId="22"/>
+                        <NameCon UId="27" Name="in"/>
+                      </Wire>
+                      <Wire UId="33">
+                        <NameCon UId="27" Name="out1"/>
+                        <IdentCon UId="23"/>
+                      </Wire>
+                      <Wire UId="34">
+                        <IdentCon UId="24"/>
+                        <NameCon UId="28" Name="in"/>
+                      </Wire>
+                      <Wire UId="35">
+                        <NameCon UId="28" Name="out1"/>
+                        <IdentCon UId="25"/>
+                      </Wire>
+                    </Wires>
+                  </FlgNet>
+                </PermanentOperation>
+                <PermanentOperation ProgrammingLanguage="LAD">
+                  <FlgNet>
+                    <Parts>
+                      <Access Scope="LocalVariable" UId="21">
+                        <Symbol>
+                          <Component Name="Hold"/>
+                          <Component Name="X"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="LiteralConstant" UId="22">
+                        <Constant>
+                          <ConstantType>Int</ConstantType>
+                          <ConstantValue>40</ConstantValue>
+                        </Constant>
+                      </Access>
+                      <Access Scope="LocalVariable" UId="23">
+                        <Symbol>
+                          <Component Name="Step"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="LocalVariable" UId="24">
+                        <Symbol>
+                          <Component Name="Hold"/>
+                          <Component Name="U"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="LocalVariable" UId="25">
+                        <Symbol>
+                          <Component Name="StepTime"/>
+                        </Symbol>
+                      </Access>
+                      <Part Name="Contact" UId="26"/>
+                      <Part Name="Move" UId="27">
+                        <TemplateValue Name="Card" Type="Cardinality">1</TemplateValue>
+                      </Part>
+                      <Part Name="Move" UId="28">
+                        <TemplateValue Name="Card" Type="Cardinality">1</TemplateValue>
+                      </Part>
+                    </Parts>
+                    <Wires>
+                      <Wire UId="29">
+                        <Powerrail/>
+                        <NameCon UId="26" Name="in"/>
+                      </Wire>
+                      <Wire UId="30">
+                        <IdentCon UId="21"/>
+                        <NameCon UId="26" Name="operand"/>
+                      </Wire>
+                      <Wire UId="31">
+                        <NameCon UId="26" Name="out"/>
+                        <NameCon UId="27" Name="en"/>
+                        <NameCon UId="28" Name="en"/>
+                      </Wire>
+                      <Wire UId="32">
+                        <IdentCon UId="22"/>
+                        <NameCon UId="27" Name="in"/>
+                      </Wire>
+                      <Wire UId="33">
+                        <NameCon UId="27" Name="out1"/>
+                        <IdentCon UId="23"/>
+                      </Wire>
+                      <Wire UId="34">
+                        <IdentCon UId="24"/>
+                        <NameCon UId="28" Name="in"/>
+                      </Wire>
+                      <Wire UId="35">
+                        <NameCon UId="28" Name="out1"/>
+                        <IdentCon UId="25"/>
+                      </Wire>
+                    </Wires>
+                  </FlgNet>
+                </PermanentOperation>
+                <PermanentOperation ProgrammingLanguage="LAD">
+                  <FlgNet>
+                    <Parts>
+                      <Access Scope="LocalVariable" UId="21">
+                        <Symbol>
+                          <Component Name="Drain"/>
+                          <Component Name="X"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="LiteralConstant" UId="22">
+                        <Constant>
+                          <ConstantType>Int</ConstantType>
+                          <ConstantValue>50</ConstantValue>
+                        </Constant>
+                      </Access>
+                      <Access Scope="LocalVariable" UId="23">
+                        <Symbol>
+                          <Component Name="Step"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="LocalVariable" UId="24">
+                        <Symbol>
+                          <Component Name="Drain"/>
+                          <Component Name="U"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="LocalVariable" UId="25">
+                        <Symbol>
+                          <Component Name="StepTime"/>
+                        </Symbol>
+                      </Access>
+                      <Part Name="Contact" UId="26"/>
+                      <Part Name="Move" UId="27">
+                        <TemplateValue Name="Card" Type="Cardinality">1</TemplateValue>
+                      </Part>
+                      <Part Name="Move" UId="28">
+                        <TemplateValue Name="Card" Type="Cardinality">1</TemplateValue>
+                      </Part>
+                    </Parts>
+                    <Wires>
+                      <Wire UId="29">
+                        <Powerrail/>
+                        <NameCon UId="26" Name="in"/>
+                      </Wire>
+                      <Wire UId="30">
+                        <IdentCon UId="21"/>
+                        <NameCon UId="26" Name="operand"/>
+                      </Wire>
+                      <Wire UId="31">
+                        <NameCon UId="26" Name="out"/>
+                        <NameCon UId="27" Name="en"/>
+                        <NameCon UId="28" Name="en"/>
+                      </Wire>
+                      <Wire UId="32">
+                        <IdentCon UId="22"/>
+                        <NameCon UId="27" Name="in"/>
+                      </Wire>
+                      <Wire UId="33">
+                        <NameCon UId="27" Name="out1"/>
+                        <IdentCon UId="23"/>
+                      </Wire>
+                      <Wire UId="34">
+                        <IdentCon UId="24"/>
+                        <NameCon UId="28" Name="in"/>
+                      </Wire>
+                      <Wire UId="35">
+                        <NameCon UId="28" Name="out1"/>
+                        <IdentCon UId="25"/>
+                      </Wire>
+                    </Wires>
+                  </FlgNet>
+                </PermanentOperation>
+                <PermanentOperation ProgrammingLanguage="LAD">
+                  <FlgNet>
+                    <Parts>
+                      <Access Scope="LocalVariable" UId="21">
+                        <Symbol>
+                          <Component Name="Done"/>
+                          <Component Name="X"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="LiteralConstant" UId="22">
+                        <Constant>
+                          <ConstantType>Int</ConstantType>
+                          <ConstantValue>60</ConstantValue>
+                        </Constant>
+                      </Access>
+                      <Access Scope="LocalVariable" UId="23">
+                        <Symbol>
+                          <Component Name="Step"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="LocalVariable" UId="24">
+                        <Symbol>
+                          <Component Name="Done"/>
+                          <Component Name="U"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="LocalVariable" UId="25">
+                        <Symbol>
+                          <Component Name="StepTime"/>
+                        </Symbol>
+                      </Access>
+                      <Part Name="Contact" UId="26"/>
+                      <Part Name="Move" UId="27">
+                        <TemplateValue Name="Card" Type="Cardinality">1</TemplateValue>
+                      </Part>
+                      <Part Name="Move" UId="28">
+                        <TemplateValue Name="Card" Type="Cardinality">1</TemplateValue>
+                      </Part>
+                    </Parts>
+                    <Wires>
+                      <Wire UId="29">
+                        <Powerrail/>
+                        <NameCon UId="26" Name="in"/>
+                      </Wire>
+                      <Wire UId="30">
+                        <IdentCon UId="21"/>
+                        <NameCon UId="26" Name="operand"/>
+                      </Wire>
+                      <Wire UId="31">
+                        <NameCon UId="26" Name="out"/>
+                        <NameCon UId="27" Name="en"/>
+                        <NameCon UId="28" Name="en"/>
+                      </Wire>
+                      <Wire UId="32">
+                        <IdentCon UId="22"/>
+                        <NameCon UId="27" Name="in"/>
+                      </Wire>
+                      <Wire UId="33">
+                        <NameCon UId="27" Name="out1"/>
+                        <IdentCon UId="23"/>
+                      </Wire>
+                      <Wire UId="34">
+                        <IdentCon UId="24"/>
+                        <NameCon UId="28" Name="in"/>
+                      </Wire>
+                      <Wire UId="35">
+                        <NameCon UId="28" Name="out1"/>
+                        <IdentCon UId="25"/>
+                      </Wire>
+                    </Wires>
+                  </FlgNet>
+                </PermanentOperation>
+                <PermanentOperation ProgrammingLanguage="LAD">
+                  <FlgNet>
+                    <Parts>
+                      <Access Scope="LocalVariable" UId="21">
+                        <Symbol>
+                          <Component Name="Idle"/>
+                          <Component Name="X"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="LocalVariable" UId="22">
+                        <Symbol>
+                          <Component Name="Running"/>
+                        </Symbol>
+                      </Access>
+                      <Part Name="Contact" UId="23">
+                        <Negated Name="operand"/>
+                      </Part>
+                      <Part Name="Coil" UId="24"/>
+                    </Parts>
+                    <Wires>
+                      <Wire UId="25">
+                        <Powerrail/>
+                        <NameCon UId="23" Name="in"/>
+                      </Wire>
+                      <Wire UId="26">
+                        <IdentCon UId="21"/>
+                        <NameCon UId="23" Name="operand"/>
+                      </Wire>
+                      <Wire UId="27">
+                        <NameCon UId="23" Name="out"/>
+                        <NameCon UId="24" Name="in"/>
+                      </Wire>
+                      <Wire UId="28">
+                        <IdentCon UId="22"/>
+                        <NameCon UId="24" Name="operand"/>
+                      </Wire>
+                    </Wires>
+                  </FlgNet>
+                </PermanentOperation>
+                <PermanentOperation ProgrammingLanguage="LAD">
+                  <FlgNet>
+                    <Parts>
+                      <Access Scope="LocalVariable" UId="21">
+                        <Symbol>
+                          <Component Name="MixHeat"/>
+                          <Component Name="X"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="GlobalVariable" UId="22">
+                        <Symbol>
+                          <Component Name="DB_Recipe"/>
+                          <Component Name="MixSpeed"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="LocalVariable" UId="23">
+                        <Symbol>
+                          <Component Name="SpeedM201"/>
+                        </Symbol>
+                      </Access>
+                      <Part Name="Contact" UId="24"/>
+                      <Part Name="Move" UId="25">
+                        <TemplateValue Name="Card" Type="Cardinality">1</TemplateValue>
+                      </Part>
+                    </Parts>
+                    <Wires>
+                      <Wire UId="26">
+                        <Powerrail/>
+                        <NameCon UId="24" Name="in"/>
+                      </Wire>
+                      <Wire UId="27">
+                        <IdentCon UId="21"/>
+                        <NameCon UId="24" Name="operand"/>
+                      </Wire>
+                      <Wire UId="28">
+                        <NameCon UId="24" Name="out"/>
+                        <NameCon UId="25" Name="en"/>
+                      </Wire>
+                      <Wire UId="29">
+                        <IdentCon UId="22"/>
+                        <NameCon UId="25" Name="in"/>
+                      </Wire>
+                      <Wire UId="30">
+                        <NameCon UId="25" Name="out1"/>
+                        <IdentCon UId="23"/>
+                      </Wire>
+                    </Wires>
+                  </FlgNet>
+                </PermanentOperation>
+                <PermanentOperation ProgrammingLanguage="LAD">
+                  <FlgNet>
+                    <Parts>
+                      <Access Scope="LocalVariable" UId="21">
+                        <Symbol>
+                          <Component Name="MixHeat"/>
+                          <Component Name="X"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="GlobalVariable" UId="22">
+                        <Symbol>
+                          <Component Name="DB_Recipe"/>
+                          <Component Name="HoldSpeed"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="LocalVariable" UId="23">
+                        <Symbol>
+                          <Component Name="SpeedM201"/>
+                        </Symbol>
+                      </Access>
+                      <Part Name="Contact" UId="24">
+                        <Negated Name="operand"/>
+                      </Part>
+                      <Part Name="Move" UId="25">
+                        <TemplateValue Name="Card" Type="Cardinality">1</TemplateValue>
+                      </Part>
+                    </Parts>
+                    <Wires>
+                      <Wire UId="26">
+                        <Powerrail/>
+                        <NameCon UId="24" Name="in"/>
+                      </Wire>
+                      <Wire UId="27">
+                        <IdentCon UId="21"/>
+                        <NameCon UId="24" Name="operand"/>
+                      </Wire>
+                      <Wire UId="28">
+                        <NameCon UId="24" Name="out"/>
+                        <NameCon UId="25" Name="en"/>
+                      </Wire>
+                      <Wire UId="29">
+                        <IdentCon UId="22"/>
+                        <NameCon UId="25" Name="in"/>
+                      </Wire>
+                      <Wire UId="30">
+                        <NameCon UId="25" Name="out1"/>
+                        <IdentCon UId="23"/>
+                      </Wire>
+                    </Wires>
+                  </FlgNet>
+                </PermanentOperation>
+                <PermanentOperation ProgrammingLanguage="LAD">
+                  <FlgNet>
+                    <Parts>
+                      <Access Scope="LocalVariable" UId="21">
+                        <Symbol>
+                          <Component Name="HeatReq"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="LocalVariable" UId="22">
+                        <Symbol>
+                          <Component Name="Temp"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="GlobalVariable" UId="23">
+                        <Symbol>
+                          <Component Name="DB_Recipe"/>
+                          <Component Name="TempSP"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="LocalVariable" UId="24">
+                        <Symbol>
+                          <Component Name="HeatE301"/>
+                        </Symbol>
+                      </Access>
+                      <Part Name="Contact" UId="25"/>
+                      <Part Name="Lt" UId="26">
+                        <TemplateValue Name="SrcType" Type="Type">Real</TemplateValue>
+                      </Part>
+                      <Part Name="Coil" UId="27"/>
+                    </Parts>
+                    <Wires>
+                      <Wire UId="28">
+                        <Powerrail/>
+                        <NameCon UId="25" Name="in"/>
+                      </Wire>
+                      <Wire UId="29">
+                        <IdentCon UId="21"/>
+                        <NameCon UId="25" Name="operand"/>
+                      </Wire>
+                      <Wire UId="30">
+                        <NameCon UId="25" Name="out"/>
+                        <NameCon UId="26" Name="pre"/>
+                      </Wire>
+                      <Wire UId="31">
+                        <IdentCon UId="22"/>
+                        <NameCon UId="26" Name="in1"/>
+                      </Wire>
+                      <Wire UId="32">
+                        <IdentCon UId="23"/>
+                        <NameCon UId="26" Name="in2"/>
+                      </Wire>
+                      <Wire UId="33">
+                        <NameCon UId="26" Name="out"/>
+                        <NameCon UId="27" Name="in"/>
+                      </Wire>
+                      <Wire UId="34">
+                        <IdentCon UId="24"/>
+                        <NameCon UId="27" Name="operand"/>
+                      </Wire>
+                    </Wires>
+                  </FlgNet>
+                </PermanentOperation>
+                <PermanentOperation ProgrammingLanguage="LAD">
+                  <FlgNet>
+                    <Parts>
+                      <Access Scope="LocalVariable" UId="21">
+                        <Symbol>
+                          <Component Name="FillA"/>
+                          <Component Name="X"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="LocalVariable" UId="22">
+                        <Symbol>
+                          <Component Name="FillA"/>
+                          <Component Name="U"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="TypedConstant" UId="23">
+                        <Constant>
+                          <ConstantValue>T#120S</ConstantValue>
+                        </Constant>
+                      </Access>
+                      <Access Scope="LocalVariable" UId="24">
+                        <Symbol>
+                          <Component Name="TimeoutStep10"/>
+                        </Symbol>
+                      </Access>
+                      <Part Name="Contact" UId="25"/>
+                      <Part Name="Gt" UId="26">
+                        <TemplateValue Name="SrcType" Type="Type">Time</TemplateValue>
+                      </Part>
+                      <Part Name="Coil" UId="27"/>
+                    </Parts>
+                    <Wires>
+                      <Wire UId="28">
+                        <Powerrail/>
+                        <NameCon UId="25" Name="in"/>
+                      </Wire>
+                      <Wire UId="29">
+                        <IdentCon UId="21"/>
+                        <NameCon UId="25" Name="operand"/>
+                      </Wire>
+                      <Wire UId="30">
+                        <NameCon UId="25" Name="out"/>
+                        <NameCon UId="26" Name="pre"/>
+                      </Wire>
+                      <Wire UId="31">
+                        <IdentCon UId="22"/>
+                        <NameCon UId="26" Name="in1"/>
+                      </Wire>
+                      <Wire UId="32">
+                        <IdentCon UId="23"/>
+                        <NameCon UId="26" Name="in2"/>
+                      </Wire>
+                      <Wire UId="33">
+                        <NameCon UId="26" Name="out"/>
+                        <NameCon UId="27" Name="in"/>
+                      </Wire>
+                      <Wire UId="34">
+                        <IdentCon UId="24"/>
+                        <NameCon UId="27" Name="operand"/>
+                      </Wire>
+                    </Wires>
+                  </FlgNet>
+                </PermanentOperation>
+                <PermanentOperation ProgrammingLanguage="LAD">
+                  <FlgNet>
+                    <Parts>
+                      <Access Scope="LocalVariable" UId="21">
+                        <Symbol>
+                          <Component Name="FillB"/>
+                          <Component Name="X"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="LocalVariable" UId="22">
+                        <Symbol>
+                          <Component Name="FillB"/>
+                          <Component Name="U"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="TypedConstant" UId="23">
+                        <Constant>
+                          <ConstantValue>T#120S</ConstantValue>
+                        </Constant>
+                      </Access>
+                      <Access Scope="LocalVariable" UId="24">
+                        <Symbol>
+                          <Component Name="TimeoutStep20"/>
+                        </Symbol>
+                      </Access>
+                      <Part Name="Contact" UId="25"/>
+                      <Part Name="Gt" UId="26">
+                        <TemplateValue Name="SrcType" Type="Type">Time</TemplateValue>
+                      </Part>
+                      <Part Name="Coil" UId="27"/>
+                    </Parts>
+                    <Wires>
+                      <Wire UId="28">
+                        <Powerrail/>
+                        <NameCon UId="25" Name="in"/>
+                      </Wire>
+                      <Wire UId="29">
+                        <IdentCon UId="21"/>
+                        <NameCon UId="25" Name="operand"/>
+                      </Wire>
+                      <Wire UId="30">
+                        <NameCon UId="25" Name="out"/>
+                        <NameCon UId="26" Name="pre"/>
+                      </Wire>
+                      <Wire UId="31">
+                        <IdentCon UId="22"/>
+                        <NameCon UId="26" Name="in1"/>
+                      </Wire>
+                      <Wire UId="32">
+                        <IdentCon UId="23"/>
+                        <NameCon UId="26" Name="in2"/>
+                      </Wire>
+                      <Wire UId="33">
+                        <NameCon UId="26" Name="out"/>
+                        <NameCon UId="27" Name="in"/>
+                      </Wire>
+                      <Wire UId="34">
+                        <IdentCon UId="24"/>
+                        <NameCon UId="27" Name="operand"/>
+                      </Wire>
+                    </Wires>
+                  </FlgNet>
+                </PermanentOperation>
+                <PermanentOperation ProgrammingLanguage="LAD">
+                  <FlgNet>
+                    <Parts>
+                      <Access Scope="LocalVariable" UId="21">
+                        <Symbol>
+                          <Component Name="MixHeat"/>
+                          <Component Name="X"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="LocalVariable" UId="22">
+                        <Symbol>
+                          <Component Name="MixHeat"/>
+                          <Component Name="U"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="TypedConstant" UId="23">
+                        <Constant>
+                          <ConstantValue>T#600S</ConstantValue>
+                        </Constant>
+                      </Access>
+                      <Access Scope="LocalVariable" UId="24">
+                        <Symbol>
+                          <Component Name="TimeoutStep30"/>
+                        </Symbol>
+                      </Access>
+                      <Part Name="Contact" UId="25"/>
+                      <Part Name="Gt" UId="26">
+                        <TemplateValue Name="SrcType" Type="Type">Time</TemplateValue>
+                      </Part>
+                      <Part Name="Coil" UId="27"/>
+                    </Parts>
+                    <Wires>
+                      <Wire UId="28">
+                        <Powerrail/>
+                        <NameCon UId="25" Name="in"/>
+                      </Wire>
+                      <Wire UId="29">
+                        <IdentCon UId="21"/>
+                        <NameCon UId="25" Name="operand"/>
+                      </Wire>
+                      <Wire UId="30">
+                        <NameCon UId="25" Name="out"/>
+                        <NameCon UId="26" Name="pre"/>
+                      </Wire>
+                      <Wire UId="31">
+                        <IdentCon UId="22"/>
+                        <NameCon UId="26" Name="in1"/>
+                      </Wire>
+                      <Wire UId="32">
+                        <IdentCon UId="23"/>
+                        <NameCon UId="26" Name="in2"/>
+                      </Wire>
+                      <Wire UId="33">
+                        <NameCon UId="26" Name="out"/>
+                        <NameCon UId="27" Name="in"/>
+                      </Wire>
+                      <Wire UId="34">
+                        <IdentCon UId="24"/>
+                        <NameCon UId="27" Name="operand"/>
+                      </Wire>
+                    </Wires>
+                  </FlgNet>
+                </PermanentOperation>
+                <PermanentOperation ProgrammingLanguage="LAD">
+                  <FlgNet>
+                    <Parts>
+                      <Access Scope="LocalVariable" UId="21">
+                        <Symbol>
+                          <Component Name="Drain"/>
+                          <Component Name="X"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="LocalVariable" UId="22">
+                        <Symbol>
+                          <Component Name="Drain"/>
+                          <Component Name="U"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="TypedConstant" UId="23">
+                        <Constant>
+                          <ConstantValue>T#180S</ConstantValue>
+                        </Constant>
+                      </Access>
+                      <Access Scope="LocalVariable" UId="24">
+                        <Symbol>
+                          <Component Name="TimeoutStep50"/>
+                        </Symbol>
+                      </Access>
+                      <Part Name="Contact" UId="25"/>
+                      <Part Name="Gt" UId="26">
+                        <TemplateValue Name="SrcType" Type="Type">Time</TemplateValue>
+                      </Part>
+                      <Part Name="Coil" UId="27"/>
+                    </Parts>
+                    <Wires>
+                      <Wire UId="28">
+                        <Powerrail/>
+                        <NameCon UId="25" Name="in"/>
+                      </Wire>
+                      <Wire UId="29">
+                        <IdentCon UId="21"/>
+                        <NameCon UId="25" Name="operand"/>
+                      </Wire>
+                      <Wire UId="30">
+                        <NameCon UId="25" Name="out"/>
+                        <NameCon UId="26" Name="pre"/>
+                      </Wire>
+                      <Wire UId="31">
+                        <IdentCon UId="22"/>
+                        <NameCon UId="26" Name="in1"/>
+                      </Wire>
+                      <Wire UId="32">
+                        <IdentCon UId="23"/>
+                        <NameCon UId="26" Name="in2"/>
+                      </Wire>
+                      <Wire UId="33">
+                        <NameCon UId="26" Name="out"/>
+                        <NameCon UId="27" Name="in"/>
+                      </Wire>
+                      <Wire UId="34">
+                        <IdentCon UId="24"/>
+                        <NameCon UId="27" Name="operand"/>
+                      </Wire>
+                    </Wires>
+                  </FlgNet>
+                </PermanentOperation>
+                <PermanentOperation ProgrammingLanguage="LAD">
+                  <FlgNet>
+                    <Parts>
+                      <Access Scope="LocalVariable" UId="21">
+                        <Symbol>
+                          <Component Name="Hold"/>
+                          <Component Name="X"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="LocalVariable" UId="22">
+                        <Symbol>
+                          <Component Name="Hold"/>
+                          <Component Name="U"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="TypedConstant" UId="23">
+                        <Constant>
+                          <ConstantValue>T#60S</ConstantValue>
+                        </Constant>
+                      </Access>
+                      <Access Scope="LocalVariable" UId="24">
+                        <Symbol>
+                          <Component Name="FillerReady"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="LocalVariable" UId="25">
+                        <Symbol>
+                          <Component Name="WaitFillerTooLong"/>
+                        </Symbol>
+                      </Access>
+                      <Part Name="Contact" UId="26"/>
+                      <Part Name="Gt" UId="27">
+                        <TemplateValue Name="SrcType" Type="Type">Time</TemplateValue>
+                      </Part>
+                      <Part Name="Contact" UId="28">
+                        <Negated Name="operand"/>
+                      </Part>
+                      <Part Name="Coil" UId="29"/>
+                    </Parts>
+                    <Wires>
+                      <Wire UId="30">
+                        <Powerrail/>
+                        <NameCon UId="26" Name="in"/>
+                      </Wire>
+                      <Wire UId="31">
+                        <IdentCon UId="21"/>
+                        <NameCon UId="26" Name="operand"/>
+                      </Wire>
+                      <Wire UId="32">
+                        <NameCon UId="26" Name="out"/>
+                        <NameCon UId="27" Name="pre"/>
+                      </Wire>
+                      <Wire UId="33">
+                        <IdentCon UId="22"/>
+                        <NameCon UId="27" Name="in1"/>
+                      </Wire>
+                      <Wire UId="34">
+                        <IdentCon UId="23"/>
+                        <NameCon UId="27" Name="in2"/>
+                      </Wire>
+                      <Wire UId="35">
+                        <NameCon UId="27" Name="out"/>
+                        <NameCon UId="28" Name="in"/>
+                      </Wire>
+                      <Wire UId="36">
+                        <IdentCon UId="24"/>
+                        <NameCon UId="28" Name="operand"/>
+                      </Wire>
+                      <Wire UId="37">
+                        <NameCon UId="28" Name="out"/>
+                        <NameCon UId="29" Name="in"/>
+                      </Wire>
+                      <Wire UId="38">
+                        <IdentCon UId="25"/>
+                        <NameCon UId="29" Name="operand"/>
+                      </Wire>
+                    </Wires>
+                  </FlgNet>
+                </PermanentOperation>
+                <PermanentOperation ProgrammingLanguage="LAD">
+                  <FlgNet>
+                    <Parts>
+                      <Access Scope="LocalVariable" UId="21">
+                        <Symbol>
+                          <Component Name="MixHeat"/>
+                          <Component Name="X"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="LocalVariable" UId="22">
+                        <Symbol>
+                          <Component Name="HeatE301"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="LocalVariable" UId="23">
+                        <Symbol>
+                          <Component Name="MixHeat"/>
+                          <Component Name="U"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="TypedConstant" UId="24">
+                        <Constant>
+                          <ConstantValue>T#60S</ConstantValue>
+                        </Constant>
+                      </Access>
+                      <Access Scope="LocalVariable" UId="25">
+                        <Symbol>
+                          <Component Name="Temp"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="LocalVariable" UId="26">
+                        <Symbol>
+                          <Component Name="TempRiseLimit"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="LocalVariable" UId="27">
+                        <Symbol>
+                          <Component Name="NoHeating"/>
+                        </Symbol>
+                      </Access>
+                      <Part Name="Contact" UId="28"/>
+                      <Part Name="Contact" UId="29"/>
+                      <Part Name="Gt" UId="30">
+                        <TemplateValue Name="SrcType" Type="Type">Time</TemplateValue>
+                      </Part>
+                      <Part Name="Lt" UId="31">
+                        <TemplateValue Name="SrcType" Type="Type">Real</TemplateValue>
+                      </Part>
+                      <Part Name="Coil" UId="32"/>
+                    </Parts>
+                    <Wires>
+                      <Wire UId="33">
+                        <Powerrail/>
+                        <NameCon UId="28" Name="in"/>
+                      </Wire>
+                      <Wire UId="34">
+                        <IdentCon UId="21"/>
+                        <NameCon UId="28" Name="operand"/>
+                      </Wire>
+                      <Wire UId="35">
+                        <NameCon UId="28" Name="out"/>
+                        <NameCon UId="29" Name="in"/>
+                      </Wire>
+                      <Wire UId="36">
+                        <IdentCon UId="22"/>
+                        <NameCon UId="29" Name="operand"/>
+                      </Wire>
+                      <Wire UId="37">
+                        <NameCon UId="29" Name="out"/>
+                        <NameCon UId="30" Name="pre"/>
+                      </Wire>
+                      <Wire UId="38">
+                        <IdentCon UId="23"/>
+                        <NameCon UId="30" Name="in1"/>
+                      </Wire>
+                      <Wire UId="39">
+                        <IdentCon UId="24"/>
+                        <NameCon UId="30" Name="in2"/>
+                      </Wire>
+                      <Wire UId="40">
+                        <NameCon UId="30" Name="out"/>
+                        <NameCon UId="31" Name="pre"/>
+                      </Wire>
+                      <Wire UId="41">
+                        <IdentCon UId="25"/>
+                        <NameCon UId="31" Name="in1"/>
+                      </Wire>
+                      <Wire UId="42">
+                        <IdentCon UId="26"/>
+                        <NameCon UId="31" Name="in2"/>
+                      </Wire>
+                      <Wire UId="43">
+                        <NameCon UId="31" Name="out"/>
+                        <NameCon UId="32" Name="in"/>
+                      </Wire>
+                      <Wire UId="44">
+                        <IdentCon UId="27"/>
+                        <NameCon UId="32" Name="operand"/>
+                      </Wire>
+                    </Wires>
+                  </FlgNet>
+                </PermanentOperation>
+                <PermanentOperation ProgrammingLanguage="LAD">
+                  <FlgNet>
+                    <Parts>
+                      <Access Scope="LocalVariable" UId="21">
+                        <Symbol>
+                          <Component Name="Idle"/>
+                          <Component Name="X"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="LocalVariable" UId="22">
+                        <Symbol>
+                          <Component Name="Start"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="LocalVariable" UId="23">
+                        <Symbol>
+                          <Component Name="Auto"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="LocalVariable" UId="24">
+                        <Symbol>
+                          <Component Name="StartNotAuto"/>
+                        </Symbol>
+                      </Access>
+                      <Part Name="Contact" UId="25"/>
+                      <Part Name="Contact" UId="26"/>
+                      <Part Name="Contact" UId="27">
+                        <Negated Name="operand"/>
+                      </Part>
+                      <Part Name="Coil" UId="28"/>
+                    </Parts>
+                    <Wires>
+                      <Wire UId="29">
+                        <Powerrail/>
+                        <NameCon UId="25" Name="in"/>
+                      </Wire>
+                      <Wire UId="30">
+                        <IdentCon UId="21"/>
+                        <NameCon UId="25" Name="operand"/>
+                      </Wire>
+                      <Wire UId="31">
+                        <NameCon UId="25" Name="out"/>
+                        <NameCon UId="26" Name="in"/>
+                      </Wire>
+                      <Wire UId="32">
+                        <IdentCon UId="22"/>
+                        <NameCon UId="26" Name="operand"/>
+                      </Wire>
+                      <Wire UId="33">
+                        <NameCon UId="26" Name="out"/>
+                        <NameCon UId="27" Name="in"/>
+                      </Wire>
+                      <Wire UId="34">
+                        <IdentCon UId="23"/>
+                        <NameCon UId="27" Name="operand"/>
+                      </Wire>
+                      <Wire UId="35">
+                        <NameCon UId="27" Name="out"/>
+                        <NameCon UId="28" Name="in"/>
+                      </Wire>
+                      <Wire UId="36">
+                        <IdentCon UId="24"/>
+                        <NameCon UId="28" Name="operand"/>
+                      </Wire>
+                    </Wires>
+                  </FlgNet>
+                </PermanentOperation>
+                <PermanentOperation ProgrammingLanguage="LAD">
+                  <FlgNet>
+                    <Parts>
+                      <Access Scope="LocalVariable" UId="21">
+                        <Symbol>
+                          <Component Name="Idle"/>
+                          <Component Name="X"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="LocalVariable" UId="22">
+                        <Symbol>
+                          <Component Name="Start"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="LocalVariable" UId="23">
+                        <Symbol>
+                          <Component Name="Level"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="GlobalVariable" UId="24">
+                        <Symbol>
+                          <Component Name="DB_Recipe"/>
+                          <Component Name="DrainLevel"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="LocalVariable" UId="25">
+                        <Symbol>
+                          <Component Name="StartTankNotEmpty"/>
+                        </Symbol>
+                      </Access>
+                      <Part Name="Contact" UId="26"/>
+                      <Part Name="Contact" UId="27"/>
+                      <Part Name="Gt" UId="28">
+                        <TemplateValue Name="SrcType" Type="Type">Real</TemplateValue>
+                      </Part>
+                      <Part Name="Coil" UId="29"/>
+                    </Parts>
+                    <Wires>
+                      <Wire UId="30">
+                        <Powerrail/>
+                        <NameCon UId="26" Name="in"/>
+                      </Wire>
+                      <Wire UId="31">
+                        <IdentCon UId="21"/>
+                        <NameCon UId="26" Name="operand"/>
+                      </Wire>
+                      <Wire UId="32">
+                        <NameCon UId="26" Name="out"/>
+                        <NameCon UId="27" Name="in"/>
+                      </Wire>
+                      <Wire UId="33">
+                        <IdentCon UId="22"/>
+                        <NameCon UId="27" Name="operand"/>
+                      </Wire>
+                      <Wire UId="34">
+                        <NameCon UId="27" Name="out"/>
+                        <NameCon UId="28" Name="pre"/>
+                      </Wire>
+                      <Wire UId="35">
+                        <IdentCon UId="23"/>
+                        <NameCon UId="28" Name="in1"/>
+                      </Wire>
+                      <Wire UId="36">
+                        <IdentCon UId="24"/>
+                        <NameCon UId="28" Name="in2"/>
+                      </Wire>
+                      <Wire UId="37">
+                        <NameCon UId="28" Name="out"/>
+                        <NameCon UId="29" Name="in"/>
+                      </Wire>
+                      <Wire UId="38">
+                        <IdentCon UId="25"/>
+                        <NameCon UId="29" Name="operand"/>
+                      </Wire>
+                    </Wires>
+                  </FlgNet>
+                </PermanentOperation>
+                <PermanentOperation ProgrammingLanguage="LAD">
+                  <FlgNet>
+                    <Parts>
+                      <Access Scope="LocalVariable" UId="21">
+                        <Symbol>
+                          <Component Name="Idle"/>
+                          <Component Name="X"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="LocalVariable" UId="22">
+                        <Symbol>
+                          <Component Name="Start"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="LocalVariable" UId="23">
+                        <Symbol>
+                          <Component Name="RecipeValid"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="LocalVariable" UId="24">
+                        <Symbol>
+                          <Component Name="StartRecipeInvalid"/>
+                        </Symbol>
+                      </Access>
+                      <Part Name="Contact" UId="25"/>
+                      <Part Name="Contact" UId="26"/>
+                      <Part Name="Contact" UId="27">
+                        <Negated Name="operand"/>
+                      </Part>
+                      <Part Name="Coil" UId="28"/>
+                    </Parts>
+                    <Wires>
+                      <Wire UId="29">
+                        <Powerrail/>
+                        <NameCon UId="25" Name="in"/>
+                      </Wire>
+                      <Wire UId="30">
+                        <IdentCon UId="21"/>
+                        <NameCon UId="25" Name="operand"/>
+                      </Wire>
+                      <Wire UId="31">
+                        <NameCon UId="25" Name="out"/>
+                        <NameCon UId="26" Name="in"/>
+                      </Wire>
+                      <Wire UId="32">
+                        <IdentCon UId="22"/>
+                        <NameCon UId="26" Name="operand"/>
+                      </Wire>
+                      <Wire UId="33">
+                        <NameCon UId="26" Name="out"/>
+                        <NameCon UId="27" Name="in"/>
+                      </Wire>
+                      <Wire UId="34">
+                        <IdentCon UId="23"/>
+                        <NameCon UId="27" Name="operand"/>
+                      </Wire>
+                      <Wire UId="35">
+                        <NameCon UId="27" Name="out"/>
+                        <NameCon UId="28" Name="in"/>
+                      </Wire>
+                      <Wire UId="36">
+                        <IdentCon UId="24"/>
+                        <NameCon UId="28" Name="operand"/>
+                      </Wire>
+                    </Wires>
+                  </FlgNet>
+                </PermanentOperation>
+              </PostOperations>
+              <AlarmsSettings>
+                <AlarmSupervisionCategories>
+                  <AlarmSupervisionCategory Id="1" DisplayClass="0"/>
+                  <AlarmSupervisionCategory Id="2" DisplayClass="0"/>
+                  <AlarmSupervisionCategory Id="3" DisplayClass="0"/>
+                  <AlarmSupervisionCategory Id="4" DisplayClass="0"/>
+                  <AlarmSupervisionCategory Id="5" DisplayClass="0"/>
+                  <AlarmSupervisionCategory Id="6" DisplayClass="0"/>
+                  <AlarmSupervisionCategory Id="7" DisplayClass="0"/>
+                  <AlarmSupervisionCategory Id="8" DisplayClass="0"/>
+                </AlarmSupervisionCategories>
+                <AlarmInterlockCategory Id="1"/>
+                <AlarmSubcategory1Interlock Id="0"/>
+                <AlarmSubcategory2Interlock Id="0"/>
+                <AlarmCategorySupervision Id="1"/>
+                <AlarmSubcategory1Supervision Id="0"/>
+                <AlarmSubcategory2Supervision Id="0"/>
+                <AlarmWarningCategory Id="2"/>
+                <AlarmSubcategory1Warning Id="0"/>
+                <AlarmSubcategory2Warning Id="0"/>
+              </AlarmsSettings>
+            </Graph>
+          </NetworkSource>
+          <ProgrammingLanguage>GRAPH</ProgrammingLanguage>
+        </AttributeList>
+        <ObjectList>
+          <MultilingualText ID="4" CompositionName="Comment">
+            <ObjectList>
+              <MultilingualTextItem ID="5" CompositionName="Items">
+                <AttributeList>
+                  <Culture>en-US</Culture>
+                  <Text/>
+                </AttributeList>
+              </MultilingualTextItem>
+            </ObjectList>
+          </MultilingualText>
+          <MultilingualText ID="6" CompositionName="Title">
+            <ObjectList>
+              <MultilingualTextItem ID="7" CompositionName="Items">
+                <AttributeList>
+                  <Culture>en-US</Culture>
+                  <Text/>
+                </AttributeList>
+              </MultilingualTextItem>
+            </ObjectList>
+          </MultilingualText>
+        </ObjectList>
+      </SW.Blocks.CompileUnit>
+      <MultilingualText ID="8" CompositionName="Title">
+        <ObjectList>
+          <MultilingualTextItem ID="9" CompositionName="Items">
+            <AttributeList>
+              <Culture>en-US</Culture>
+              <Text>Batch sequence: fill A, fill B, mix and heat, hold, drain</Text>
+            </AttributeList>
+          </MultilingualTextItem>
+        </ObjectList>
+      </MultilingualText>
+    </ObjectList>
+  </SW.Blocks.FB>
+</Document>
