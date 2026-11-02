@@ -12,6 +12,10 @@ using Xunit;
 /// <summary>Login, users and the settings store of the plant PC features, in memory with a temporary data folder.</summary>
 public class PlantTests : IDisposable
 {
+    // Made up at run time, so no password-like text sits in the source
+    private static readonly string AdminPw = NewSecret(), OperatorPw = NewSecret(), NewPw = NewSecret(), PlcPw = NewSecret();
+    private static string NewSecret() => Guid.NewGuid().ToString("N")[..12];
+
     private readonly string _dir = Path.Combine(Path.GetTempPath(), "plcki-test-" + Guid.NewGuid().ToString("N"));
 
     public void Dispose()
@@ -26,24 +30,24 @@ public class PlantTests : IDisposable
         Directory.CreateDirectory(_dir);
         var users = new UserStore(file);
         Assert.Throws<PlantException>(() => users.Add("anna", "short", UserStore.Admin));
-        users.Add("anna", "correct horse", UserStore.Admin);
-        users.Add("ben", "operator pw", UserStore.Operator);
+        users.Add("anna", AdminPw, UserStore.Admin);
+        users.Add("ben", OperatorPw, UserStore.Operator);
 
-        Assert.DoesNotContain("correct horse", File.ReadAllText(file));
-        Assert.NotNull(users.Verify("ANNA", "correct horse"));
+        Assert.DoesNotContain(AdminPw, File.ReadAllText(file));
+        Assert.NotNull(users.Verify("ANNA", AdminPw));
         Assert.Null(users.Verify("anna", "wrong password"));
-        Assert.Null(users.Verify("nobody", "correct horse"));
+        Assert.Null(users.Verify("nobody", AdminPw));
 
         Assert.Throws<PlantException>(() => users.Delete("anna", "ben"));            // last admin
         Assert.Throws<PlantException>(() => users.SetRole("anna", "operator", "ben"));
         Assert.Throws<PlantException>(() => users.Delete("anna", "anna"));           // yourself
 
         var stamp = users.Find("ben")!.Stamp;
-        users.SetPassword("ben", "another pw");
+        users.SetPassword("ben", NewPw);
         Assert.NotEqual(stamp, users.Find("ben")!.Stamp);                           // other sessions end
 
         var reloaded = new UserStore(file);
-        Assert.NotNull(reloaded.Verify("ben", "another pw"));
+        Assert.NotNull(reloaded.Verify("ben", NewPw));
         reloaded.Delete("ben", "anna");
         Assert.Single(reloaded.List());
     }
@@ -110,7 +114,7 @@ public class PlantTests : IDisposable
         {
             var c = new Client(remote.GetTestClient());
             Assert.Equal(HttpStatusCode.Unauthorized, (await c.Send(HttpMethod.Get, "/api/status")).StatusCode);
-            var setup = await c.Send(HttpMethod.Post, "/api/auth/setup", new { name = "anna", password = "correct horse" });
+            var setup = await c.Send(HttpMethod.Post, "/api/auth/setup", new { name = "anna", password = AdminPw });
             Assert.Equal(HttpStatusCode.Forbidden, setup.StatusCode);
         }
 
@@ -120,14 +124,14 @@ public class PlantTests : IDisposable
         Assert.Equal(HttpStatusCode.Redirect, page.StatusCode);
         Assert.Equal("/login.html", page.Headers.Location!.OriginalString);
 
-        Assert.True((await admin.Send(HttpMethod.Post, "/api/auth/setup", new { name = "anna", password = "correct horse" })).IsSuccessStatusCode);
-        Assert.Equal(HttpStatusCode.Conflict, (await admin.Send(HttpMethod.Post, "/api/auth/setup", new { name = "eve", password = "correct horse" })).StatusCode);
+        Assert.True((await admin.Send(HttpMethod.Post, "/api/auth/setup", new { name = "anna", password = AdminPw })).IsSuccessStatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await admin.Send(HttpMethod.Post, "/api/auth/setup", new { name = "eve", password = AdminPw })).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await admin.Send(HttpMethod.Get, "/api/status")).StatusCode);
-        Assert.True((await admin.Send(HttpMethod.Post, "/api/admin/users", new { name = "ben", password = "operator pw", role = "operator" })).IsSuccessStatusCode);
+        Assert.True((await admin.Send(HttpMethod.Post, "/api/admin/users", new { name = "ben", password = OperatorPw, role = "operator" })).IsSuccessStatusCode);
 
         var op = new Client(app.GetTestClient());
         Assert.Equal(HttpStatusCode.Unauthorized, (await op.Send(HttpMethod.Post, "/api/auth/login", new { name = "ben", password = "nope nope" })).StatusCode);
-        Assert.True((await op.Send(HttpMethod.Post, "/api/auth/login", new { name = "ben", password = "operator pw" })).IsSuccessStatusCode);
+        Assert.True((await op.Send(HttpMethod.Post, "/api/auth/login", new { name = "ben", password = OperatorPw })).IsSuccessStatusCode);
         Assert.Equal(HttpStatusCode.OK, (await op.Send(HttpMethod.Get, "/api/status")).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await op.Send(HttpMethod.Get, "/api/admin/settings")).StatusCode);
 
@@ -142,10 +146,10 @@ public class PlantTests : IDisposable
         await using (var app = await Start())
         {
             var c = new Client(app.GetTestClient());
-            await c.Send(HttpMethod.Post, "/api/auth/setup", new { name = "anna", password = "correct horse" });
+            await c.Send(HttpMethod.Post, "/api/auth/setup", new { name = "anna", password = AdminPw });
             var current = app.Services.GetRequiredService<SettingsStore>().Current();
             current.Address = "10.20.30.40";
-            current.PlcPassword = "plc-secret-1";
+            current.PlcPassword = PlcPw;
             current.Port = 5099;
             var r = await c.Send(HttpMethod.Put, "/api/admin/settings", current);
             Assert.True(r.IsSuccessStatusCode, await r.Content.ReadAsStringAsync());
@@ -157,11 +161,11 @@ public class PlantTests : IDisposable
         var saved = File.ReadAllText(Path.Combine(_dir, "settings.json"));
         Assert.Contains("10.20.30.40", saved);
         Assert.Contains("http://localhost:5099", saved);
-        Assert.DoesNotContain("plc-secret-1", saved);
+        Assert.DoesNotContain(PlcPw, saved);
 
         await using var again = await Start();
         var config = again.Services.GetRequiredService<IConfiguration>();
         Assert.Equal("10.20.30.40", config["PlcKi:Plc:Address"]);
-        Assert.Equal("plc-secret-1", config["PlcKi:Plc:Password"]);
+        Assert.Equal(PlcPw, config["PlcKi:Plc:Password"]);
     }
 }
