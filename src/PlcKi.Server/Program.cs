@@ -72,7 +72,12 @@ if (string.IsNullOrEmpty(builder.Configuration["urls"]) && string.IsNullOrEmpty(
 
 var app = builder.Build();
 app.UseDefaultFiles();
-app.UseStaticFiles();
+// "no-cache": the browser asks each time whether a page file changed (cheap, ETag), so after an update
+// it never keeps showing an old stylesheet or script
+app.UseStaticFiles(new StaticFileOptions
+{
+    OnPrepareResponse = ctx => ctx.Context.Response.Headers.CacheControl = "no-cache",
+});
 
 app.MapGet("/api/status", (LiveState s) =>
     s.Status is { } st ? Results.Ok(st) : Results.Json(new { state = "starting" }, statusCode: 503));
