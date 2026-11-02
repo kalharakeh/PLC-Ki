@@ -16,12 +16,16 @@ public class ImportTests
         Assert.Equal("MixingDemo", Export.Value.Project);
         var plc = Plc;
         Assert.Contains("192.168.10.10", plc.IpAddresses);
-        Assert.Equal(16, plc.Blocks.Count);
+        Assert.Equal(17, plc.Blocks.Count);
         var valve = plc.Block("FB_Valve")!;
         Assert.Equal("FB", valve.Kind);
         Assert.Equal("On/off valve with limit switch monitoring", valve.Title);
         Assert.Contains(valve.Interface, m => m.Name == "Permit" && m.Comment!.Contains("Interlock"));
-        Assert.NotNull(valve.SclSource);
+        Assert.Equal("LAD", valve.Language);
+        Assert.Null(valve.SclSource);
+        Assert.Equal("GRAPH", plc.Block("FB_BatchSequence")!.Language);
+        Assert.Equal("FB_BatchSequence", plc.Block("DB_BatchSequence")!.InstanceOf);
+        Assert.NotNull(plc.Block("FB_Station")!.SclSource);
         var station = plc.Block("Station")!;
         Assert.Equal("InstanceDB", station.Kind);
         Assert.Equal("FB_Station", station.InstanceOf);
@@ -86,7 +90,7 @@ public class ImportTests
         Assert.Contains("OB Main", digest);
         Assert.Contains("calls FB_Station with instance \"Station\"", digest);
         Assert.Contains("calls FB_Valve with instance #XV101", digest);
-        Assert.Contains("#XV101(Open := #Seq.OpenXV101", digest);
+        Assert.Contains("#XV101(Open := \"DB_BatchSequence\".OpenXV101", digest);
         Assert.Contains("\"DB_Alarms\".A02_XV101_NotOpen : Bool // FAULT: Inlet valve XV101", digest);
         Assert.InRange(digest.Length, 10_000, 200_000);
     }
