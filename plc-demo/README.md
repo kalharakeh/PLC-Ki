@@ -23,7 +23,7 @@ See [LAD and GRAPH blocks](#lad-and-graph-blocks) below.
 | P401 | Outlet pump with running feedback and motor protection |
 | LT101 / TT301 | Level 0..100 % / temperature 0..120 degC |
 
-Sequence (`Station.Seq.Step`): 0 Idle, 10 Fill A, 20 Fill B, 30 Mix and heat, 40 Hold (wait for filler),
+Sequence (`DB_BatchSequence.Step`): 0 Idle, 10 Fill A, 20 Fill B, 30 Mix and heat, 40 Hold (wait for filler),
 50 Drain, 60 Done. Data exchange with "MES" and a downstream "filler" is in `DB_LineInterface`.
 
 ## Set it up in TIA Portal V20
@@ -56,7 +56,7 @@ Make a watch table with these tags and use "Modify":
 | `DB_IO.PB_Stop` | pause the batch |
 | `DB_IO.PB_Reset` | reset alarms (TRUE then FALSE) |
 | `DB_IO.SW_Auto`, `DB_IO.EStop_OK` | TRUE by default |
-| `Station.Seq.Step`, `Station.Seq.StepTime` | where the sequence is |
+| `DB_BatchSequence.Step`, `DB_BatchSequence.StepTime` | where the sequence is |
 | `Station.LT101.Value`, `Station.TT301.Value`, `DB_IO.M201_SpeedPV` | level, temperature, speed |
 | `DB_Alarms.*` | alarm bits |
 
@@ -72,8 +72,9 @@ build the LAD/GRAPH parser on real V20 output.
 
 ## LAD and GRAPH blocks
 
-The XML blocks replace SCL blocks of the same name and keep their inputs and outputs, so `FB_Station`, the
-alarms, the watch table and the PLC-Ki model do not change. The SCL versions stay in `scl/` as a fallback.
+The XML blocks replace SCL blocks of the same name and keep their inputs and outputs. The SCL versions stay in
+`scl/` as a fallback. The sequence runs in its own instance DB `DB_BatchSequence` (not inside `Station`), because
+TIA does not allow a GRAPH block as a multi-instance on this CPU; the SCL version uses the same DB.
 
 | Block | Language | Number | What it shows |
 | --- | --- | --- | --- |
