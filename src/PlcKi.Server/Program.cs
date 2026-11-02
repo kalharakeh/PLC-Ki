@@ -1,6 +1,8 @@
+using PlcKi.Core.Ask;
 using PlcKi.Core.Model;
 using PlcKi.Core.Status;
 using PlcKi.Server;
+using PlcKi.Server.Ask;
 using PlcKi.Server.Live;
 
 // PLC-Ki server.
@@ -52,7 +54,15 @@ if (probe)
 builder.Services.AddSingleton(opt);
 builder.Services.AddSingleton(model);
 builder.Services.AddSingleton(new StatusEngine(model));
+builder.Services.AddSingleton(new MachineHistory(TimeSpan.FromMinutes(Math.Clamp(opt.HistoryMinutes, 1, 240))));
 builder.Services.AddSingleton<LiveState>();
+builder.Services.AddSingleton(opt.Ask);
+builder.Services.AddSingleton(sp =>
+{
+    var live = sp.GetRequiredService<LiveState>();
+    return new MachineTools(model, () => new LiveView(live.Status, live.Snapshot, live.History, DateTimeOffset.Now));
+});
+builder.Services.AddSingleton<AskService>();
 builder.Services.AddSingleton<IPlcSource>(sp => CreateSource(sp.GetRequiredService<ILoggerFactory>().CreateLogger("plc")));
 builder.Services.AddHostedService<PollingService>();
 builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.WriteIndented = false);
@@ -88,12 +98,39 @@ app.MapGet("/api/values", (LiveState s, MachineModel m) =>
     });
 });
 
+// "Ask a question": Claude answers from the live values and the machine model (read-only lookups)
+app.MapGet("/api/ask", (AskService ask) =>
+{
+    var (enabled, reason) = ask.Availability();
+    return Results.Ok(new { enabled, reason, model = opt.Ask.Model });
+});
+
+app.MapPost("/api/ask", async (AskRequest req, AskService ask, CancellationToken ct) =>
+{
+    try
+    {
+        return Results.Ok(await ask.AskAsync(req, ct));
+    }
+    catch (AskException ex)
+    {
+        return Results.Json(new { error = ex.Message }, statusCode: ex.Status);
+    }
+});
+
+app.MapDelete("/api/ask/{id}", (string id, AskService ask) =>
+{
+    ask.Forget(id);
+    return Results.NoContent();
+});
+
 app.Lifetime.ApplicationStarted.Register(() =>
 {
     var urls = string.Join(", ", app.Urls);
     Console.WriteLine();
     Console.WriteLine($"PLC-Ki is running. Open {urls} in your browser.");
     Console.WriteLine($"Model: {model.Name} ({model.Tags.Count} tags). Source: {opt.Source} {(opt.Source == "s7" ? opt.Plc.Address : opt.SnapshotFile)}. Read-only.");
+    var (askOn, askWhy) = app.Services.GetRequiredService<AskService>().Availability();
+    Console.WriteLine(askOn ? $"Ask a question: on ({opt.Ask.Model})." : $"Ask a question: off. {askWhy}");
     Console.WriteLine("Press Ctrl+C to stop.");
 });
 

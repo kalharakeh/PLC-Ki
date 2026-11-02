@@ -5,6 +5,7 @@
   --muted: #5d6778;
   --line: #e2e5ea;
   --accent: #2563eb;
+  --btn: #2563eb;
   --ok: #16803c;
   --ok-bg: #e5f5ea;
   --warn: #a15c00;
@@ -27,6 +28,7 @@
     --muted: #9aa4b5;
     --line: #2a323e;
     --accent: #6ea0ff;
+    --btn: #2f5fd0;
     --ok: #4ccb78;
     --ok-bg: #173323;
     --warn: #f0b04a;
@@ -196,6 +198,45 @@ th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--lin
 th { color: var(--muted); font-weight: 600; }
 td.val { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .count { color: var(--muted); font-weight: 400; }
+
+/* Ask about the machine */
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.ask-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.linkbtn { background: none; border: 0; padding: 0; color: var(--accent); font: inherit; font-size: 13px; cursor: pointer; }
+.ask-log { display: grid; gap: 10px; margin-bottom: 10px; }
+.ask-log:empty { display: none; }
+.msg { padding: 10px 14px; border-radius: 10px; max-width: 100%; overflow-wrap: anywhere; }
+.msg.q { background: var(--btn); color: #fff; justify-self: end; max-width: 85%; white-space: pre-wrap; }
+.msg.a { background: var(--step-bg); }
+.msg.a p { margin: 0 0 8px; }
+.msg.a p:last-child, .msg.a ul:last-child, .msg.a ol:last-child { margin-bottom: 0; }
+.msg.a ul, .msg.a ol { margin: 0 0 8px; padding-left: 22px; }
+.msg.a code { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 13px; }
+.msg.err { background: var(--fault-bg); color: var(--fault); }
+.msg .meta { margin-top: 8px; font-size: 12px; color: var(--muted); }
+.msg .note { margin-top: 6px; font-size: 13px; color: var(--warn); }
+.msg.pending { color: var(--muted); }
+.msg.pending::after { content: "…"; display: inline-block; animation: blink 1.2s infinite; }
+@keyframes blink { 50% { opacity: .2; } }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.chip {
+  border: 1px solid var(--line); background: var(--card); color: var(--text);
+  border-radius: 999px; padding: 4px 12px; font: inherit; font-size: 13px; cursor: pointer;
+}
+.chip:hover { border-color: var(--accent); }
+.ask-form { display: flex; gap: 8px; align-items: stretch; }
+.ask-form textarea {
+  flex: 1; min-width: 0; resize: vertical; min-height: 44px;
+  padding: 10px 12px; border-radius: 8px; border: 1px solid var(--line);
+  background: var(--bg); color: var(--text); font: inherit;
+}
+.ask-form textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.btn {
+  border: 0; border-radius: 8px; padding: 0 18px; min-height: 44px;
+  background: var(--btn); color: #fff; font: inherit; font-weight: 600; cursor: pointer;
+}
+.btn:disabled, .chip:disabled { opacity: .5; cursor: default; }
+.ask-hint { margin-top: 8px; }
 
 footer { max-width: 1200px; margin: 0 auto; padding: 8px 24px 24px; }
 

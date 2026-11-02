@@ -1,4 +1,3 @@
-using System.Text.Json;
 using PlcKi.Core.Model;
 using PlcKi.Core.Status;
 using Xunit;
@@ -6,30 +5,9 @@ using Xunit;
 /// <summary>Runs the status engine on the demo model with snapshots taken from real watch tables.</summary>
 public class StatusTests
 {
-    private static readonly MachineModel Model = MachineModel.Load(Path.Combine(AppContext.BaseDirectory, "models", "demo-mixing-station.json"));
-    private static readonly StatusEngine Engine = new(Model);
+    private static readonly MachineModel Model = TestData.Model;
 
-    private static MachineStatus Run(string snapshot)
-    {
-        var path = Path.Combine(AppContext.BaseDirectory, "models", "snapshots", snapshot + ".json");
-        var doc = JsonDocument.Parse(File.ReadAllText(path));
-        var tags = Model.Tags.ToDictionary(t => t.Id);
-        var snap = new Snapshot();
-        foreach (var p in doc.RootElement.EnumerateObject())
-        {
-            if (!tags.TryGetValue(p.Name, out var t)) continue;
-            object? raw = p.Value.ValueKind switch
-            {
-                JsonValueKind.True => true,
-                JsonValueKind.False => false,
-                JsonValueKind.Number => p.Value.GetDouble(),
-                JsonValueKind.String => p.Value.GetString(),
-                _ => null,
-            };
-            snap.Values[p.Name] = TagValue.Normalize(t, raw);
-        }
-        return Engine.Evaluate(snap, new PlcLinkInfo("snapshot", snapshot, null, snap.Time, Model.Tags.Count, 0));
-    }
+    private static MachineStatus Run(string snapshot) => TestData.Status(snapshot);
 
     [Fact]
     public void Demo_model_is_valid_and_covers_every_alarm()

@@ -10,8 +10,9 @@ GRAPH), reads live values from the PLC, and tells you:
 - what data is exchanged with other systems
 - for every active alarm: what it means, where it is raised in the program, why it is on, and how to fix it
 
-You can also just ask, for example *"Why is the agitator stopped?"*. Answers cite the block and network they
-are based on, so you can check them in TIA Portal.
+You can also just ask, for example *"Why is the agitator stopped?"* or *"What happened before the alarm?"*.
+Claude answers from the live values, the last minutes of history and the program model, and names the device,
+step, alarm and program location it is based on, so you can check it in TIA Portal.
 
 > **Read-only.** The app never writes to a PLC. There is no write code path, not even a disabled one.
 
@@ -32,8 +33,8 @@ Full plan and architecture: [PLC Troubleshooter plan](https://claude.ai/artifact
 | --- | --- |
 | `plc-demo/` | Demo PLC program (mixing station) for PLCSIM Advanced, with plant simulation, fault injection and an alarm answer key |
 | `tools/TiaImporter/` | TIA Openness tool: export a `.zap20` archive, load the demo into a TIA project |
-| `src/PlcKi.Core/` | Machine model, condition language and the plain-English status engine (no PLC code) |
-| `src/PlcKi.Server/` | The web app: live read-only PLC link, status page, `probe` connection test. See its README |
+| `src/PlcKi.Core/` | Machine model, condition language, the plain-English status engine, recent history, and the lookups Claude uses (no PLC code) |
+| `src/PlcKi.Server/` | The web app: live read-only PLC link, status page, "ask about the machine", `probe` connection test. See its README |
 | `models/` | Machine models (`demo-mixing-station.json`) and test snapshots taken from watch tables |
 | `tests/` | Unit tests (`dotnet test`), including a check that the app calls no PLC write or start/stop function |
 
@@ -50,8 +51,8 @@ Full plan and architecture: [PLC Troubleshooter plan](https://claude.ai/artifact
 | --- | --- |
 | 0. Setup: repo, PLCSIM Advanced VM on the network | Done |
 | 1. Demo program and `.zap20` importer | Demo runs full batches in PLCSIM. Importer written, not yet built against TIA |
-| 2. Live status page | First version: works on test data, first live test on PLCSIM pending. Machine model is hand-written for now |
-| 3. Ask questions (Claude) | Planned |
+| 2. Live status page | Works live against the demo in PLCSIM (83 of 83 tags). Machine model is hand-written for now |
+| 3. Ask questions (Claude) | First version: chat box on the status page, tested against a fake API; first real test pending |
 | 4. Real plant archives, Web API fallback, S7-1200 hardware | Planned |
 | 5. Plant PC deployment | Planned |
 
@@ -63,6 +64,8 @@ Live status page, against the demo PLC in PLCSIM (needs the [.NET 8 SDK](https:/
 dotnet run --project src\PlcKi.Server -- probe     # connection test: reads every tag once
 dotnet run --project src\PlcKi.Server              # then open http://localhost:5080
 ```
+
+The "Ask about the machine" box appears when the `ANTHROPIC_API_KEY` environment variable is set.
 
 Details: [src/PlcKi.Server/README.md](src/PlcKi.Server/README.md).
 
