@@ -74,3 +74,43 @@ public class StatusTests
         Assert.Equal("running", s.Equipment.Single(e => e.Id == "P401").State);
     }
 }
+
+/// <summary>Status details that generated models need: the sequence's own "not halted" term and values in alarm texts.</summary>
+public class StatusTextTests
+{
+    private static MachineModel Changed(Func<string, string> change)
+    {
+        var src = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "models", "demo-mixing-station.json"));
+        var path = Path.Combine(Path.GetTempPath(), $"plcki-model-{Guid.NewGuid():N}.json");
+        File.WriteAllText(path, change(src));
+        try { return MachineModel.Load(path); }
+        finally { File.Delete(path); }
+    }
+
+    private static MachineStatus Run(MachineModel model, string snapshot)
+    {
+        var snap = TestData.Snapshot(snapshot);
+        return new StatusEngine(model).Evaluate(snap, new PlcLinkInfo("snapshot", "192.168.10.10", null, snap.Time, model.Tags.Count, 0));
+    }
+
+    [Fact]
+    public void Not_halted_term_of_a_transition_is_not_listed_as_a_waiting_for_line()
+    {
+        var model = Changed(s => s.Replace("\"next\": [ { \"to\": 20, \"conditions\": [",
+            "\"next\": [ { \"to\": 20, \"conditions\": [ { \"expr\": \"NOT Halted\", \"text\": \"Sequence not halted\" },"));
+        var seq = Assert.Single(Run(model, "step10-xv101-not-open").Sequences);
+        var next = Assert.Single(seq.Next);
+        Assert.DoesNotContain(next.Conditions, c => c.Text.Contains("not halted"));
+        Assert.NotEmpty(next.Conditions);
+        Assert.NotEqual(true, next.Ready);   // halted: still not ready
+    }
+
+    [Fact]
+    public void Placeholders_in_alarm_texts_get_live_values()
+    {
+        var model = Changed(s => s.Replace("\"Check the open switch ZSO\"", "\"Check the open switch ZSO (level now {Level})\""));
+        var a02 = Assert.Single(Run(model, "step10-xv101-not-open").ActiveAlarms);
+        Assert.DoesNotContain("{Level}", string.Join(" ", a02.Fix));
+        Assert.Contains("%", a02.Fix.Single(f => f.Contains("level now")));
+    }
+}

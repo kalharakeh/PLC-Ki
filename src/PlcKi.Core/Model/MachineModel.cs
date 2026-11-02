@@ -105,7 +105,11 @@ public sealed class MachineModel
             foreach (var st in e.States) { CheckExpr(st.When, $"equipment {e.Id} state"); CheckText(st.Text, $"equipment {e.Id} state"); }
             foreach (var v in e.Values) CheckTag(v, $"equipment {e.Id}");
         }
-        foreach (var a in Alarms) CheckTag(a.Tag, $"alarm {a.Id}");
+        foreach (var a in Alarms)
+        {
+            CheckTag(a.Tag, $"alarm {a.Id}");
+            foreach (var t in new[] { a.Text, a.Condition }.Concat(a.Causes).Concat(a.Fix)) CheckText(t, $"alarm {a.Id}");
+        }
         foreach (var x in Exchange) CheckTag(x.Tag, "exchange");
 
         if (errors.Count > 0)
