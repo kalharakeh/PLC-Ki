@@ -287,6 +287,67 @@ ol.fix li { margin: 3px 0; }
   .top { position: static; }
 }
 @media (prefers-reduced-motion: reduce) { .ask { transition: none; } }
+
+/* ---------- polish: dark app frame, softer cards, process picture ---------- */
+:root { --chrome: #0f1b2d; --chrome-2: #16263d; --chrome-fg: #e8eef7; --chrome-mu: #8fa3bf; --chrome-line: #22344f;
+  --liquid: #9cc3f5; --liquid-top: #6aa5ee; --steel: #8a96a6; --pipe: #c3cbd6; --heat: #f97316;
+  --shadow-2: 0 1px 2px rgba(16,24,40,.05), 0 6px 18px rgba(16,24,40,.06); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --chrome: #0a121e; --chrome-2: #111d2e; --chrome-line: #1d2b40;
+  --liquid: #2a4f80; --liquid-top: #3d6eb0; --steel: #6b7787; --pipe: #3c4757; --shadow-2: none; } }
+:root[data-theme="dark"] { --chrome: #0a121e; --chrome-2: #111d2e; --chrome-line: #1d2b40;
+  --liquid: #2a4f80; --liquid-top: #3d6eb0; --steel: #6b7787; --pipe: #3c4757; --shadow-2: none; }
+body::before { background: var(--chrome); }
+.top { background: var(--chrome); color: var(--chrome-fg); border-bottom-color: var(--chrome-line); }
+.top .muted { color: var(--chrome-mu); }
+.scen { background: var(--chrome-2); border-color: var(--chrome-line); }
+.scen button { color: var(--chrome-mu); }
+.scen button[aria-pressed="true"] { background: var(--chrome-fg); color: var(--chrome); outline: 0; }
+.top .p-info { background: rgba(110,160,255,.16); color: #a9c6ff; }
+.top .p-ok { background: rgba(76,203,120,.16); color: #6fe09a; }
+.rail { background: var(--chrome-2); border-right-color: var(--chrome-line); }
+.rail button { color: var(--chrome-mu); }
+.rail button:hover { background: rgba(255,255,255,.06); color: var(--chrome-fg); }
+.rail button[aria-current="page"] { background: rgba(110,160,255,.16); color: #fff; box-shadow: inset 3px 0 0 #6ea0ff; }
+.rail .sep { background: var(--chrome-line); }
+.rail .foot { color: var(--chrome-mu); }
+.card, .unit { border-radius: 14px; box-shadow: var(--shadow-2); }
+.card { padding: 16px 18px; }
+.card > h2 { font-size: 14px; letter-spacing: .01em; }
+.vhead h2 { font-size: 22px; letter-spacing: -.01em; }
+.tile { border-radius: 12px; }
+.statebox { border-radius: 12px; }
+
+/* process picture */
+.mimic { width: 100%; height: auto; display: block; max-width: 640px; margin: 0 auto; }
+.mimic .pipe { stroke: var(--pipe); stroke-width: 7; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.mimic .flow { stroke: var(--c1); stroke-width: 3; fill: none; stroke-dasharray: 8 8; animation: flow 1s linear infinite; }
+.mimic .tank { fill: var(--card); stroke: var(--steel); stroke-width: 3; }
+.mimic .liq { fill: var(--liquid); }
+.mimic .liqtop { stroke: var(--liquid-top); stroke-width: 2; }
+.mimic .dev { cursor: pointer; }
+.mimic .dev:hover .body { stroke-width: 3; }
+.mimic .body { stroke-width: 2.2; }
+.mimic .st-ok .body { stroke: var(--ok); fill: var(--ok-bg); }
+.mimic .st-idle .body { stroke: var(--steel); fill: var(--card); }
+.mimic .st-fault .body { stroke: var(--fault); fill: var(--fault-bg); }
+.mimic .st-warn .body { stroke: var(--warn); fill: var(--warn-bg); }
+.mimic .ring { fill: none; stroke: var(--fault); stroke-width: 2.5; animation: pulse 1.4s ease-out infinite; transform-box: fill-box; transform-origin: center; }
+.mimic .ring.w { stroke: var(--warn); }
+.mimic .tag { font: 600 12px var(--mono); }
+.mimic .sub { font: 11.5px var(--sans); fill: var(--muted); }
+.mimic .valtxt { font: 600 13px var(--mono); }
+.mimic .blade { transform-box: fill-box; transform-origin: center; }
+.mimic .spin .blade { animation: spin .8s linear infinite; }
+.mimic .coil { fill: none; stroke: var(--steel); stroke-width: 2.5; }
+.mimic .coil.on { stroke: var(--heat); }
+.mimic .bub { fill: var(--card); stroke: var(--line-strong); stroke-width: 1.5; }
+@keyframes flow { to { stroke-dashoffset: -16; } }
+@keyframes pulse { 0% { transform: scale(1); opacity: .9; } 100% { transform: scale(1.7); opacity: 0; } }
+@keyframes spin { to { transform: scaleX(-1); } }
+.hero { display: grid; grid-template-columns: 56px minmax(0,1fr); gap: 14px; align-items: start; }
+.hero .hic { width: 56px; height: 56px; border-radius: 14px; display: grid; place-items: center; }
+.hero .hic svg { width: 30px; height: 30px; }
+@media (prefers-reduced-motion: reduce) { .mimic .flow, .mimic .ring, .mimic .spin .blade { animation: none; } }
 </style>
 
 <header class="top">
@@ -359,7 +420,7 @@ const AL = {
     fix: ["Check the contactor and its auxiliary contact.", "Reset and Start."] },
   A16: { sev: "F", text: "Step 10 timeout (Fill A)", dev: "Seq", path: ["OB_Main", "Station", "Seq · FB_BatchSequence", "TimeoutStep10", "DB_Alarms.A16"], net: 1, block: "FB_BatchSequence",
     cond: "Step 10 longer than 120 s", causes: [[70, "XV101 not open", ""], [30, "Supply tank A empty", ""]], fix: ["Check XV101 and ingredient A supply."] },
-  A21: { sev: "W", text: "Filler not ready", dev: "Seq", path: ["OB_Main", "Station", "Seq · FB_BatchSequence", "WaitFillerTooLong", "DB_Alarms.A21"], net: 1, block: "FB_BatchSequence",
+  A21: { sev: "W", text: "Filler not ready", dev: "Seq", path: ["OB_Main", "Station", "Seq · FB_BatchSequence", "WaitFillerTooLong", "DB_Alarms.A21"], net: 5, block: "FB_BatchSequence",
     cond: "Step 40 waiting more than 60 s for the filler",
     causes: [[65, "Filler stopped or not in Auto", "Filler_ReadyToReceive has been FALSE the whole step."], [25, "Filler waiting for bottles or caps", ""], [10, "Signal lost between filler and PLC", "Unlikely: MES heartbeat is fine on the same network."]],
     fix: ["Check the filler is running and in Auto.", "Check that the filler sets DB_LineInterface.Filler_ReadyToReceive.", "No reset needed: the batch drains as soon as the filler is ready."] },
@@ -387,7 +448,7 @@ const STEPS = [
 ];
 
 let V = {};
-const S = { sc: "mix", view: "plant", step: null, net: null, alarm: null, dev: "M201", block: "FB_BatchSequence", tags: ["Level", "Temp", "Speed", "XV101", "XV102", "E301", "P401"], ask: false, t: 0, asked: [] };
+const S = { sc: "xv101", view: "active", step: null, net: null, alarm: null, dev: "M201", block: "FB_BatchSequence", tags: ["Level", "Temp", "Speed", "XV101", "XV102", "E301", "P401"], ask: false, t: 0, asked: [] };
 
 function load(sc) {
   V = JSON.parse(JSON.stringify(BASE[sc]));
@@ -510,10 +571,46 @@ function devices() {
   ];
 }
 
+
+/* ---------- process picture: generated from a "batch tank" template when the importer finds
+   a vessel with level/temperature transmitters, inlet valves, agitator, heater and outlet pump ---------- */
+function mimic(focus) {
+  const D = Object.fromEntries(devices().map((d) => [d.id, d]));
+  const T = { x: 200, y: 70, w: 150, h: 190 };
+  const lvl = Math.max(0, Math.min(100, V.Level)), ly = T.y + T.h - (T.h - 10) * lvl / 100;
+  const ring = (id, cx, cy, r) => focus === id ? `<circle class="ring ${D[id] && D[id].st === "warn" ? "w" : ""}" cx="${cx}" cy="${cy}" r="${r}"/>` : "";
+  const valve = (id, x, y) => `<g class="dev st-${D[id].st}" data-act="dev" data-id="${id}">${ring(id, x, y, 16)}<path class="body" d="M${x - 14} ${y - 10} L${x} ${y} L${x - 14} ${y + 10} Z M${x + 14} ${y - 10} L${x} ${y} L${x + 14} ${y + 10} Z"/><path class="body" d="M${x} ${y} V${y - 16} M${x - 8} ${y - 16} H${x + 8}" fill="none"/>
+    <text class="tag" x="${x}" y="${y - 24}" text-anchor="middle">${id}</text><text class="sub" x="${x}" y="${y + 26}" text-anchor="middle">${D[id].val}</text></g>`;
+  const flowA = V.XV101_Out && V.XV101_ZSO, flowB = V.XV102_Out && V.XV102_ZSO, flowOut = V.P401_Out;
+  const running = V.M201_RunOut;
+  return `<svg class="mimic" viewBox="0 0 560 340" role="img" aria-label="Process picture of the mixing tank">
+    <path class="pipe" d="M20 40 H245 V70"/><path class="pipe" d="M540 40 H305 V70"/>
+    ${flowA ? `<path class="flow" d="M20 40 H245 V70"/>` : ""}${flowB ? `<path class="flow" d="M540 40 H305 V70"/>` : ""}
+    <text class="sub" x="20" y="28">Ingredient A</text><text class="sub" x="540" y="28" text-anchor="end">Ingredient B</text>
+    <path class="pipe" d="M275 260 V300 H530"/>${flowOut ? `<path class="flow" d="M275 260 V300 H530"/>` : ""}
+    ${focus === "Filler" ? `<circle class="ring w" cx="530" cy="300" r="12"/>` : ""}<circle cx="530" cy="300" r="6" style="fill:var(--${focus === "Filler" ? "warn" : "steel"})"/><text class="sub" x="530" y="322" text-anchor="end" ${focus === "Filler" ? 'style="fill:var(--warn);font-weight:600"' : ""}>to Filler · ${V.FillerReady ? "ready" : "not ready"}</text>
+    <rect class="tank" x="${T.x}" y="${T.y}" width="${T.w}" height="${T.h}" rx="16"/>
+    <clipPath id="tc"><rect x="${T.x + 2}" y="${T.y + 2}" width="${T.w - 4}" height="${T.h - 4}" rx="14"/></clipPath>
+    <g clip-path="url(#tc)"><rect class="liq" x="${T.x}" y="${ly}" width="${T.w}" height="${T.y + T.h - ly}"/><line class="liqtop" x1="${T.x}" x2="${T.x + T.w}" y1="${ly}" y2="${ly}"/></g>
+    <g class="dev st-${D.E301.st}" data-act="dev" data-id="E301">${ring("E301", 240, 240, 18)}<path class="coil ${V.E301_On ? "on" : ""}" d="M212 240 l6 -10 l6 10 l6 -10 l6 10 l6 -10 l6 10 l6 -10 l6 10"/><text class="tag" x="240" y="226" text-anchor="middle" style="font-size:11px">E301</text></g>
+    <g class="dev st-${D.M201.st} ${running ? "spin" : ""}" data-act="dev" data-id="M201">${ring("M201", 275, 50, 22)}
+      <line x1="275" y1="62" x2="275" y2="200" style="stroke:var(--steel)" stroke-width="3"/><g class="blade"><path d="M249 200 h52" style="stroke:var(--steel)" stroke-width="6" stroke-linecap="round"/></g>
+      <circle class="body" cx="275" cy="50" r="16"/><text class="tag" x="275" y="54" text-anchor="middle" style="font-size:11px">M</text>
+      <text class="tag" x="302" y="13">M201</text><text class="sub" x="302" y="27">${running ? V.SpeedPV + " rpm" : "stopped"}</text></g>
+    ${valve("XV101", 120, 40)}${valve("XV102", 430, 40)}
+    <g class="dev st-ok" data-act="dev" data-id="LT101"><line x1="${T.x + T.w}" y1="130" x2="380" y2="130" style="stroke:var(--line-strong)"/><rect class="bub" x="380" y="112" width="108" height="36" rx="18"/><text class="tag" x="398" y="127">LT101</text><text class="valtxt" x="398" y="142" style="fill:var(--c1)">${f1(V.Level)} %</text></g>
+    <g class="dev st-ok" data-act="dev" data-id="TT301"><line x1="${T.x + T.w}" y1="200" x2="380" y2="200" style="stroke:var(--line-strong)"/><rect class="bub" x="380" y="182" width="108" height="36" rx="18"/><text class="tag" x="398" y="197">TT301</text><text class="valtxt" x="398" y="212" style="fill:var(--c2)">${f1(V.Temp)} °C</text></g>
+    <g class="dev st-${D.P401.st}" data-act="dev" data-id="P401">${ring("P401", 380, 300, 20)}<circle class="body" cx="380" cy="300" r="15"/><path d="M372 292 L388 300 L372 308" style="stroke:var(--steel);fill:none" stroke-width="2"/>
+      <text class="tag" x="380" y="276" text-anchor="middle">P401</text><text class="sub" x="380" y="332" text-anchor="middle">${D.P401.val}</text></g>
+    <text class="sub" x="${T.x + 10}" y="${T.y + T.h + 18}">Tank · step ${V.Step} ${stepOf(V.Step).name}</text>
+  </svg>`;
+}
+
 /* ============================================================
    Views
    ============================================================ */
 const VIEWS = [
+  ["active", "Active alarm", '<path d="M12 3l10 18H2zM12 10v5M12 18v.5"/>'],
   ["plant", "Plant", '<path d="M3 21V9l6 4V9l6 4V5h6v16z"/>'],
   ["sequence", "Sequence", '<rect x="7" y="2" width="10" height="6" rx="1"/><rect x="7" y="16" width="10" height="6" rx="1"/><path d="M12 8v8M8 12h8"/>'],
   ["logic", "Logic", '<path d="M2 12h5M17 12h5M7 7v10M10 7v10M14 7v10M17 7v10"/>'],
@@ -528,7 +625,7 @@ function rail() {
   const nf = act.filter((a) => a.sev === "F").length, nw = act.filter((a) => a.sev === "W").length;
   return VIEWS.map(([id, name, ic]) => {
     let badge = "";
-    if (id === "alarms" && (nf || nw)) badge = `<span class="cnt ${nf ? "" : "w"}">${nf + nw}</span>`;
+    if ((id === "alarms" || id === "active") && (nf || nw)) badge = `<span class="cnt ${nf ? "" : "w"}">${nf + nw}</span>`;
     return `<button data-act="nav" data-view="${id}" ${S.view === id ? 'aria-current="page"' : ""}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ic}</svg>${name}${badge}</button>`;
   }).join("") + `<div class="sep"></div><div class="foot">Mockup of the PLC-Ki UI concept. Values are simulated; switch scenarios at the top.</div>`;
 }
@@ -555,10 +652,13 @@ function vPlant() {
   <section class="card" aria-label="Sequence"><h2>Sequence <button class="link small" data-act="nav" data-view="sequence">open step chart</button></h2><div class="strip">${strip}</div>
     ${w.h ? `<div class="waiting ${w.cls}" style="margin-top:10px"><b>${esc(w.h)}</b><p>${esc(w.p)}</p></div>` : ""}</section>
   <div class="split">
+    <div style="display:grid;gap:14px;align-content:start;min-width:0">
+    <section class="card" aria-label="Process picture"><h2>Mixing station <span class="small muted" style="font-weight:400">click any device</span></h2>${mimic(activeAlarms()[0] && (activeAlarms()[0].id === "A21" ? "Filler" : activeAlarms()[0].dev))}</section>
     <section class="unit" aria-label="Mixing station equipment">
       <div class="unit-h"><h2>Mixing station <span class="muted mono small">"Station" · FB_Station</span></h2><span class="small muted">Click a device for its faceplate</span></div>
       <div class="eq">${tiles}</div>
     </section>
+    </div>
     <div style="display:grid;gap:14px;align-content:start">
       <section class="card"><h2>Active alarms <span class="pill ${act.length ? (act.some((a) => a.sev === "F") ? "p-fault" : "p-warn") : "p-ok"} plain">${act.length || "none"}</span></h2>
         ${act.length ? act.map((a) => `<div class="cond f" style="cursor:pointer;grid-template-columns:auto minmax(0,1fr) auto" data-act="goalarm" data-id="${a.id}"><span class="sev ${a.sev}">${a.id}</span><span><b>${esc(a.text)}</b><span class="sym">since ${clock(a.since)} · ${a.ack ? "acknowledged" : "not acknowledged"}</span></span><span class="link small">why?</span></div>`).join("") : `<div class="empty small">No alarms. Last one: A21 Filler not ready, today 15:48.</div>`}
@@ -661,6 +761,8 @@ function nets() {
     { blk: "FB_Valve \"Station\".XV101", title: "XV101 did-not-open monitoring", coil: "#FaultNotOpen",
       e: AND(NO("#Out", V.XV101_Out), NC("#IsOpen", V.XV101_ZSO && !V.XV101_ZSC), TON("#tOpen  TON", V.XV101_Out && !V.XV101_ZSO, "PT 10 s")), why: { "#Out": "sequence" },
       snap: S.sc === "xv101" ? "When A02 came in at 17:12:31 this rung was: #Out TRUE, #IsOpen FALSE, #tOpen.ET 10 s → #FaultNotOpen TRUE. The batch then halted, which switched #Out off, so it reads FALSE now. The alarm stays latched in DB_Alarms until Reset." : "" },
+    { blk: "FB_BatchSequence", title: "Step 40 waiting for filler too long", coil: "#WaitFillerTooLong",
+      e: AND(CMP("#StepNo = 40", V.Step === 40, String(V.Step)), CMP("#StepTime > T#60S", V.StepTime > 60, mmss(V.StepTime)), NC("#FillerReady", V.FillerReady)), why: {} },
   ];
 }
 function ladLayout(n) {
@@ -688,7 +790,6 @@ function ladDraw(n, lay, x, y, pw, firstBlock) {
       s += `<line class="${wl}" x1="${x}" y1="${y + M}" x2="${a}" y2="${y + M}"/><line class="${sym}" x1="${a}" y1="${y + M - 13}" x2="${a}" y2="${y + M + 13}"/><line class="${sym}" x1="${b}" y1="${y + M - 13}" x2="${b}" y2="${y + M + 13}"/>
         <line class="${wr}" x1="${b}" y1="${y + M}" x2="${x + lay.w}" y2="${y + M}"/>`;
       if (n.neg) s += `<line class="${sym}" x1="${a - 3}" y1="${y + M + 11}" x2="${b + 3}" y2="${y + M - 11}"/>`;
-      if (n.k === "cmp") s += `<text x="${cx}" y="${y + M + 4}" text-anchor="middle" font-size="9" font-weight="700" class="mono">CMP</text>`;
     }
     const vt = n.k === "c" ? (n.v ? "TRUE" : "FALSE") : n.k === "box" ? (n.v ? "running" : "ET 0 s") : n.txt;
     s += `<text class="val ${blk ? "v-blk" : p ? "v-on" : "v-off"}" x="${cx}" y="${y + 70}" text-anchor="middle">${esc(vt)}${blk ? "  ← blocks" : ""}</text>`;
@@ -850,6 +951,74 @@ function vCode() {
         <p class="note" style="margin-top:8px">Summary written by Claude at import from the code and its comments; stored with the model, so it costs nothing at runtime.</p></section>
       <section class="card"><h2>Source <span class="small muted" style="font-weight:400">live values next to each operand · highlighted lines run in the current step</span></h2>${body}</section>
     </div>
+  </div>`;
+}
+
+
+/* ---------- Active alarm (start page) ---------- */
+// Everything needed to fix the top alarm on one screen: what is going on, where in the machine,
+// where in the software, the values (now and at alarm time), causes and fix.
+const VALS = {
+  A02: () => [["XV101 open command", "\"DB_IO\".XV101_OpenCmd", "TRUE", V.XV101_Out ? "TRUE" : "FALSE"], ["XV101 open switch ZSO", "\"DB_IO\".XV101_ZSO", "FALSE", V.XV101_ZSO ? "TRUE" : "FALSE"],
+    ["XV101 closed switch ZSC", "\"DB_IO\".XV101_ZSC", "TRUE", V.XV101_ZSC ? "TRUE" : "FALSE"], ["Step", "\"Station\".Seq.Step", "10 · 0:10", `${V.Step} · ${mmss(V.StepTime)}`],
+    ["Sequence halted", "\"Station\".Seq.Halted", "FALSE", V.Halted ? "TRUE" : "FALSE"], ["Tank level LT101", "\"Station\".LT101.Value", "0.8 %", f1(V.Level) + " %"], ["Air pressure", "not wired to the PLC", "–", "–"]],
+  A21: () => [["Step", "\"Station\".Seq.Step", "40 · 1:00", `${V.Step} · ${mmss(V.StepTime)}`], ["Filler ready to receive", "\"DB_LineInterface\".Filler_ReadyToReceive", "FALSE", V.FillerReady ? "TRUE" : "FALSE"],
+    ["Tank level LT101", "\"Station\".LT101.Value", "80.2 %", f1(V.Level) + " %"], ["Temperature TT301", "\"Station\".TT301.Value", "60.3 °C", f1(V.Temp) + " °C"],
+    ["Agitator M201 speed", "\"DB_IO\".M201_SpeedPV", "299 rpm", V.SpeedPV + " rpm"], ["MES heartbeat", "\"DB_LineInterface\".MES_Heartbeat", "ok", "ok"]],
+};
+const GOING = {
+  A02: () => `At ${clock(NOW0 - 14)} the batch entered step 10 Fill A and told inlet valve XV101 to open. After 10 s the open limit switch had still not come on, and the closed switch never dropped, so the valve most likely did not move. The alarm halted the sequence: all outputs are off and the batch waits in step 10. Nothing else on the station is wrong.`,
+  A21: () => `The batch is mixed, heated and ready (${f1(V.Level)} %, ${f1(V.Temp)} °C). It waits in step 40 Hold for the downstream filler to set Filler_ReadyToReceive, which has been FALSE for ${mmss(V.StepTime)}. This is a warning: nothing is stopped on this station, and draining starts by itself once the filler is ready.`,
+};
+function vActive() {
+  const act = activeAlarms().sort((x, y) => (x.sev === "F" ? 0 : 1) - (y.sev === "F" ? 0 : 1));
+  if (!act.length) {
+    const ms = machineState(), w = waitingText();
+    return `${vhead("Active alarm", "DB_Alarms, read every 500 ms")}
+    <section class="card now"><div class="statebox" style="background:var(--ok-bg);color:var(--ok)"><b>0</b>alarms</div>
+      <div><p class="big">No active alarms. The machine is ${ms.word.toLowerCase()} in step ${V.Step} ${stepOf(V.Step).name}.</p>
+      ${w.h ? `<ul><li>${esc(w.h)}: ${esc(w.p)}</li></ul>` : ""}
+      <div class="chips" style="margin-top:10px"><button class="chip" data-act="nav" data-view="plant">Plant overview</button><button class="chip" data-act="alarm" data-id="A21" data-go="1">Last alarm: A21 Filler not ready, 15:48</button></div></div></section>
+    <p class="small muted" style="margin:0">Switch the scenario at the top to Valve fault or Waiting to see this page with an alarm.</p>`;
+  }
+  const sel = act.find((x) => x.id === S.alarm) || act[0], a = sel;
+  const dev = devices().find((d) => d.id === a.dev);
+  const net = nets()[a.net];
+  const vals = VALS[a.id] ? VALS[a.id]() : [];
+  const tabs = act.length > 1 ? `<div class="chips">${act.map((x) => `<button class="chip" data-act="alarm" data-id="${x.id}" aria-pressed="${x.id === a.id}">${x.id} ${esc(x.text)}</button>`).join("")}</div>` : "";
+  const machineSide = mimic(a.id === "A21" ? "Filler" : a.dev === "Seq" ? "" : a.dev) + (a.dev === "Seq"
+    ? `<div class="sect"><h3>Step ${V.Step} ${stepOf(V.Step).name} waits for</h3>${condList(transition(V.Step))}</div>`
+    : `<div class="sect"><h3>${a.dev}: why it works or not</h3>${faceplate(dev).match(/<div class="chain">[\s\S]*?<\/div><\/div>/)[0]}</div>`);
+  return `${vhead("Active alarm", "DB_Alarms + the model: device, code location, values")}
+  ${tabs}
+  <section class="card hero" style="border-color:var(--${a.sev === "F" ? "fault" : "warn"});border-width:2px;background:linear-gradient(90deg,var(--${a.sev === "F" ? "fault" : "warn"}-bg),var(--card) 55%)">
+    <div class="hic" style="background:var(--${a.sev === "F" ? "fault" : "warn"});color:#fff"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l10 18H2zM12 10v5M12 18v.5"/></svg></div><div style="min-width:0">
+    <div class="vhead"><h2 style="font-size:21px"><span class="sev ${a.sev}" style="font-size:13px;vertical-align:3px">${a.id}</span> ${esc(a.text)}</h2>
+      <span class="pill ${a.sev === "F" ? "p-fault" : "p-warn"}">${a.sev === "F" ? "Fault · machine halted" : "Warning"} · since ${clock(a.since)} (${mmss(NOW0 + S.t - a.since)})${a.ack ? "" : " · not acknowledged"}</span></div>
+    <p class="muted" style="margin:4px 0 10px">${esc(a.cond)}</p>
+    <h3 style="text-transform:uppercase;letter-spacing:.06em;font-size:11.5px;color:var(--muted)">What is going on</h3>
+    <p style="margin:4px 0 0;font-size:15.5px;max-width:90ch">${esc(GOING[a.id] ? GOING[a.id]() : a.cond)}</p>
+  </div></section>
+  <div class="grid2">
+    <section class="card"><h2>Where in the machine</h2>
+      <div class="path" style="margin-bottom:10px"><span>Mixing station</span><i>›</i><span>${esc(a.dev === "Seq" ? "Batch sequence" : a.dev + " · " + dev.role)}</span></div>
+      ${machineSide}
+      <div class="chips" style="margin-top:10px"><button class="chip" data-act="dev" data-id="${a.dev}">Open faceplate</button><button class="chip" data-act="nav" data-view="plant">Plant overview</button></div></section>
+    <section class="card"><h2>Where in the software</h2>
+      <div class="path" style="margin-bottom:10px">${a.path.map((p) => `<span>${esc(p)}</span>`).join("<i>›</i>")}</div>
+      <div class="chart-wrap">${ladSvg(net)}</div>
+      ${net.snap ? `<p class="small" style="margin:8px 0 0">${esc(net.snap)}</p>` : ""}
+      <div class="chips" style="margin-top:10px"><button class="chip" data-act="golog" data-i="${a.net}">Open in Logic</button><button class="chip" data-act="goblock" data-id="${a.block}">Show the code</button><button class="chip" data-act="nav" data-view="sequence">Sequence</button></div></section>
+  </div>
+  <div class="grid2">
+    <section class="card"><h2>Values</h2><div class="tw"><table><thead><tr><th>Signal</th><th>When it came in</th><th>Now</th></tr></thead><tbody>
+      ${vals.map(([l, sym, at, now]) => `<tr><td>${esc(l)}<br><span class="mono small muted">${esc(sym)}</span></td><td class="mono" style="white-space:nowrap">${esc(at)}</td><td class="mono" style="white-space:nowrap;${at !== now && now !== "–" ? "color:var(--accent);font-weight:600" : ""}">${esc(now)}</td></tr>`).join("")}
+    </tbody></table></div>
+    <p class="note">"When it came in" is captured by PLC-Ki at the alarm edge. Values that changed since are blue. Offline (no PLC connection): the page shows the last values read and says how old they are.</p></section>
+    <section class="card"><h2>Likely causes</h2>${a.causes.map(([p, c, e]) => `<div class="cause"><span class="pct">${p} %</span><span><b>${esc(c)}</b>${e ? `<br><span class="small muted">${esc(e)}</span>` : ""}</span></div>`).join("")}
+      <div class="sect"><h3>How to fix</h3><ol class="fix">${a.fix.map((f) => `<li>${esc(f)}</li>`).join("")}</ol></div>
+      <div class="sect"><h3>History</h3><div class="small muted">${PERDAY[a.id].reduce((x, y) => x + y, 0)} times in 14 days · <button class="link" data-act="alarm" data-id="${a.id}" data-go="1">full history</button></div></div>
+      <div class="chips" style="margin-top:10px"><button class="chip" data-act="askq" data-q="0">Ask about this alarm</button></div></section>
   </div>`;
 }
 
@@ -1041,7 +1210,7 @@ function askPanel() {
 /* ============================================================
    Render + events
    ============================================================ */
-const RENDER = { plant: vPlant, sequence: vSequence, logic: vLogic, code: vCode, alarms: vAlarms, trends: vTrends, equipment: vEquipment };
+const RENDER = { active: vActive, plant: vPlant, sequence: vSequence, logic: vLogic, code: vCode, alarms: vAlarms, trends: vTrends, equipment: vEquipment };
 function render(full) {
   $("#rail").innerHTML = rail();
   document.querySelectorAll(".scen button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.sc === S.sc));
@@ -1068,7 +1237,7 @@ document.addEventListener("click", (e) => {
     case "net": S.net = +d.i; render(true); break;
     case "golog": S.net = +d.i; S.ask = false; go("logic"); break;
     case "why": if (d.to === "sequence" || d.to === "alarms") go(d.to); else { S.net = +d.to; render(true); } break;
-    case "alarm": S.alarm = d.id; render(true); break;
+    case "alarm": S.alarm = d.id; if (d.go) go("alarms"); else render(true); break;
     case "goalarm": if (!d.id) break; S.alarm = d.id; S.ask = false; go("alarms"); break;
     case "block": S.block = d.id; render(true); break;
     case "goblock": S.block = d.id; go("code"); break;
@@ -1077,7 +1246,7 @@ document.addEventListener("click", (e) => {
   }
 });
 document.addEventListener("keydown", (e) => { if ((e.key === "Enter" || e.key === " ") && e.target.matches("g[data-act]")) { e.preventDefault(); e.target.dispatchEvent(new MouseEvent("click", { bubbles: true })); } });
-load("mix");
+load("xv101");
 { const h = location.hash.slice(1); if (RENDER[h]) S.view = h; }
 render(true);
 let busy = false;

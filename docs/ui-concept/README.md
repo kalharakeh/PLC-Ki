@@ -3,7 +3,7 @@
 Clickable mockup: open [`index.html`](index.html) in a browser (no server needed). It uses the demo mixing
 station (`plc-demo/scl`) in three switchable states: **Mixing** (normal, waiting for temperature),
 **Valve fault** (A02 XV101 did not open, batch halted) and **Waiting** (step 40, filler not ready, warning A21).
-Values are simulated and tick every second.
+Values are simulated and tick every second. It opens on the **Active alarm** page in the Valve fault scenario.
 
 This is a design proposal only. It does not touch `src/PlcKi.Server` or `tools/TiaImporter`.
 
@@ -38,7 +38,7 @@ only its code view.
 ## Layout
 
 - **Top bar:** machine, CPU and archive, connection state, the Read-only badge, clock, and the **Ask** button.
-- **Left rail:** Plant, Sequence, Logic, Code, Alarms, Trends, Equipment. The Alarms entry shows the count of
+- **Left rail:** Active alarm (the start page), Plant, Sequence, Logic, Code, Alarms, Trends, Equipment. The Alarms entry shows the count of
   active alarms in red (fault) or amber (warning). On a phone the rail becomes a row of tabs.
 - **Ask panel:** slides in from the right over any view. Answers link to the view that proves them
   ("Show the rung", "Alarm details"). The real chat is being built in the status page; the mockup only shows
@@ -48,12 +48,30 @@ only its code view.
 
 ## The views
 
+### 0. Active alarm (start page)
+kassem's team opens an "Active Alarm" screen first on a breakdown, so this is the landing page. It puts
+everything needed to fix the top alarm on one screen (faults before warnings, a chip row when several are active):
+- **The alarm:** number, text, fault or warning, since when, acknowledged or not, and a few plain sentences on
+  **what is going on** (what the machine was doing, what failed, what it means for the batch).
+- **Where in the machine:** the process picture with the device marked by a pulsing ring, plus the device's
+  "why it works or not" chain (or, for sequence alarms, the condition the step is waiting for).
+- **Where in the software:** the path from OB to the alarm bit and the live rung that sets it, with the
+  values at alarm time when the rung looks normal again now.
+- **Values:** every signal involved, at alarm time and now; changed values are highlighted. Offline (no
+  PLC connection) the page shows the last values read and how old they are.
+- **Likely causes, how to fix, history,** and "Ask about this alarm".
+With no alarm active, it says so and shows what the machine is doing, with a link to the last alarm.
+
 ### 1. Plant
 The first screen answers "what is it doing right now?" in one or two plain sentences, next to a big
 state box (step number + Running / Waiting / Halted). Below: the sequence as a strip of steps, the
 "waiting for" sentence, one tile per device (icon by type, colour by state, key value), active alarms and
 data exchange with MES and the filler. The device tiles come from the FB instances in `FB_Station`.
 E301 has no device block; the importer found it from its I/O tag names, and the tile says so.
+The **process picture** (tank with valves, agitator, heater, transmitters and pump, live level and flows) is
+drawn from a "batch tank" template that the importer applies when it recognises the pattern (a vessel with
+a level transmitter, inlet valves and an outlet pump). Each device in it is clickable. Plants it doesn't
+recognise get the device tiles only.
 
 ### 2. Sequence (GRAPH step chart)
 A vertical step chart in GRAPH style: initial step with a double frame, active step filled blue (red when
@@ -107,8 +125,8 @@ without reading code.
 
 ## Visual language
 
-- Colours and tokens continue the current status page (`src/PlcKi.Server/wwwroot/style.css`), with a dark
-  theme. Green = on / passing, red = fault / blocking, amber = warning / waiting, blue = active step and
+- A dark navy app frame (top bar and rail) around light content cards, like a control-room application;
+  content colours continue the current status page (`src/PlcKi.Server/wwwroot/style.css`), with a dark theme. Green = on / passing, red = fault / blocking, amber = warning / waiting, blue = active step and
   links, grey = off. State is always shown by shape or text as well as colour.
 - IBM Plex Sans for text and IBM Plex Mono for tags, symbols and numbers (tabular figures), with system
   fonts as fallback for plant PCs without internet.
@@ -117,14 +135,13 @@ without reading code.
 
 ## Build order (proposal)
 
-1. Shell (rail, top bar, routing) and **Plant** + **Alarms** on top of the existing `/api/status`: highest
-   value, needs only the hand-written model.
+1. Shell (rail, top bar, routing), **Active alarm**, **Plant** and **Alarms** on top of the existing
+   `/api/status`: highest value, needs only the hand-written model.
 2. **Sequence** from SCL CASE patterns (demo), then from GRAPH XML once a real export arrives.
 3. **Equipment** faceplates by block type, and alarm history + trend recording (small local store, e.g. SQLite).
 4. **Code** view with live chips (needs block sources from the importer).
 5. **Logic** rung view from LAD/FBD XML (needs the real V20 export to build the parser on).
 6. Ask panel joins in as the chat lands; answers link to these views.
 
-Open questions for kassem: should operators see the Code and Logic views, or only technicians (a simple
-role switch)? And which screen do you open first on a breakdown today in TIA or on the HMI? That should be
-the default landing view.
+Decided with kassem (2 Nov): operators may see every view, including Code and Logic (no role switch).
+The start page is Active alarm.
