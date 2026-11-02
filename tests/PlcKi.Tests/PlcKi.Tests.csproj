@@ -12,8 +12,8 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\PlcKi.Core\PlcKi.Core.csproj" />
-    <!-- Built first so ReadOnlyTests can inspect its compiled code; not loaded or run -->
-    <ProjectReference Include="..\..\src\PlcKi.Server\PlcKi.Server.csproj" ReferenceOutputAssembly="false" />
+    <!-- AskTests run the assistant against a fake API; ReadOnlyTests inspect the compiled server -->
+    <ProjectReference Include="..\..\src\PlcKi.Server\PlcKi.Server.csproj" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\models\*.json" Link="models\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />

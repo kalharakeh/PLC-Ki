@@ -28,6 +28,28 @@
       <ul id="summary"></ul>
     </section>
 
+    <section class="card ask" aria-labelledby="h-ask">
+      <div class="ask-head">
+        <h2 id="h-ask">Ask about the machine</h2>
+        <button id="ask-new" type="button" class="linkbtn hidden">New conversation</button>
+      </div>
+      <p id="ask-off" class="muted small hidden"></p>
+      <div id="ask-log" class="ask-log" aria-live="polite"></div>
+      <div id="ask-examples" class="chips">
+        <button type="button" class="chip">Why is the machine stopped?</button>
+        <button type="button" class="chip">What is it waiting for?</button>
+        <button type="button" class="chip">What happened in the last 10 minutes?</button>
+        <button type="button" class="chip">Explain the active alarm and how to fix it</button>
+      </div>
+      <form id="ask-form" class="ask-form">
+        <label for="ask-input" class="sr-only">Your question</label>
+        <textarea id="ask-input" rows="2" maxlength="4000"
+          placeholder="e.g. Why is the agitator not running?"></textarea>
+        <button id="ask-send" type="submit" class="btn">Ask</button>
+      </form>
+      <p class="muted small ask-hint">Claude answers from the live values and the program model. It can only read; check before you act.</p>
+    </section>
+
     <section id="overview" class="tiles" aria-label="Process values"></section>
 
     <section class="card" aria-labelledby="h-seq">
@@ -67,5 +89,6 @@
   </footer>
 
   <script src="app.js"></script>
+  <script src="ask.js"></script>
 </body>
 </html>

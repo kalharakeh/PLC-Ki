@@ -3,19 +3,23 @@ using PlcKi.Core.Status;
 
 namespace PlcKi.Server.Live;
 
-/// <summary>Latest status, shared between the polling loop and the web API.</summary>
+/// <summary>Latest status and the recent history, shared between the polling loop, the web API and the assistant.</summary>
 public sealed class LiveState
 {
     private volatile MachineStatus? _status;
     private volatile Snapshot? _snapshot;
 
+    public LiveState(MachineHistory history) => History = history;
+
     public MachineStatus? Status => _status;
     public Snapshot? Snapshot => _snapshot;
+    public MachineHistory History { get; }
 
     public void Publish(Snapshot snap, MachineStatus status)
     {
         _snapshot = snap;
         _status = status;
+        History.Add(snap, status);
     }
 }
 

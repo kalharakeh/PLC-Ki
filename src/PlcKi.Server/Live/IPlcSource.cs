@@ -33,6 +33,21 @@ public sealed class PlcKiOptions
     public string Source { get; set; } = "s7";
     public string SnapshotFile { get; set; } = "models/snapshots/step10-xv101-not-open.json";
     public PlcOptions Plc { get; set; } = new();
+    public AskOptions Ask { get; set; } = new();
+    /// <summary>How many minutes of tag values to keep in memory for "what happened" questions.</summary>
+    public double HistoryMinutes { get; set; } = 15;
+}
+
+/// <summary>The "ask a question" assistant. The API key comes from the ANTHROPIC_API_KEY environment variable only.</summary>
+public sealed class AskOptions
+{
+    public bool Enabled { get; set; } = true;
+    public string Model { get; set; } = "claude-opus-5-5";
+    /// <summary>low, medium, high or max: how hard Claude thinks before answering. Higher is slower.</summary>
+    public string Effort { get; set; } = "medium";
+    public int MaxTokens { get; set; } = 8000;
+    /// <summary>Upper limit of tool rounds per question, so a question cannot loop forever.</summary>
+    public int MaxToolRounds { get; set; } = 12;
 }
 
 public sealed class PlcOptions

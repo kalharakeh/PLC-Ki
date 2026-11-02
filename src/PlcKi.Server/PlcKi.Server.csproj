@@ -9,6 +9,7 @@
   </PropertyGroup>
   <ItemGroup>
     <!-- S7CommPlus driver (LGPL-3.0-or-later), fork of thomas-v2/S7CommPlusDriver by DotNetProjects -->
+    <PackageReference Include="Anthropic" Version="13.3.0" />
     <PackageReference Include="DotNetProjects.S7CommPlusDriver" Version="6.1.0" />
   </ItemGroup>
   <ItemGroup>
