@@ -96,7 +96,7 @@ namespace TiaImporter
             catch (EngineeringException)
             {
                 // Archive from an older TIA version: upgrade a copy while retrieving.
-                return tia.Projects.RetrieveWithUpgrade(archive, target, ProjectUpgradeOptions.None);
+                return tia.Projects.RetrieveWithUpgrade(archive, target);
             }
         }
 

@@ -41,7 +41,7 @@ namespace TiaImporter
                         var existing = sw.ExternalSourceGroup.ExternalSources.Find(file.Name);
                         existing?.Delete();
                         var source = sw.ExternalSourceGroup.ExternalSources.CreateFromFile(file.Name, file.FullName);
-                        source.GenerateBlocksFromSource(GenerateBlockOption.KeepOnDeletedBlocks);
+                        source.GenerateBlocksFromSource();
                     }
 
                     // 2. LAD and GRAPH blocks exported as SimaticML XML.
