@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PLC-Ki live status</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <span class="logo" aria-hidden="true">◆</span>
+      <div>
+        <h1>PLC-Ki</h1>
+        <p id="machine" class="muted">Loading…</p>
+      </div>
+    </div>
+    <div class="link">
+      <span class="badge readonly" title="This app only reads from the PLC. It has no way to write.">Read-only</span>
+      <span id="conn" class="pill pill-wait">connecting</span>
+      <span id="updated" class="muted small"></span>
+    </div>
+  </header>
+
+  <main>
+    <section class="card summary" aria-labelledby="h-summary">
+      <h2 id="h-summary">What the machine is doing</h2>
+      <ul id="summary"></ul>
+    </section>
+
+    <section id="overview" class="tiles" aria-label="Process values"></section>
+
+    <section class="card" aria-labelledby="h-seq">
+      <h2 id="h-seq">Sequence</h2>
+      <div id="sequences"></div>
+    </section>
+
+    <section class="card" aria-labelledby="h-alarms">
+      <h2 id="h-alarms">Active alarms <span id="alarm-count" class="count"></span></h2>
+      <div id="alarms"></div>
+    </section>
+
+    <section class="card" aria-labelledby="h-eq">
+      <h2 id="h-eq">Equipment</h2>
+      <div id="equipment" class="eq-grid"></div>
+    </section>
+
+    <section class="card" aria-labelledby="h-x">
+      <h2 id="h-x">Data exchange</h2>
+      <div class="table-wrap">
+        <table id="exchange">
+          <thead><tr><th>Partner</th><th>Direction</th><th>Signal</th><th>Value</th><th>Meaning</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="tag-errors-card" class="card hidden" aria-labelledby="h-te">
+      <h2 id="h-te">Tags that could not be read</h2>
+      <ul id="tag-errors" class="mono small"></ul>
+    </section>
+  </main>
+
+  <footer class="muted small">
+    Raw values with their TIA symbols: <a href="/api/values">/api/values</a> ·
+    Status as JSON: <a href="/api/status">/api/status</a>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

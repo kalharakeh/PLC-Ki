@@ -1,0 +1,417 @@
+{
+  // Machine model for the demo mixing station (plc-demo/).
+  // Written by hand from the SCL sources and plc-demo/alarms.md.
+  // Later the TIA archive importer will generate this file from the .zap archive.
+  "name": "Demo mixing station",
+  "description": "Batch tank: fill ingredient A and B, mix and heat, hold for the filler, drain.",
+  "source": "hand-written from plc-demo/scl (PLC-Ki phase 2)",
+
+  "tags": [
+    // --- Sequence ("Station".Seq is the multi-instance of FB_BatchSequence) ---
+    { "id": "Step", "symbol": "\"Station\".Seq.Step", "type": "Int", "label": "Step" },
+    { "id": "StepTime", "symbol": "\"Station\".Seq.StepTime", "type": "Time", "label": "Time in step" },
+    { "id": "Halted", "symbol": "\"Station\".Seq.Halted", "type": "Bool", "label": "Sequence halted", "trueText": "halted", "falseText": "running" },
+    { "id": "Paused", "symbol": "\"Station\".Seq.Paused", "type": "Bool", "label": "Paused by Stop", "trueText": "yes", "falseText": "no" },
+    { "id": "SeqRunning", "symbol": "\"Station\".Seq.Running", "type": "Bool", "label": "Batch active", "trueText": "yes", "falseText": "no" },
+    { "id": "RecipeValid", "symbol": "\"Station\".Seq.RecipeValid", "type": "Bool", "label": "Recipe valid", "trueText": "yes", "falseText": "no" },
+    { "id": "Seq_OpenXV101", "symbol": "\"Station\".Seq.OpenXV101", "type": "Bool", "label": "Sequence asks XV101 open" },
+    { "id": "Seq_OpenXV102", "symbol": "\"Station\".Seq.OpenXV102", "type": "Bool", "label": "Sequence asks XV102 open" },
+    { "id": "Seq_RunM201", "symbol": "\"Station\".Seq.RunM201", "type": "Bool", "label": "Sequence asks M201 run" },
+    { "id": "Seq_SpeedM201", "symbol": "\"Station\".Seq.SpeedM201", "type": "Real", "label": "Requested agitator speed", "unit": "rpm", "decimals": 0 },
+    { "id": "Seq_HeatE301", "symbol": "\"Station\".Seq.HeatE301", "type": "Bool", "label": "Sequence asks E301 heat" },
+    { "id": "Seq_RunP401", "symbol": "\"Station\".Seq.RunP401", "type": "Bool", "label": "Sequence asks P401 run" },
+
+    // --- Operator panel ---
+    { "id": "PB_Start", "symbol": "\"DB_IO\".PB_Start", "type": "Bool", "label": "Start button", "trueText": "pressed", "falseText": "released" },
+    { "id": "PB_Stop", "symbol": "\"DB_IO\".PB_Stop", "type": "Bool", "label": "Stop button", "trueText": "pressed", "falseText": "released" },
+    { "id": "PB_Reset", "symbol": "\"DB_IO\".PB_Reset", "type": "Bool", "label": "Reset button", "trueText": "pressed", "falseText": "released" },
+    { "id": "SW_Auto", "symbol": "\"DB_IO\".SW_Auto", "type": "Bool", "label": "Mode selector", "trueText": "Auto", "falseText": "Manual" },
+    { "id": "EStop_OK", "symbol": "\"DB_IO\".EStop_OK", "type": "Bool", "label": "Emergency stop circuit", "trueText": "healthy", "falseText": "E-stop pressed" },
+
+    // --- Valves ---
+    { "id": "XV101_OpenCmd", "symbol": "\"DB_IO\".XV101_OpenCmd", "type": "Bool", "label": "XV101 open command", "trueText": "on", "falseText": "off" },
+    { "id": "XV101_ZSO", "symbol": "\"DB_IO\".XV101_ZSO", "type": "Bool", "label": "XV101 open switch", "trueText": "reached", "falseText": "not reached" },
+    { "id": "XV101_ZSC", "symbol": "\"DB_IO\".XV101_ZSC", "type": "Bool", "label": "XV101 closed switch", "trueText": "reached", "falseText": "not reached" },
+    { "id": "XV102_OpenCmd", "symbol": "\"DB_IO\".XV102_OpenCmd", "type": "Bool", "label": "XV102 open command", "trueText": "on", "falseText": "off" },
+    { "id": "XV102_ZSO", "symbol": "\"DB_IO\".XV102_ZSO", "type": "Bool", "label": "XV102 open switch", "trueText": "reached", "falseText": "not reached" },
+    { "id": "XV102_ZSC", "symbol": "\"DB_IO\".XV102_ZSC", "type": "Bool", "label": "XV102 closed switch", "trueText": "reached", "falseText": "not reached" },
+
+    // --- Agitator M201 on a VFD ---
+    { "id": "M201_RunCmd", "symbol": "\"DB_IO\".M201_RunCmd", "type": "Bool", "label": "M201 run command", "trueText": "on", "falseText": "off" },
+    { "id": "M201_SpeedSP", "symbol": "\"DB_IO\".M201_SpeedSP", "type": "Real", "label": "M201 speed setpoint", "unit": "rpm", "decimals": 0 },
+    { "id": "M201_SpeedPV", "symbol": "\"DB_IO\".M201_SpeedPV", "type": "Real", "label": "M201 actual speed", "unit": "rpm", "decimals": 0 },
+    { "id": "M201_DriveReady", "symbol": "\"DB_IO\".M201_DriveReady", "type": "Bool", "label": "M201 drive ready", "trueText": "ready", "falseText": "not ready" },
+    { "id": "M201_DriveFault", "symbol": "\"DB_IO\".M201_DriveFault", "type": "Bool", "label": "M201 drive fault", "trueText": "fault", "falseText": "no fault" },
+    { "id": "M201_AtSpeed", "symbol": "\"Station\".M201.AtSpeed", "type": "Bool", "label": "M201 at speed", "trueText": "yes", "falseText": "no" },
+
+    // --- Heater E301 ---
+    { "id": "E301_OnCmd", "symbol": "\"DB_IO\".E301_OnCmd", "type": "Bool", "label": "E301 on command", "trueText": "on", "falseText": "off" },
+    { "id": "E301_OverTemp", "symbol": "\"DB_IO\".E301_OverTemp", "type": "Bool", "label": "E301 overtemperature switch", "trueText": "tripped", "falseText": "ok" },
+
+    // --- Pump P401 ---
+    { "id": "P401_RunCmd", "symbol": "\"DB_IO\".P401_RunCmd", "type": "Bool", "label": "P401 run command", "trueText": "on", "falseText": "off" },
+    { "id": "P401_RunFb", "symbol": "\"DB_IO\".P401_RunFb", "type": "Bool", "label": "P401 running feedback", "trueText": "running", "falseText": "no feedback" },
+    { "id": "P401_MotorTrip", "symbol": "\"DB_IO\".P401_MotorTrip", "type": "Bool", "label": "P401 motor protection", "trueText": "tripped", "falseText": "ok" },
+
+    // --- Analog values (scaled in FB_AnalogIn) ---
+    { "id": "Level", "symbol": "\"Station\".LT101.Value", "type": "Real", "label": "Tank level LT101", "unit": "%", "decimals": 1 },
+    { "id": "Level_High", "symbol": "\"Station\".LT101.High", "type": "Bool", "label": "Level high-high", "trueText": "above 95 %", "falseText": "ok" },
+    { "id": "Level_WireBreak", "symbol": "\"Station\".LT101.WireBreak", "type": "Bool", "label": "LT101 signal", "trueText": "wire break", "falseText": "ok" },
+    { "id": "Temp", "symbol": "\"Station\".TT301.Value", "type": "Real", "label": "Tank temperature TT301", "unit": "°C", "decimals": 1 },
+    { "id": "Temp_WireBreak", "symbol": "\"Station\".TT301.WireBreak", "type": "Bool", "label": "TT301 signal", "trueText": "wire break", "falseText": "ok" },
+
+    // --- Recipe ---
+    { "id": "RecipeNo", "symbol": "\"DB_Recipe\".RecipeNo", "type": "Int", "label": "Recipe" },
+    { "id": "LevelA", "symbol": "\"DB_Recipe\".LevelA", "type": "Real", "label": "Fill A to", "unit": "%", "decimals": 0 },
+    { "id": "LevelB", "symbol": "\"DB_Recipe\".LevelB", "type": "Real", "label": "Fill B to", "unit": "%", "decimals": 0 },
+    { "id": "TempSP", "symbol": "\"DB_Recipe\".TempSP", "type": "Real", "label": "Temperature setpoint", "unit": "°C", "decimals": 0 },
+    { "id": "MixTime", "symbol": "\"DB_Recipe\".MixTime", "type": "Time", "label": "Mixing time" },
+    { "id": "MixSpeed", "symbol": "\"DB_Recipe\".MixSpeed", "type": "Real", "label": "Mixing speed", "unit": "rpm", "decimals": 0 },
+    { "id": "HoldSpeed", "symbol": "\"DB_Recipe\".HoldSpeed", "type": "Real", "label": "Hold speed", "unit": "rpm", "decimals": 0 },
+    { "id": "DrainLevel", "symbol": "\"DB_Recipe\".DrainLevel", "type": "Real", "label": "Empty below", "unit": "%", "decimals": 0 },
+
+    // --- Data exchange with MES and filler ---
+    { "id": "MES_RecipeNo", "symbol": "\"DB_LineInterface\".MES_RecipeNo", "type": "Int", "label": "Recipe from MES" },
+    { "id": "MES_StartRequest", "symbol": "\"DB_LineInterface\".MES_StartRequest", "type": "Bool", "label": "Start request from MES", "trueText": "on", "falseText": "off" },
+    { "id": "MES_Heartbeat", "symbol": "\"DB_LineInterface\".MES_Heartbeat", "type": "Int", "label": "MES heartbeat" },
+    { "id": "Filler_Ready", "symbol": "\"DB_LineInterface\".Filler_ReadyToReceive", "type": "Bool", "label": "Filler ready to receive", "trueText": "ready", "falseText": "not ready" },
+    { "id": "Station_Running", "symbol": "\"DB_LineInterface\".Station_Running", "type": "Bool", "label": "Station running (to MES/filler)", "trueText": "on", "falseText": "off" },
+    { "id": "Station_Draining", "symbol": "\"DB_LineInterface\".Station_Draining", "type": "Bool", "label": "Station draining (to filler)", "trueText": "on", "falseText": "off" },
+    { "id": "Batch_Done", "symbol": "\"DB_LineInterface\".Batch_Done", "type": "Bool", "label": "Batch done pulse (to MES)", "trueText": "on", "falseText": "off" },
+    { "id": "Batch_Count", "symbol": "\"DB_LineInterface\".Batch_Count", "type": "DInt", "label": "Batches done" },
+    { "id": "Station_Heartbeat", "symbol": "\"DB_LineInterface\".Station_Heartbeat", "type": "Int", "label": "Station heartbeat (to MES/filler)" },
+
+    // --- Alarms (latched bits in DB_Alarms) ---
+    { "id": "A01", "symbol": "\"DB_Alarms\".A01_EStop", "type": "Bool" },
+    { "id": "A02", "symbol": "\"DB_Alarms\".A02_XV101_NotOpen", "type": "Bool" },
+    { "id": "A03", "symbol": "\"DB_Alarms\".A03_XV101_NotClosed", "type": "Bool" },
+    { "id": "A04", "symbol": "\"DB_Alarms\".A04_XV102_NotOpen", "type": "Bool" },
+    { "id": "A05", "symbol": "\"DB_Alarms\".A05_XV102_NotClosed", "type": "Bool" },
+    { "id": "A06", "symbol": "\"DB_Alarms\".A06_M201_DriveFault", "type": "Bool" },
+    { "id": "A07", "symbol": "\"DB_Alarms\".A07_M201_SpeedDev", "type": "Bool" },
+    { "id": "A08", "symbol": "\"DB_Alarms\".A08_M201_NotReady", "type": "Bool" },
+    { "id": "A09", "symbol": "\"DB_Alarms\".A09_E301_OverTemp", "type": "Bool" },
+    { "id": "A10", "symbol": "\"DB_Alarms\".A10_P401_Trip", "type": "Bool" },
+    { "id": "A11", "symbol": "\"DB_Alarms\".A11_P401_NoFeedback", "type": "Bool" },
+    { "id": "A12", "symbol": "\"DB_Alarms\".A12_LT101_WireBreak", "type": "Bool" },
+    { "id": "A13", "symbol": "\"DB_Alarms\".A13_LT101_HighHigh", "type": "Bool" },
+    { "id": "A14", "symbol": "\"DB_Alarms\".A14_TT301_WireBreak", "type": "Bool" },
+    { "id": "A15", "symbol": "\"DB_Alarms\".A15_TT301_High", "type": "Bool" },
+    { "id": "A16", "symbol": "\"DB_Alarms\".A16_Step10_Timeout", "type": "Bool" },
+    { "id": "A17", "symbol": "\"DB_Alarms\".A17_Step20_Timeout", "type": "Bool" },
+    { "id": "A18", "symbol": "\"DB_Alarms\".A18_Step30_Timeout", "type": "Bool" },
+    { "id": "A19", "symbol": "\"DB_Alarms\".A19_Step50_Timeout", "type": "Bool" },
+    { "id": "A20", "symbol": "\"DB_Alarms\".A20_E301_NoHeating", "type": "Bool" },
+    { "id": "A21", "symbol": "\"DB_Alarms\".A21_Filler_NotReady", "type": "Bool" },
+    { "id": "A22", "symbol": "\"DB_Alarms\".A22_MES_HeartbeatLost", "type": "Bool" },
+    { "id": "A23", "symbol": "\"DB_Alarms\".A23_RecipeInvalid", "type": "Bool" },
+    { "id": "A24", "symbol": "\"DB_Alarms\".A24_NotInAuto", "type": "Bool" },
+    { "id": "A25", "symbol": "\"DB_Alarms\".A25_TankNotEmpty", "type": "Bool" },
+    { "id": "AnyFault", "symbol": "\"DB_Alarms\".AnyFault", "type": "Bool", "label": "Any fault active", "trueText": "yes", "falseText": "no" },
+    { "id": "AnyWarning", "symbol": "\"DB_Alarms\".AnyWarning", "type": "Bool", "label": "Any warning active", "trueText": "yes", "falseText": "no" }
+  ],
+
+  "overview": [ "Level", "Temp", "M201_SpeedPV", "SW_Auto", "EStop_OK", "RecipeNo", "Batch_Count" ],
+
+  "sequences": [
+    {
+      "id": "Batch",
+      "name": "Batch sequence",
+      "block": "FB_BatchSequence, instance \"Station\".Seq (called in FB_Station)",
+      "stepTag": "Step",
+      "stepTimeTag": "StepTime",
+      "haltedTag": "Halted",
+      "haltReasons": [
+        { "expr": "AnyFault", "text": "a FAULT alarm is active (alarms stay latched until the cause is gone and Reset is pressed)" },
+        { "expr": "NOT EStop_OK", "text": "the emergency stop is pressed" },
+        { "expr": "Paused", "text": "Stop was pressed (press Start to continue from this step)" },
+        { "expr": "NOT SW_Auto", "text": "the selector is in Manual" }
+      ],
+      "steps": [
+        {
+          "no": 0, "name": "Idle",
+          "does": "Keeps all outputs off and waits for a start from the panel or from MES.",
+          "next": [ { "to": 10, "conditions": [
+            { "expr": "PB_Start OR MES_StartRequest", "text": "Start pressed on the panel or start request from MES" },
+            { "expr": "SW_Auto", "text": "Selector in Auto" },
+            { "expr": "NOT AnyFault", "text": "No FAULT alarm active" },
+            { "expr": "RecipeValid", "text": "Recipe values are valid" },
+            { "expr": "Level <= DrainLevel", "text": "Tank empty (level at or below {DrainLevel})" }
+          ] } ]
+        },
+        {
+          "no": 10, "name": "Fill A",
+          "does": "Opens inlet valve XV101 so ingredient A flows in until the level reaches {LevelA}.",
+          "limit": "Longer than 120 s raises A16. If XV101 does not reach its open switch within 10 s, A02 comes first.",
+          "next": [ { "to": 20, "conditions": [
+            { "expr": "Level >= LevelA", "text": "Level reached {LevelA}" }
+          ] } ]
+        },
+        {
+          "no": 20, "name": "Fill B",
+          "does": "Opens inlet valve XV102 so ingredient B flows in until the level reaches {LevelB}.",
+          "limit": "Longer than 120 s raises A17. If XV102 does not open within 10 s, A04 comes first.",
+          "next": [ { "to": 30, "conditions": [
+            { "expr": "Level >= LevelB", "text": "Level reached {LevelB}" }
+          ] } ]
+        },
+        {
+          "no": 30, "name": "Mix and heat",
+          "does": "Runs agitator M201 at {MixSpeed} and heats with E301 to {TempSP} once the agitator is at speed.",
+          "limit": "Longer than 600 s raises A18. If the heater is on for 60 s and the temperature rises less than 2 °C, A20 comes first.",
+          "next": [ { "to": 40, "conditions": [
+            { "expr": "Temp >= TempSP", "text": "Temperature reached {TempSP}" },
+            { "expr": "StepTime >= MixTime", "text": "Mixed for at least {MixTime}" }
+          ] } ]
+        },
+        {
+          "no": 40, "name": "Hold",
+          "does": "Keeps agitator M201 at {HoldSpeed} while it waits for the filler.",
+          "limit": "Waiting longer than 60 s raises warning A21.",
+          "next": [ { "to": 50, "conditions": [
+            { "expr": "Filler_Ready", "text": "Filler ready to receive" }
+          ] } ]
+        },
+        {
+          "no": 50, "name": "Drain",
+          "does": "Runs pump P401 to send the product to the filler until the level is at or below {DrainLevel}.",
+          "limit": "Longer than 180 s raises A19.",
+          "next": [ { "to": 60, "conditions": [
+            { "expr": "Level <= DrainLevel", "text": "Level at or below {DrainLevel}" }
+          ] } ]
+        },
+        {
+          "no": 60, "name": "Done",
+          "does": "Counts the batch, reports it to MES and goes back to step 0 in the next PLC cycle.",
+          "next": [ { "to": 0, "conditions": [ { "expr": "TRUE", "text": "Always (one PLC cycle)" } ] } ]
+        }
+      ]
+    }
+  ],
+
+  "equipment": [
+    {
+      "id": "XV101", "name": "Inlet valve XV101 (ingredient A)", "kind": "valve",
+      "location": "FB_Valve, instance \"Station\".XV101",
+      "request": "Seq_OpenXV101", "command": "XV101_OpenCmd",
+      "permits": [
+        { "expr": "NOT Level_High", "text": "Level not high-high (95 %)" },
+        { "expr": "NOT Level_WireBreak", "text": "Level transmitter LT101 healthy" }
+      ],
+      "states": [
+        { "when": "XV101_OpenCmd AND XV101_ZSO AND NOT XV101_ZSC", "text": "open", "level": "ok" },
+        { "when": "XV101_OpenCmd", "text": "opening: command on, open switch not reached yet", "level": "warn" },
+        { "when": "XV101_ZSC AND NOT XV101_ZSO", "text": "closed", "level": "idle" },
+        { "when": "TRUE", "text": "closing: closed switch not reached yet", "level": "warn" }
+      ],
+      "values": [ "XV101_ZSO", "XV101_ZSC" ]
+    },
+    {
+      "id": "XV102", "name": "Inlet valve XV102 (ingredient B)", "kind": "valve",
+      "location": "FB_Valve, instance \"Station\".XV102",
+      "request": "Seq_OpenXV102", "command": "XV102_OpenCmd",
+      "permits": [
+        { "expr": "NOT Level_High", "text": "Level not high-high (95 %)" },
+        { "expr": "NOT Level_WireBreak", "text": "Level transmitter LT101 healthy" }
+      ],
+      "states": [
+        { "when": "XV102_OpenCmd AND XV102_ZSO AND NOT XV102_ZSC", "text": "open", "level": "ok" },
+        { "when": "XV102_OpenCmd", "text": "opening: command on, open switch not reached yet", "level": "warn" },
+        { "when": "XV102_ZSC AND NOT XV102_ZSO", "text": "closed", "level": "idle" },
+        { "when": "TRUE", "text": "closing: closed switch not reached yet", "level": "warn" }
+      ],
+      "values": [ "XV102_ZSO", "XV102_ZSC" ]
+    },
+    {
+      "id": "M201", "name": "Agitator M201", "kind": "drive",
+      "location": "FB_VFD, instance \"Station\".M201",
+      "request": "Seq_RunM201", "command": "M201_RunCmd",
+      "permits": [
+        { "expr": "Level > 20", "text": "Level above 20 % (blades covered)" },
+        { "expr": "EStop_OK", "text": "Emergency stop circuit healthy" },
+        { "expr": "M201_DriveReady", "text": "Drive ready" }
+      ],
+      "states": [
+        { "when": "M201_DriveFault", "text": "drive fault", "level": "fault" },
+        { "when": "M201_RunCmd AND M201_AtSpeed", "text": "running at {M201_SpeedPV} (setpoint {M201_SpeedSP})", "level": "ok" },
+        { "when": "M201_RunCmd", "text": "speeding up: {M201_SpeedPV} of {M201_SpeedSP}", "level": "warn" },
+        { "when": "M201_SpeedPV > 1", "text": "slowing down ({M201_SpeedPV})", "level": "info" },
+        { "when": "TRUE", "text": "stopped", "level": "idle" }
+      ],
+      "values": [ "M201_SpeedSP", "M201_SpeedPV", "M201_DriveReady" ]
+    },
+    {
+      "id": "E301", "name": "Heater E301", "kind": "heater",
+      "location": "FB_Station (heater interlock line)",
+      "request": "Seq_HeatE301", "command": "E301_OnCmd",
+      "permits": [
+        { "expr": "M201_AtSpeed", "text": "Agitator M201 at speed (prevents local overheating)" },
+        { "expr": "NOT E301_OverTemp", "text": "Overtemperature switch not tripped" },
+        { "expr": "NOT Temp_WireBreak", "text": "Temperature transmitter TT301 healthy" }
+      ],
+      "states": [
+        { "when": "E301_OverTemp", "text": "overtemperature switch tripped", "level": "fault" },
+        { "when": "E301_OnCmd", "text": "heating ({Temp}, target {TempSP})", "level": "ok" },
+        { "when": "TRUE", "text": "off", "level": "idle" }
+      ],
+      "values": [ "Temp", "TempSP" ]
+    },
+    {
+      "id": "P401", "name": "Outlet pump P401", "kind": "motor",
+      "location": "FB_Motor, instance \"Station\".P401",
+      "request": "Seq_RunP401", "command": "P401_RunCmd",
+      "permits": [
+        { "expr": "Level > 0.5", "text": "Tank not empty (above 0.5 %, dry-run protection)" },
+        { "expr": "EStop_OK", "text": "Emergency stop circuit healthy" },
+        { "expr": "NOT P401_MotorTrip", "text": "Motor protection not tripped" }
+      ],
+      "states": [
+        { "when": "P401_MotorTrip", "text": "motor protection tripped", "level": "fault" },
+        { "when": "P401_RunCmd AND P401_RunFb", "text": "running", "level": "ok" },
+        { "when": "P401_RunCmd", "text": "starting: no running feedback yet", "level": "warn" },
+        { "when": "TRUE", "text": "stopped", "level": "idle" }
+      ],
+      "values": [ "P401_RunFb" ]
+    }
+  ],
+
+  "alarms": [
+    { "id": "A01", "tag": "A01", "severity": "FAULT", "text": "Emergency stop pressed",
+      "location": "FB_Station, alarm input EStop (\"DB_IO\".EStop_OK is FALSE)",
+      "condition": "The emergency stop circuit is open.",
+      "causes": [ "An E-stop button is pressed", "E-stop circuit wiring or safety relay" ],
+      "fix": [ "Release the E-stop", "Press Reset, then Start to continue" ] },
+    { "id": "A02", "tag": "A02", "severity": "FAULT", "text": "Inlet valve XV101 (ingredient A) did not open within 10 s",
+      "location": "FB_Valve, instance \"Station\".XV101 (output FaultNotOpen)",
+      "condition": "Open command on, but the open limit switch ZSO was not reached in 10 s.",
+      "causes": [ "No compressed air", "Solenoid coil burnt or not powered", "Open limit switch out of position" ],
+      "fix": [ "Check the air supply and the solenoid on XV101", "Check the open switch ZSO", "Press Reset, then Start" ] },
+    { "id": "A03", "tag": "A03", "severity": "FAULT", "text": "Inlet valve XV101 (ingredient A) did not close within 10 s",
+      "location": "FB_Valve, instance \"Station\".XV101 (output FaultNotClosed)",
+      "condition": "Open command off, but the closed limit switch ZSC was not reached in 10 s.",
+      "causes": [ "Valve seat blocked", "Return spring broken", "Closed limit switch out of position" ],
+      "fix": [ "Check the valve seat", "Check the closed switch ZSC", "Press Reset" ] },
+    { "id": "A04", "tag": "A04", "severity": "FAULT", "text": "Inlet valve XV102 (ingredient B) did not open within 10 s",
+      "location": "FB_Valve, instance \"Station\".XV102 (output FaultNotOpen)",
+      "condition": "Open command on, but the open limit switch ZSO was not reached in 10 s.",
+      "causes": [ "No compressed air", "Solenoid coil burnt or not powered", "Open limit switch out of position" ],
+      "fix": [ "Check the air supply and the solenoid on XV102", "Check the open switch ZSO", "Press Reset, then Start" ] },
+    { "id": "A05", "tag": "A05", "severity": "FAULT", "text": "Inlet valve XV102 (ingredient B) did not close within 10 s",
+      "location": "FB_Valve, instance \"Station\".XV102 (output FaultNotClosed)",
+      "condition": "Open command off, but the closed limit switch ZSC was not reached in 10 s.",
+      "causes": [ "Valve seat blocked", "Return spring broken" ],
+      "fix": [ "Clean the valve", "Check the closed switch ZSC", "Press Reset" ] },
+    { "id": "A06", "tag": "A06", "severity": "FAULT", "text": "Agitator M201 drive fault",
+      "location": "FB_VFD, instance \"Station\".M201 (output FaultDrive)",
+      "condition": "The drive reports a fault.",
+      "causes": [ "Overcurrent", "Motor or cable short", "Drive overheated" ],
+      "fix": [ "Read the fault code on the drive panel", "Check the motor and cable", "Reset the drive, then press Reset" ] },
+    { "id": "A07", "tag": "A07", "severity": "FAULT", "text": "Agitator M201 speed more than 10 % below setpoint for 15 s",
+      "location": "FB_VFD, instance \"Station\".M201 (output FaultSpeedDev)",
+      "condition": "Running, but the speed stayed below 90 % of the setpoint for 15 s.",
+      "causes": [ "Product too viscous", "Mechanical drag (gearbox, bearing)", "Drive current limit too low" ],
+      "fix": [ "Check the product", "Check the gearbox and bearings", "Check the drive current limit" ] },
+    { "id": "A08", "tag": "A08", "severity": "WARNING", "text": "Agitator M201 drive not ready",
+      "location": "FB_VFD, instance \"Station\".M201 (output NotReady)",
+      "condition": "The drive is not ready and reports no fault.",
+      "causes": [ "E-stop pressed", "Drive enable off", "Main switch off" ],
+      "fix": [ "Check the E-stop", "Check drive enable and the main switch" ] },
+    { "id": "A09", "tag": "A09", "severity": "FAULT", "text": "Heater E301 overtemperature switch tripped",
+      "location": "FB_Station, \"DB_IO\".E301_OverTemp",
+      "condition": "The overtemperature safety switch tripped (above 95 °C).",
+      "causes": [ "Temperature control failed", "Heater contactor welded" ],
+      "fix": [ "Let the tank cool down", "Check TT301 and the heater contactor", "Press Reset" ] },
+    { "id": "A10", "tag": "A10", "severity": "FAULT", "text": "Outlet pump P401 motor protection tripped",
+      "location": "FB_Motor, instance \"Station\".P401 (output FaultTrip)",
+      "condition": "The motor protection breaker tripped.",
+      "causes": [ "Motor overload", "Pump blocked", "Phase loss" ],
+      "fix": [ "Check the pump and motor", "Reset the motor protection breaker", "Press Reset" ] },
+    { "id": "A11", "tag": "A11", "severity": "FAULT", "text": "Outlet pump P401 no running feedback within 5 s",
+      "location": "FB_Motor, instance \"Station\".P401 (output FaultNoFeedback)",
+      "condition": "Run command on, but no running feedback within 5 s.",
+      "causes": [ "Contactor coil faulty", "Auxiliary contact faulty", "Wiring" ],
+      "fix": [ "Check the contactor and its auxiliary contact", "Check the wiring", "Press Reset" ] },
+    { "id": "A12", "tag": "A12", "severity": "FAULT", "text": "Level transmitter LT101 signal fault (wire break)",
+      "location": "FB_AnalogIn, instance \"Station\".LT101 (output WireBreak)",
+      "condition": "Raw value above 32511 (or below -4864).",
+      "causes": [ "Cable broken", "Transmitter dead", "24 V supply missing" ],
+      "fix": [ "Check the wiring and the 24 V supply of LT101", "Press Reset" ] },
+    { "id": "A13", "tag": "A13", "severity": "FAULT", "text": "Tank level high-high (above 95 %)",
+      "location": "FB_AnalogIn, instance \"Station\".LT101 (output High)",
+      "condition": "Level above 95 %.",
+      "causes": [ "An inlet valve does not close", "Wrong recipe levels" ],
+      "fix": [ "Check that XV101 and XV102 close", "Check the recipe", "Drain the tank, then press Reset" ] },
+    { "id": "A14", "tag": "A14", "severity": "FAULT", "text": "Temperature transmitter TT301 signal fault (wire break)",
+      "location": "FB_AnalogIn, instance \"Station\".TT301 (output WireBreak)",
+      "condition": "Raw value above 32511 (or below -4864).",
+      "causes": [ "Cable broken", "Transmitter dead" ],
+      "fix": [ "Check the wiring of TT301", "Press Reset" ] },
+    { "id": "A15", "tag": "A15", "severity": "FAULT", "text": "Tank temperature high (above 90 °C)",
+      "location": "FB_AnalogIn, instance \"Station\".TT301 (output High)",
+      "condition": "Temperature above 90 °C.",
+      "causes": [ "Heater does not switch off", "Temperature setpoint too high" ],
+      "fix": [ "Check the heater contactor", "Check TempSP in the recipe", "Press Reset" ] },
+    { "id": "A16", "tag": "A16", "severity": "FAULT", "text": "Step 10 Fill A took longer than 120 s",
+      "location": "FB_BatchSequence, instance \"Station\".Seq (TimeoutStep10)",
+      "condition": "The sequence stayed in step 10 for more than 120 s.",
+      "causes": [ "XV101 not open", "Ingredient A supply tank empty", "Supply line blocked" ],
+      "fix": [ "Check XV101 and the ingredient A supply", "Press Reset, then Start" ] },
+    { "id": "A17", "tag": "A17", "severity": "FAULT", "text": "Step 20 Fill B took longer than 120 s",
+      "location": "FB_BatchSequence, instance \"Station\".Seq (TimeoutStep20)",
+      "condition": "The sequence stayed in step 20 for more than 120 s.",
+      "causes": [ "XV102 not open", "Ingredient B supply empty" ],
+      "fix": [ "Check XV102 and the ingredient B supply", "Press Reset, then Start" ] },
+    { "id": "A18", "tag": "A18", "severity": "FAULT", "text": "Step 30 Mix and heat took longer than 600 s",
+      "location": "FB_BatchSequence, instance \"Station\".Seq (TimeoutStep30)",
+      "condition": "The sequence stayed in step 30 for more than 600 s.",
+      "causes": [ "Heater too weak or failed", "Temperature setpoint too high" ],
+      "fix": [ "Check the heater", "Check TempSP in the recipe" ] },
+    { "id": "A19", "tag": "A19", "severity": "FAULT", "text": "Step 50 Drain took longer than 180 s",
+      "location": "FB_BatchSequence, instance \"Station\".Seq (TimeoutStep50)",
+      "condition": "The sequence stayed in step 50 for more than 180 s.",
+      "causes": [ "Pump not delivering", "Outlet line blocked" ],
+      "fix": [ "Check P401 and the outlet line" ] },
+    { "id": "A20", "tag": "A20", "severity": "FAULT", "text": "Heater E301 on for 60 s but temperature rose less than 2 °C",
+      "location": "FB_BatchSequence, instance \"Station\".Seq (NoHeating)",
+      "condition": "In step 30 the heater was on for 60 s and the temperature rose less than 2 °C.",
+      "causes": [ "Heating element broken", "Heater fuse blown", "Heater contactor not pulling in" ],
+      "fix": [ "Check the heating element and fuses", "Check the heater contactor", "Press Reset, then Start" ] },
+    { "id": "A21", "tag": "A21", "severity": "WARNING", "text": "Waiting for filler ready for more than 60 s (step 40)",
+      "location": "FB_BatchSequence, instance \"Station\".Seq (WaitFillerTooLong)",
+      "condition": "In step 40 the filler did not signal ready within 60 s.",
+      "causes": [ "Filler stopped", "Filler not in auto", "Signal Filler_ReadyToReceive not arriving" ],
+      "fix": [ "Check the filler", "Check \"DB_LineInterface\".Filler_ReadyToReceive" ] },
+    { "id": "A22", "tag": "A22", "severity": "WARNING", "text": "No heartbeat from MES for 5 s",
+      "location": "FB_Station, timer tMesHb",
+      "condition": "\"DB_LineInterface\".MES_Heartbeat did not change for 5 s.",
+      "causes": [ "MES is down", "Network problem between MES and PLC" ],
+      "fix": [ "Check the MES connection" ] },
+    { "id": "A23", "tag": "A23", "severity": "WARNING", "text": "Recipe values invalid, batch cannot start",
+      "location": "FB_BatchSequence, instance \"Station\".Seq (StartRecipeInvalid)",
+      "condition": "Start pressed while the recipe is not plausible.",
+      "causes": [ "Wrong values in DB_Recipe" ],
+      "fix": [ "Fix DB_Recipe: LevelA < LevelB <= 90, TempSP 20..85, speeds 100..1500" ] },
+    { "id": "A24", "tag": "A24", "severity": "WARNING", "text": "Start pressed but selector is not in Auto",
+      "location": "FB_BatchSequence, instance \"Station\".Seq (StartNotAuto)",
+      "condition": "Start pressed in Manual.",
+      "causes": [ "Selector in Manual" ],
+      "fix": [ "Switch to Auto, then press Start" ] },
+    { "id": "A25", "tag": "A25", "severity": "WARNING", "text": "Start pressed but tank is not empty (level above 2 %)",
+      "location": "FB_BatchSequence, instance \"Station\".Seq (StartTankNotEmpty)",
+      "condition": "Start pressed with the level above DrainLevel.",
+      "causes": [ "Previous batch was not drained" ],
+      "fix": [ "Drain the tank, then press Start" ] }
+  ],
+
+  "exchange": [
+    { "tag": "MES_RecipeNo", "partner": "MES", "direction": "in", "text": "Recipe for the next batch; copied to DB_Recipe in step 0." },
+    { "tag": "MES_StartRequest", "partner": "MES", "direction": "in", "text": "Starts a batch, same as the Start button." },
+    { "tag": "MES_Heartbeat", "partner": "MES", "direction": "in", "text": "Must change at least every 5 s, otherwise A22." },
+    { "tag": "Filler_Ready", "partner": "Filler", "direction": "in", "text": "Needed to leave step 40 (Hold)." },
+    { "tag": "Station_Running", "partner": "MES / Filler", "direction": "out", "text": "A batch is active." },
+    { "tag": "Station_Draining", "partner": "Filler", "direction": "out", "text": "Product is being pumped out (step 50)." },
+    { "tag": "Batch_Done", "partner": "MES", "direction": "out", "text": "Pulse when a batch finishes." },
+    { "tag": "Batch_Count", "partner": "MES", "direction": "out", "text": "Batches finished since power-up." },
+    { "tag": "Station_Heartbeat", "partner": "MES / Filler", "direction": "out", "text": "Counts up every second." }
+  ]
+}

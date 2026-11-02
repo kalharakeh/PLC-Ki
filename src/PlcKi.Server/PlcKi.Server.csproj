@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <!-- PLC-Ki web server: reads the PLC (read-only) and serves the live status page. -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>PlcKi.Server</RootNamespace>
+    <AssemblyName>PlcKi.Server</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- S7CommPlus driver (LGPL-3.0-or-later), fork of thomas-v2/S7CommPlusDriver by DotNetProjects -->
+    <PackageReference Include="DotNetProjects.S7CommPlusDriver" Version="6.1.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\PlcKi.Core\PlcKi.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Copy the web page next to the exe so "dotnet run" and the built exe serve the same files -->
+    <Content Update="wwwroot\**" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\models\*.json" Link="models\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\models\snapshots\*.json" Link="models\snapshots\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>
