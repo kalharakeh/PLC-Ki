@@ -20,16 +20,21 @@ VERSION : 0.1
       WireBreak : Bool;   // Signal fault: raw value out of range
    END_VAR
 
+   VAR
+      LastGood : Real;   // Last scaled value with a good signal
+   END_VAR
+
 BEGIN
 	// Signal check: above 32511 means overflow, below -4864 means underflow
 	#WireBreak := (#Raw > 32511) OR (#Raw < -4864);
 	
 	// Scale only good values, otherwise keep the last good value
 	IF NOT #WireBreak THEN
-	    #Value := #RangeLo + (INT_TO_REAL(#Raw) / 27648.0) * (#RangeHi - #RangeLo);
+	    #LastGood := #RangeLo + (INT_TO_REAL(#Raw) / 27648.0) * (#RangeHi - #RangeLo);
 	END_IF;
 	
 	// Limits are not evaluated with a bad signal
-	#High := NOT #WireBreak AND (#Value > #LimitHigh);
-	#Low := NOT #WireBreak AND (#Value < #LimitLow);
+	#Value := #LastGood;
+	#High := NOT #WireBreak AND (#LastGood > #LimitHigh);
+	#Low := NOT #WireBreak AND (#LastGood < #LimitLow);
 END_FUNCTION_BLOCK

@@ -1,0 +1,10 @@
+DATA_BLOCK "Station"
+TITLE = 'Instance of the mixing station'
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+NON_RETAIN
+"FB_Station"
+
+BEGIN
+
+END_DATA_BLOCK
