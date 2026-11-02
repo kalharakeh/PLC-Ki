@@ -38,3 +38,10 @@ Interlocks worth knowing (good test questions such as "why isn't the agitator ru
 - E301 heats only when M201 is at speed, no overtemperature, and TT301 healthy.
 - XV101/XV102 open only when level is not high and LT101 is healthy.
 - P401 runs only with level above 0.5 %.
+
+## GRAPH interlock error (with the GRAPH sequence from `graph/`)
+
+When any FAULT alarm, the E-stop, Stop or Auto off halts the sequence in steps 10 to 50, GRAPH also reports an
+interlock error on the active step of `FB_BatchSequence`: "Sequence halted: fault, E-stop, Stop or not in Auto".
+It is a consequence, not a cause: the explanation should point to the alarm, E-stop, Stop or selector that made
+`Station.Seq.Healthy` FALSE. It goes away when the cause is cleared and Reset is pressed (and Start, if Stop was pressed).
