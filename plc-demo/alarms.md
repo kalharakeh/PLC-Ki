@@ -44,4 +44,5 @@ Interlocks worth knowing (good test questions such as "why isn't the agitator ru
 When any FAULT alarm, the E-stop, Stop or Auto off halts the sequence in steps 10 to 50, GRAPH also reports an
 interlock error on the active step of `FB_BatchSequence`: "Sequence halted: fault, E-stop, Stop or not in Auto".
 It is a consequence, not a cause: the explanation should point to the alarm, E-stop, Stop or selector that made
-`DB_BatchSequence.Healthy` FALSE. It goes away when the cause is cleared and Reset is pressed (and Start, if Stop was pressed).
+`DB_BatchSequence.Healthy` FALSE. It goes away when the cause is cleared, Reset is pressed and then Start: a fault, the E-stop and Stop all pause the batch,
+so Reset alone never restarts it.

@@ -192,7 +192,7 @@
           <Section Name="Static">
             <Member Name="Paused" Datatype="Bool">
               <Comment>
-                <MultiLanguageText Lang="en-US">Set by Stop, cleared by Start</MultiLanguageText>
+                <MultiLanguageText Lang="en-US">Set by Stop, a fault or the E-stop; cleared by Start</MultiLanguageText>
               </Comment>
             </Member>
             <Member Name="Healthy" Datatype="Bool">
@@ -550,6 +550,80 @@
                       </Access>
                       <Access Scope="LocalVariable" UId="22">
                         <Symbol>
+                          <Component Name="Paused"/>
+                        </Symbol>
+                      </Access>
+                      <Part Name="Contact" UId="23"/>
+                      <Part Name="SCoil" UId="24"/>
+                    </Parts>
+                    <Wires>
+                      <Wire UId="25">
+                        <Powerrail/>
+                        <NameCon UId="23" Name="in"/>
+                      </Wire>
+                      <Wire UId="26">
+                        <IdentCon UId="21"/>
+                        <NameCon UId="23" Name="operand"/>
+                      </Wire>
+                      <Wire UId="27">
+                        <NameCon UId="23" Name="out"/>
+                        <NameCon UId="24" Name="in"/>
+                      </Wire>
+                      <Wire UId="28">
+                        <IdentCon UId="22"/>
+                        <NameCon UId="24" Name="operand"/>
+                      </Wire>
+                    </Wires>
+                  </FlgNet>
+                </PermanentOperation>
+                <PermanentOperation ProgrammingLanguage="LAD">
+                  <FlgNet>
+                    <Parts>
+                      <Access Scope="LocalVariable" UId="21">
+                        <Symbol>
+                          <Component Name="EStopOK"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="LocalVariable" UId="22">
+                        <Symbol>
+                          <Component Name="Paused"/>
+                        </Symbol>
+                      </Access>
+                      <Part Name="Contact" UId="23">
+                        <Negated Name="operand"/>
+                      </Part>
+                      <Part Name="SCoil" UId="24"/>
+                    </Parts>
+                    <Wires>
+                      <Wire UId="25">
+                        <Powerrail/>
+                        <NameCon UId="23" Name="in"/>
+                      </Wire>
+                      <Wire UId="26">
+                        <IdentCon UId="21"/>
+                        <NameCon UId="23" Name="operand"/>
+                      </Wire>
+                      <Wire UId="27">
+                        <NameCon UId="23" Name="out"/>
+                        <NameCon UId="24" Name="in"/>
+                      </Wire>
+                      <Wire UId="28">
+                        <IdentCon UId="22"/>
+                        <NameCon UId="24" Name="operand"/>
+                      </Wire>
+                    </Wires>
+                  </FlgNet>
+                </PermanentOperation>
+                <PermanentOperation ProgrammingLanguage="LAD">
+                  <FlgNet>
+                    <Parts>
+                      <Access Scope="LocalVariable" UId="21">
+                        <Symbol>
+                          <Component Name="AnyFault"/>
+                        </Symbol>
+                      </Access>
+                      <Access Scope="LocalVariable" UId="22">
+                        <Symbol>
                           <Component Name="EStopOK"/>
                         </Symbol>
                       </Access>
@@ -758,7 +832,7 @@
               <Sequence>
                 <Title/>
                 <Comment>
-                  <MultiLanguageText Lang="en-US">Batch sequence of the mixing station. Idle waits for Start; Fill A and Fill B open the inlet valves until the recipe levels; Mix and heat runs the agitator and heats to TempSP for MixTime; Hold waits for the filler; Drain pumps the tank empty; Done counts the batch. Every working step is interlocked with Healthy: on a fault, E-stop, Stop or Auto off its actions switch off and the step is kept. Press Start (after Reset) to continue.</MultiLanguageText>
+                  <MultiLanguageText Lang="en-US">Batch sequence of the mixing station. Idle waits for Start; Fill A and Fill B open the inlet valves until the recipe levels; Mix and heat runs the agitator and heats to TempSP for MixTime; Hold waits for the filler; Drain pumps the tank empty; Done counts the batch. Every working step is interlocked with Healthy: on a fault, E-stop, Stop or Auto off its actions switch off and the step is kept. After a fault or E-stop, press Reset, then Start to continue; Reset alone does not restart the batch.</MultiLanguageText>
                 </Comment>
                 <Steps>
                   <Step Number="1" Init="true" Name="Idle" MaximumStepTime="T#10S" WarningTime="T#10S">
