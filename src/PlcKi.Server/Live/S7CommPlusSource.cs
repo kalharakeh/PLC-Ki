@@ -64,7 +64,8 @@ public sealed class S7CommPlusSource : IPlcSource
             try { client.DisposeAsync().AsTask().GetAwaiter().GetResult(); } catch { /* ignore */ }
             throw new IOException($"Connection to {_opt.Address} failed ({security}): {Describe(ex)}", ex);
         }
-        NegotiatedSecurity = options.NegotiatedSecurityMode?.ToString() ?? security.ToString();
+        // The client keeps its own copy of the options; read the mode it actually used from there
+        NegotiatedSecurity = client.Options.NegotiatedSecurityMode?.ToString() ?? security.ToString();
 
         var missing = new Dictionary<string, string>();
         _tags.Clear();
