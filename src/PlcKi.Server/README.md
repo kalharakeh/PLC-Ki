@@ -141,6 +141,16 @@ How it works:
 It takes a few minutes and costs roughly $0.50 to $2 for a program the size of the demo. SCL is read in full;
 for LAD and GRAPH blocks Claude only sees the interface and the calls for now, so their logic is not decoded yet.
 
+## Write PLC blocks from a request
+
+```
+dotnet run --project src\PlcKi.Server -- generate --out C:\temp\gen\valve --request "Make me a valve FB in LAD to our standard"
+```
+
+Claude writes FBs, FCs, DBs, data types and tag tables (SCL, LAD, FBD, GRAPH) into a versioned package folder;
+`tools/TiaImporter import-blocks` imports and compiles it in TIA, and `generate --fix` sends TIA's errors back.
+Full workflow: [docs/block-generator.md](../../docs/block-generator.md).
+
 ## If the connection fails
 
 | Message | What to check |
