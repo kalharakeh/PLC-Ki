@@ -16,7 +16,7 @@ You get the program as text: the call structure, every block with its interface 
   "source": "where the model comes from: project and archive name",
   "tags": [ { "id": "Level", "symbol": "\"Station\".LT101.Value", "type": "Real", "label": "Tank level LT101", "unit": "%", "decimals": 1 },
             { "id": "PB_Start", "symbol": "\"DB_IO\".PB_Start", "type": "Bool", "label": "Start push button", "trueText": "pressed", "falseText": "released" } ],
-  "overview": [ "tag ids of the 4 to 8 most important process values and switches" ],
+  "overview": [ "tag ids of the 4 to 8 most important process values and switches, including the active recipe or product and the batch or piece counter when the program has them" ],
   "sequences": [ {
       "id": "Batch", "name": "Batch sequence", "block": "FB_X, instance \"DB\".Seq (called in FB_Y)",
       "stepTag": "Step", "stepTimeTag": "StepTime", "haltedTag": "Halted",
@@ -58,25 +58,30 @@ Sequences
 - Find every step chain: a CASE over a step number in SCL, a GRAPH block, or a step number in LAD. stepTag is the readable step number; add the time-in-step and halted/paused tags when the program has them.
 - One entry per step with the step number the program uses, a short name, what it does (outputs it sets, setpoints with {TagId} placeholders), its time limit and the alarm that limit raises, and every transition with its conditions exactly as programmed.
 - haltReasons: each reason the sequence stops or pauses, as conditions, worded for the operator.
+- LAD, FBD and GRAPH blocks come as "Logic (decoded ...)": SCL-like text made from the networks. Read it like SCL. For GRAPH, take each transition's condition from its "when" part and each step's interlock and actions from its lines. Never use GRAPH's internal bits (transition .TT, step .X, interlock .L) as conditions: write the real condition, one AND term each (level >= setpoint, temperature >= setpoint, ...). A time in the step (#Step.U or .T) is the stepTimeTag compared with the time; a transition that only needs its own step active ("when #Step.X") is { "expr": "TRUE", "text": "Immediately (one PLC cycle)" }.
+- haltReasons text is a lower-case clause without a full stop, because the app writes "halted because <reason> and <reason>": "the selector is in Manual", "Stop was pressed (press Start to continue from this step)".
+- does starts with a verb: "Opens XV101 until ...".
 
 Devices
 - One entry per field device the program drives: valves, motors, drives, pumps, heaters, conveyors, cylinders.
 - request: what the program asks for (sequence or manual output into the device block). command: the output to the field.
 - permits: every interlock between request and output, as programmed (one AND term each), with the reason it exists when the comment or name says so.
-- states: first match wins, last one "TRUE". level is ok (running/open as wanted), warn (moving, starting, not confirmed), fault, info or idle.
+- states: first match wins, last one "TRUE". level is ok (running/open as wanted), warn (moving, starting, not confirmed), fault, info or idle. A state text says what the device does ("requested but off"); do not list possible causes in it, the app shows the blocking permit by itself.
 
 Alarms
 - One entry per alarm bit (alarm DB, alarm handler outputs, ProDiag or message tags). id: the alarm number or a short code; tag: the id of its Bool tag.
 - severity FAULT (stops the machine) or WARNING, from the program or the alarm text.
 - location: the block, instance and output where the condition is made, and where it is latched.
 - condition: when the program raises it, in plain words, with the delay and limits from the code.
-- causes: 2 to 4 likely causes at the machine, most likely first. fix: concrete steps a technician takes, ending with how to reset or acknowledge as the program requires. Never suggest bridging, forcing or bypassing a safety function, E-stop, guard or interlock.
+- causes: 2 to 4 likely causes at the machine, most likely first. fix: concrete steps a technician takes, ending with every step the program needs to run again (for example "Press Reset, then Start to continue the batch" when the sequence waits for Start after a fault). Never suggest bridging, forcing or bypassing a safety function, E-stop, guard or interlock.
 
 Data exchange
 - Signals to and from other systems (MES, SCADA, other PLCs, line partners): direction "in" when received, "out" when sent, and what each one means.
 
 Texts
-- Short, plain English for operators and technicians, as in the examples. {TagId} in a text is replaced by the live value.
-- Write only what the program shows. If something is unclear, say so briefly in the text rather than guessing.
+- Short, plain English for operators and technicians, as in the examples.
+- {TagId} in a text is replaced by the live value with its unit, so never write the unit after a placeholder: "Level reached {LevelA}", not "{LevelA} %".
+- Name things by their plant name or plain words ("the filler is ready", "heat request"), never by a tag id or symbol (Filler_Ready, HeatReq, Station_Draining). Tag ids belong only in expr, when, request, command and {placeholders}.
+- Write only what the program shows. Texts are for people at the machine: no notes about the export, the source or how you worked something out ("not in the export", "per the comments"). If you cannot find the logic for a condition, leave the condition out.
 """;
 }

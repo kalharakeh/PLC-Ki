@@ -62,7 +62,8 @@ public sealed class StatusEngine
         bool hasValues = snap.Values.Count > 0;
 
         var sequences = _model.Sequences.Select(s => EvaluateSequence(s, Get)).ToList();
-        var equipment = _model.Equipment.Select(e => EvaluateEquipment(e, Get)).ToList();
+        var halted = sequences.Where(q => q.Halted).Select(q => q.Name).ToList();
+        var equipment = _model.Equipment.Select(e => EvaluateEquipment(e, Get, halted)).ToList();
         var alarms = _model.Alarms
             .Where(a => Get(a.Tag) is true)
             .OrderBy(a => a.Severity == "FAULT" ? 0 : 1).ThenBy(a => a.Id, StringComparer.Ordinal)
@@ -156,7 +157,9 @@ public sealed class StatusEngine
             timeInStep, step?.Limit != null ? Fill(step.Limit, get) : null, halted, reasons, next, string.Join(" ", parts));
     }
 
-    private EquipmentStatus EvaluateEquipment(EquipmentDef e, Func<string, object?> get)
+    /// <param name="haltedSequences">Names of the sequences that are halted now: their step outputs are off, so a device
+    /// that is not requested may only be off because of the halt.</param>
+    private EquipmentStatus EvaluateEquipment(EquipmentDef e, Func<string, object?> get, IReadOnlyList<string> haltedSequences)
     {
         bool? requested = e.Request != null ? EvalBool(e.Request, get) : null;
         bool? commanded = e.Command != null ? EvalBool(e.Command, get) : null;
@@ -181,7 +184,9 @@ public sealed class StatusEngine
                 ? $"{e.Name} is requested by the program but blocked by: " + string.Join("; ", blocking.Select(DescribeCondition)) + "."
                 : $"{e.Name} is requested by the program but its output is off.";
         else if (requested == false && commanded != true)
-            explanation = $"{e.Name}: {state}. Not requested in the current step.";
+            explanation = haltedSequences.Count > 0
+                ? $"{e.Name}: {state}. Not requested now: {JoinAnd(haltedSequences.ToList())} {(haltedSequences.Count == 1 ? "is" : "are")} halted, which switches the step outputs off."
+                : $"{e.Name}: {state}. Not requested in the current step.";
         else
             explanation = $"{e.Name}: {state}.";
 

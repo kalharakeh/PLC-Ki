@@ -83,6 +83,11 @@ public static class ProgramDigest
             sb.AppendLine("Source:");
             sb.AppendLine(Body(b.SclSource));
         }
+        else if (b.DecodedLogic != null)
+        {
+            sb.AppendLine($"Logic (decoded from {string.Join(", ", langs)} networks into SCL-like text):");
+            sb.AppendLine(b.DecodedLogic.Replace("\r\n", "\n").Trim());
+        }
         else if (langs.Count > 0 && b.Kind is "OB" or "FB" or "FC")
             sb.AppendLine($"Networks: {string.Join(", ", langs)} (logic not included yet; use the interface comments and how the block is called).");
         sb.AppendLine();
