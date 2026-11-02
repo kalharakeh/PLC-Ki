@@ -28,6 +28,10 @@ public class StatusTests
         Assert.Equal("A02", alarm.Id);
         Assert.Contains("air", string.Join(" ", alarm.Fix));
         Assert.Contains(s.Summary, l => l.Contains("halted") && l.Contains("step 10"));
+        // The step-10 valve is off because of the halt, not because step 10 does not need it
+        var xv101 = s.Equipment.Single(e => e.Id == "XV101");
+        Assert.DoesNotContain("Not requested in the current step", xv101.Explanation);
+        Assert.Contains("halted", xv101.Explanation);
     }
 
     [Fact]
