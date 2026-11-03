@@ -4,12 +4,20 @@
 (() => {
   const { esc, icon, state, cond, sec, hero } = PK;
 
-  const firstSeen = {};          // alarm id -> when this page first saw it (PLC-Ki keeps no alarm log yet)
   const fixDone = {};            // alarm id -> Set of fix steps ticked off on this screen
   let selectedAlarm = null;
   let selectedEq = null;
 
-  const sorted = (alarms) => [...alarms].sort((a, b) => (a.severity === "WARNING") - (b.severity === "WARNING"));
+  /** Devices the program asks for whose output stays off, with what they need (from the server). */
+  const blockedOf = (s) => (s.equipment || []).filter((e) => e.blockedBy);
+  /** "Agitator M201 is blocked: it needs tank level above 20 %, now Level 15 %." */
+  const blockedLine = (e) => `${e.name} is blocked: ${/^needs /.test(e.blockedBy) ? "it " : ""}${e.blockedBy}.`;
+  function blockedNotice(list, max = 3) {
+    if (!list.length) return "";
+    return `<div class="notice gold blocked-list">${icon("warn")}<div>${list.slice(0, max).map((e) =>
+      `<div><b>${esc(e.name)}</b> is blocked: ${esc(/^needs /.test(e.blockedBy) ? "it " + e.blockedBy : e.blockedBy)}.</div>`).join("")}
+      ${list.length > max ? `<div class="small">And ${list.length - max} more on the Plant page.</div>` : ""}</div></div>`;
+  }
   const opened = Date.now();
   /** No status from PLC-Ki (yet): say so, and what to do if it stays that way. */
   function waitingPage() {
@@ -25,6 +33,7 @@
     const i = PK.connInfo();
     const admin = state.user && state.user.role === "admin";
     return hero({
+      cls: "hero offline-page",
       eyebrow: `<span class="pill ${i.level}"><span class="dot"></span>${i.level === "warn" ? "Waiting" : "Not connected"}</span>`,
       title: "No live values from the PLC.",
       sub: esc(i.text || i.title),
@@ -98,10 +107,11 @@
     return `<div class="eq-top"><span class="ico">${icon(PK.kindIcon(e.kind))}</span>
         <div style="flex:1"><div class="eq-name">${esc(e.name)}</div><div class="eq-id">${esc(e.id)}${e.kind ? " · " + esc(e.kind) : ""}</div></div>
         <span class="lv lv-${esc(e.level)}">${esc(e.state)}</span></div>
-      ${chain}${vals}
+      ${chain}
+      ${e.blockedBy ? `<div class="eq-why">${icon("warn")}<span>${esc(e.blockedBy.charAt(0).toUpperCase() + e.blockedBy.slice(1))}</span></div>` : ""}
+      ${vals}
       ${full && e.permits.length ? `<div><h3 style="margin-top:6px">Interlocks</h3><ul class="conds">${e.permits.map(cond).join("")}</ul></div>` : ""}
-      ${full && e.blocking.length && e.requested ? `<div class="notice red">${icon("warn")}<div><b>Requested but blocked by:</b><ul class="conds" style="margin-top:6px">${e.blocking.map(cond).join("")}</ul></div></div>` : ""}
-      ${full && e.explanation ? `<p class="muted small" style="margin:0">${esc(e.explanation)}</p>` : ""}`;
+      ${full && e.explanation && !e.blockedBy ? `<p class="muted small" style="margin:0">${esc(e.explanation)}</p>` : ""}`;
   }
 
   function stepStrip(seq) {
@@ -129,19 +139,25 @@
     render() {
       const s = state.status;
       if (!s) return waitingPage();
-      const alarms = sorted(s.activeAlarms);
-      for (const a of alarms) firstSeen[a.id] ||= Date.now();
-      for (const id of Object.keys(firstSeen)) if (!alarms.some((a) => a.id === id)) delete firstSeen[id];
+      const alarms = s.activeAlarms;      // first-out first: the server orders them by when they came
       const seq = s.sequences.find((q) => q.halted) || s.sequences[0];
-      if (offline()) return guide() + offlinePage();
+      if (offline()) return offlinePage() + guide();
 
       if (!alarms.length) {
-        return guide() + hero({
-          eyebrow: `<span class="pill ok"><span class="dot"></span>No alarm</span>`,
-          title: "No alarm is active.",
-          sub: esc(s.summary[0] || ""),
-          actions: `<a class="btn" href="#/plant">See the plant</a><button class="btn b" data-ask="What is the machine doing right now?">Ask</button>`,
-        }) + (seq ? sec("alt", `<h2>${esc(seq.name)}</h2><p class="sub">${esc(seq.explanation)}</p>${stepStrip(seq)}`) : "");
+        const blocked = blockedOf(s);
+        const n = blocked.length;
+        return hero({
+          eyebrow: n ? `<span class="pill warn"><span class="dot"></span>No alarm · ${n} device${n > 1 ? "s" : ""} blocked</span>` : `<span class="pill ok"><span class="dot"></span>No alarm</span>`,
+          title: n ? `No alarm, but ${n === 1 ? "1 device is" : n + " devices are"} blocked.` : "No alarm is active.",
+          sub: esc(n ? blockedLine(blocked[0]) : (seq ? seq.explanation : s.summary[0] || "")),
+          actions: n ? `<button class="btn" data-ask="Why is ${esc(blocked[0].name)} blocked, and what do I check?">Ask why</button><a class="btn b" href="#/plant">See the plant</a>`
+            : `<a class="btn" href="#/plant">See the plant</a><button class="btn b" data-ask="What is the machine doing right now?">Ask</button>`,
+        })
+        + (n ? sec("alt", `<h2>Blocked now</h2><p class="sub">The program asks for ${n === 1 ? "this device" : "these devices"}, but ${n === 1 ? "its" : "their"} output stays off.</p>
+            <div class="grid ${n > 1 ? "two" : ""}">${blocked.map((e) => `<div class="card stack">${eqCard(e, true)}</div>`).join("")}</div>`) : "")
+        + (seq ? sec(n ? "" : "alt", `<h2>${esc(seq.name)}</h2>${n ? `<p class="sub">${esc(seq.explanation)}</p>` : ""}${stepStrip(seq)}
+            ${seq.next.length ? `<p class="muted small" style="margin:16px 0 8px">To go on it needs</p><ul class="conds">${seq.next.flatMap((x) => x.conditions).map(cond).join("")}</ul>` : ""}`) : "")
+        + guide();
       }
 
       if (!alarms.some((a) => a.id === selectedAlarm)) selectedAlarm = alarms[0].id;
@@ -149,22 +165,24 @@
       const warn = a.severity === "WARNING";
       const eqs = relatedEquipment(a);
       const done = fixDone[a.id] || new Set();
-      const since = firstSeen[a.id];
+      const atStart = alarms.filter((x) => x.atStart).length;
+      const firstKnown = alarms.length > 1 && (!alarms[0].atStart || atStart === 1);
       const loc = parseLoc(a.location);
       const path = callPath(loc.block);
 
       const chips = alarms.length > 1 ? `<div class="alarm-chips">${alarms.map((x, i) =>
         `<button class="alarm-chip ${x.severity === "WARNING" ? "warning" : ""} ${x.id === a.id ? "sel" : ""}" data-alarm="${esc(x.id)}">
-          <span class="d"></span>${i === 0 ? "First · " : ""}${esc(x.id)} ${esc(x.text.length > 40 ? x.text.slice(0, 38) + "…" : x.text)}</button>`).join("")}</div>` : "";
+          <span class="d"></span>${i === 0 && firstKnown ? "First · " : ""}${esc(x.id)} ${esc(x.text.length > 40 ? x.text.slice(0, 38) + "…" : x.text)}</button>`).join("")}</div>
+          ${atStart > 1 ? `<p class="faint small" style="margin:-12px 0 18px">${atStart} alarms were already on when PLC-Ki started watching, so which of those came first is not known.</p>` : ""}` : "";
 
       const kpis = [
         ...eqs.slice(0, 2).map((e) => [e.state, e.name, e.level === "ok" ? "ok" : e.level === "idle" ? "" : "bad"]),
         seq ? [`Step ${seq.step ?? "?"}`, `${seq.name}: ${seq.stepName}${seq.halted ? ", halted" : ""}`, seq.halted ? "bad" : ""] : null,
         seq && seq.timeInStep ? [seq.timeInStep, "in this step"] : null,
-        [since && Date.now() - since > 3000 ? PK.ago(since).replace(" ago", "") : "Just now", "active for (since this page saw it)"],
+        a.since ? [PK.when(a.since), a.atStart ? "already on when PLC-Ki started watching" : "came at"] : null,
       ].filter(Boolean).slice(0, 4);
 
-      return guide() + sec("hero", `${chips}
+      return sec("hero", `${chips}
           <div class="eyebrow"><span class="pill ${warn ? "warn" : "bad"}"><span class="dot"></span>${esc(a.severity)} · ${esc(a.id)}</span></div>
           <h1>${esc(a.text)}</h1>
           ${a.condition ? `<p class="sub">${esc(a.condition)}</p>` : ""}
@@ -189,7 +207,7 @@
         + sec("alt", `<h2>What is going on</h2>
           <div class="grid two"><div>${s.summary.map((l) => `<p class="sub" style="margin-bottom:12px">${esc(l)}</p>`).join("")}</div>
           ${seq ? `<div class="card"><h3>${esc(seq.name)}</h3>${stepStrip(seq)}
-            ${seq.next.length ? `<p class="muted small" style="margin:12px 0 8px">To go on it needs</p><ul class="conds">${seq.next.flatMap((n) => n.conditions).map(cond).join("")}</ul>` : ""}</div>` : ""}</div>`);
+            ${seq.next.length ? `<p class="muted small" style="margin:12px 0 8px">To go on it needs</p><ul class="conds">${seq.next.flatMap((n) => n.conditions).map(cond).join("")}</ul>` : ""}</div>` : ""}</div>`) + guide();
     },
     after(page) {
       page.querySelectorAll("[data-alarm]").forEach((b) => b.onclick = () => { selectedAlarm = b.dataset.alarm; PK.draw(); });
@@ -211,28 +229,30 @@
     render() {
       const s = state.status;
       if (!s) return waitingPage();
-      if (offline()) return guide() + offlinePage();
+      if (offline()) return offlinePage() + guide();
       const main = s.sequences[0];
       const [stText, stCls] = main ? seqState(main) : ["", ""];
+      const blocked = blockedOf(s);
       const top = hero({
         eyebrow: main ? `<span class="pill ${stCls}"><span class="dot"></span>${stText}</span>${main.timeInStep ? `<span class="faint">for ${esc(main.timeInStep)}</span>` : ""}` : "",
         title: main ? `Step ${main.step ?? "?"}: ${esc(main.stepName)}` : esc(s.machine),
         sub: esc(main ? main.explanation : s.summary.join(" ")),
-        actions: `<button class="btn" data-ask="What is the machine doing right now?">Ask about it</button>${s.activeAlarms.length ? `<a class="btn b" href="#/alarm">${s.activeAlarms.length} active alarm${s.activeAlarms.length > 1 ? "s" : ""}</a>` : ""}`,
+        extra0: blocked.length ? blockedNotice(blocked) : "",
+        actions: `<button class="btn" data-ask="${blocked.length ? `Why is ${esc(blocked[0].name)} blocked, and what do I check?` : "What is the machine doing right now?"}">Ask about it</button>${s.activeAlarms.length ? `<a class="btn b" href="#/alarm">${s.activeAlarms.length} active alarm${s.activeAlarms.length > 1 ? "s" : ""}</a>` : ""}`,
         extra: s.overview.length ? `<div class="kpis" style="margin-top:34px">${s.overview.slice(0, 8).map((v) => `<div class="k"><b>${esc(v.text)}</b><span>${esc(v.label)}</span></div>`).join("")}</div>` : "",
       });
 
       const seqs = s.sequences.map((q) => `<div class="card stack">
           <div class="row"><h3 style="margin:0">${esc(q.name)}</h3><span class="pill ${seqState(q)[1]}">${seqState(q)[0]}</span></div>
           ${stepStrip(q)}
-          ${q.does ? `<p style="margin:0">${esc(q.does)}</p>` : ""}
+          ${q.does ? `<p style="margin:0"><span class="muted">This step should:</span> ${esc(q.does)}</p>` : ""}
           ${q.halted && q.haltReasons.length ? `<div class="notice red">${icon("warn")}<div><b>Halted, outputs are off:</b> ${q.haltReasons.map(esc).join("; ")}</div></div>` : ""}
           ${q.next.map((n) => `<div><p class="muted small" style="margin:0 0 8px">To go to step ${n.to} "${esc(n.toName)}" it needs</p><ul class="conds">${n.conditions.map(cond).join("")}</ul></div>`).join("")}
           ${q.limit ? `<p class="faint" style="margin:0">${esc(q.limit)}</p>` : ""}
         </div>`).join("");
 
       const sel = s.equipment.find((e) => e.id === selectedEq);
-      const problem = (e) => e.level !== "ok" && e.level !== "idle";
+      const problem = (e) => !!e.blockedBy || (e.level !== "ok" && e.level !== "idle");
       const nProblems = s.equipment.filter(problem).length;
       const q = eqQuery.trim().toLowerCase();
       const shown = s.equipment.filter((e) => (!eqOnlyProblems || problem(e)) && (!q || (e.id + " " + e.name + " " + (e.kind || "") + " " + e.state).toLowerCase().includes(q)));
@@ -241,7 +261,7 @@
           <div class="segmented" role="group" aria-label="Show">
             <button type="button" class="${eqOnlyProblems ? "" : "on"}" data-eqf="all" aria-pressed="${!eqOnlyProblems}">All ${s.equipment.length}</button>
             <button type="button" class="${eqOnlyProblems ? "on" : ""}" data-eqf="problems" aria-pressed="${eqOnlyProblems}">Needs attention ${nProblems}</button></div></div>` : "";
-      return guide() + top
+      return top
         + (seqs ? sec("alt", `<h2>Sequence</h2><p class="sub">Each step, where it is now, and what it waits for.</p>${seqs}`) : "")
         + sec("", `<h2>Equipment</h2><p class="sub">Every device, and the chain from request to feedback. The first red link is why it is not running.</p>
             ${sel ? `<div class="card stack eq-open" style="margin-bottom:18px">${eqCard(sel, true)}<div class="actions"><button class="btn small" data-ask="Why is ${esc(sel.id)} ${esc(sel.state)}?">Ask why</button><button class="btn b small" data-close-eq>Close</button></div></div>` : ""}
@@ -253,7 +273,8 @@
             <div style="overflow-x:auto"><table class="tbl"><tr><th>Partner</th><th>Direction</th><th>Signal</th><th>Value</th><th>Meaning</th></tr>
             ${s.exchange.map((x) => `<tr><td><b>${esc(x.partner)}</b></td><td>${x.direction === "in" ? "from" : "to"} ${esc(x.partner)}</td><td>${esc(x.label)}</td><td class="val">${esc(x.value)}</td><td class="muted">${esc(x.text || "")}</td></tr>`).join("")}
             </table></div>`) : "")
-        + (Object.keys(s.tagErrors || {}).length ? sec("tight", `<details class="more"><summary>${Object.keys(s.tagErrors).length} signals could not be read</summary><ul class="small">${Object.entries(s.tagErrors).map(([k, v]) => `<li><code>${esc(k)}</code>: ${esc(v)}</li>`).join("")}</ul></details>`) : "");
+        + (Object.keys(s.tagErrors || {}).length ? sec("tight", `<details class="more"><summary>${Object.keys(s.tagErrors).length} signals could not be read</summary><ul class="small">${Object.entries(s.tagErrors).map(([k, v]) => `<li><code>${esc(k)}</code>: ${esc(v)}</li>`).join("")}</ul></details>`) : "")
+        + guide();
     },
     after(page) {
       page.querySelectorAll("[data-eq]").forEach((d) => {

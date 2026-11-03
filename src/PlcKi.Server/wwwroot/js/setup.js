@@ -399,7 +399,7 @@ const PKSetup = (() => {
     after(page) {
       bindRestart(page);
       const keep = () => { readConn(page); trackConn(); };
-      page.querySelectorAll("input,select").forEach((el) => { el.addEventListener("change", keep); el.addEventListener("input", keep); });
+      page.querySelectorAll("input,select").forEach((el) => { PK.on(el, "change", keep); PK.on(el, "input", keep); });
       trackConn();
       page.querySelectorAll("[data-preset]").forEach((b) => b.onclick = () => { keep(); const p = presets[b.dataset.preset]; conn.tiaMode = p.tiaMode; conn.plcVia = p.plcVia; PK.draw(); });
       page.querySelectorAll("[data-tiamode]").forEach((b) => b.onclick = () => { keep(); conn.tiaMode = b.dataset.tiamode; PK.draw(); });
@@ -426,7 +426,7 @@ const PKSetup = (() => {
         s.disabled = true;
         try {
           const { _plcPassword, _tiaToken, ...rest } = conn;
-          await saveSettings({ ...rest, plcPassword: _plcPassword, tiaToken: _tiaToken });
+          await saveSettings({ ...rest, setupChosen: true, plcPassword: _plcPassword, tiaToken: _tiaToken });
           conn = { ...settings };
           PK.dirty(null);
           toast(info.restartNeeded ? "Saved. Apply to use the new connections." : "Saved.");
@@ -640,7 +640,7 @@ const PKSetup = (() => {
       const saveBtn = page.querySelector("[data-save-settings]");
       const form = page.querySelector("[data-settings-form]");
       const mark = () => PK.dirty(() => saveBtn.click());
-      form.querySelectorAll("input,select").forEach((el) => { el.addEventListener("input", mark); el.addEventListener("change", mark); });
+      form.querySelectorAll("input,select").forEach((el) => { PK.on(el, "input", mark); PK.on(el, "change", mark); });
       saveBtn.onclick = async () => {
         saveBtn.disabled = true;
         try {

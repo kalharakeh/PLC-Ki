@@ -290,7 +290,7 @@
         for (const k of ["watch", "rounds"]) if (v(k)) f[k] = Number(v(k).value);
         for (const k of ["useContext", "sclOnly"]) if (v(k)) f[k] = v(k).checked;
       };
-      page.querySelectorAll("textarea,input,select").forEach((x) => { if (x.id && x.id.startsWith("g-")) x.addEventListener("change", read); });
+      page.querySelectorAll("textarea,input,select").forEach((x) => { if (x.id && x.id.startsWith("g-")) PK.on(x, "change", read); });
       page.querySelectorAll("[data-dl]").forEach((b) => b.onclick = () => { read(); f.download = b.dataset.dl; PK.draw(); });
       page.querySelectorAll("[data-open]").forEach((li) => li.onclick = () => openPackage(li.dataset.open));
       page.querySelectorAll("[data-file]").forEach((b) => b.onclick = (e) => { e.preventDefault(); showFile(b.dataset.ver, b.dataset.file); });

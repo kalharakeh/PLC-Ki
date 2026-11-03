@@ -61,6 +61,11 @@
       let target = m[2].trim();
       if (/^#/.test(target) && parentInst) target = parentInst.path + "." + target.slice(1);
       if (/^(NOT\s+)?("[^"]+"|#?\w+)(\.[\w"]+)*$/.test(target)) wires[m[1]] = target;
+      else if (/\b(AND|OR|NOT)\b|[<>=]/.test(target)) {
+        // An input wired to logic, e.g. Permit := #LT101.Value > 20.0 AND "DB_IO".EStop_OK: kept to evaluate live
+        const inst = parentInst ? parentInst.path : null;
+        wires[m[1]] = { expr: target.replace(/#(\w+)/g, (x, n) => (inst ? inst + "." + n : x)), text: target };
+      }
     }
     return wires;
   }
@@ -73,6 +78,12 @@
       if (operand.startsWith("#")) {
         const name = operand.slice(1);
         const first = name.split(".")[0];
+        if (inst && inst.wires[first] && typeof inst.wires[first] === "object" && name === first) {
+          const w = inst.wires[first];
+          const toks = tokenize(w.expr), tree = toks && parseExpr(toks);
+          const v = tree ? evalNode(tree, resolver(null)) : null;
+          return v == null ? null : { raw: v, text: v ? "TRUE" : "FALSE", symbol: w.text, label: w.text };
+        }
         if (inst && inst.wires[first] && name === first) {
           sym = inst.wires[first];
           if (/^NOT\s+/.test(sym)) { negate = true; sym = sym.replace(/^NOT\s+/, ""); }
@@ -172,8 +183,9 @@
       const live = n.t === "leaf" ? resolve(n.op) : null;
       const blocker = power && v === false && !ctx.blocked;
       if (blocker) ctx.blocked = true;
-      return { html: `<div class="contact ${v === true ? "on" : v === false ? "off" : ""} ${blocker && ctx.coilOff ? "blocker" : ""}" title="${esc(label)}${live ? " = " + esc(live.text) : ""}">
-          <span class="sym">${sym}</span><span class="nm">${esc(label.replace(/^#/, ""))}</span></div>`, out: power && v === true };
+      const tip = v == null ? `${label}: no live value (not read, or not found in the PLC)` : `${label}${live ? " = " + live.text : ""}: ${v ? "passes" : "does not pass"}`;
+      return { html: `<div class="contact ${v === true ? "on" : v === false ? "off" : "unk"} ${blocker && ctx.coilOff ? "blocker" : ""}" title="${esc(tip)}">
+          <span class="sym">${sym}${v == null ? `<span class="q" aria-hidden="true">?</span>` : ""}</span><span class="nm">${esc(label.replace(/^#/, ""))}</span></div>`, out: power && v === true };
     }
     if (n.t === "not") {
       const inner = drawNode(n.x, resolve, power, ctx);
@@ -204,7 +216,9 @@
     const coil = box ? null : resolve(lhs);
     const result = evalNode(tree, resolve);
     const coilOn = coil && typeof coil.raw === "boolean" ? coil.raw : result;
-    const ctx = { blocked: false, coilOff: coilOn === false };
+    // A fault or alarm output that is off is the healthy state: nothing on its rung is "stopping" it
+    const faultCoil = !box && /fault|alarm|error|\berr|warn|notready|not_?ok|trip|dev$/i.test(lhs || "");
+    const ctx = { blocked: false, coilOff: coilOn === false && !faultCoil };
     const body = drawNode(tree, resolve, true, ctx);
     const end = box
       ? `<div class="contact ${result ? "on" : result === false ? "off" : ""}"><span class="sym">${esc(box.kind)}</span><span class="nm">${esc(box.name)}${box.pt ? " · " + esc(box.pt) : ""}</span></div>`
@@ -324,7 +338,7 @@
         const p = state.program;
         const head = PK.sec("hero", `<div class="eyebrow">${esc(p.project)} · ${esc(p.plc)}${p.cpu ? " · " + esc(p.cpu) : ""}</div>
           <h1>${kind === "code" ? "The program, live." : "Why an output is on, or not."}</h1>
-          <p class="sub">${kind === "code" ? "Every block as written, with the live value after each signal." : "Each network drawn as a rung. Green passes, red blocks: the first red contact is what stops the output."}</p>
+          <p class="sub">${kind === "code" ? "Every block as written, with the live value after each signal." : "Each network drawn as a rung with live values. Read from left to right: the amber contact is the first one that stops the output."}</p>
           <div class="segmented"><button class="${kind === "logic" ? "on" : ""}" data-switch="logic">Logic</button><button class="${kind === "code" ? "on" : ""}" data-switch="code">Code</button></div>`);
         const body = (inner) => head + PK.sec("alt", `<div class="split"><nav class="blocklist">${list()}</nav><div class="stack">${inner}</div></div>`);
         if (!sel) return body(`<div class="card"><p class="muted">Loading…</p></div>`);
@@ -342,7 +356,9 @@
           bodyHtml = text ? codeHtml(text, resolve, sel.highlight) : `<p class="muted">No code in this block (data only). Its fields are listed below.</p>`;
         } else {
           let nets = b.logic ? networks(b.logic) : sclNetworks(b.source);
-          bodyHtml = nets.length ? nets.map((n) => netHtml(n, resolve, sel.highlight)).join("")
+          const legend = `<div class="legend rung-legend"><span><i class="lg on"></i>Passes power</span><span><i class="lg off"></i>Does not pass</span>
+            <span><i class="lg unk"></i>No live value</span><span><i class="lg blocker"></i>First one that stops the output</span></div>`;
+          bodyHtml = nets.length ? legend + nets.map((n) => netHtml(n, resolve, sel.highlight)).join("")
             : `<p class="muted">No boolean logic to draw in this block. <a href="#/code/${encodeURIComponent(b.name)}">Show the code</a>.</p>`;
         }
         const iface = (b.interface || []).filter((m) => m.section !== "Temp" && m.section !== "Constant");

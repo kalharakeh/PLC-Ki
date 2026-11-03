@@ -71,26 +71,10 @@ const PK = (() => {
   const views = {};
   let current = null;       // { name, view, params }
   let lastHtml = "";
-  let firstDraw = true;
-  const io = "IntersectionObserver" in window
-    ? new IntersectionObserver((es) => es.forEach((e) => { if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); } }), { rootMargin: "0px 0px -8% 0px" })
-    : null;
-
-  /** Sections rise in as they scroll into view, once per page (not on every live update). */
-  function reveal(root) {
-    if (!firstDraw || !io || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    if (root.querySelectorAll(":scope > section").length < 2) return;   // still loading
-    firstDraw = false;
-    root.querySelectorAll(":scope > section").forEach((sec, i) => {
-      sec.classList.add("reveal");
-      if (i === 0) requestAnimationFrame(() => sec.classList.add("in")); else io.observe(sec);
-    });
-  }
-
   // Page building blocks in the house style: full-width sections with a centred column
   const sec = (cls, html) => `<section class="${cls}"><div class="wrap">${html}</div></section>`;
-  const hero = ({ eyebrow = "", title, sub = "", actions = "", cls = "hero", extra = "" }) =>
-    sec(cls, `${eyebrow ? `<div class="eyebrow">${eyebrow}</div>` : ""}<h1>${title}</h1>${sub ? `<p class="sub">${sub}</p>` : ""}${actions ? `<div class="actions">${actions}</div>` : ""}${extra}`);
+  const hero = ({ eyebrow = "", title, sub = "", actions = "", cls = "hero", extra = "", extra0 = "" }) =>
+    sec(cls, `${eyebrow ? `<div class="eyebrow">${eyebrow}</div>` : ""}<h1>${title}</h1>${sub ? `<p class="sub">${sub}</p>` : ""}${extra0}${actions ? `<div class="actions">${actions}</div>` : ""}${extra}`);
 
   function view(name, def) { views[name] = def; }
 
@@ -136,12 +120,56 @@ const PK = (() => {
     current = { name, view: v, params };
     lastHtml = "";
     page.innerHTML = "";
-    firstDraw = true;
     if (v.mount) v.mount(page, params);
     else draw();
     page.scrollTop = 0;
     window.scrollTo(0, 0);
     setTitle();
+  }
+
+  // ---- updating the page in place ----
+  // A live page is rebuilt from its HTML every second or so. Swapping the whole page would lose focus, text
+  // selection, an open <details> and the screen reader's place, so only what changed is touched.
+  function morph(from, to) {
+    const olds = [...from.childNodes], news = [...to.childNodes];
+    news.forEach((n, i) => {
+      const o = olds[i];
+      if (!o) { from.appendChild(n); return; }
+      // A different element in the same place (other tag, id or data-* hooks) is swapped, so no handler from the old one stays on it
+      if (o.nodeType !== n.nodeType || (o.nodeType === 1 && (o.tagName !== n.tagName || o.id !== n.id || o.type !== n.type || hooks(o) !== hooks(n)))) { from.replaceChild(n, o); return; }
+      if (o.nodeType !== 1) { if (o.nodeValue !== n.nodeValue) o.nodeValue = n.nodeValue; return; }
+      syncAttrs(o, n);
+      if (o.dataset.icon && !n.firstChild) return;          // its icon is filled in once
+      if (o.tagName === "TEXTAREA") { if (document.activeElement !== o && o.value !== n.value) o.value = n.value; return; }
+      morph(o, n);
+      if (o.tagName === "SELECT" && document.activeElement !== o) {
+        const sel = n.querySelector("option[selected]");
+        if (sel && o.value !== sel.value) o.value = sel.value;
+      }
+    });
+    for (let i = news.length; i < olds.length; i++) olds[i].remove();
+  }
+  const hooks = (el) => { let k = ""; for (const a of el.attributes) if (a.name.startsWith("data-")) k += a.name + "=" + a.value + ";"; return k; };
+  function syncAttrs(o, n) {
+    for (const a of [...o.attributes]) {
+      if (o.tagName === "DETAILS" && a.name === "open") continue;      // the person opened or closed it
+      if (!n.hasAttribute(a.name)) o.removeAttribute(a.name);
+    }
+    for (const a of n.attributes) {
+      if (o.tagName === "DETAILS" && a.name === "open") continue;
+      if (o.getAttribute(a.name) !== a.value) o.setAttribute(a.name, a.value);
+    }
+    if (o.tagName === "INPUT" && document.activeElement !== o) {
+      if (o.type === "checkbox" || o.type === "radio") { if (o.checked !== n.hasAttribute("checked")) o.checked = n.hasAttribute("checked"); }
+      else if (o.value !== (n.getAttribute("value") ?? "")) o.value = n.getAttribute("value") ?? "";
+    }
+  }
+  /** Sets an event handler on an element that may be kept between updates, replacing the one set before. */
+  function on(el, type, fn) {
+    el._pk ||= {};
+    if (el._pk[type]) el.removeEventListener(type, el._pk[type]);
+    el._pk[type] = fn;
+    el.addEventListener(type, fn);
   }
 
   // Live views return their HTML from render(); it is only put on the page when it changed
@@ -161,10 +189,11 @@ const PK = (() => {
       const sel = f.id ? "#" + CSS.escape(f.id) : attr ? `[${attr.name}="${CSS.escape(attr.value)}"]` : null;
       if (sel) keep = { sel, a: f.selectionStart, b: f.selectionEnd };
     }
-    page.innerHTML = html;
+    const t = document.createElement("template");
+    t.innerHTML = html;
+    morph(page, t.content);
     lastHtml = html;
     fillIcons(page);
-    reveal(page);
     if (current.view.after) current.view.after(page, current.params);
     if (keep) {
       const el = page.querySelector(keep.sel);
@@ -203,7 +232,24 @@ const PK = (() => {
     b.classList.toggle("hidden", alarms.length === 0);
     b.classList.toggle("gold", alarms.length > 0 && alarms.every((a) => a.severity === "WARNING"));
     if (state.status) $("machine").textContent = state.status.machine;
+    renderBanner(stale);
     setTitle();
+  }
+
+  /** Says loudly when the values on the page are not live: PLC-Ki not answering, PLC not read, or test values. */
+  function renderBanner(stale) {
+    const c = state.status && state.status.connection;
+    let text = "", kind = "";
+    if (state.lastOk && stale) { text = `PLC-Ki is not answering. Values frozen since ${clock(state.lastOk)}.`; kind = "frozen"; }
+    else if (c && (c.state === "disconnected" || c.state === "connecting" || c.state === "waiting") && c.lastGoodRead) {
+      text = `No connection to the PLC. Values are from the last good read at ${clock(c.lastGoodRead)}.`; kind = "frozen";
+    }
+    else if (c && c.state === "snapshot") { text = "Test values from a file, not the real machine."; kind = "test"; }
+    const b = $("banner");
+    if (!b) return;
+    if (b.textContent !== text) b.innerHTML = text ? `<span class="dot"></span><span>${esc(text)}</span>` : "";
+    b.className = "banner " + kind + (text ? "" : " hidden");
+    document.documentElement.classList.toggle("frozen", kind === "frozen");
   }
 
   /** The browser tab shows the page and the number of active alarms, e.g. "(2) Plant · PLC-Ki". */
@@ -356,12 +402,29 @@ const PK = (() => {
     return out.join("");
   }
 
+  // ---- dates: one format everywhere, "3 Nov 2026, 14:02" (no ambiguous 03/11) ----
+  const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const pad = (n) => String(n).padStart(2, "0");
+  /** "14:02:13" */
+  const clock = (t) => { const d = new Date(t); return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; };
+  /** "3 Nov 2026" or, with time, "3 Nov 2026, 14:02" */
+  const date = (t, withTime = true) => {
+    const d = new Date(t);
+    if (isNaN(d)) return "";
+    return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}` + (withTime ? `, ${pad(d.getHours())}:${pad(d.getMinutes())}` : "");
+  };
+  /** "14:02:13" today, "3 Nov, 14:02" before */
+  const when = (t) => {
+    const d = new Date(t), now = new Date();
+    return d.toDateString() === now.toDateString() ? clock(d) : `${d.getDate()} ${MONTHS[d.getMonth()]}, ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+
   const ago = (t) => {
     const s = Math.round((Date.now() - new Date(t).getTime()) / 1000);
     if (s < 60) return s + " s ago";
     if (s < 3600) return Math.round(s / 60) + " min ago";
     if (s < 86400) return Math.round(s / 3600) + " h ago";
-    return new Date(t).toLocaleDateString();
+    return date(t, false);
   };
 
   // ---- plain language: what a status or error means and what to do ----
@@ -419,7 +482,7 @@ const PK = (() => {
   // ---- Help: what the current page shows and how to read it ----
   const HELP = {
     alarm: ["Active alarm", "The start page. It shows the alarm that matters most right now and how to get the machine going again.", [
-      "With several alarms, the first chip is the first-out: the alarm that came first. Fix that one first; the others often follow from it.",
+      "With several alarms, the first chip is the first-out: the alarm that came first, as PLC-Ki saw them come. Fix that one first; the others often follow from it.",
       "Fix it: work down the list and tap each step when done. The ticks are only on this screen.",
       "Where in the machine: the device behind the alarm and the chain Requested › Interlocks › Output › Feedback. The first red link is why it is not working.",
       "Where in the software: from the main cycle (OB1) down to the bit that sets the alarm. Show the logic opens that network with live values.",
@@ -432,7 +495,7 @@ const PK = (() => {
       "Search by number, text or device. Active alarms are at the top.",
       "Click an alarm to open its causes and fix. Red tags are faults (they stop the machine), gold tags are warnings."]],
     logic: ["Logic", "Each network of a block drawn as a rung, with live values.", [
-      "Green passes, red blocks. Read from left to right: the first red contact is what stops the output.",
+      "Green passes power, grey does not, a dashed ? has no live value. Read from left to right: the amber contact is the first one that stops the output.",
       "Pick a block on the left. Coming from an alarm, the network that sets it is marked.",
       "Values update every two seconds. PLC-Ki only reads: nothing here changes the PLC."]],
     code: ["Code", "Every block as written in TIA, with the live value after each signal.", [
@@ -508,6 +571,9 @@ const PK = (() => {
       else if (e.key === "/" && window.PKAsk) { e.preventDefault(); window.PKAsk.open(); }
     });
     window.addEventListener("scroll", () => $("topnav").classList.toggle("scrolled", window.scrollY > 4), { passive: true });
+    const navh = () => document.documentElement.style.setProperty("--navh", $("topnav").offsetHeight + "px");
+    navh();
+    if ("ResizeObserver" in window) new ResizeObserver(navh).observe($("topnav"));
     if (admin && !location.hash && typeof PKStart !== "undefined" && (await PKStart.firstRun())) history.replaceState(null, "", "#/setup/start");
     route();
     pollStatus();
@@ -515,6 +581,6 @@ const PK = (() => {
     pollJobs();
   }
 
-  return { dirty: setDirty, get isDirty() { return !!dirty; }, plain, connInfo, connSheet, helpSheet, cmd, sec, hero, reveal: (el) => reveal(el), $, esc, icon, fillIcons, kindIcon, api, state, view, go, draw, route, toast, sheet, confirmSheet, cond, md, ago,
+  return { dirty: setDirty, get isDirty() { return !!dirty; }, plain, connInfo, connSheet, helpSheet, cmd, sec, hero, on, $, esc, icon, fillIcons, kindIcon, api, state, view, go, draw, route, toast, sheet, confirmSheet, cond, md, ago, clock, date, when,
     loadProgram, valueBySymbol, norm, start, get current() { return current; } };
 })();

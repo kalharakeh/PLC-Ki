@@ -25,6 +25,8 @@ public sealed class PlantSettings
     public bool AllowRemote { get; set; }
     public bool PublicView { get; set; }
     public string Export { get; set; } = "";
+    /// <summary>An administrator picked the setup (Get started or Connections), so the Getting started list counts it as done.</summary>
+    public bool SetupChosen { get; set; }
 
     /// <summary>"direct" or "link" (the PLC is read by PLC-Ki Link on the user's laptop).</summary>
     public string PlcVia { get; set; } = "direct";
@@ -107,6 +109,8 @@ public sealed class SettingsStore
             TiaPlcsimIp = c["PlcKi:Tia:PlcsimIp"] ?? "",
             TiaAllowReal = c["PlcKi:Tia:AllowReal"] ?? "",
             TiaProject = c["PlcKi:Tia:Project"] ?? "",
+            // Settings saved before this flag existed were saved by someone who set PLC-Ki up
+            SetupChosen = c.GetValue("Plant:SetupChosen", File.Exists(_ctx.SettingsFile)),
         };
     }
 
@@ -148,6 +152,7 @@ public sealed class SettingsStore
             plant["Port"] = s.Port;
             plant["AllowRemote"] = s.AllowRemote;
             plant["PublicView"] = s.PublicView;
+            plant["SetupChosen"] = s.SetupChosen || before.SetupChosen;
             root["Urls"] = $"http://{(s.AllowRemote ? "*" : "localhost")}:{s.Port}";
 
             bool secretChanged = false;

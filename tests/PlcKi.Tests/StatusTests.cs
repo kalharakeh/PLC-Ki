@@ -113,4 +113,73 @@ public class StatusTextTests
         Assert.DoesNotContain("{Level}", string.Join(" ", a02.Fix));
         Assert.Contains("%", a02.Fix.Single(f => f.Contains("level now")));
     }
+
+}
+
+/// <summary>What the pages lean on: blocked devices with their reason, and alarms in the order they came.</summary>
+public class StatusAttentionTests
+{
+    private static readonly MachineModel Model = TestData.Model;
+    private static MachineStatus Run(string snapshot) => TestData.Status(snapshot);
+
+    [Fact]
+    public void Step30_blocked_devices_say_what_they_need()
+    {
+        var s = Run("step30-agitator-blocked");
+        var m201 = s.Equipment.Single(e => e.Id == "M201");
+        Assert.NotNull(m201.BlockedBy);
+        Assert.StartsWith("needs ", m201.BlockedBy);
+        Assert.Contains("20 %", m201.BlockedBy);
+        Assert.Contains("now", m201.BlockedBy);
+        // Devices that are not requested are not "blocked"
+        Assert.All(s.Equipment.Where(e => e.Requested != true), e => Assert.Null(e.BlockedBy));
+        // The step says what it should do, not that it does it
+        Assert.Contains("In this step it should run agitator M201", s.Sequences[0].Explanation);
+    }
+
+    [Theory]
+    [InlineData("Runs agitator M201", "In this step it should run agitator M201.")]
+    [InlineData("Mixes for 5 min.", "In this step it should mix for 5 min.")]
+    [InlineData("Doses ingredient B", "In this step it should dose ingredient B.")]
+    [InlineData("Carries the batch", "In this step it should carry the batch.")]
+    [InlineData("Keeps all outputs off", "In this step it should keep all outputs off.")]
+    [InlineData("Waiting for start", "What this step does: Waiting for start.")]
+    [InlineData("Runs agitator M201 and heats with E301", "In this step it should run agitator M201 and heat with E301.")]
+    [InlineData("Opens XV101 and valves stay closed", "In this step it should open XV101 and valves stay closed.")]
+    public void Step_task_is_worded_as_intent(string does, string expected) =>
+        Assert.Equal(expected, StatusEngine.ShouldDo(does));
+
+    [Fact]
+    public void Alarms_are_ordered_by_when_they_came_not_by_severity()
+    {
+        var engine = new StatusEngine(Model);
+        MachineStatus Eval(Snapshot snap) => engine.Evaluate(snap, new PlcLinkInfo("connected", "x", null, snap.Time, 0, 0));
+        var t0 = new DateTimeOffset(2026, 11, 3, 14, 0, 0, TimeSpan.Zero);
+
+        // First read: A02 is already on, so when it came is not known
+        var first = TestData.Snapshot("step10-xv101-not-open", t0);
+        var s1 = Eval(first);
+        var a02 = Assert.Single(s1.ActiveAlarms);
+        Assert.True(a02.AtStart);
+
+        // A02 goes, then the warning A08 comes, then the fault A06: A08 is the first-out
+        var t1 = t0.AddSeconds(10);
+        var noAlarm = TestData.Snapshot("step10-xv101-not-open", t1); noAlarm.Values["A02"] = false;
+        Assert.Empty(Eval(noAlarm).ActiveAlarms);
+        var warn = TestData.Snapshot("step10-xv101-not-open", t1.AddSeconds(2)); warn.Values["A02"] = false; warn.Values["A08"] = true;
+        Eval(warn);
+        var both = TestData.Snapshot("step10-xv101-not-open", t1.AddSeconds(5)); both.Values["A02"] = false; both.Values["A08"] = true; both.Values["A06"] = true;
+        var s4 = Eval(both);
+        Assert.Equal(new[] { "A08", "A06" }, s4.ActiveAlarms.Select(a => a.Id));
+        Assert.Equal(t1.AddSeconds(2), s4.ActiveAlarms[0].Since);
+        Assert.Equal(t1.AddSeconds(5), s4.ActiveAlarms[1].Since);
+        Assert.All(s4.ActiveAlarms, a => Assert.False(a.AtStart));
+    }
+
+    [Fact]
+    public void Alarm_ids_sort_naturally()
+    {
+        var ids = new[] { "A10", "A9", "A2", "B1", "A01" }.OrderBy(x => x, NaturalComparer.Instance).ToArray();
+        Assert.Equal(new[] { "A01", "A2", "A9", "A10", "B1" }, ids);
+    }
 }

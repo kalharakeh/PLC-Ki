@@ -26,9 +26,13 @@ public sealed record SequenceStatus(
 public sealed record EquipmentStatus(
     string Id, string Name, string? Kind, string? Location,
     string State, string Level, bool? Requested, bool? Commanded,
-    List<ConditionStatus> Permits, List<ConditionStatus> Blocking, List<ValueView> Values, string Explanation);
+    List<ConditionStatus> Permits, List<ConditionStatus> Blocking, List<ValueView> Values, string Explanation,
+    string? BlockedBy = null);
 
-public sealed record AlarmStatus(string Id, string Severity, string Text, string? Location, string? Condition, List<string> Causes, List<string> Fix);
+/// <param name="Since">When PLC-Ki first saw the alarm on (server time).</param>
+/// <param name="AtStart">The alarm was already on at the first read, so when it really came is not known.</param>
+public sealed record AlarmStatus(string Id, string Severity, string Text, string? Location, string? Condition, List<string> Causes, List<string> Fix,
+    DateTimeOffset? Since = null, bool AtStart = false);
 public sealed record ExchangeStatus(string Partner, string Direction, string Label, string Value, string? Text);
 
 public sealed record MachineStatus(
@@ -47,6 +51,9 @@ public sealed class StatusEngine
     private readonly MachineModel _model;
     private readonly Dictionary<string, TagDef> _tags;
     private readonly Dictionary<string, Expr> _exprCache = new(StringComparer.Ordinal);
+    // When each active alarm came, so the page can show the first-out first. Kept while the alarm stays on.
+    private readonly Dictionary<string, (DateTimeOffset Since, bool AtStart)> _alarmSince = new(StringComparer.Ordinal);
+    private bool _hadValues;
 
     public StatusEngine(MachineModel model)
     {
@@ -64,12 +71,20 @@ public sealed class StatusEngine
         var sequences = _model.Sequences.Select(s => EvaluateSequence(s, Get)).ToList();
         var halted = sequences.Where(q => q.Halted).Select(q => q.Name).ToList();
         var equipment = _model.Equipment.Select(e => EvaluateEquipment(e, Get, halted)).ToList();
-        var alarms = _model.Alarms
-            .Where(a => Get(a.Tag) is true)
-            .OrderBy(a => a.Severity == "FAULT" ? 0 : 1).ThenBy(a => a.Id, StringComparer.Ordinal)
-            .Select(a => new AlarmStatus(a.Id, a.Severity, Fill(a.Text, Get), a.Location,
-                a.Condition != null ? Fill(a.Condition, Get) : null,
-                a.Causes.Select(c => Fill(c, Get)).ToList(), a.Fix.Select(f => Fill(f, Get)).ToList()))
+        var on = _model.Alarms.Where(a => Get(a.Tag) is true).ToList();
+        var since = TrackAlarms(on.Select(a => a.Id), snap.Time, hasValues);
+        // First-out first: by when each alarm came. Alarms that were already on at the first read have no known
+        // order between them, so those come first (they are older than anything seen coming), faults before warnings.
+        var alarms = on
+            .Select(a => (Def: a, When: since.TryGetValue(a.Id, out var w) ? w : (Since: snap.Time, AtStart: true)))
+            .OrderBy(x => x.When.AtStart ? 0 : 1)
+            .ThenBy(x => x.When.AtStart ? DateTimeOffset.MinValue : x.When.Since)
+            .ThenBy(x => x.Def.Severity == "FAULT" ? 0 : 1)
+            .ThenBy(x => x.Def.Id, NaturalComparer.Instance)
+            .Select(x => new AlarmStatus(x.Def.Id, x.Def.Severity, Fill(x.Def.Text, Get), x.Def.Location,
+                x.Def.Condition != null ? Fill(x.Def.Condition, Get) : null,
+                x.Def.Causes.Select(c => Fill(c, Get)).ToList(), x.Def.Fix.Select(f => Fill(f, Get)).ToList(),
+                x.When.Since, x.When.AtStart))
             .ToList();
         var exchange = _model.Exchange
             .Select(x => new ExchangeStatus(x.Partner, x.Direction, Label(x.Tag), Fmt(x.Tag, Get), x.Text))
@@ -105,6 +120,23 @@ public sealed class StatusEngine
 
         return new MachineStatus(snap.Time, _model.Name, connection, summary, overview, sequences, equipment, alarms, exchange,
             new Dictionary<string, string>(snap.Errors));
+    }
+
+    /// <summary>Remembers when each alarm came on. Only reads with values count: before the first one nothing is known.</summary>
+    private Dictionary<string, (DateTimeOffset Since, bool AtStart)> TrackAlarms(IEnumerable<string> activeIds, DateTimeOffset time, bool hasValues)
+    {
+        lock (_alarmSince)
+        {
+            if (hasValues)
+            {
+                var active = activeIds.ToHashSet(StringComparer.Ordinal);
+                foreach (var id in _alarmSince.Keys.Where(k => !active.Contains(k)).ToList()) _alarmSince.Remove(id);
+                foreach (var id in active)
+                    if (!_alarmSince.ContainsKey(id)) _alarmSince[id] = (time, !_hadValues);
+                _hadValues = true;
+            }
+            return new Dictionary<string, (DateTimeOffset Since, bool AtStart)>(_alarmSince, StringComparer.Ordinal);
+        }
     }
 
     private SequenceStatus EvaluateSequence(SequenceDef s, Func<string, object?> get)
@@ -143,7 +175,7 @@ public sealed class StatusEngine
         {
             parts.Add($"{s.Name} is in step {stepNo} \"{stepName}\"" + (timeInStep != null ? $" for {timeInStep}." : "."));
             if (step?.Does != null)
-                parts.Add((halted ? "Normally it " : "It ") + LowerFirst(Fill(step.Does, get)));
+                parts.Add(halted ? "Normally it " + LowerFirst(Fill(step.Does, get)) : ShouldDo(Fill(step.Does, get)));
             if (halted)
                 parts.Add(reasons.Count > 0
                     ? "But it is halted (outputs off) because " + JoinAnd(reasons) + "."
@@ -195,8 +227,15 @@ public sealed class StatusEngine
         else
             explanation = $"{e.Name}: {state}.";
 
+        // Requested but the output stays off: say what it needs, from the interlocks that are not met
+        string? blockedBy = null;
+        if (requested == true && commanded == false)
+            blockedBy = blocking.Count > 0
+                ? "needs " + JoinAnd(blocking.Select(NeedText).ToList())
+                : "the program asks for it, but its output stays off and no interlock in the model explains why";
+
         var values = e.Values.Select(v => View(v, get)).ToList();
-        return new EquipmentStatus(e.Id, e.Name, e.Kind, e.Location, state, level, requested, commanded, permits, blocking, values, explanation);
+        return new EquipmentStatus(e.Id, e.Name, e.Kind, e.Location, state, level, requested, commanded, permits, blocking, values, explanation, blockedBy);
     }
 
     private ConditionStatus EvaluateCondition(CondDef c, Func<string, object?> get)
@@ -209,6 +248,50 @@ public sealed class StatusEngine
         var inText = TextTemplate.Placeholders(c.Text).ToHashSet(StringComparer.Ordinal);
         var values = expr.Identifiers().Where(id => _tags.ContainsKey(id) && !inText.Contains(id)).Select(id => View(id, get)).ToList();
         return new ConditionStatus(Fill(c.Text, get), met, values);
+    }
+
+    /// <summary>"tank level above 20 % (blades covered), now Level 15 %" for a condition that is not met.</summary>
+    private static string NeedText(ConditionStatus c)
+    {
+        var text = LowerFirst(c.Text);
+        if (c.Met == null) return text + " (no live value to check)";
+        return c.Values.Count > 0 ? text + ", now " + string.Join(", ", c.Values.Select(v => $"{v.Label} {v.Text}")) : text;
+    }
+
+    /// <summary>"Runs agitator M201 at 1200 rpm" -> "In this step it should run agitator M201 at 1200 rpm."</summary>
+    public static string ShouldDo(string does)
+    {
+        var d = does.Trim().TrimEnd('.');
+        var sp = d.IndexOf(' ');
+        var first = sp > 0 ? d[..sp] : d;
+        var rest = sp > 0 ? d[sp..] : "";
+        var verb = BaseVerb(first);
+        if (verb == null) return $"What this step does: {does.Trim().TrimEnd('.')}.";
+        // "... and heats with E301": later verbs of the same sentence, but only well-known ones (never "and valves")
+        rest = System.Text.RegularExpressions.Regex.Replace(rest, @"\b(and|then|or)\s+([a-z]+s)\b", m =>
+            CommonVerbs.Contains(m.Groups[2].Value) ? m.Groups[1].Value + " " + BaseVerb(char.ToUpperInvariant(m.Groups[2].Value[0]) + m.Groups[2].Value[1..]) : m.Value);
+        return $"In this step it should {verb}{rest}.";
+    }
+
+    private static readonly HashSet<string> CommonVerbs = new(StringComparer.Ordinal)
+    {
+        "runs", "heats", "cools", "opens", "closes", "starts", "stops", "fills", "drains", "doses", "mixes", "pumps", "waits",
+        "keeps", "holds", "moves", "sends", "counts", "reports", "goes", "checks", "sets", "resets", "switches", "turns",
+    };
+
+    /// <summary>"Runs" -> "run", "Mixes" -> "mix", "Carries" -> "carry". Null when the word does not look like such a verb.</summary>
+    private static string? BaseVerb(string word)
+    {
+        if (word.Length < 3 || !char.IsUpper(word[0]) || !word.All(char.IsLetter) || !word.EndsWith('s')) return null;
+        var w = word.ToLowerInvariant();
+        string[] irregular = ["is", "has", "does", "goes"];
+        string[] bases = ["be", "have", "do", "go"];
+        var i = Array.IndexOf(irregular, w);
+        if (i >= 0) return bases[i];
+        if (w.EndsWith("ies")) return w[..^3] + "y";
+        if (w.EndsWith("sses") || w.EndsWith("xes") || w.EndsWith("zes") || w.EndsWith("ches") || w.EndsWith("shes")) return w[..^2];
+        if (w.EndsWith("ss") || w.EndsWith("us")) return null;     // "Process", "Status": not a verb in the -s form
+        return w[..^1];
     }
 
     private static string DescribeCondition(ConditionStatus c)
@@ -259,4 +342,37 @@ public sealed class StatusEngine
         1 => items[0],
         _ => string.Join(", ", items.Take(items.Count - 1)) + " and " + items[^1],
     };
+}
+
+/// <summary>Sorts "A9" before "A10": runs of digits compare as numbers.</summary>
+public sealed class NaturalComparer : IComparer<string>
+{
+    public static readonly NaturalComparer Instance = new();
+
+    public int Compare(string? x, string? y)
+    {
+        if (x == null || y == null) return string.CompareOrdinal(x, y);
+        int i = 0, j = 0;
+        while (i < x.Length && j < y.Length)
+        {
+            if (char.IsDigit(x[i]) && char.IsDigit(y[j]))
+            {
+                int si = i, sj = j;
+                while (i < x.Length && char.IsDigit(x[i])) i++;
+                while (j < y.Length && char.IsDigit(y[j])) j++;
+                var a = x[si..i].TrimStart('0');
+                var b = y[sj..j].TrimStart('0');
+                if (a.Length != b.Length) return a.Length.CompareTo(b.Length);
+                var c = string.CompareOrdinal(a, b);
+                if (c != 0) return c;
+            }
+            else
+            {
+                var c = char.ToUpperInvariant(x[i]).CompareTo(char.ToUpperInvariant(y[j]));
+                if (c != 0) return c;
+                i++; j++;
+            }
+        }
+        return (x.Length - i).CompareTo(y.Length - j);
+    }
 }
