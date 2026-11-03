@@ -24,7 +24,16 @@ namespace TiaImporter
       (unless --replace) and keeps a copy of each replaced block in before\. Saves the project only when
       everything imported and compiled without errors (unless --keep-on-error).
 
-Nothing in this tool connects to a PLC or downloads to one.";
+  TiaImporter download --project <project.ap20> --plcsim-ip <address> [--plc <PLC name>]
+      Downloads the PLC software to PLCSIM Advanced, and only there: the PLC's address in the project must be
+      the PLCSIM address, and the download must go through a PLCSIM virtual adapter. Never hardware, never a real PLC.
+
+  TiaImporter serve --token <secret> [--port 5090] [--plcsim-ip <address>] [--packages C:\PLCKi\gen]
+                    [--projects <folder with your TIA projects>]
+      Lets PLC-Ki on another PC upload generated packages, import them, compile and download to PLCSIM
+      (if --plcsim-ip is given). Every request needs the token. Projects default to Documents\Automation.
+
+Only download and serve with --plcsim-ip talk to a PLC, and only to PLCSIM.";
 
         private static int Main(string[] args)
         {
@@ -75,6 +84,19 @@ Nothing in this tool connects to a PLC or downloads to one.";
                         if (project == null || package == null) { Console.WriteLine(Usage); return 2; }
                         return new BlockImport(Console.Out).Run(new FileInfo(Path.GetFullPath(project)), new DirectoryInfo(Path.GetFullPath(package)),
                             Arg("--plc"), Arg("--version"), Array.IndexOf(args, "--replace") >= 0, Array.IndexOf(args, "--keep-on-error") >= 0);
+                    }
+                case "download":
+                    {
+                        var project = Arg("--project");
+                        if (project == null) { Console.WriteLine(Usage); return 2; }
+                        return new PlcsimDownload(Console.Out).Run(new FileInfo(Path.GetFullPath(project)), Arg("--plc"), Arg("--plcsim-ip"));
+                    }
+                case "serve":
+                    {
+                        var projects = Arg("--projects") ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Automation");
+                        return new Serve(int.Parse(Arg("--port") ?? "5090"), Arg("--token"), Arg("--plcsim-ip"),
+                            new DirectoryInfo(Path.GetFullPath(Arg("--packages") ?? @"C:\PLCKi\gen")),
+                            new DirectoryInfo(Path.GetFullPath(projects))).Run();
                     }
                 default:
                     Console.WriteLine(Usage);

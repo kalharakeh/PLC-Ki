@@ -34,10 +34,19 @@ public sealed class ImportReport
     [JsonPropertyName("warningCount")] public int WarningCount { get; set; }
     [JsonPropertyName("fileErrors")] public List<ReportFileError> FileErrors { get; set; } = new();
     [JsonPropertyName("messages")] public List<ReportMessage> Messages { get; set; } = new();
+    /// <summary>Download to PLCSIM: null when not tried, else whether it worked and what TIA said.</summary>
+    [JsonPropertyName("download")] public string? Download { get; set; }
+    /// <summary>What went wrong while the PLC ran the new code: CPU not in RUN, new alarms (from "develop").</summary>
+    [JsonPropertyName("runtime")] public List<string> Runtime { get; set; } = new();
 
     public static ImportReport Load(string path) => JsonSerializer.Deserialize<ImportReport>(File.ReadAllText(path)) ?? new();
 
-    public bool Clean => FileErrors.Count == 0 && ErrorCount == 0 && CompileState != "" && !CompileState.Equals("Error", StringComparison.OrdinalIgnoreCase);
+    public void Save(string path) => File.WriteAllText(path, JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true }));
+
+    /// <summary>Imported and compiled without errors (warnings allowed).</summary>
+    public bool Compiled => FileErrors.Count == 0 && ErrorCount == 0 && CompileState != "" && !CompileState.Equals("Error", StringComparison.OrdinalIgnoreCase);
+
+    public bool Clean => Compiled && Runtime.Count == 0;
 
     /// <summary>The report as problems for Claude: refused files, compile errors, then warnings.</summary>
     public List<string> AsProblems(bool withWarnings = true)
@@ -46,6 +55,8 @@ public sealed class ImportReport
         list.AddRange(Messages.Where(m => m.State.Equals("Error", StringComparison.OrdinalIgnoreCase)).Select(m => $"Compile error in {m.Path}: {m.Description}"));
         if (withWarnings)
             list.AddRange(Messages.Where(m => m.State.Equals("Warning", StringComparison.OrdinalIgnoreCase)).Select(m => $"Compile warning in {m.Path}: {m.Description}"));
+        if (Download != null && !Download.StartsWith("OK", StringComparison.Ordinal)) list.Add("Download to PLCSIM failed: " + Download);
+        list.AddRange(Runtime.Select(r => "While running on PLCSIM: " + r));
         return list;
     }
 }

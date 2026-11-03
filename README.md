@@ -15,6 +15,8 @@ Claude answers from the live values, the last minutes of history and the program
 step, alarm and program location it is based on, so you can check it in TIA Portal.
 
 > **Read-only.** The app never writes to a PLC. There is no write code path, not even a disabled one.
+> The only exception is in the separate TIA tool for the block generator: `tools/TiaImporter` can download
+> generated code to **PLCSIM Advanced** for testing, and refuses any other target.
 
 ## How it works
 

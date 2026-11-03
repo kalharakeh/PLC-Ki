@@ -185,7 +185,7 @@ Generated code must be reviewed by an engineer before it goes to a real machine.
             Kind = fix ? "fix" : previous != null ? "change" : existing.Count > 0 ? "edit" : "new",
             Request = fix && request.Length == 0 ? "Fix what TIA reported for " + latest!.Folder : request.Trim(),
             Model = model,
-            Replaces = replaces.Where(r => existingNames == null || existingNames.Contains(r)).OrderBy(r => r).ToList(),
+            Replaces = replaces.OrderBy(r => r).ToList(),   // its own earlier blocks too: a later version replaces what an earlier one imported
             Problems = result.Problems,
         }, previous);
 
