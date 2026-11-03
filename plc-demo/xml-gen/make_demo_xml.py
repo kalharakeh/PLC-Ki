@@ -476,11 +476,6 @@ POST_OPERATIONS = (
         rung([("C", "#MixHeat.X")], [("MOVE", '"DB_Recipe".MixSpeed', "#SpeedM201")]),
         rung([("CN", "#MixHeat.X")], [("MOVE", '"DB_Recipe".HoldSpeed', "#SpeedM201")]),
         rung([("C", "#HeatReq"), ("CMP", "Lt", "Real", "#Temp", '"DB_Recipe".TempSP')], [("COIL", "#HeatE301")]),
-        # Heating check: while the heater is off, remember the temperature and the step time. So the 60 s window
-        # starts again each time the heater switches on, also after a halt (MixHeat.U keeps its value while halted).
-        rung([("CN", "#HeatE301")], [("MOVE", "#Temp", "#TempAtStepStart"), ("MOVE", "#MixHeat.U", "#HeatOnSince")]),
-        rung([], [("CALC", "Add", "Real", "#TempAtStepStart", "real:2.0", "#TempRiseLimit"),
-                  ("CALC", "Sub", "Time", "#MixHeat.U", "#HeatOnSince", "#HeatOnTime")]),
         # Step supervision (the alarm handler latches these)
         rung([("C", "#FillA.X"), ("CMP", "Gt", "Time", "#FillA.U", "T#120S")], [("COIL", "#TimeoutStep10")]),
         rung([("C", "#FillB.X"), ("CMP", "Gt", "Time", "#FillB.U", "T#120S")], [("COIL", "#TimeoutStep20")]),
@@ -488,8 +483,6 @@ POST_OPERATIONS = (
         rung([("C", "#Drain.X"), ("CMP", "Gt", "Time", "#Drain.U", "T#180S")], [("COIL", "#TimeoutStep50")]),
         rung([("C", "#Hold.X"), ("CMP", "Gt", "Time", "#Hold.U", "T#60S"), ("CN", "#FillerReady")],
              [("COIL", "#WaitFillerTooLong")]),
-        rung([("C", "#MixHeat.X"), ("C", "#HeatE301"), ("CMP", "Gt", "Time", "#HeatOnTime", "T#60S"),
-              ("CMP", "Lt", "Real", "#Temp", "#TempRiseLimit")], [("COIL", "#NoHeating")]),
         # Start checks (only in Idle)
         rung([("C", "#Idle.X"), ("C", "#Start"), ("CN", "#Auto")], [("COIL", "#StartNotAuto")]),
         rung([("C", "#Idle.X"), ("C", "#Start"), ("CMP", "Gt", "Real", "#Level", '"DB_Recipe".DrainLevel')],
@@ -532,7 +525,6 @@ def graph_fb(version):
         member("TimeoutStep30", "Bool", "Step 30 longer than 600 s"),
         member("TimeoutStep50", "Bool", "Step 50 longer than 180 s"),
         member("WaitFillerTooLong", "Bool", "Step 40 waiting for filler longer than 60 s"),
-        member("NoHeating", "Bool", "Heater on for 60 s in step 30 but temperature rose less than 2 degC"),
         member("StartNotAuto", "Bool", "Start pressed while not in Auto"),
         member("StartTankNotEmpty", "Bool", "Start pressed while tank not empty"),
         member("StartRecipeInvalid", "Bool", "Start pressed while recipe invalid"),
@@ -541,10 +533,6 @@ def graph_fb(version):
         member("Paused", "Bool", "Set by Stop, a fault or the E-stop; cleared by Start"),
         member("Healthy", "Bool", "No fault, E-stop OK, not paused and in Auto: the step interlocks are fulfilled"),
         member("HeatReq", "Bool", "Step 30 asks for heat (heater runs while below TempSP)"),
-        member("TempAtStepStart", "Real", "Temperature when the heater last switched on [degC]"),
-        member("TempRiseLimit", "Real", "TempAtStepStart + 2 degC"),
-        member("HeatOnSince", "Time", "Step 30 time when the heater last switched on"),
-        member("HeatOnTime", "Time", "How long the heater has been on without a break"),
     ]
     graph_statics = [member("RT_DATA", f"G7_RTDataPlus_{vsuffix}", version="1.0")]
     graph_statics += [member(name, f"G7_TransitionPlus_{vsuffix}", version="1.0") for _, name, _, _, _ in TRANSITIONS]

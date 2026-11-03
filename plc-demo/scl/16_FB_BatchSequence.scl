@@ -42,7 +42,6 @@ VERSION : 0.1
       TimeoutStep30 : Bool;   // Step 30 longer than 600 s
       TimeoutStep50 : Bool;   // Step 50 longer than 180 s
       WaitFillerTooLong : Bool;   // Step 40 waiting for filler longer than 60 s
-      NoHeating : Bool;   // Heater on 60 s in step 30 but temperature rose less than 2 degC
       StartNotAuto : Bool;   // Start pressed while not in Auto
       StartTankNotEmpty : Bool;   // Start pressed while tank not empty
       StartRecipeInvalid : Bool;   // Start pressed while recipe invalid
@@ -52,7 +51,6 @@ VERSION : 0.1
       StepNo : Int;   // Current step (kept here; copied to the Step output)
       LastStep : Int := -1;   // Step in the previous cycle (to restart the step timer)
       Paused : Bool;   // Set by Stop, a fault or the E-stop; cleared by Start
-      TempAtStepStart : Real;   // Temperature when step 30 began
       tStep {InstructionName := 'TON_TIME'; LibVersion := '1.0'} : TON_TIME;
    END_VAR
 
@@ -74,9 +72,6 @@ BEGIN
 	
 	// --- Step timer: restarts whenever the step changes, frozen while halted ---
 	#tStep(IN := (#StepNo = #LastStep) AND NOT #Halted, PT := T#24D);
-	IF #StepNo <> #LastStep THEN
-	    #TempAtStepStart := #Temp;
-	END_IF;
 	#LastStep := #StepNo;
 	#StepTime := #tStep.ET;
 	
@@ -141,7 +136,6 @@ BEGIN
 	#TimeoutStep30 := (#StepNo = 30) AND (#StepTime > T#600S);
 	#TimeoutStep50 := (#StepNo = 50) AND (#StepTime > T#180S);
 	#WaitFillerTooLong := (#StepNo = 40) AND (#StepTime > T#60S) AND NOT #FillerReady;
-	#NoHeating := (#StepNo = 30) AND #HeatE301 AND (#StepTime > T#60S) AND (#Temp < #TempAtStepStart + 2.0);
 	
 	#Step := #StepNo;
 END_FUNCTION_BLOCK

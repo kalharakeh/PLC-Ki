@@ -372,7 +372,7 @@
       "causes": [ "Pump not delivering", "Outlet line blocked" ],
       "fix": [ "Check P401 and the outlet line", "Press Reset, then Start to continue the batch" ] },
     { "id": "A20", "tag": "A20", "severity": "FAULT", "text": "Heater E301 on for 60 s but temperature rose less than 2 °C",
-      "location": "FB_BatchSequence, instance \"DB_BatchSequence\" (NoHeating)",
+      "location": "FB_Station, instance \"Station\" (NoHeating, timer tHeat)",
       "condition": "In step 30 the heater was on for 60 s and the temperature rose less than 2 °C.",
       "causes": [ "Heating element broken", "Heater fuse blown", "Heater contactor not pulling in" ],
       "fix": [ "Check the heating element and fuses", "Check the heater contactor", "Press Reset, then Start to continue the batch" ] },
