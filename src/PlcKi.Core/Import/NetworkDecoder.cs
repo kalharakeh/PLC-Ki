@@ -264,27 +264,120 @@ public static class NetworkDecoder
         }
         var symbol = access.Elements().FirstOrDefault(e => e.Name.LocalName == "Symbol");
         if (symbol == null) return "?";
-        var comps = symbol.Elements().Where(e => e.Name.LocalName == "Component").Select(ComponentText).ToList();
+        var comps = symbol.Elements().Where(e => e.Name.LocalName == "Component")
+            .Select((c, i) => ComponentText(c, !(i == 0 && scope == "GlobalVariable"))).ToList();
         if (comps.Count == 0) return "?";
         return scope == "GlobalVariable"
             ? $"\"{comps[0]}\"" + string.Concat(comps.Skip(1).Select(c => "." + c))
             : "#" + string.Join(".", comps);
     }
 
-    private static string ComponentText(XElement c)
+    private static string ComponentText(XElement c) => ComponentText(c, true);
+
+    private static string ComponentText(XElement c, bool quote)
     {
+        // Names like "Read list_1" need quotes, as in TIA ("DB"."Read list_1".Variable)
         var name = c.Attribute("Name")?.Value ?? "?";
+        if (quote) name = ProgramExport.Quote(name);
         var idx = c.Elements().Where(e => e.Name.LocalName == "Access").Select(AccessText).ToList();
         return idx.Count > 0 ? $"{name}[{string.Join(", ", idx)}]" : name;
     }
 
     private static string InstanceText(XElement inst)
     {
-        var comps = inst.Descendants().Where(e => e.Name.LocalName == "Component").Select(ComponentText).ToList();
+        var global = inst.Attribute("Scope")?.Value == "GlobalVariable";
+        var comps = inst.Descendants().Where(e => e.Name.LocalName == "Component")
+            .Select((c, i) => ComponentText(c, !(i == 0 && global))).ToList();
         if (comps.Count == 0) return "?";
-        return inst.Attribute("Scope")?.Value == "GlobalVariable"
+        return global
             ? $"\"{comps[0]}\"" + string.Concat(comps.Skip(1).Select(c => "." + c))
             : "#" + string.Join(".", comps);
+    }
+
+    /// <summary>
+    /// An SCL network inside a LAD/FBD block (TIA V17+) as plain SCL text, rebuilt from its StructuredText tokens.
+    /// Pure SCL blocks are covered by the generated SCL source instead.
+    /// </summary>
+    public static string DecodeScl(XElement structuredText)
+    {
+        var sb = new StringBuilder();
+        foreach (var e in structuredText.Elements()) Scl(e, sb);
+        // Drop trailing blanks on each line and empty lines at the ends
+        var lines = sb.ToString().Replace("\r", "").Split('\n').Select(l => l.TrimEnd());
+        return string.Join("\n", lines).Trim('\n');
+    }
+
+    private static void Scl(XElement e, StringBuilder sb)
+    {
+        int Num() => int.TryParse(e.Attribute("Num")?.Value, out var n) ? n : 1;
+        switch (e.Name.LocalName)
+        {
+            case "Token": sb.Append(e.Attribute("Text")?.Value); break;
+            case "Blank": sb.Append(' ', Num()); break;
+            case "NewLine": sb.Append('\n', Num()); break;
+            case "LineComment": sb.Append("//").Append(string.Concat(e.Elements().Where(x => x.Name.LocalName == "Text").Select(x => x.Value))); break;
+            case "Comment": sb.Append("(*").Append(string.Concat(e.Elements().Where(x => x.Name.LocalName == "Text").Select(x => x.Value))).Append("*)"); break;
+            case "Text": sb.Append(e.Value); break;
+            case "Access": SclAccess(e, sb); break;
+            case "Parameter":
+                sb.Append(e.Attribute("Name")?.Value);
+                foreach (var c in e.Elements()) Scl(c, sb);
+                break;
+            case "Instruction":
+                sb.Append(e.Attribute("Name")?.Value);
+                foreach (var c in e.Elements()) Scl(c, sb);
+                break;
+            case "CallInfo":
+            {
+                var inst = e.Elements().FirstOrDefault(x => x.Name.LocalName == "Instance");
+                if (inst != null) sb.Append(InstanceText(inst));
+                else if (e.Attribute("Name")?.Value is { } n) sb.Append('"').Append(n).Append('"');
+                foreach (var c in e.Elements().Where(x => x.Name.LocalName != "Instance")) Scl(c, sb);
+                break;
+            }
+            case "DataType": sb.Append(e.Value); break;
+            case "Constant" or "PredefinedVariable" when e.Attribute("Name") != null: sb.Append(e.Attribute("Name")!.Value); break;
+            case "AttributeList": break;
+            default:
+                foreach (var c in e.Elements()) Scl(c, sb);
+                break;
+        }
+    }
+
+    private static void SclAccess(XElement access, StringBuilder sb)
+    {
+        var scope = access.Attribute("Scope")?.Value ?? "";
+        var symbol = access.Elements().FirstOrDefault(x => x.Name.LocalName == "Symbol");
+        switch (scope)
+        {
+            case "LocalVariable" or "GlobalVariable" when symbol != null:
+                sb.Append(scope == "LocalVariable" ? "#" : "");
+                var first = true;
+                foreach (var c in symbol.Elements())
+                {
+                    if (c.Name.LocalName == "Component")
+                    {
+                        var name = c.Attribute("Name")?.Value ?? "?";
+                        sb.Append(first && scope == "GlobalVariable" ? $"\"{name}\"" : ProgramExport.Quote(name));
+                        foreach (var ix in c.Elements()) Scl(ix, sb);   // array index: [ ... ]
+                        first = false;
+                    }
+                    else Scl(c, sb);
+                }
+                break;
+            case "LiteralConstant" or "TypedConstant":
+                sb.Append(access.Descendants().FirstOrDefault(x => x.Name.LocalName == "ConstantValue")?.Value ?? "?");
+                break;
+            case "LocalConstant":
+                sb.Append('#').Append(access.Descendants().FirstOrDefault(x => x.Name.LocalName == "Constant")?.Attribute("Name")?.Value);
+                break;
+            case "GlobalConstant":
+                sb.Append('"').Append(access.Descendants().FirstOrDefault(x => x.Name.LocalName == "Constant")?.Attribute("Name")?.Value).Append('"');
+                break;
+            default:
+                foreach (var c in access.Elements()) Scl(c, sb);
+                break;
+        }
     }
 
     /// <summary>

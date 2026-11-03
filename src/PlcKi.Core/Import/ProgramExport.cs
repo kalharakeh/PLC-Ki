@@ -192,6 +192,7 @@ public sealed class ProgramExport
             networkNo++;
             var lang = cu.Element("AttributeList")?.Element("ProgrammingLanguage")?.Value;
             if (lang != null) block.NetworkLanguages.Add(lang);
+            if (block.Language == "SCL") continue;   // the SCL source covers pure SCL blocks
             try { DecodeNetwork(cu, lang, networkNo, logic); }
             catch (Exception ex) { logic.AppendLine($"// Network {networkNo}: could not decode ({ex.Message})"); }
         }
@@ -201,21 +202,30 @@ public sealed class ProgramExport
             var inst = call.Elements().FirstOrDefault(e => e.Name.LocalName == "Instance");
             var comps = inst?.Descendants().Where(e => e.Name.LocalName == "Component").Select(c => c.Attribute("Name")?.Value).ToList();
             var instName = comps is { Count: > 0 }
-                ? (inst!.Attribute("Scope")?.Value == "GlobalVariable" ? $"\"{comps[0]}\"" + string.Concat(comps.Skip(1).Select(c => "." + c)) : "#" + string.Join(".", comps))
+                ? (inst!.Attribute("Scope")?.Value == "GlobalVariable" ? $"\"{comps[0]}\"" + string.Concat(comps.Skip(1).Select(c => "." + Quote(c!))) : "#" + string.Join(".", comps.Select(c => Quote(c!))))
                 : null;
-            block.Calls.Add(new ExportCall(call.Attribute("BlockType")?.Value ?? "", call.Attribute("Name")?.Value ?? "", instName));
+            var type = call.Attribute("BlockType")?.Value ?? "";
+            var name = call.Attribute("Name")?.Value;
+            // SCL calls of an FC ("VAL_To_String"(...)) carry the FC's name as the "instance" and no Name attribute
+            if (string.IsNullOrEmpty(name) && type == "FC" && comps is { Count: > 0 }) { name = string.Join(".", comps); instName = null; }
+            if (string.IsNullOrEmpty(name)) continue;
+            block.Calls.Add(new ExportCall(type, name, instName));
         }
         return block;
     }
 
-    /// <summary>Appends one LAD/FBD network or the GRAPH sequence as text. SCL and STL networks are skipped (the SCL source covers them).</summary>
+    /// <summary>
+    /// Appends one LAD/FBD network, an SCL network of a LAD/FBD block, or the GRAPH sequence as text.
+    /// Networks of pure SCL blocks are skipped (the SCL source covers them); STL is not decoded yet.
+    /// </summary>
     private static void DecodeNetwork(XElement cu, string? lang, int no, StringBuilder logic)
     {
         var source = cu.Element("AttributeList")?.Element("NetworkSource");
         if (source == null) return;
         var graph = source.Elements().FirstOrDefault(e => e.Name.LocalName == "Graph");
         var flg = source.Elements().FirstOrDefault(e => e.Name.LocalName == "FlgNet");
-        if (graph == null && flg == null) return;
+        var st = source.Elements().FirstOrDefault(e => e.Name.LocalName == "StructuredText");
+        if (graph == null && flg == null && st == null) return;
 
         var title = Text(cu, "Title");
         var comment = Text(cu, "Comment");
@@ -223,6 +233,8 @@ public sealed class ProgramExport
         logic.AppendLine(head);
         if (graph != null)
             logic.AppendLine(NetworkDecoder.DecodeGraph(graph));
+        else if (st != null)
+            logic.AppendLine(NetworkDecoder.DecodeScl(st));
         else
             foreach (var s in NetworkDecoder.Decode(flg!)) logic.AppendLine(s);
         logic.AppendLine();
@@ -383,7 +395,7 @@ public sealed class ProgramExport
     }
 
     private static readonly Regex PlainName = new(@"^[A-Za-z_][A-Za-z0-9_]*$");
-    private static string Quote(string name) => PlainName.IsMatch(name) ? name : $"\"{name}\"";
+    internal static string Quote(string name) => PlainName.IsMatch(name) ? name : $"\"{name}\"";
 
     /// <summary>Normalises a symbol for comparison: no spaces, same quoting ("DB".a == "DB"."a").</summary>
     public static string NormalizeSymbol(string symbol)
