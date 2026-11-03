@@ -1,12 +1,18 @@
 # TiaImporter
 
-Command-line helper that uses **TIA Portal V20 Openness**. It never connects to or downloads to a PLC.
+Command-line helper that uses **TIA Portal V20 Openness**. Only `download` and `serve` (with `--plcsim-ip`) talk to a
+PLC, and only to PLCSIM Advanced.
 
 ```
 TiaImporter export --archive <project.zap20> --out <empty folder>
 TiaImporter setup-demo --project <project.ap20> --demo <plc-demo folder> [--plc <PLC name>]
 TiaImporter import-blocks --project <project.ap20> --package <package folder> [--plc <PLC name>] [--version v002] [--replace] [--keep-on-error]
+TiaImporter download --project <project.ap20> --plcsim-ip <address> [--plc <PLC name>]
+TiaImporter serve --token <secret> [--port 5090] [--plcsim-ip <address>] [--packages C:\PLCKi\gen] [--projects <folder>]
 ```
+
+`download` and `serve` download only to PLCSIM: the PLC's address in the project must be the PLCSIM address and the
+PC interface must be a PLCSIM adapter; software only. `serve` is what `PlcKi.Server develop` talks to.
 
 `import-blocks` loads blocks written by `PlcKi.Server generate` into the project you name, compiles, and writes
 `import-report.json` for the next fix round. See [docs/block-generator.md](../../docs/block-generator.md).

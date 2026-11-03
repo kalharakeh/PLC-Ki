@@ -74,8 +74,46 @@ What went wrong while bringing the demo into TIA V20 is now in Claude's instruct
 | Texts are en-US | the TIA project needs English as a project language |
 | TIA asks to allow the exe after every rebuild | run `tools\TiaImporter\allow-openness.ps1` once after building |
 
-## Coming next
+## Live loop: one command from the PC
 
-A live link between the PC and the VM, so the round trip runs without copying folders: import, compile, download to
-PLCSIM only, then watch the PLC through the read-only live connection and the diagnostic buffer, and give Claude the
-errors, CPU stops and misbehaving blocks to fix.
+With `TiaImporter serve` running on the TIA PC, `develop` does the round trip by itself: Claude writes the blocks,
+the TIA PC imports and compiles them, errors go back to Claude, and once it compiles it can download to PLCSIM and
+watch the PLC. Every round is still a version in the package folder.
+
+### Once, on the VM (Command Prompt as administrator)
+
+```
+netsh http add urlacl url=http://+:5090/ user=Software
+netsh advfirewall firewall add rule name="PLC-Ki TiaImporter" dir=in action=allow protocol=TCP localport=5090
+```
+
+### Each session, on the VM (normal Command Prompt, TIA closed)
+
+```
+cd /d C:\PLCKi\PLC-Ki\tools\TiaImporter
+bin\Release\net48\TiaImporter.exe serve --token <pick a password> --plcsim-ip 192.168.10.10
+```
+
+Leave the window open. Without `--plcsim-ip` it never downloads. With it, a download only happens when the PLC's
+address in the project is that PLCSIM address and TIA reaches it through a PLCSIM virtual adapter. Software only,
+never hardware, never a real PLC. Projects must be under `Documents\Automation`.
+
+### On the PC (PowerShell)
+
+```powershell
+$env:PLCKI_VM_TOKEN = "<the same password>"
+dotnet run --project src\PlcKi.Server -- develop --vm http://192.168.10.3:5090 `
+  --project C:\Users\Software\Documents\Automation\MixingDemo_test\MixingDemo_test.ap20 `
+  --out C:\temp\gen\pump --request "A pump FB in SCL with run feedback monitoring, and call it from a new cyclic OB with its own instance DB" `
+  --download --plc-address 192.168.10.10 --watch 30
+```
+
+What it does: generate v001, upload, import and compile on the VM; on errors, up to 3 fix rounds (`--rounds`);
+then download to PLCSIM and watch for 30 s (read-only): if the CPU leaves RUN or new alarms come up, they go back to
+Claude as the next fix round. The blocks only run if something calls them, so ask for the call (an OB or a call in
+an existing block via `--edit`) when you want the runtime check to mean something.
+
+## Not yet
+
+- Reading the CPU diagnostic buffer (the watch sees the CPU state and active alarms, including system diagnostics
+  alarms). Values of the new blocks are not checked against what they should do yet.

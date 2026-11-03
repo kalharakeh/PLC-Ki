@@ -224,3 +224,75 @@ END_FUNCTION_BLOCK
         finally { Directory.Delete(dir, true); }
     }
 }
+
+/// <summary>"develop" against a fake TIA PC: a compile error goes back to Claude, the fixed version compiles and downloads.</summary>
+public class DevelopTests
+{
+    private sealed class FakeTiaPc : HttpMessageHandler
+    {
+        public readonly List<string> Calls = new();
+        public readonly List<string> Uploaded = new();
+        private int _imports;
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        {
+            Assert.Equal("secret-token", request.Headers.GetValues("X-PlcKi-Token").Single());
+            var path = request.RequestUri!.AbsolutePath;
+            Calls.Add(request.Method + " " + path);
+            string body = "{\"ok\":true}";
+            if (request.Method == HttpMethod.Put)
+            {
+                using var zip = new System.IO.Compression.ZipArchive(await request.Content!.ReadAsStreamAsync(ct));
+                Uploaded.AddRange(zip.Entries.Select(e => e.FullName.Replace('\\', '/')));
+            }
+            else if (path == "/import")
+            {
+                var req = System.Text.Json.JsonDocument.Parse(await request.Content!.ReadAsStringAsync(ct)).RootElement;
+                Assert.Equal(@"C:\Users\Software\Documents\Automation\Test\Test.ap20", req.GetProperty("project").GetString());
+                var version = req.GetProperty("version").GetString();
+                body = ++_imports == 1
+                    ? "{\"exitCode\":3,\"log\":\"Compile: Error\\n\",\"report\":{\"version\":\"" + version + "\",\"saved\":false,\"compileState\":\"Error\",\"errorCount\":1,\"warningCount\":0,\"fileErrors\":[],\"messages\":[{\"state\":\"Error\",\"path\":\"FB_GenValve\",\"description\":\"Tag XV201_Open not defined\"}]}}"
+                    : "{\"exitCode\":0,\"log\":\"Compile: Success\\n\",\"report\":{\"version\":\"" + version + "\",\"saved\":true,\"compileState\":\"Success\",\"errorCount\":0,\"warningCount\":0,\"fileErrors\":[],\"messages\":[]}}";
+            }
+            else if (path == "/download") body = "{\"exitCode\":0,\"log\":\"Download: Success\\n\"}";
+            return new HttpResponseMessage(System.Net.HttpStatusCode.OK) { Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json") };
+        }
+    }
+
+    [Fact]
+    public async Task Fixes_a_compile_error_then_downloads()
+    {
+        var dir = Path.Combine(Directory.CreateTempSubdirectory("plcki-dev-").FullName, "valve");
+        try
+        {
+            var tia = new FakeTiaPc();
+            var vm = new VmClient("http://tia-pc:5090", "secret-token", tia);
+            var answer = "<file name=\"10_FB_GenValve.scl\">\nFUNCTION_BLOCK \"FB_GenValve\"\nVAR_INPUT\n Open : Bool;\nEND_VAR\nBEGIN\nEND_FUNCTION_BLOCK\n</file>\n<review>ok</review>";
+            var api = new ModelBuilderTests.FakeStreamingApi(answer, answer.Replace("<review>ok", "<review>fixed"));
+            var code = await DevelopCommand.RunAsync(["--vm", "http://tia-pc:5090", "--project", @"C:\Users\Software\Documents\Automation\Test\Test.ap20",
+                "--out", dir, "--request", "valve", "--download", "--scl-only"], ModelBuilderTests.Client(api), vm);
+
+            Assert.Equal(0, code);
+            Assert.Equal(new[] { "GET /status", "PUT /packages/valve", "POST /import", "PUT /packages/valve", "POST /import", "POST /download" }, tia.Calls);
+            Assert.Contains("generated.json", tia.Uploaded);
+            Assert.Contains("v002/10_FB_GenValve.scl", tia.Uploaded);
+            // The fix round told Claude what TIA said
+            var fixTask = api.Requests[1].GetProperty("messages")[0].GetProperty("content")[1].GetProperty("text").GetString()!;
+            Assert.Contains("Compile error in FB_GenValve: Tag XV201_Open not defined", fixTask);
+            var report = ImportReport.Load(Path.Combine(dir, "v002", "import-report.json"));
+            Assert.True(report.Clean);
+            Assert.Equal("OK", report.Download);
+            Assert.Equal("fix", PackageHistory.Load(dir).Latest!.Kind);
+        }
+        finally { Directory.Delete(Path.GetDirectoryName(dir)!, true); }
+    }
+
+    [Fact]
+    public void Runtime_problems_go_back_as_problems()
+    {
+        var r = new ImportReport { CompileState = "Success", Download = "OK", Runtime = { "The CPU is in Stop instead of RUN." } };
+        Assert.True(r.Compiled);
+        Assert.False(r.Clean);
+        Assert.Contains("While running on PLCSIM: The CPU is in Stop instead of RUN.", r.AsProblems());
+    }
+}

@@ -13,6 +13,7 @@ namespace TiaImporter
         public string TypeIdentifier;
         public List<string> IpAddresses = new List<string>();
         public PlcSoftware Software;
+        public DeviceItem Item;
     }
 
     internal static class TiaHelpers
@@ -48,6 +49,7 @@ namespace TiaImporter
                     CpuName = item.Name,
                     TypeIdentifier = item.TypeIdentifier,
                     Software = plc,
+                    Item = item,
                 };
                 CollectIps(item, info.IpAddresses);
                 result.Add(info);
