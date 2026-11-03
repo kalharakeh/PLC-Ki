@@ -34,7 +34,7 @@ public sealed class ModelBuilder
     private readonly Action<string> _log;
 
     public int MaxRepairs { get; init; } = 3;
-    public int MaxTokens { get; init; } = 64000;
+    public int MaxTokens { get; init; } = 128000;   // real plants: 100+ alarms and steps
 
     public ModelBuilder(AnthropicClient client, string model, Effort effort, Action<string> log)
     {

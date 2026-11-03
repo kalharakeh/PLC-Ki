@@ -367,6 +367,15 @@ public sealed class ProgramExport
     private static void Walk(ExportPlc plc, ExportMember m, string symbol, string source, List<ExportTag> tags, int depth)
     {
         if (depth > 8) return;
+        // GRAPH runtime structures: a step is "active" (.X) and "active for" (.T); everything else
+        // (transition internals, flags, offsets) is noise that pushed real tags out of the list
+        if (m.Datatype.StartsWith("G7_Step", StringComparison.Ordinal))
+        {
+            tags.Add(new ExportTag($"{symbol}.X", "Bool", "Bool", "step active", source));
+            tags.Add(new ExportTag($"{symbol}.T", "Time", "Time", "time the step has been active", source));
+            return;
+        }
+        if (m.Datatype.StartsWith("G7_", StringComparison.Ordinal)) return;
         var arr = ArrayRx.Match(m.Datatype);
         if (arr.Success)
         {

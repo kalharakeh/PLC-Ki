@@ -100,7 +100,8 @@ public static class ProgramDigest
         if (m.Comment != null) line += $" // {m.Comment}";
         sb.AppendLine(line);
         // Struct members (not multi-instances, which are described by their own FB)
-        if (m.Members.Count > 0 && m.UserType == null)
+        // and not GRAPH runtime structures (step/transition internals), which only repeat the same fields
+        if (m.Members.Count > 0 && m.UserType == null && !m.Datatype.StartsWith("G7_", StringComparison.Ordinal))
             foreach (var c in m.Members) WriteMember(sb, c, indent + "  ", false);
     }
 
