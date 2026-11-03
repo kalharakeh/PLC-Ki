@@ -161,7 +161,7 @@
         ...eqs.slice(0, 2).map((e) => [e.state, e.name, e.level === "ok" ? "ok" : e.level === "idle" ? "" : "bad"]),
         seq ? [`Step ${seq.step ?? "?"}`, `${seq.name}: ${seq.stepName}${seq.halted ? ", halted" : ""}`, seq.halted ? "bad" : ""] : null,
         seq && seq.timeInStep ? [seq.timeInStep, "in this step"] : null,
-        [since && Date.now() - since > 3000 ? PK.ago(since).replace(" ago", "") : "now", "on this screen"],
+        [since && Date.now() - since > 3000 ? PK.ago(since).replace(" ago", "") : "Just now", "active for (since this page saw it)"],
       ].filter(Boolean).slice(0, 4);
 
       return guide() + sec("hero", `${chips}
@@ -204,6 +204,8 @@
   });
 
   // ---------- Plant ----------
+  let eqQuery = "";
+  let eqOnlyProblems = false;
   PK.view("plant", {
     live: true,
     render() {
@@ -230,11 +232,23 @@
         </div>`).join("");
 
       const sel = s.equipment.find((e) => e.id === selectedEq);
+      const problem = (e) => e.level !== "ok" && e.level !== "idle";
+      const nProblems = s.equipment.filter(problem).length;
+      const q = eqQuery.trim().toLowerCase();
+      const shown = s.equipment.filter((e) => (!eqOnlyProblems || problem(e)) && (!q || (e.id + " " + e.name + " " + (e.kind || "") + " " + e.state).toLowerCase().includes(q)));
+      const tools = s.equipment.length > 4 ? `<div class="toolbar">
+          <input type="search" id="eq-search" placeholder="Find a device by name or tag" value="${esc(eqQuery)}" aria-label="Find a device">
+          <div class="segmented" role="group" aria-label="Show">
+            <button type="button" class="${eqOnlyProblems ? "" : "on"}" data-eqf="all" aria-pressed="${!eqOnlyProblems}">All ${s.equipment.length}</button>
+            <button type="button" class="${eqOnlyProblems ? "on" : ""}" data-eqf="problems" aria-pressed="${eqOnlyProblems}">Needs attention ${nProblems}</button></div></div>` : "";
       return guide() + top
         + (seqs ? sec("alt", `<h2>Sequence</h2><p class="sub">Each step, where it is now, and what it waits for.</p>${seqs}`) : "")
         + sec("", `<h2>Equipment</h2><p class="sub">Every device, and the chain from request to feedback. The first red link is why it is not running.</p>
-            ${sel ? `<div class="card stack" style="margin-bottom:18px">${eqCard(sel, true)}<div class="actions"><button class="btn small" data-ask="Why is ${esc(sel.id)} ${esc(sel.state)}?">Ask why</button><button class="btn b small" data-close-eq>Close</button></div></div>` : ""}
-            <div class="grid auto">${s.equipment.map((e) => `<div class="eq ${e.id === selectedEq ? "sel" : ""}" data-eq="${esc(e.id)}">${eqCard(e, false)}</div>`).join("")}</div>`)
+            ${sel ? `<div class="card stack eq-open" style="margin-bottom:18px">${eqCard(sel, true)}<div class="actions"><button class="btn small" data-ask="Why is ${esc(sel.id)} ${esc(sel.state)}?">Ask why</button><button class="btn b small" data-close-eq>Close</button></div></div>` : ""}
+            ${tools}
+            ${shown.length ? `<div class="grid auto">${shown.map((e) => `<div class="eq ${e.id === selectedEq ? "sel" : ""}" data-eq="${esc(e.id)}" role="button" tabindex="0" aria-label="${esc(e.name)}, ${esc(e.state)}">${eqCard(e, false)}</div>`).join("")}</div>`
+              : `<div class="nomatch">${eqOnlyProblems && !q ? `${icon("check")}<b>Every device is fine.</b><span>Nothing needs attention right now.</span>` : `${icon("search")}<b>No device matches.</b><span>Try part of the name or the tag, like ${esc((s.equipment[0] || {}).id || "XV101")}.</span>`}
+                <button class="btn b small" data-eq-reset>Show all devices</button></div>`}`)
         + (s.exchange.length ? sec("dark", `<h2>Data exchange</h2><p class="sub">Signals to and from other systems.</p>
             <div style="overflow-x:auto"><table class="tbl"><tr><th>Partner</th><th>Direction</th><th>Signal</th><th>Value</th><th>Meaning</th></tr>
             ${s.exchange.map((x) => `<tr><td><b>${esc(x.partner)}</b></td><td>${x.direction === "in" ? "from" : "to"} ${esc(x.partner)}</td><td>${esc(x.label)}</td><td class="val">${esc(x.value)}</td><td class="muted">${esc(x.text || "")}</td></tr>`).join("")}
@@ -242,7 +256,15 @@
         + (Object.keys(s.tagErrors || {}).length ? sec("tight", `<details class="more"><summary>${Object.keys(s.tagErrors).length} signals could not be read</summary><ul class="small">${Object.entries(s.tagErrors).map(([k, v]) => `<li><code>${esc(k)}</code>: ${esc(v)}</li>`).join("")}</ul></details>`) : "");
     },
     after(page) {
-      page.querySelectorAll("[data-eq]").forEach((d) => d.onclick = () => { selectedEq = selectedEq === d.dataset.eq ? null : d.dataset.eq; PK.draw(); });
+      page.querySelectorAll("[data-eq]").forEach((d) => {
+        d.onclick = () => { selectedEq = selectedEq === d.dataset.eq ? null : d.dataset.eq; PK.draw(); if (selectedEq) PK.$("page").querySelector(".eq-open")?.scrollIntoView({ block: "nearest", behavior: "smooth" }); };
+        d.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); d.click(); } };
+      });
+      const es = page.querySelector("#eq-search");
+      if (es) es.oninput = () => { eqQuery = es.value; PK.draw(); };
+      page.querySelectorAll("[data-eqf]").forEach((b) => b.onclick = () => { eqOnlyProblems = b.dataset.eqf === "problems"; PK.draw(); });
+      const r = page.querySelector("[data-eq-reset]");
+      if (r) r.onclick = () => { eqQuery = ""; eqOnlyProblems = false; PK.draw(); };
       const c = page.querySelector("[data-close-eq]");
       if (c) c.onclick = () => { selectedEq = null; PK.draw(); };
       bindAsk(page);
@@ -251,6 +273,7 @@
 
   // ---------- Alarms ----------
   let alarmFilter = "";
+  let alarmKind = "all";        // all | active | faults | warnings
   let openAlarm = null;
   PK.view("alarms", {
     live: true,
@@ -259,12 +282,13 @@
       if (!s || !m) return waitingPage();
       const active = new Set(s.activeAlarms.map((a) => a.id));
       const q = alarmFilter.toLowerCase();
-      const all = m.alarms.filter((a) => !q || (a.id + " " + a.text + " " + (a.location || "")).toLowerCase().includes(q))
+      const kindOk = { all: () => true, active: (a) => active.has(a.id), faults: (a) => a.severity !== "WARNING", warnings: (a) => a.severity === "WARNING" }[alarmKind] || (() => true);
+      const all = m.alarms.filter((a) => kindOk(a) && (!q || (a.id + " " + a.text + " " + (a.location || "")).toLowerCase().includes(q)))
         .sort((a, b) => (active.has(b.id) - active.has(a.id)) || a.id.localeCompare(b.id, undefined, { numeric: true }));
       const faults = m.alarms.filter((a) => a.severity !== "WARNING").length;
       const rows = all.map((a) => {
         const on = active.has(a.id), open = openAlarm === a.id;
-        return `<li class="click" data-open="${esc(a.id)}" style="flex-wrap:wrap">
+        return `<li class="click" data-open="${esc(a.id)}" style="flex-wrap:wrap" tabindex="0" aria-expanded="${open}">
           <span class="tag ${a.severity === "WARNING" ? "gold" : "red"}">${esc(a.id)}</span>
           <span style="flex:1;min-width:200px"><b style="font-weight:600">${esc(a.text)}</b>${a.location ? `<div class="faint">${esc(a.location)}</div>` : ""}</span>
           ${on ? `<span class="pill ${a.severity === "WARNING" ? "warn" : "bad"}"><span class="dot"></span>Active</span>` : ""}<span class="chev">${open ? "⌄" : "›"}</span>
@@ -283,17 +307,27 @@
         extra: `<div class="kpis" style="margin-top:12px"><div class="k ${s.activeAlarms.length ? "bad" : "ok"}"><b>${s.activeAlarms.length}</b><span>active now</span></div>
           <div class="k"><b>${m.alarms.length}</b><span>alarms in the program</span></div><div class="k"><b>${faults}</b><span>faults (stop the machine)</span></div>
           <div class="k"><b>${m.alarms.length - faults}</b><span>warnings</span></div></div>`,
-      }) + sec("alt", `<input type="search" id="alarm-search" placeholder="Search by number, text or device" value="${esc(alarmFilter)}" style="margin-bottom:16px;max-width:460px">
-          <ul class="list">${rows || `<li class="muted">No alarm matches.</li>`}</ul>`);
+      }) + sec("alt", `<div class="toolbar"><input type="search" id="alarm-search" placeholder="Search by number, text or device" value="${esc(alarmFilter)}" aria-label="Search alarms">
+          <div class="segmented" role="group" aria-label="Show">${[["all", "All", m.alarms.length], ["active", "Active", s.activeAlarms.length], ["faults", "Faults", faults], ["warnings", "Warnings", m.alarms.length - faults]]
+            .map(([k, l, n]) => `<button type="button" class="${alarmKind === k ? "on" : ""}" data-akind="${k}" aria-pressed="${alarmKind === k}">${l} ${n}</button>`).join("")}</div></div>
+          ${rows ? `<ul class="list">${rows}</ul>` : `<div class="nomatch">${alarmKind === "active" && !q ? `${icon("check")}<b>No alarm is active.</b><span>The machine reports no fault or warning right now.</span>`
+            : `${icon("search")}<b>No alarm matches.</b><span>Search by the alarm number (like ${esc((m.alarms[0] || {}).id || "A101")}), a word from the text, or a device tag.</span>`}
+            ${q || alarmKind !== "all" ? `<button class="btn b small" data-areset>Show all alarms</button>` : ""}</div>`}`);
     },
     after(page) {
       const inp = page.querySelector("#alarm-search");
       if (!inp) return;
-      inp.oninput = () => { alarmFilter = inp.value; PK.draw(); const i = PK.$("alarm-search"); i.focus(); i.setSelectionRange(i.value.length, i.value.length); };
-      page.querySelectorAll("[data-open]").forEach((li) => li.onclick = (e) => {
-        if (e.target.closest("a,button")) return;
-        openAlarm = openAlarm === li.dataset.open ? null : li.dataset.open;
-        PK.draw();
+      inp.oninput = () => { alarmFilter = inp.value; PK.draw(); };
+      page.querySelectorAll("[data-akind]").forEach((b) => b.onclick = () => { alarmKind = b.dataset.akind; PK.draw(); });
+      const ar = page.querySelector("[data-areset]");
+      if (ar) ar.onclick = () => { alarmFilter = ""; alarmKind = "all"; PK.draw(); };
+      page.querySelectorAll("[data-open]").forEach((li) => {
+        li.onclick = (e) => {
+          if (e.target.closest("a,button")) return;
+          openAlarm = openAlarm === li.dataset.open ? null : li.dataset.open;
+          PK.draw();
+        };
+        li.onkeydown = (e) => { if ((e.key === "Enter" || e.key === " ") && e.target === li) { e.preventDefault(); li.click(); } };
       });
       bindAsk(page);
     },

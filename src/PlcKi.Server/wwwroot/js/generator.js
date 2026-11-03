@@ -23,19 +23,19 @@
     return r.text();
   }
   async function loadPackages() {
-    try { g.packages = await api("GET", "/api/admin/generator/packages"); } catch (e) { g.packages = []; toast(e.message); }
+    try { g.packages = await api("GET", "/api/admin/generator/packages"); } catch (e) { g.packages = []; toast(e.message, "error"); }
     PK.draw();
   }
   async function openPackage(name) {
     g.open = name; g.detail = null; g.file = null;
     PK.draw();
-    try { g.detail = await api("GET", "/api/admin/generator/packages/" + encodeURIComponent(name)); } catch (e) { toast(e.message); }
+    try { g.detail = await api("GET", "/api/admin/generator/packages/" + encodeURIComponent(name)); } catch (e) { toast(e.message, "error"); }
     PK.draw();
   }
   async function showFile(version, file) {
     try {
       g.file = { version, file, text: await textOf(`/api/admin/generator/packages/${encodeURIComponent(g.open)}/${version}/${encodeURIComponent(file)}`) };
-    } catch (e) { toast(e.message); }
+    } catch (e) { toast(e.message, "error"); }
     PK.draw();
   }
 
@@ -76,13 +76,13 @@
         Then type <b>${esc(version)}</b> to go on. Anything else stops here and nothing is downloaded.</p>
       <details class="more"><summary>What Claude wrote (REVIEW.md)</summary><div class="md" data-review>Loading…</div></details>
       <input id="cv-text" autocomplete="off" spellcheck="false" placeholder="Type ${esc(version)}" style="font-family:var(--mono);font-size:18px">
-      <div class="row end"><button class="btn gray" data-no>Stop, don't download</button><button class="btn red" data-yes disabled>Download to the real PLC</button></div>`);
+      <div class="row end"><button class="btn gray" data-no>Stop, don't download</button><button class="btn red" data-yes disabled>Download to the real PLC</button></div>`, { dismiss: false });
     const el = g.sheet.el, input = el.querySelector("#cv-text"), yes = el.querySelector("[data-yes]");
     input.focus();
     input.oninput = () => { yes.disabled = input.value.trim() !== version; };
     const answer = async (text) => {
       yes.disabled = true;
-      try { await api("POST", `/api/admin/jobs/${j.id}/input`, { text }); } catch (e) { toast(e.message); }
+      try { await api("POST", `/api/admin/jobs/${j.id}/input`, { text }); } catch (e) { toast(e.message, "error"); }
     };
     yes.onclick = () => answer(input.value.trim());
     input.onkeydown = (e) => { if (e.key === "Enter" && input.value.trim() === version) answer(version); };
@@ -100,7 +100,7 @@
         and the CPU must be in STOP. If nobody confirms in time, nothing is downloaded.</p>
       <div class="countdown" data-left>2:00</div>
       <div class="progress"><div data-bar style="width:100%;background:var(--fault)"></div></div>
-      <p class="faint small" style="margin:0">This closes by itself when the TIA PC answers.</p>`);
+      <p class="faint small" style="margin:0">This closes by itself when the TIA PC answers.</p>`, { dismiss: false });
     const el = g.sheet.el, left = el.querySelector("[data-left]"), bar = el.querySelector("[data-bar]");
     const tick = () => {
       if (!el.isConnected) return;
@@ -317,7 +317,7 @@
           followJob(job);
           PK.draw();
           window.scrollTo({ top: 0, behavior: "smooth" });
-        } catch (e) { toast(e.message); }
+        } catch (e) { toast(e.message, "error"); }
       };
     },
   });

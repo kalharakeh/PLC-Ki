@@ -49,7 +49,26 @@
     }
   }
 
+  /** Example questions that fit the page and the alarm on screen, so the first question is one tap. */
+  function suggestions() {
+    const cur = PK.current || { name: "alarm", params: [] };
+    const st = PK.state.status;
+    const alarm = st && st.activeAlarms && st.activeAlarms[0];
+    const block = cur.params && cur.params[0];
+    const list = {
+      alarm: alarm ? [`Why is alarm ${alarm.id} on, and how do I fix it?`, "What should I check first?", "What happened just before the alarm?"]
+        : ["What is the machine doing right now?", "Is anything close to raising an alarm?", "What happened in the last 5 minutes?"],
+      plant: ["Why is the sequence not going on?", "Which devices are not running, and why?", "What happened in the last 5 minutes?"],
+      alarms: [alarm ? `Explain alarm ${alarm.id} in plain words.` : "Which alarms stop the machine?", "Which alarms come from the same device?", "How do I reset an alarm?"],
+      logic: block ? [`Explain ${block} in plain words.`, `What stops the output in ${block} right now?`, `Where is ${block} called from?`] : ["Which block runs the sequence?", "Where are the interlocks programmed?", "What is the machine doing right now?"],
+      code: block ? [`Explain ${block} in plain words.`, `What are the inputs and outputs of ${block}?`, `Where is ${block} called from?`] : ["Which block runs the sequence?", "Where are the interlocks programmed?", "What is the machine doing right now?"],
+    }[cur.name] || ["What is the machine doing right now?", "Why is the alarm on and how do I fix it?", "What happened in the last 5 minutes?"];
+    chips.innerHTML = list.map((q) => `<button type="button">${PK.esc(q)}</button>`).join("");
+    chips.querySelectorAll("button").forEach((c) => { c.disabled = busy; });
+  }
+
   function open(question) {
+    suggestions();
     $("ask").classList.add("open");
     $("scrim").classList.add("on");
     if (question) ask(question); else setTimeout(() => input.focus(), 250);

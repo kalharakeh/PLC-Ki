@@ -41,6 +41,7 @@ const PK = (() => {
     eye: '<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>',
     clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
     shield: '<path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6l-8-3Z"/>',
+    search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/>',
     user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6"/>',
   };
   const icon = (name, cls = "") =>
@@ -102,7 +103,31 @@ const PK = (() => {
 
   function go(hash) { if (location.hash !== hash) location.hash = hash; else route(); }
 
+  // ---- unsaved changes: a bar with Discard / Save, and a question before leaving the page ----
+  let dirty = null;          // { save } while the page has changes that are not saved
+  let shownHash = location.hash;
+  function setDirty(save) {
+    dirty = save ? { save } : null;
+    const bar = $("dirty-bar");
+    if (bar) bar.classList.toggle("on", !!dirty);
+    document.documentElement.classList.toggle("has-dirty", !!dirty);
+  }
+  async function onHash() {
+    if (dirty && location.hash !== shownHash) {
+      const target = location.hash;
+      history.replaceState(null, "", shownHash || location.pathname);
+      const leave = await confirmSheet({ title: "Leave without saving?", text: "Your changes on this page are not saved yet.", ok: "Leave without saving", cancel: "Stay", danger: true });
+      if (!leave) return;
+      setDirty(null);
+      location.hash = target;
+      return;
+    }
+    route();
+  }
+
   function route() {
+    setDirty(null);
+    shownHash = location.hash;
     const { name, params } = parseRoute();
     const v = views[name] || views.alarm;
     document.querySelectorAll("#nav a").forEach((a) => a.classList.toggle("active", a.dataset.route === name || (a.dataset.route === "setup" && name.startsWith("setup/"))));
@@ -116,6 +141,7 @@ const PK = (() => {
     else draw();
     page.scrollTop = 0;
     window.scrollTo(0, 0);
+    setTitle();
   }
 
   // Live views return their HTML from render(); it is only put on the page when it changed
@@ -127,11 +153,26 @@ const PK = (() => {
     if (html === lastHtml) return;
     const page = $("page");
     const y = window.scrollY;
+    // A live update must not take the cursor out of a field someone is typing in
+    const f = document.activeElement;
+    let keep = null;
+    if (f && f !== page && page.contains(f)) {
+      const attr = f.id ? null : [...f.attributes].find((x) => x.name.startsWith("data-"));
+      const sel = f.id ? "#" + CSS.escape(f.id) : attr ? `[${attr.name}="${CSS.escape(attr.value)}"]` : null;
+      if (sel) keep = { sel, a: f.selectionStart, b: f.selectionEnd };
+    }
     page.innerHTML = html;
     lastHtml = html;
     fillIcons(page);
     reveal(page);
     if (current.view.after) current.view.after(page, current.params);
+    if (keep) {
+      const el = page.querySelector(keep.sel);
+      if (el && el !== document.activeElement) {
+        el.focus({ preventScroll: true });
+        try { if (keep.a != null) el.setSelectionRange(keep.a, keep.b); } catch { /* not a text field */ }
+      }
+    }
     window.scrollTo(0, y);
   }
 
@@ -162,6 +203,15 @@ const PK = (() => {
     b.classList.toggle("hidden", alarms.length === 0);
     b.classList.toggle("gold", alarms.length > 0 && alarms.every((a) => a.severity === "WARNING"));
     if (state.status) $("machine").textContent = state.status.machine;
+    setTitle();
+  }
+
+  /** The browser tab shows the page and the number of active alarms, e.g. "(2) Plant · PLC-Ki". */
+  function setTitle() {
+    const n = ((state.status && state.status.activeAlarms) || []).length;
+    const page = current ? (HELP[current.name] || [""])[0] : "";
+    const t = `${n ? `(${n}) ` : ""}${page ? page + " · " : ""}PLC-Ki`;
+    if (document.title !== t) document.title = t;
   }
 
   async function pollStatus() {
@@ -230,24 +280,51 @@ const PK = (() => {
     toastTimer = setTimeout(() => t.classList.remove("on"), kind === "error" ? 7000 : 3200);
   }
 
-  /** A modal sheet; returns {el, close}. */
-  function sheet(html) {
+  /**
+   * A modal sheet; returns {el, close}. Esc, a click outside it and any [data-close] button close it,
+   * unless dismiss is false (sheets that wait for a job, such as a real-PLC confirmation or a restart).
+   */
+  function sheet(html, { dismiss = true, onClose } = {}) {
+    const back = document.activeElement;
     const wrap = document.createElement("div");
     wrap.className = "sheet-wrap";
-    wrap.innerHTML = `<div class="sheet" role="dialog" aria-modal="true">${html}</div>`;
+    wrap.innerHTML = `<div class="sheet" role="dialog" aria-modal="true" tabindex="-1">${html}</div>`;
     document.body.append(wrap);
     fillIcons(wrap);
-    const close = () => wrap.remove();
-    return { el: wrap.firstElementChild, close };
+    const el = wrap.firstElementChild;
+    let closed = false;
+    const close = () => {
+      if (closed) return;
+      closed = true;
+      wrap.classList.add("out");
+      setTimeout(() => wrap.remove(), matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 160);
+      if (back && back.isConnected && back.focus) back.focus({ preventScroll: true });
+      if (onClose) onClose();
+    };
+    const focusables = () => [...el.querySelectorAll("a[href],button:not([disabled]),input:not([disabled]),select,textarea,summary,[tabindex]:not([tabindex='-1'])")].filter((x) => x.offsetParent !== null);
+    wrap.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") { e.stopPropagation(); if (dismiss) close(); }
+      if (e.key === "Tab") {           // keep the keyboard inside the sheet
+        const f = focusables(); if (!f.length) return;
+        if (e.shiftKey && document.activeElement === f[0]) { e.preventDefault(); f[f.length - 1].focus(); }
+        else if (!e.shiftKey && document.activeElement === f[f.length - 1]) { e.preventDefault(); f[0].focus(); }
+      }
+    });
+    if (dismiss) wrap.addEventListener("mousedown", (e) => { if (e.target === wrap) close(); });
+    el.addEventListener("click", (e) => { if (e.target.closest("[data-close]")) close(); });
+    requestAnimationFrame(() => { if (!el.contains(document.activeElement)) (el.querySelector("[autofocus]") || el.querySelector(".row.end .btn:last-child") || el).focus({ preventScroll: true }); });
+    return { el, close };
   }
 
-  function confirmSheet({ title, text, ok = "OK", danger = false }) {
+  function confirmSheet({ title, text, ok = "OK", cancel = "Cancel", danger = false }) {
     return new Promise((resolve) => {
+      let answer = false;
       const s = sheet(`<h2>${esc(title)}</h2><div class="muted">${text}</div>
-        <div class="row end"><button class="btn gray" data-r="0">Cancel</button><button class="btn ${danger ? "red" : ""}" data-r="1">${esc(ok)}</button></div>`);
+        <div class="row end"><button class="btn gray" data-r="0">${esc(cancel)}</button><button class="btn ${danger ? "red" : ""}" data-r="1">${esc(ok)}</button></div>`,
+        { onClose: () => resolve(answer) });
       s.el.addEventListener("click", (e) => {
         const b = e.target.closest("[data-r]");
-        if (b) { s.close(); resolve(b.dataset.r === "1"); }
+        if (b) { answer = b.dataset.r === "1"; s.close(); }
       });
     });
   }
@@ -318,12 +395,11 @@ const PK = (() => {
   function connSheet() {
     const i = connInfo();
     const admin = state.user && state.user.role === "admin";
-    const s = sheet(`<span class="pill ${i.level}" style="align-self:flex-start;justify-self:start"><span class="dot"></span>${{ ok: "Connected", bad: "Not connected", warn: "Waiting", info: "Test values" }[i.level]}</span>
+    sheet(`<span class="pill ${i.level}" style="align-self:flex-start;justify-self:start"><span class="dot"></span>${{ ok: "Connected", bad: "Not connected", warn: "Waiting", info: "Test values" }[i.level]}</span>
       <h2>${esc(i.title)}</h2>${i.text ? `<p class="muted" style="margin:0">${esc(i.text)}</p>` : ""}
       ${i.todo ? `<div class="notice ${i.level === "bad" ? "red" : "gold"}">${icon("info")}<div><b>What to do</b><br>${esc(i.todo)}</div></div>` : ""}
       ${i.detail ? `<details class="more"><summary>Technical detail</summary><p class="faint small" style="margin:8px 0 0">${esc(i.detail)}</p></details>` : ""}
       <div class="row end">${admin && i.level !== "ok" ? `<a class="btn b" href="#/setup/connections" data-close>Open Connections</a>` : ""}<button class="btn" data-close>OK</button></div>`);
-    s.el.querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", s.close));
   }
 
   /** A command to type, with where to type it ("On the VM") and a Copy button. One line where possible. */
@@ -384,11 +460,11 @@ const PK = (() => {
     const name = current ? current.name : "alarm";
     const [title, intro, tips] = HELP[name] || HELP.alarm;
     const admin = state.user && state.user.role === "admin";
-    const s = sheet(`<span class="eyebrow">Help</span><h2>${esc(title)}</h2><p class="muted" style="margin:0">${esc(intro)}</p>
+    sheet(`<span class="eyebrow">Help</span><h2>${esc(title)}</h2><p class="muted" style="margin:0">${esc(intro)}</p>
       <ul class="plainlist">${tips.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>
       <p class="faint small" style="margin:0">The light at the top right shows the PLC connection; click it for what it means. Ask answers questions about the machine on every page.</p>
+      <p class="faint small keys" style="margin:0"><kbd>?</kbd> this help · <kbd>/</kbd> ask a question · <kbd>Esc</kbd> close</p>
       <div class="row end">${admin && name !== "setup/start" ? `<a class="btn b" href="#/setup/start" data-close>Get started</a>` : ""}<button class="btn" data-close>OK</button></div>`);
-    s.el.querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", s.close));
   }
 
   async function start() {
@@ -413,7 +489,24 @@ const PK = (() => {
     $("conn").title = "What does this mean?";
     $("conn").onclick = connSheet;
     $("conn").onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); connSheet(); } };
-    window.addEventListener("hashchange", route);
+    window.addEventListener("hashchange", onHash);
+    const bar = document.createElement("div");
+    bar.id = "dirty-bar";
+    bar.className = "dirty-bar";
+    bar.setAttribute("role", "region");
+    bar.setAttribute("aria-label", "Unsaved changes");
+    bar.innerHTML = `<span class="dot"></span><span>Unsaved changes</span><button type="button" class="btn gray small" data-discard>Discard</button><button type="button" class="btn small" data-save-now>Save</button>`;
+    document.body.append(bar);
+    bar.querySelector("[data-discard]").onclick = () => { setDirty(null); route(); };
+    bar.querySelector("[data-save-now]").onclick = () => dirty && dirty.save();
+    window.addEventListener("beforeunload", (e) => { if (dirty) { e.preventDefault(); e.returnValue = ""; } });
+    document.addEventListener("keydown", (e) => {
+      if (e.ctrlKey || e.metaKey || e.altKey || document.querySelector(".sheet-wrap")) return;
+      const t = e.target;
+      if (t.closest && t.closest("input,textarea,select,[contenteditable]")) return;
+      if (e.key === "?") { e.preventDefault(); helpSheet(); }
+      else if (e.key === "/" && window.PKAsk) { e.preventDefault(); window.PKAsk.open(); }
+    });
     window.addEventListener("scroll", () => $("topnav").classList.toggle("scrolled", window.scrollY > 4), { passive: true });
     if (admin && !location.hash && typeof PKStart !== "undefined" && (await PKStart.firstRun())) history.replaceState(null, "", "#/setup/start");
     route();
@@ -422,6 +515,6 @@ const PK = (() => {
     pollJobs();
   }
 
-  return { plain, connInfo, connSheet, helpSheet, cmd, sec, hero, reveal: (el) => reveal(el), $, esc, icon, fillIcons, kindIcon, api, state, view, go, draw, route, toast, sheet, confirmSheet, cond, md, ago,
+  return { dirty: setDirty, get isDirty() { return !!dirty; }, plain, connInfo, connSheet, helpSheet, cmd, sec, hero, reveal: (el) => reveal(el), $, esc, icon, fillIcons, kindIcon, api, state, view, go, draw, route, toast, sheet, confirmSheet, cond, md, ago,
     loadProgram, valueBySymbol, norm, start, get current() { return current; } };
 })();
