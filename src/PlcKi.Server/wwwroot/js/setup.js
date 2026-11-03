@@ -1,0 +1,503 @@
+// Setup pages (administrators): Connections, Program import, Settings. Long work (TIA export, building the
+// model with Claude) runs as a job on the server; the page shows its progress and log.
+"use strict";
+
+const PKSetup = (() => {
+  const { $, esc, icon, api, state, toast } = PK;
+
+  // ---------- settings (shared by Connections and Settings) ----------
+  let settings = null, info = null, lists = null;
+  async function loadSettings() {
+    const d = await api("GET", "/api/admin/settings");
+    settings = d.settings; info = d.info; lists = d;
+    return d;
+  }
+  async function saveSettings(changes) {
+    const d = await api("PUT", "/api/admin/settings", { ...settings, plcPassword: null, apiKey: null, tiaToken: null, ...changes });
+    settings = d.settings; info = d.info;
+    return d;
+  }
+
+  function restartBar(el) {
+    if (!info || !info.restartNeeded) return "";
+    return `<div class="notice gold" style="align-items:center">${icon("info")}<div style="flex:1"><b>Saved.</b> PLC-Ki uses the new settings after a restart.
+      ${info.canRestart ? "" : " Stop PLC-Ki (Ctrl+C in its window) and start it again."}</div>
+      ${info.canRestart ? `<button class="btn gold small" data-restart>Apply now</button>` : ""}</div>`;
+  }
+
+  async function restart() {
+    try { await api("POST", "/api/admin/restart"); } catch (e) { toast(e.message); return; }
+    const s = PK.sheet(`<h2>Restarting PLC-Ki…</h2><p class="muted">The page comes back by itself in a few seconds.</p><div class="progress indet"><div></div></div>`);
+    await new Promise((r) => setTimeout(r, 1500));
+    for (let i = 0; i < 60; i++) {
+      try { const r = await fetch("/api/auth/state", { cache: "no-store" }); if (r.ok) { location.reload(); return; } } catch { /* still down */ }
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+    s.close();
+    toast("PLC-Ki did not come back. Check its window.");
+  }
+
+  function bindRestart(page) {
+    page.querySelectorAll("[data-restart]").forEach((b) => b.onclick = restart);
+  }
+
+  // ---------- jobs ----------
+  /** Follows a job: polls its log and state, calls onUpdate(job) until it ends. */
+  function follow(job, onUpdate) {
+    let stopped = false;
+    let log = job.log || "";
+    async function tick() {
+      if (stopped) return;
+      try {
+        const j = await api("GET", `/api/admin/jobs/${job.id}?from=${log.length}`);
+        log += j.log;
+        j.log = log;
+        Object.assign(job, j);
+        onUpdate(job);
+        if (j.state !== "running") return;
+      } catch { /* retry */ }
+      setTimeout(tick, 1200);
+    }
+    tick();
+    return () => { stopped = true; };
+  }
+
+  const stateText = { running: ["Running", "info"], done: ["Finished", "ok"], problems: ["Finished with problems", "warn"], failed: ["Failed", "bad"], stopped: ["Stopped", "bad"] };
+  function jobCard(job, extra = "") {
+    const [t, cls] = stateText[job.state] || [job.state, "info"];
+    const lines = (job.log || "").split("\n").filter((l) => l.trim() && !l.startsWith("> "));
+    const lastLine = lines.slice(-1)[0] || "Starting…";
+    return `<div class="card job">
+      <div class="row"><b style="font-size:16px">${esc(job.title)}</b><span class="pill ${cls}"><span class="dot"></span>${t}</span><span class="spacer"></span>
+        ${job.state === "running" ? `<button class="btn red-tinted small" data-stop="${esc(job.id)}">${icon("stop")}Stop</button>` : ""}</div>
+      ${extra}
+      ${job.state === "running" ? `<div class="progress indet" style="margin-top:12px"><div></div></div><p class="muted small" style="margin:8px 0 0">${esc(lastLine.replace(/^\s*\|\s?/, "").slice(0, 200))}</p>` : ""}
+      <details class="more" ${job.state !== "running" && job.state !== "done" ? "open" : ""}><summary>Log</summary>
+        <div class="joblog" data-log>${esc(job.log || "")}</div></details>
+    </div>`;
+  }
+  function bindJob(page) {
+    page.querySelectorAll("[data-stop]").forEach((b) => b.onclick = async () => {
+      if (await PK.confirmSheet({ title: "Stop this job?", text: "What was done so far is kept. A TIA import that is already running on the TIA PC finishes there.", ok: "Stop", danger: true }))
+        api("POST", `/api/admin/jobs/${b.dataset.stop}/stop`).catch((e) => toast(e.message));
+    });
+    page.querySelectorAll("[data-log]").forEach((l) => { l.scrollTop = l.scrollHeight; });
+  }
+
+  // ---------- Connections ----------
+  let tiaStatus = null;
+  let plcTest = null;
+  let conn = null;      // edited copy
+
+  const presets = {
+    same: { title: "Same PC as TIA", text: "PLC-Ki, TIA Portal and the cable to the PLC are on this PC.", icon: "pc", tiaMode: "local", plcVia: "direct" },
+    vm: { title: "PC with a TIA VM", text: "PLC-Ki runs on this PC; TIA runs in a VM (or another PC) next to it.", icon: "vm", tiaMode: "remote", plcVia: "direct" },
+    server: { title: "Server + my laptop", text: "PLC-Ki runs on a server. Your laptop has TIA and reaches the PLC.", icon: "server", tiaMode: "link", plcVia: "link" },
+  };
+  const presetOf = (c) => c.tiaMode === "local" ? "same" : c.tiaMode === "link" || c.plcVia === "link" ? "server" : "vm";
+
+  /** The setup as a clean schematic: boxes for the computers, lines for the links, green / red once checked. */
+  function diagram(c) {
+    const tiaOk = tiaStatus ? tiaStatus.ok : null;
+    const plcState = state.status && state.status.connection.state;
+    const plcOk = plcState === "connected" ? true : plcState === "disconnected" ? false : null;
+    const col = (v) => (v === true ? "var(--ok)" : v === false ? "var(--fault)" : "var(--muted)");
+    const box = (x, y, w, h, title, lines, strong) => `<g>
+        <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="16" fill="var(--panel)" stroke="${strong ? "var(--accent)" : "var(--line-strong)"}" stroke-width="${strong ? 2 : 1.2}"/>
+        <text x="${x + 18}" y="${y + 30}" font-size="15" font-weight="600" fill="var(--ink)">${esc(title)}</text>
+        ${lines.map((l, i) => `<text x="${x + 18}" y="${y + 52 + i * 19}" font-size="12.5" fill="var(--muted)" ${l.mono ? 'font-family="ui-monospace,Menlo,Consolas,monospace"' : ""}>${esc(l.t)}</text>`).join("")}</g>`;
+    const wire = (x1, y1, x2, y2, ok, label, dash) => {
+      const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+      return `<g><line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${col(ok)}" stroke-width="2.5" ${ok == null || dash ? 'stroke-dasharray="6 6"' : ""} stroke-linecap="round"/>
+        <circle cx="${x1}" cy="${y1}" r="4" fill="${col(ok)}"/><circle cx="${x2}" cy="${y2}" r="4" fill="${col(ok)}"/>
+        <rect x="${mx - label.length * 3.4 - 10}" y="${my - 13}" width="${label.length * 6.8 + 20}" height="24" rx="12" fill="var(--bg-alt)"/>
+        <text x="${mx}" y="${my + 4}" font-size="12" text-anchor="middle" fill="var(--muted)">${esc(label)}</text></g>`;
+    };
+    const plc = (x, y) => box(x, y, 210, 92, "PLC", [{ t: c.address || "address not set", mono: true }, { t: plcOk ? "read live" : plcOk === false ? "no answer" : "S7-1500 / S7-1200" }]);
+    let svg;
+    if (c.tiaMode === "local") {
+      svg = `<rect x="30" y="30" width="430" height="200" rx="22" fill="none" stroke="var(--line-strong)" stroke-dasharray="4 6"/>
+        <text x="50" y="56" font-size="12.5" fill="var(--muted)">This PC</text>
+        ${box(50, 76, 180, 120, "PLC-Ki", [{ t: location.host, mono: true }, { t: "web app" }], true)}
+        ${box(260, 76, 180, 120, "TIA Portal", [{ t: "+ TIA helper" }, { t: tiaOk ? "started" : "on this PC" }])}
+        ${wire(230, 136, 260, 136, tiaOk, "")}
+        ${wire(460, 130, 720, 130, plcOk, "Ethernet · S7, read-only")}${plc(720, 84)}`;
+    } else if (c.tiaMode === "remote") {
+      svg = `${box(40, 74, 220, 112, "PLC-Ki", [{ t: location.host, mono: true }, { t: "this PC" }], true)}
+        ${box(700, 20, 230, 100, "TIA Portal", [{ t: (c.tiaUrl || "address not set").replace(/^https?:\/\//, ""), mono: true }, { t: "VM or PC with the TIA helper" }])}
+        ${wire(260, 110, 700, 70, tiaOk, "TIA helper, port 5090")}
+        ${wire(260, 150, 700, 190, plcOk, "S7, read-only")}${plc(700, 144)}`;
+    } else {
+      svg = `${box(30, 74, 210, 112, "PLC-Ki", [{ t: "on the server", mono: false }, { t: location.host, mono: true }], true)}
+        ${box(380, 64, 250, 132, "Your laptop", [{ t: "PLC-Ki Link" }, { t: "TIA Portal" }, { t: "your browser" }])}
+        ${wire(380, 130, 240, 130, null, "connects out to the server", true)}
+        ${wire(630, 130, 730, 130, null, "S7", true)}${plc(730, 84)}`;
+    }
+    return `<div class="schematic"><svg viewBox="0 0 960 250" role="img" aria-label="How PLC-Ki, TIA Portal and the PLC are connected" font-family="inherit">${svg}</svg></div>
+      <div class="legend"><span><span class="sw" style="background:var(--ok)"></span>checked, working</span><span><span class="sw" style="background:var(--fault)"></span>no answer</span><span><span class="sw" style="background:var(--muted)"></span>not checked yet</span></div>`;
+  }
+
+  const setupNav = (here) => `<div class="subnav">${[["connections", "Connections"], ["program", "Program"], ["generator", "Block generator"], ["settings", "Settings"]]
+    .map(([k, l]) => `<a class="btn ${k === here ? "" : "b"} small" href="#/setup/${k}">${l}</a>`).join("")}</div>`;
+
+  function choice(name, current, options) {
+    return `<div class="choice">${options.map((o) => `<button type="button" data-${name}="${o.value}" class="${current === o.value ? "on" : ""}" ${o.disabled ? "disabled" : ""}>
+      <span class="ico">${icon(o.icon)}</span><b>${esc(o.label)}</b><small>${esc(o.text)}</small>${o.soon ? `<span class="tag gold soon">Next update</span>` : ""}</button>`).join("")}</div>`;
+  }
+
+  function connectionsHtml() {
+    const c = conn;
+    const preset = presetOf(c);
+    const tiaFields = c.tiaMode === "local" ? `
+        <div class="grid two">
+          <label class="field">TiaImporter.exe on this PC<input id="tiaImporterPath" value="${esc(c.tiaImporterPath)}" placeholder="C:\\PLCKi\\PLC-Ki\\tools\\TiaImporter\\bin\\Release\\net48\\TiaImporter.exe"><span class="hint">PLC-Ki starts it in its own window and stops it when PLC-Ki stops.</span></label>
+          <label class="field">TIA project for generated blocks<input id="tiaProject" value="${esc(c.tiaProject)}" placeholder="C:\\Users\\you\\Documents\\Automation\\Line1\\Line1.ap20"><span class="hint">Can also be chosen on the Block generator page.</span></label>
+          <label class="field">PLCSIM address (downloads for testing)<input id="tiaPlcsimIp" value="${esc(c.tiaPlcsimIp)}" placeholder="e.g. 192.168.10.10, empty = no PLCSIM downloads"></label>
+          <label class="field">Real PLCs that may be loaded<input id="tiaAllowReal" value="${esc(c.tiaAllowReal)}" placeholder="empty = never"><span class="hint">Each download is still confirmed by typing the address in the TiaImporter window, with the CPU in STOP.</span></label>
+        </div>
+        <div class="row" style="margin-top:12px"><button class="btn b small" data-start-helper>${tiaStatus && tiaStatus.helperRunning ? "Restart" : "Start"} the TIA helper</button></div>`
+      : c.tiaMode === "remote" ? `
+        <div class="grid two">
+          <label class="field">TIA PC address<input id="tiaUrl" value="${esc(c.tiaUrl)}" placeholder="http://192.168.10.3:5090"></label>
+          <label class="field">Token <span class="hint">${info.tiaToken === "set" ? "Saved. Leave empty to keep it." : "The password TiaImporter serve was started with."}</span><input id="tiaToken" type="password" autocomplete="new-password" placeholder="${info.tiaToken === "set" ? "••••••••" : "at least 8 characters"}"></label>
+          <label class="field">TIA project for generated blocks<input id="tiaProject" value="${esc(c.tiaProject)}" placeholder="path on the TIA PC, e.g. C:\\Users\\Software\\Documents\\Automation\\…\\.ap20"></label>
+        </div>
+        <details class="more"><summary>How to start the TIA helper on the TIA PC</summary>
+          <p class="muted small">On the TIA PC (your VM), once, in a <b>Command Prompt as administrator</b>:</p>
+          <div class="joblog">netsh http add urlacl url=http://+:5090/ user=%USERNAME%
+netsh advfirewall firewall add rule name="PLC-Ki TiaImporter" dir=in action=allow protocol=TCP localport=5090</div>
+          <p class="muted small">Then each time, in a normal Command Prompt on the TIA PC (TIA closed), and leave the window open:</p>
+          <div class="joblog">cd /d C:\\PLCKi\\PLC-Ki\\tools\\TiaImporter
+bin\\Release\\net48\\TiaImporter.exe serve --token &lt;the token above&gt; --plcsim-ip 192.168.10.10</div>
+          <p class="muted small">Add <code>--allow-real &lt;PLC address&gt;</code> only if generated blocks may go to a real PLC.</p>
+        </details>`
+      : `<div class="notice gold"><div><b>Coming in the next update.</b> A small program, PLC-Ki Link, runs on your laptop. It connects out to this server (no firewall changes), reads the PLC for it and does the TIA work with the TIA on your laptop. Until then, choose "This PC" or "Another PC".</div></div>`;
+
+    const tiaMsg = !tiaStatus ? `<span class="pill">Checking…</span>`
+      : `<span class="pill ${tiaStatus.ok ? "ok" : "bad"}"><span class="dot"></span>${esc(tiaStatus.message || (tiaStatus.ok ? "Reachable" : "Not reachable"))}</span>
+         ${tiaStatus.ok ? `<span class="faint small">PLCSIM downloads: ${tiaStatus.plcsimIp ? esc(tiaStatus.plcsimIp) : "off"} · real PLC downloads: ${tiaStatus.realAllowed ? "allowed (confirmed at the TIA PC)" : "off"}</span>` : ""}`;
+
+    return PK.sec("hero", `${setupNav("connections")}
+        <h1>Where everything is.</h1>
+        <p class="sub">PLC-Ki needs the PLC for live values and TIA Portal for importing programs and the block generator. Pick the setup that matches yours.</p>
+        ${restartBar()}
+        ${choice("preset", preset, Object.entries(presets).map(([k, p]) => ({ value: k, label: p.title, text: p.text, icon: p.icon, soon: k === "server" })))}
+        <div style="margin-top:22px">${diagram(c)}</div>`)
+
+      + PK.sec("alt", `<div class="row" style="align-items:baseline"><h2>The PLC</h2><span class="pill warn">Read-only</span></div>
+        <p class="sub">PLC-Ki reads values with the S7 protocol TIA and HMIs use. It never writes to the PLC.</p>
+        <div class="card stack">
+        ${choice("plcvia", c.plcVia, [
+          { value: "direct", label: "From here", text: "PLC-Ki reads the PLC over the network.", icon: "pc" },
+          { value: "link", label: "Through my laptop", text: "PLC-Ki Link on the laptop reads it and sends the values here.", icon: "laptop", disabled: true, soon: true },
+        ]).replace('class="choice"', 'class="choice two"')}
+        <div class="grid two">
+          <label class="field">PLC address<input id="address" value="${esc(c.address)}" placeholder="192.168.0.1"></label>
+          <label class="field">Password <span class="hint">${info.plcPassword === "settings" ? "saved" : info.plcPassword === "environment" ? "from PLCKI_PLC_PASSWORD" : "only if the CPU has access protection"}</span><input id="plcPassword" type="password" autocomplete="new-password"></label>
+        </div>
+        <div class="row"><button class="btn b small" data-test-plc>Test the address</button>
+          ${plcTest ? `<span class="pill ${plcTest.ok ? "ok" : "bad"}"><span class="dot"></span>${esc(plcTest.message)}</span>` : ""}</div>
+        <details class="more" style="margin-top:0"><summary>More PLC options</summary>
+          <div class="grid three" style="margin-top:12px">
+            <label class="field">Security<select id="security">${["Auto", "Tls", "LegacyChallenge"].map((x) => `<option ${c.security === x ? "selected" : ""}>${x}</option>`).join("")}</select></label>
+            <label class="field">Read every (ms)<input id="pollMs" type="number" value="${c.pollMs}"></label>
+            <label class="field">Timeout (ms)<input id="timeoutMs" type="number" value="${c.timeoutMs}"></label>
+            <label class="field">Values from<select id="source"><option value="s7" ${c.source === "s7" ? "selected" : ""}>Live PLC</option><option value="snapshot" ${c.source === "snapshot" ? "selected" : ""}>Test file (no PLC)</option></select></label>
+            <label class="field">Test file<select id="snapshotFile">${(lists.snapshots || []).map((f) => `<option value="${esc(f.path)}" ${f.path === c.snapshotFile ? "selected" : ""}>${esc(f.label)}</option>`).join("")}</select></label>
+          </div>
+        </details></div>`)
+
+      + PK.sec("", `<h2>TIA Portal</h2>
+        <p class="sub">Used to import a program from an archive and by the block generator. A small helper, TiaImporter, does the TIA work next to TIA.</p>
+        <div class="card stack">
+        ${choice("tiamode", c.tiaMode, [
+          { value: "local", label: "This PC", text: "TIA Portal is installed here.", icon: "pc" },
+          { value: "remote", label: "Another PC or VM", text: "A PC or VM next to this one runs TIA and the helper.", icon: "vm" },
+          { value: "link", label: "My laptop", text: "Through PLC-Ki Link.", icon: "laptop", soon: true },
+        ])}
+        <div>${tiaFields}</div>
+        <div class="row">${tiaMsg}<span class="spacer"></span><button class="btn plain small" data-check-tia>Check again</button></div>
+        </div>
+        <div class="actions" style="margin-top:28px"><button class="btn big" data-save>Save</button><span class="muted small" id="save-msg"></span></div>`);
+  }
+
+  function readConn(page) {
+    const v = (id) => { const el = page.querySelector("#" + id); return el ? el.value : undefined; };
+    for (const k of ["address", "security", "source", "snapshotFile", "tiaUrl", "tiaImporterPath", "tiaPlcsimIp", "tiaAllowReal", "tiaProject"]) {
+      const x = v(k); if (x !== undefined) conn[k] = x.trim();
+    }
+    for (const k of ["pollMs", "timeoutMs"]) { const x = v(k); if (x !== undefined) conn[k] = Number(x); }
+    conn._plcPassword = v("plcPassword") || conn._plcPassword || null;
+    conn._tiaToken = v("tiaToken") || conn._tiaToken || null;
+  }
+
+  async function checkTia() {
+    tiaStatus = null; PK.draw();
+    try { tiaStatus = await api("GET", "/api/admin/tia/status"); } catch (e) { tiaStatus = { ok: false, message: e.message }; }
+    PK.draw();
+  }
+
+  PK.view("setup/connections", {
+    live: true,      // the diagram follows the PLC state
+    async mount() {
+      conn = null; tiaStatus = null; plcTest = null;
+      try { await loadSettings(); conn = { ...settings }; } catch (e) { PK.$("page").innerHTML = `<div class="notice red">${esc(e.message)}</div>`; return; }
+      PK.draw();
+      checkTia();
+    },
+    render() { return conn ? connectionsHtml() : PK.hero({ title: "Loading…" }); },
+    after(page) {
+      bindRestart(page);
+      const keep = () => readConn(page);
+      page.querySelectorAll("input,select").forEach((el) => el.addEventListener("change", keep));
+      page.querySelectorAll("[data-preset]").forEach((b) => b.onclick = () => { keep(); const p = presets[b.dataset.preset]; conn.tiaMode = p.tiaMode; conn.plcVia = p.plcVia === "link" ? "direct" : p.plcVia; if (b.dataset.preset === "server") toast("PLC-Ki Link for this setup comes in the next update."); PK.draw(); });
+      page.querySelectorAll("[data-tiamode]").forEach((b) => b.onclick = () => { keep(); conn.tiaMode = b.dataset.tiamode; PK.draw(); });
+      page.querySelectorAll("[data-plcvia]").forEach((b) => b.onclick = () => { keep(); conn.plcVia = b.dataset.plcvia; PK.draw(); });
+      const t = page.querySelector("[data-test-plc]");
+      if (t) t.onclick = async () => { keep(); plcTest = { ok: false, message: "Testing…" }; PK.draw(); try { plcTest = await api("POST", "/api/admin/test-plc", { address: conn.address }); } catch (e) { plcTest = { ok: false, message: e.message }; } PK.draw(); };
+      const c = page.querySelector("[data-check-tia]");
+      if (c) c.onclick = checkTia;
+      const h = page.querySelector("[data-start-helper]");
+      if (h) h.onclick = async () => {
+        if (JSON.stringify({ ...conn, _plcPassword: 0, _tiaToken: 0 }) !== JSON.stringify({ ...settings, _plcPassword: 0, _tiaToken: 0 })) { toast("Save first, then start the helper."); return; }
+        h.disabled = true;
+        try { tiaStatus = await api("POST", "/api/admin/tia/start-helper"); } catch (e) { tiaStatus = { ok: false, message: e.message }; }
+        PK.draw();
+      };
+      const s = page.querySelector("[data-save]");
+      if (s) s.onclick = async () => {
+        keep();
+        s.disabled = true;
+        try {
+          const { _plcPassword, _tiaToken, ...rest } = conn;
+          await saveSettings({ ...rest, plcPassword: _plcPassword, tiaToken: _tiaToken });
+          conn = { ...settings };
+          toast(info.restartNeeded ? "Saved. Apply to use the new connections." : "Saved.");
+          PK.draw();
+          checkTia();
+        } catch (e) { toast(e.message); }
+        s.disabled = false;
+      };
+    },
+  });
+
+  // ---------- Program import ----------
+  const imp = { files: null, chosen: null, exportInfo: null, plc: "", effort: "high", compare: true, job: null, unfollow: null, model: null, modelInfo: null };
+
+  async function refreshFiles() {
+    imp.files = await api("GET", "/api/admin/import/files");
+    PK.draw();
+  }
+
+  async function choose(kind, path) {
+    imp.chosen = { kind, path, name: path.split(/[\\/]/).pop() };
+    imp.exportInfo = null; imp.model = null; imp.modelInfo = null;
+    PK.draw();
+    if (kind === "export") {
+      try { imp.exportInfo = await api("GET", "/api/admin/import/export-info?file=" + encodeURIComponent(path)); imp.plc = imp.exportInfo.plcs.length === 1 ? imp.exportInfo.plcs[0].name : ""; }
+      catch (e) { toast(e.message); }
+      PK.draw();
+    }
+  }
+
+  async function upload(file) {
+    const s = PK.sheet(`<h2>Uploading ${esc(file.name)}</h2><div class="progress"><div style="width:0%" id="up-bar"></div></div><p class="muted small" id="up-text">0 %</p>`);
+    try {
+      const res = await new Promise((resolve, reject) => {
+        const x = new XMLHttpRequest();
+        x.open("PUT", "/api/admin/import/upload/" + encodeURIComponent(file.name));
+        x.upload.onprogress = (e) => { if (e.lengthComputable) { const p = Math.round(e.loaded / e.total * 100); $("up-bar").style.width = p + "%"; $("up-text").textContent = p + " %"; } };
+        x.onload = () => { let d = null; try { d = JSON.parse(x.responseText); } catch { /* */ } x.status < 300 ? resolve(d) : reject(new Error((d && d.error) || "Upload failed (" + x.status + ").")); };
+        x.onerror = () => reject(new Error("Upload failed."));
+        x.send(file);
+      });
+      s.close();
+      await refreshFiles();
+      await choose(res.kind, res.file);
+    } catch (e) { s.close(); toast(e.message); }
+  }
+
+  function startJob(job, after) {
+    imp.job = job;
+    if (imp.unfollow) imp.unfollow();
+    imp.unfollow = follow(job, async (j) => {
+      PK.draw();
+      if (j.state !== "running" && after) { const a = after; after = null; await a(j); }
+    });
+    PK.draw();
+  }
+
+  function programHtml() {
+    const f = imp.files;
+    const cur = f ? f.current : {};
+    const ch = imp.chosen;
+    const isArchive = ch && ch.kind === "archive";
+    const jobRunning = imp.job && imp.job.state === "running";
+    const stepCls = (n) => {
+      const at = !ch ? 1 : isArchive ? 2 : imp.model ? 4 : 3;
+      return n < at ? "done" : n === at ? "now" : "";
+    };
+    const fileRow = (kind) => (x) => `<li class="click ${ch && ch.path === x.path ? "sel" : ""}" data-choose="${kind}" data-path="${esc(x.path)}">
+        <span class="ico">${icon(kind === "archive" ? "file" : "import")}</span>
+        <span style="flex:1"><b style="font-weight:600">${esc(x.name)}</b><div class="faint">${(x.size / 1048576).toFixed(1)} MB · ${new Date(x.time).toLocaleString()}</div></span><span class="chev">›</span></li>`;
+    const earlier = f && (f.archives.length || f.exports.length) ? `<details class="more" ${ch ? "" : "open"}><summary>Earlier files (${f.archives.length + f.exports.length})</summary>
+        <ul class="list" style="margin-top:10px">${f.exports.map(fileRow("export")).join("")}${f.archives.map(fileRow("archive")).join("")}</ul></details>` : "";
+
+    const exp = imp.exportInfo;
+    const plcPick = exp && exp.plcs.length ? `<div class="tiles" style="margin:0 0 14px">${exp.plcs.map((p) => `<div class="tile pick ${imp.plc === p.name ? "on" : ""}" data-plc="${esc(p.name)}">
+        <div class="label">${esc(p.cpu || "PLC")}</div><div class="value">${esc(p.name)}</div><div class="faint">${p.blocks} blocks · ${p.tags} tags · ${(p.languages || []).join(", ")}</div></div>`).join("")}</div>` : "";
+
+    const mi = imp.modelInfo;
+    const review = mi ? (mi.ok ? `<div class="kpis">${[["Tags", mi.tags], ["Steps", mi.steps], ["Devices", mi.equipment], ["Alarms", mi.alarms]]
+        .map(([l, v]) => `<div class="k"><b>${v}</b><span>${l}</span></div>`).join("")}</div>
+        <p style="margin:12px 0 0"><b>${esc(mi.name)}</b>${mi.description ? " · " + esc(mi.description) : ""}</p>
+        ${imp.job && imp.job.state === "problems" ? `<div class="notice gold" style="margin-top:10px">${icon("warn")}<div>Claude left some problems (see the log). PLC-Ki will not start with this model until they are fixed. Build it again, or ask for help with the log.</div></div>` : ""}
+        <div class="row" style="margin-top:14px"><button class="btn" data-use ${imp.job && imp.job.state === "problems" ? "disabled" : ""}>Use this program</button></div>`
+      : `<div class="notice red">${icon("warn")}<div>${esc(mi.error)}</div></div>`) : "";
+
+    const step = (n, title, text, body) => `<div class="step ${stepCls(n)}"><div class="n">${stepCls(n) === "done" ? "✓" : n}</div><h3>${title}</h3><p style="margin-bottom:14px">${text}</p>${body}</div>`;
+    return PK.sec("hero", `${setupNav("program")}
+        <h1>Teach PLC-Ki a machine.</h1>
+        <p class="sub">Give it the program. It reads every block, and Claude writes the plain-English model of steps, devices, alarms, causes and fixes, once.</p>
+        ${restartBar()}
+        <div class="kpis" style="margin-top:30px"><div class="k"><b>${esc(state.info ? state.info.machine : "")}</b><span>watched now</span></div>
+          <div class="k"><b>${state.model ? state.model.alarms.length : "–"}</b><span>alarms explained</span></div>
+          <div class="k"><b>${state.model ? state.model.equipment.length : "–"}</b><span>devices</span></div>
+          <div class="k"><b style="font-size:16px;font-weight:600;word-break:break-all">${esc((cur.export || "none").split(/[\\/]/).pop())}</b><span>program file</span></div></div>`)
+      + PK.sec("alt", `<div class="steps col">
+        ${step(1, "Choose the program", "A TIA archive (.zap20), or a program export (.zip) made earlier.", `
+          <div class="dropzone" id="drop">${icon("import", "")}<div style="font-weight:600;margin-top:6px">Drop the file here, or click to choose it</div>
+            <input type="file" id="file" accept=".zap20,.zap19,.zap18,.zap17,.zap16,.zip" class="hidden"></div>
+          ${ch ? `<p style="margin:12px 0 0">Chosen: <b>${esc(ch.name)}</b> <span class="tag ${isArchive ? "gold" : "blue"}">${isArchive ? "TIA archive" : "program export"}</span></p>` : ""}
+          ${earlier}`)}
+        ${step(2, "Export it with TIA Portal", "Only for archives. TIA opens it in the background on the TIA PC (see Connections) and exports every block. The archive is not changed.",
+          isArchive ? `<button class="btn" data-export ${jobRunning ? "disabled" : ""}>Export with TIA</button>` : `<span class="faint">${ch ? "Not needed: this is already an export." : "Waiting for a file."}</span>`)}
+        ${step(3, "Build the machine model", "Claude reads the program and writes what each step, device and alarm means. A few minutes, a few dollars of API use.",
+          ch && !isArchive ? `${plcPick}
+            <div class="row"><span class="small muted">Effort</span><div class="segmented">${["medium", "high", "max"].map((e) => `<button class="${imp.effort === e ? "on" : ""}" data-effort="${e}">${e}</button>`).join("")}</div>
+              <label class="check small"><input type="checkbox" id="compare" ${imp.compare ? "checked" : ""}>Compare with the current model</label></div>
+            <div class="row" style="margin-top:14px"><button class="btn" data-build ${jobRunning || (exp && exp.plcs.length > 1 && !imp.plc) ? "disabled" : ""}>Build the model</button>
+              ${exp && exp.plcs.length > 1 && !imp.plc ? `<span class="faint">Choose the PLC first.</span>` : ""}</div>` : `<span class="faint">Needs a program export.</span>`)}
+        ${step(4, "Check it and use it", "What Claude found. Use it, and PLC-Ki restarts with this machine.", review || `<span class="faint">The result shows here.</span>`)}
+        </div>
+        ${imp.job ? `<div style="margin-top:22px">${jobCard(imp.job)}</div>` : ""}`);
+  }
+
+  PK.view("setup/program", {
+    live: false,
+    async mount() {
+      await refreshFiles().catch((e) => toast(e.message));
+      const run = (state.jobs || []).find((j) => j.state === "running" && (j.kind === "export" || j.kind === "import"));
+      if (run && !imp.job) startJob(run);
+      PK.draw();
+    },
+    leave() { if (imp.unfollow) { imp.unfollow(); imp.unfollow = null; } },
+    render() { return imp.files ? programHtml() : PK.hero({ title: "Loading…" }); },
+    after(page) {
+      bindRestart(page);
+      bindJob(page);
+      const drop = page.querySelector("#drop"), file = page.querySelector("#file");
+      drop.onclick = () => file.click();
+      file.onchange = () => file.files[0] && upload(file.files[0]);
+      drop.ondragover = (e) => { e.preventDefault(); drop.classList.add("over"); };
+      drop.ondragleave = () => drop.classList.remove("over");
+      drop.ondrop = (e) => { e.preventDefault(); drop.classList.remove("over"); if (e.dataTransfer.files[0]) upload(e.dataTransfer.files[0]); };
+      page.querySelectorAll("[data-choose]").forEach((li) => li.onclick = () => choose(li.dataset.choose, li.dataset.path));
+      page.querySelectorAll("[data-plc]").forEach((t) => t.onclick = () => { imp.plc = t.dataset.plc; PK.draw(); });
+      page.querySelectorAll("[data-effort]").forEach((b) => b.onclick = () => { imp.effort = b.dataset.effort; PK.draw(); });
+      const cmp = page.querySelector("#compare");
+      if (cmp) cmp.onchange = () => { imp.compare = cmp.checked; };
+      const ex = page.querySelector("[data-export]");
+      if (ex) ex.onclick = async () => {
+        try {
+          const job = await api("POST", "/api/admin/import/export", { archive: imp.chosen.path });
+          startJob(job, async (j) => { if (j.state === "done") { await refreshFiles(); await choose("export", j.outputs.export); toast("Exported. Now build the model."); } });
+        } catch (e) { toast(e.message); }
+      };
+      const bd = page.querySelector("[data-build]");
+      if (bd) bd.onclick = async () => {
+        try {
+          const job = await api("POST", "/api/admin/import/build", { export: imp.chosen.path, plc: imp.plc || null, effort: imp.effort, compare: imp.compare });
+          startJob(job, async (j) => {
+            imp.model = j.outputs.model;
+            try { imp.modelInfo = await api("GET", "/api/admin/import/model-info?file=" + encodeURIComponent(imp.model)); } catch (e) { imp.modelInfo = { ok: false, error: e.message }; }
+            PK.draw();
+          });
+        } catch (e) { toast(e.message); }
+      };
+      const use = page.querySelector("[data-use]");
+      if (use) use.onclick = async () => {
+        try {
+          await api("POST", "/api/admin/import/use", { model: imp.model, export: imp.chosen.path });
+          info = (await loadSettings()).info;
+          toast("Saved. Apply to start watching this program.");
+          PK.draw();
+        } catch (e) { toast(e.message); }
+      };
+    },
+  });
+
+  // ---------- Settings ----------
+  let users = null;
+  PK.view("setup/settings", {
+    async mount() {
+      try { await loadSettings(); users = await api("GET", "/api/admin/users"); } catch (e) { toast(e.message); }
+      PK.draw();
+    },
+    render() {
+      if (!settings) return PK.hero({ title: "Loading…" });
+      const s = settings;
+      const keyText = { settings: "A key is saved here.", environment: "Using the ANTHROPIC_API_KEY environment variable. A key entered here replaces it.", none: "No key yet: the Ask box stays off until you add one." }[info.apiKey];
+      const sw = (id, on, title, text) => `<div class="row"><div style="flex:1"><b style="font-weight:600">${title}</b><div class="muted small">${text}</div></div><label class="switch"><input type="checkbox" id="${id}" ${on ? "checked" : ""}><span></span></label></div>`;
+      return PK.sec("hero", `${setupNav("settings")}<h1>Settings.</h1><p class="sub">The machine model, the assistant, and who can open PLC-Ki from where.</p>${restartBar()}`)
+        + PK.sec("alt", `<div class="grid two">
+          <div class="card stack"><h3>Machine</h3>
+            <label class="field">Machine model<select id="model">${(lists.models || []).map((f) => `<option value="${esc(f.path)}" ${f.path === s.model ? "selected" : ""}>${esc(f.label)}${f.uploaded ? " (imported)" : ""}</option>`).join("")}</select><span class="hint">New models come from the Program page.</span></label>
+            <label class="field">History kept (minutes)<input id="historyMinutes" type="number" value="${s.historyMinutes}"><span class="hint">For questions like "what happened before the alarm?"</span></label></div>
+          <div class="card stack"><h3>Assistant</h3>
+            ${sw("askEnabled", s.askEnabled, "Ask box", "Claude answers questions about the machine.")}
+            <label class="field">Claude API key <span class="hint">${esc(keyText)}</span><input id="apiKey" type="password" autocomplete="new-password" placeholder="sk-ant-…"></label>
+            <label class="field">How hard Claude thinks<select id="askEffort">${["low", "medium", "high", "max"].map((x) => `<option ${s.askEffort === x ? "selected" : ""}>${x}</option>`).join("")}</select></label></div>
+          <div class="card stack"><h3>Access</h3>
+            ${sw("allowRemote", s.allowRemote, "Other computers may open PLC-Ki", "Off: only this PC. On: anyone on the network who has a login.")}
+            ${sw("publicView", s.publicView, "Viewing without login", "For a screen on the line. Setup still needs an administrator.")}
+            <label class="field" style="max-width:200px">Port<input id="port" type="number" value="${s.port}"></label></div>
+        </div>
+        <div class="actions" style="margin-top:24px"><button class="btn big" data-save-settings>Save</button></div>`)
+        + PK.sec("", `<h2>Logins</h2><p class="sub">Operators see every machine page. Administrators also see Setup.</p>
+          <ul class="list">${(users || []).map((u) => `<li><span class="ico">${icon("user")}</span>
+            <span style="flex:1"><b style="font-weight:600">${esc(u.name)}</b>${state.user && u.name === state.user.name ? " (you)" : ""}<div class="faint">${u.role === "admin" ? "Administrator" : "Operator"}</div></span>
+            ${state.user && u.name !== state.user.name ? `<button class="btn plain small" data-role="${esc(u.name)}" data-to="${u.role === "admin" ? "operator" : "admin"}">Make ${u.role === "admin" ? "operator" : "administrator"}</button>
+              <button class="btn plain small" data-pw="${esc(u.name)}">New password</button><button class="btn plain small" style="color:var(--fault)" data-del="${esc(u.name)}">Delete</button>` : ""}</li>`).join("")}</ul>
+          <h3 style="margin-top:26px">Add a login</h3>
+          <div class="grid three"><input id="nu-name" placeholder="Name"><input id="nu-pw" type="password" placeholder="Password (8+ characters)" autocomplete="new-password">
+            <div class="row"><select id="nu-role" style="flex:1"><option value="operator">Operator</option><option value="admin">Administrator</option></select><button class="btn" data-add-user>Add</button></div></div>
+          <p class="faint" style="margin:16px 0 0">Data folder: ${esc(info.dataDir)}</p>`);
+    },
+    after(page) {
+      bindRestart(page);
+      const v = (id) => page.querySelector("#" + id);
+      page.querySelector("[data-save-settings]").onclick = async () => {
+        try {
+          await saveSettings({ model: v("model").value, historyMinutes: Number(v("historyMinutes").value), askEnabled: v("askEnabled").checked,
+            apiKey: v("apiKey").value.trim() || null, askEffort: v("askEffort").value, allowRemote: v("allowRemote").checked, publicView: v("publicView").checked, port: Number(v("port").value) });
+          toast("Saved."); PK.draw();
+        } catch (e) { toast(e.message); }
+      };
+      const act = async (fn, ok) => { try { await fn(); toast(ok); users = await api("GET", "/api/admin/users"); PK.draw(); } catch (e) { toast(e.message); } };
+      page.querySelectorAll("[data-role]").forEach((b) => b.onclick = () => act(() => api("PUT", `/api/admin/users/${encodeURIComponent(b.dataset.role)}/role`, { role: b.dataset.to }), "Role changed."));
+      page.querySelectorAll("[data-del]").forEach((b) => b.onclick = async () => {
+        if (await PK.confirmSheet({ title: `Delete ${b.dataset.del}?`, text: "They can no longer log in.", ok: "Delete", danger: true }))
+          act(() => api("DELETE", `/api/admin/users/${encodeURIComponent(b.dataset.del)}`), "Deleted.");
+      });
+      page.querySelectorAll("[data-pw]").forEach((b) => b.onclick = () => {
+        const s = PK.sheet(`<h2>New password for ${esc(b.dataset.pw)}</h2><input type="password" id="np" autocomplete="new-password" placeholder="8+ characters"><div class="row end"><button class="btn gray" data-c>Cancel</button><button class="btn" data-ok>Set</button></div>`);
+        s.el.querySelector("[data-c]").onclick = s.close;
+        s.el.querySelector("[data-ok]").onclick = () => { const pw = s.el.querySelector("#np").value; s.close(); act(() => api("PUT", `/api/admin/users/${encodeURIComponent(b.dataset.pw)}/password`, { password: pw }), "Password changed."); };
+      });
+      page.querySelector("[data-add-user]").onclick = () => act(() => api("POST", "/api/admin/users", { name: v("nu-name").value, password: v("nu-pw").value, role: v("nu-role").value }), "Login added.");
+    },
+  });
+
+  return { setupNav, follow, jobCard, bindJob, restartBar, bindRestart, loadSettings, get settings() { return settings; } };
+})();

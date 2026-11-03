@@ -73,6 +73,7 @@ Usage: PlcKi.Server develop --vm <http://tia-pc:5090> --project <project .ap20 o
         // 1. New version from the request (or use the latest as it is)
         if (o.ContainsKey("request") || o.ContainsKey("request-file"))
         {
+            Marker("stage", "generate");
             var code = await GenerateCommand.RunAsync(o.ContainsKey("request") ? GenArgs("--request", o["request"]) : GenArgs(), client, ct);
             if (code >= 2) return code;
         }
@@ -83,6 +84,7 @@ Usage: PlcKi.Server develop --vm <http://tia-pc:5090> --project <project .ap20 o
             var version = PackageHistory.Load(outDir).Latest!;
             var reportPath = Path.Combine(outDir, version.Folder, BlockPackage.ReportFile);
             Console.WriteLine();
+            Marker("stage", "import", version.Folder);
             Console.WriteLine($"=== {version.Folder}: import and compile on the TIA PC ===");
             await vm.UploadAsync(outDir, package, ct);
             var import = await vm.ImportAsync(package, o["project"], plc, version.Folder, ct);
@@ -100,11 +102,13 @@ Usage: PlcKi.Server develop --vm <http://tia-pc:5090> --project <project .ap20 o
                     try { before = await watch.SnapshotAsync(ct); Console.WriteLine($"PLC before download: {before.State}, {before.Alarms.Count} active alarm(s)."); }
                     catch (Exception ex) { Console.WriteLine($"Cannot read the PLC at {plcAddress} ({ex.Message}); the download goes ahead without watching."); watch = null; }
                 }
+                Marker("stage", "download", version.Folder);
                 Console.WriteLine($"=== {version.Folder}: download to PLCSIM ===");
                 var dl = await vm.DownloadAsync(o["project"], plc, ct);
                 report.Download = dl.ExitCode == 0 ? "OK" : LastLine(dl.Log);
                 if (dl.ExitCode == 0 && watch != null)
                 {
+                    Marker("stage", "watch", watchSeconds.ToString());
                     Console.WriteLine($"=== watching the PLC for {watchSeconds} s (read-only) ===");
                     await Task.Delay(TimeSpan.FromSeconds(Math.Min(5, watchSeconds)), ct);
                     try { report.Runtime = await watch.WatchAsync(before, TimeSpan.FromSeconds(watchSeconds), ct); }
@@ -119,6 +123,7 @@ Usage: PlcKi.Server develop --vm <http://tia-pc:5090> --project <project .ap20 o
             var done = report.Compiled && (!o.ContainsKey("download") || report.Download == "OK") && report.Runtime.Count == 0;
             if (done)
             {
+                Marker("stage", "done", version.Folder);
                 Console.WriteLine();
                 Console.WriteLine($"{version.Folder} imported and compiled" + (o.ContainsKey("download") ? ", downloaded to PLCSIM" : "") +
                                   (plcAddress != null && o.ContainsKey("download") ? " and ran without new alarms" : "") + ".");
@@ -135,6 +140,7 @@ Usage: PlcKi.Server develop --vm <http://tia-pc:5090> --project <project .ap20 o
                 return 1;
             }
             Console.WriteLine();
+            Marker("stage", "fix", (round + 1).ToString());
             Console.WriteLine($"=== fix round {round + 1} of {rounds}: {problems.Count} problem(s) go back to Claude ===");
             var fix = await GenerateCommand.RunAsync(GenArgs("--fix"), client, ct);
             if (fix >= 2) return fix;
@@ -150,6 +156,7 @@ Usage: PlcKi.Server develop --vm <http://tia-pc:5090> --project <project .ap20 o
         Console.WriteLine();
         Console.WriteLine($"{version} compiles. Before it goes to a REAL PLC, review it:");
         Console.WriteLine($"  {Path.Combine(outDir, version, BlockPackage.ReviewFile)} and the blocks in TIA ({project}).");
+        Marker("confirm-version", version);
         Console.Write($"Type {version} to confirm you reviewed it and want to download, anything else stops here: ");
         var typed = readLine()?.Trim();
         if (typed != version)
@@ -160,6 +167,7 @@ Usage: PlcKi.Server develop --vm <http://tia-pc:5090> --project <project .ap20 o
             return 1;
         }
         Console.WriteLine("Now confirm on the TIA PC: type the PLC's address in the TiaImporter serve window (2 minutes).");
+        Marker("confirm-at-tia", "120");
         var dl = await vm.DownloadAsync(project, plc, ct, real: true);
         report.Download = dl.ExitCode == 0 ? "OK (real PLC, left in STOP)" : LastLine(dl.Log);
         report.Save(reportPath);
@@ -168,6 +176,12 @@ Usage: PlcKi.Server develop --vm <http://tia-pc:5090> --project <project .ap20 o
             : "The real PLC download did not happen: " + LastLine(dl.Log));
         return dl.ExitCode == 0 ? 0 : 1;
     }
+
+    /// <summary>
+    /// A line the PLC-Ki page reads to show progress and the confirmations ("##plcki stage import v002").
+    /// On the command line it is just one more line.
+    /// </summary>
+    private static void Marker(params string[] parts) => Console.WriteLine("##plcki " + string.Join(' ', parts));
 
     private static string Indent(string log) => string.Concat(log.Split('\n').Where(l => l.Length > 0).Select(l => "  | " + l.TrimEnd('\r') + "\n"));
 

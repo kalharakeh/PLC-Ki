@@ -33,10 +33,11 @@ namespace TiaImporter
       you type that address here, only when the CPU is already in STOP; it stays in STOP. Logged in real-downloads.log.
 
   TiaImporter serve --token <secret> [--port 5090] [--plcsim-ip <address>] [--allow-real <address,...>]
-                    [--packages C:\PLCKi\gen] [--projects <folder with your TIA projects>]
+                    [--packages C:\PLCKi\gen] [--projects <folder with your TIA projects>] [--local]
       Lets PLC-Ki on another PC upload generated packages, import them, compile and download to PLCSIM
       (if --plcsim-ip is given), or to the real PLCs listed in --allow-real after you confirm each one in this
-      window. Every request needs the token. Projects default to Documents\Automation.
+      window. Also exports uploaded .zap20 archives for the PLC-Ki import page. Every request needs the token.
+      Projects default to Documents\Automation. --local: only PLC-Ki on this same PC may connect (no admin rights needed).
 
 Only download and serve talk to a PLC.";
 
@@ -110,7 +111,7 @@ Only download and serve talk to a PLC.";
                         var allowReal = (Arg("--allow-real") ?? "").Split(new[] { ',', ';', ' ' }, StringSplitOptions.RemoveEmptyEntries);
                         return new Serve(int.Parse(Arg("--port") ?? "5090"), Arg("--token"), Arg("--plcsim-ip"),
                             new DirectoryInfo(Path.GetFullPath(Arg("--packages") ?? @"C:\PLCKi\gen")),
-                            new DirectoryInfo(Path.GetFullPath(projects)), allowReal).Run();
+                            new DirectoryInfo(Path.GetFullPath(projects)), allowReal, Array.IndexOf(args, "--local") >= 0).Run();
                     }
                 default:
                     Console.WriteLine(Usage);

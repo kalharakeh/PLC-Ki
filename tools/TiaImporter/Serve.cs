@@ -19,6 +19,10 @@ namespace TiaImporter
     ///   POST /import                 {"package","project","plc","version","replace","keepOnError"} -> {"job"}
     ///   POST /download               {"project","plc","real"} -> {"job"}: PLCSIM, or a guarded real PLC (see PlcsimDownload)
     ///   GET  /jobs/{id}              {"done","log"} and when done {"exitCode","report"}
+    ///   GET  /projects               the .ap20 projects under the allowed folder, for the PLC-Ki pages
+    ///   PUT  /archives/{name}        body: a .zap20 archive to export
+    ///   POST /export                 {"archive"} -> {"job"}: export the archive's PLC programs (TiaImporter export)
+    ///   GET  /exports/{name}         the finished export as a zip
     ///
     /// Projects are opened only when a request names them, and only .ap20 files under the allowed folder.
     /// </summary>
@@ -31,10 +35,13 @@ namespace TiaImporter
         private readonly DirectoryInfo _packages;
         private readonly DirectoryInfo _projects;
         private readonly HashSet<string> _allowReal;
+        private readonly bool _localOnly;
         private readonly Dictionary<string, Job> _jobs = new Dictionary<string, Job>();
 
-        public Serve(int port, string token, string plcsimIp, DirectoryInfo packages, DirectoryInfo projects, IEnumerable<string> allowReal = null)
+        public Serve(int port, string token, string plcsimIp, DirectoryInfo packages, DirectoryInfo projects, IEnumerable<string> allowReal = null,
+            bool localOnly = false)
         {
+            _localOnly = localOnly;
             _allowReal = new HashSet<string>(allowReal ?? Enumerable.Empty<string>());
             _port = port;
             _token = token;
@@ -49,7 +56,8 @@ namespace TiaImporter
                 throw new InvalidOperationException("Give a --token of at least 8 characters; PLC-Ki sends the same one.");
             _packages.Create();
             var listener = new HttpListener();
-            listener.Prefixes.Add($"http://+:{_port}/");
+            // --local: only this PC (PLC-Ki on the same PC as TIA); needs no administrator rights or firewall rule
+            listener.Prefixes.Add(_localOnly ? $"http://localhost:{_port}/" : $"http://+:{_port}/");
             try { listener.Start(); }
             catch (HttpListenerException ex)
             {
@@ -57,7 +65,7 @@ namespace TiaImporter
                     $"  netsh http add urlacl url=http://+:{_port}/ user=%USERNAME%\n" +
                     $"  netsh advfirewall firewall add rule name=\"PLC-Ki TiaImporter\" dir=in action=allow protocol=TCP localport={_port}");
             }
-            Console.WriteLine($"TiaImporter serve on port {_port}. Packages in {_packages.FullName}, projects under {_projects.FullName}.");
+            Console.WriteLine($"TiaImporter serve on port {_port}{(_localOnly ? " (this PC only)" : "")}. Packages in {_packages.FullName}, projects under {_projects.FullName}.");
             Console.WriteLine(_plcsimIp != null ? $"PLCSIM downloads to {_plcsimIp}." : "PLCSIM downloads are off (no --plcsim-ip).");
             Console.WriteLine(_allowReal.Count > 0
                 ? $"REAL PLC downloads allowed to {string.Join(", ", _allowReal)}, each confirmed by typing the address in this window."
@@ -106,6 +114,41 @@ namespace TiaImporter
                 Reply(ctx, 200, new Dictionary<string, object> { ["ok"] = true, ["folder"] = dir.FullName });
                 return;
             }
+            if (req.HttpMethod == "GET" && path == "/projects")
+            {
+                var list = _projects.Exists
+                    ? _projects.EnumerateFiles("*.ap20", SearchOption.AllDirectories)
+                        .Where(f => f.DirectoryName.IndexOf("\\UserFiles", StringComparison.OrdinalIgnoreCase) < 0)
+                        .OrderByDescending(f => f.LastWriteTimeUtc).Take(200)
+                        .Select(f => (object)new Dictionary<string, object> { ["path"] = f.FullName, ["name"] = Path.GetFileNameWithoutExtension(f.Name), ["changed"] = f.LastWriteTimeUtc.ToString("o") })
+                        .ToList()
+                    : new List<object>();
+                Reply(ctx, 200, new Dictionary<string, object> { ["projects"] = list, ["folder"] = _projects.FullName });
+                return;
+            }
+            if (req.HttpMethod == "PUT" && path.StartsWith("/archives/"))
+            {
+                var name = Uri.UnescapeDataString(path.Substring("/archives/".Length));
+                if (!PackageName.IsMatch(name) || !Regex.IsMatch(name, @"\.zap\d+$", RegexOptions.IgnoreCase))
+                    throw new InvalidOperationException("Archive names use letters, digits, _ . - only and end in .zap20.");
+                var dir = Directory.CreateDirectory(Path.Combine(_packages.FullName, "archives"));
+                var file = Path.Combine(dir.FullName, name);
+                using (var f = File.Create(file)) req.InputStream.CopyTo(f);
+                Reply(ctx, 200, new Dictionary<string, object> { ["ok"] = true, ["file"] = file });
+                return;
+            }
+            if (req.HttpMethod == "GET" && path.StartsWith("/exports/"))
+            {
+                var name = Uri.UnescapeDataString(path.Substring("/exports/".Length));
+                var zip = new FileInfo(Path.Combine(_packages.FullName, "exports", name + ".zip"));
+                if (!PackageName.IsMatch(name) || !zip.Exists) { Reply(ctx, 404, new Dictionary<string, object> { ["error"] = "No such export." }); return; }
+                ctx.Response.StatusCode = 200;
+                ctx.Response.ContentType = "application/zip";
+                ctx.Response.ContentLength64 = zip.Length;
+                using (var f = zip.OpenRead()) f.CopyTo(ctx.Response.OutputStream);
+                ctx.Response.Close();
+                return;
+            }
             if (req.HttpMethod == "GET" && path.StartsWith("/jobs/"))
             {
                 Job job;
@@ -114,14 +157,23 @@ namespace TiaImporter
                 Reply(ctx, 200, job.Answer());
                 return;
             }
-            if (req.HttpMethod == "POST" && (path == "/import" || path == "/download"))
+            if (req.HttpMethod == "POST" && (path == "/import" || path == "/download" || path == "/export"))
             {
                 // Checked here, so a bad request is refused at once; the work itself runs as a job the PC polls,
                 // so a short network drop (the download can reset the adapter) does not lose the result.
                 JsonElement body;
                 using (var r = new StreamReader(req.InputStream, Encoding.UTF8)) body = JsonDocument.Parse(r.ReadToEnd()).RootElement.Clone();
-                var project = Project(Str(body, "project"));
+                var isExport = path == "/export";
+                var project = isExport ? null : Project(Str(body, "project"));
                 var plc = Str(body, "plc");
+                FileInfo archive = null;
+                if (isExport)
+                {
+                    var name = Str(body, "archive");
+                    if (name == null || !PackageName.IsMatch(name)) throw new InvalidOperationException("Name the archive.");
+                    archive = new FileInfo(Path.Combine(_packages.FullName, "archives", name));
+                    if (!archive.Exists) throw new FileNotFoundException("Upload the archive first: " + name);
+                }
                 var requestedBy = req.RemoteEndPoint?.Address?.ToString() ?? "?";
                 DirectoryInfo dir = null;
                 if (path == "/import")
@@ -130,7 +182,7 @@ namespace TiaImporter
                     if (name == null || !PackageName.IsMatch(name)) throw new InvalidOperationException("Name the package.");
                     dir = new DirectoryInfo(Path.Combine(_packages.FullName, name));
                 }
-                else if (!Bool(body, "real") && _plcsimIp == null)
+                else if (!isExport && !Bool(body, "real") && _plcsimIp == null)
                     throw new InvalidOperationException("Downloads are off: start serve with --plcsim-ip <PLCSIM address>.");
 
                 Job job;
@@ -152,7 +204,19 @@ namespace TiaImporter
                     string report = null;
                     try
                     {
-                        if (dir != null)
+                        if (archive != null)
+                        {
+                            var name = Path.GetFileNameWithoutExtension(archive.Name);
+                            var exports = Directory.CreateDirectory(Path.Combine(_packages.FullName, "exports"));
+                            var outDir = new DirectoryInfo(Path.Combine(exports.FullName, name));
+                            if (outDir.Exists) outDir.Delete(true);
+                            code = new Exporter(tee).Run(archive, outDir);
+                            var zip = Path.Combine(exports.FullName, name + ".zip");
+                            if (File.Exists(zip)) File.Delete(zip);
+                            if (code == 0 || outDir.Exists) ZipFile.CreateFromDirectory(outDir.FullName, zip, CompressionLevel.Optimal, false);
+                            report = JsonSerializer.Serialize(new Dictionary<string, object> { ["export"] = name });
+                        }
+                        else if (dir != null)
                         {
                             var started = DateTime.UtcNow.AddSeconds(-2);
                             code = new BlockImport(tee).Run(project, dir, plc, Str(body, "version"), Bool(body, "replace"), Bool(body, "keepOnError"));

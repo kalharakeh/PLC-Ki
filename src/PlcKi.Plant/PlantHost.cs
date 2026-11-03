@@ -66,6 +66,11 @@ public static class PlantHost
             secrets["PlcKi:Plc:Password"] = plcPassword;
             ctx.PlcPasswordInSettings = true;
         }
+        if (Secret("TiaToken") is { } tiaToken)
+        {
+            secrets["PlcKi:Tia:Token"] = tiaToken;
+            ctx.TiaTokenInSettings = true;
+        }
         if (secrets.Count > 0) sources.Insert(at + 1, new MemoryConfigurationSource { InitialData = secrets });
         if (Secret("AnthropicApiKey") is { } apiKey)
         {
@@ -130,7 +135,7 @@ public static class PlantHost
     /// <summary>Pages and calls anyone may use, logged in or not.</summary>
     private static readonly HashSet<string> Open = new(StringComparer.OrdinalIgnoreCase)
     {
-        "/login.html", "/login.js", "/plant.css", "/style.css", "/favicon.ico",
+        "/login.html", "/login.js", "/ui.css", "/favicon.ico",
         "/api/auth/state", "/api/auth/login", "/api/auth/setup", "/api/auth/logout",
     };
 

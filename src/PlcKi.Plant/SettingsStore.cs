@@ -24,6 +24,20 @@ public sealed class PlantSettings
     public int Port { get; set; } = 5080;
     public bool AllowRemote { get; set; }
     public bool PublicView { get; set; }
+    public string Export { get; set; } = "";
+
+    /// <summary>"direct" or "link" (the PLC is read by PLC-Ki Link on the user's laptop).</summary>
+    public string PlcVia { get; set; } = "direct";
+    /// <summary>Where TIA is: "local", "remote" or "link".</summary>
+    public string TiaMode { get; set; } = "remote";
+    public string TiaUrl { get; set; } = "";
+    public string TiaImporterPath { get; set; } = "";
+    public string TiaPlcsimIp { get; set; } = "";
+    public string TiaAllowReal { get; set; } = "";
+    public string TiaProject { get; set; } = "";
+    /// <summary>New token for TiaImporter serve. Null or empty keeps the saved one.</summary>
+    public string? TiaToken { get; set; }
+    public bool ClearTiaToken { get; set; }
 
     /// <summary>New PLC password. Null or empty keeps the saved one.</summary>
     public string? PlcPassword { get; set; }
@@ -34,7 +48,8 @@ public sealed class PlantSettings
 
     /// <summary>The settings that only take effect after a restart (everything but PublicView).</summary>
     internal string RestartKey() => string.Join('|', Source, Address, Security, Username, PollMs, TimeoutMs, Model,
-        SnapshotFile, HistoryMinutes, AskEnabled, AskEffort, Port, AllowRemote);
+        SnapshotFile, HistoryMinutes, AskEnabled, AskEffort, Port, AllowRemote, Export, PlcVia,
+        TiaMode, TiaUrl, TiaImporterPath, TiaPlcsimIp, TiaAllowReal);
 }
 
 /// <summary>
@@ -84,6 +99,14 @@ public sealed class SettingsStore
             Port = c.GetValue("Plant:Port", PortFromUrls(urls) ?? 5080),
             AllowRemote = c.GetValue("Plant:AllowRemote", urls.Contains("*") || urls.Contains("0.0.0.0") || urls.Contains("[::]")),
             PublicView = c.GetValue("Plant:PublicView", false),
+            Export = c["PlcKi:Export"] ?? "",
+            PlcVia = c["PlcKi:Plc:Via"] ?? "direct",
+            TiaMode = c["PlcKi:Tia:Mode"] ?? "remote",
+            TiaUrl = c["PlcKi:Tia:Url"] ?? "",
+            TiaImporterPath = c["PlcKi:Tia:ImporterPath"] ?? "",
+            TiaPlcsimIp = c["PlcKi:Tia:PlcsimIp"] ?? "",
+            TiaAllowReal = c["PlcKi:Tia:AllowReal"] ?? "",
+            TiaProject = c["PlcKi:Tia:Project"] ?? "",
         };
     }
 
@@ -98,12 +121,22 @@ public sealed class SettingsStore
             var plc = Obj(plcki, "Plc");
             var ask = Obj(plcki, "Ask");
             var plant = Obj(root, "Plant");
+            var tia = Obj(plcki, "Tia");
             var secrets = Obj(root, SecretsSection);
 
             plcki["Source"] = s.Source;
             plcki["Model"] = s.Model;
             plcki["SnapshotFile"] = s.SnapshotFile;
             plcki["HistoryMinutes"] = s.HistoryMinutes;
+            plcki["Export"] = s.Export?.Trim() ?? "";
+            plc["Via"] = s.PlcVia;
+            tia["Mode"] = s.TiaMode;
+            tia["Url"] = s.TiaUrl?.Trim() ?? "";
+            tia["ImporterPath"] = s.TiaImporterPath?.Trim() ?? "";
+            tia["PlcsimIp"] = s.TiaPlcsimIp?.Trim() ?? "";
+            tia["AllowReal"] = s.TiaAllowReal?.Trim() ?? "";
+            tia["Project"] = s.TiaProject?.Trim() ?? "";
+            tia.Remove("Token");                    // never in plain text: see PlantSecrets
             plc["Address"] = s.Address.Trim();
             plc["Security"] = s.Security;
             plc["Username"] = s.Username.Trim();
@@ -122,6 +155,10 @@ public sealed class SettingsStore
             else if (!string.IsNullOrEmpty(s.PlcPassword)) { secrets["PlcPassword"] = _protector.Protect(s.PlcPassword); secretChanged = true; _ctx.PlcPasswordInSettings = true; }
             if (s.ClearApiKey) { secretChanged |= secrets.Remove("AnthropicApiKey"); _ctx.ApiKeyInSettings = false; }
             else if (!string.IsNullOrWhiteSpace(s.ApiKey)) { secrets["AnthropicApiKey"] = _protector.Protect(s.ApiKey.Trim()); secretChanged = true; _ctx.ApiKeyInSettings = true; }
+
+            if (s.ClearTiaToken) { secretChanged |= secrets.Remove("TiaToken"); }
+            else if (!string.IsNullOrWhiteSpace(s.TiaToken)) { secrets["TiaToken"] = _protector.Protect(s.TiaToken.Trim()); secretChanged = true; }
+            _ctx.TiaTokenInSettings = secrets.ContainsKey("TiaToken");
 
             AtomicFile.Save(_ctx.SettingsFile, root.ToJsonString(Json));
             if (secretChanged || before.RestartKey() != s.RestartKey()) _ctx.RestartNeeded = true;
@@ -164,6 +201,13 @@ public sealed class SettingsStore
         catch (Exception ex) { throw new PlantException($"The machine model cannot be read: {ex.Message}"); }
         if (s.Source == "snapshot" && !File.Exists(_ctx.ResolveAppPath(s.SnapshotFile ?? "")))
             throw new PlantException($"The test values file was not found: {s.SnapshotFile}");
+        if (s.PlcVia is not ("direct" or "link")) throw new PlantException("The PLC is read directly or through PLC-Ki Link.");
+        if (s.TiaMode is not ("local" or "remote" or "link")) throw new PlantException("TIA is on this PC, on another PC, or reached through PLC-Ki Link.");
+        if (s.TiaMode == "remote" && !string.IsNullOrWhiteSpace(s.TiaUrl) && !Uri.TryCreate(s.TiaUrl.Trim(), UriKind.Absolute, out _))
+            throw new PlantException("Enter the TIA PC as an address like http://192.168.10.3:5090.");
+        if (s.TiaToken is { Length: > 0 } tok && tok.Trim().Length < 8) throw new PlantException("The TIA helper's token needs at least 8 characters.");
+        if (!string.IsNullOrWhiteSpace(s.Export) && !File.Exists(_ctx.ResolveAppPath(s.Export.Trim())) && !Directory.Exists(_ctx.ResolveAppPath(s.Export.Trim())))
+            throw new PlantException($"The program export was not found: {s.Export}");
         if (s.ApiKey is { Length: > 0 } key && !key.Trim().StartsWith("sk-", StringComparison.Ordinal))
             throw new PlantException("That does not look like a Claude API key (they start with sk-).");
     }

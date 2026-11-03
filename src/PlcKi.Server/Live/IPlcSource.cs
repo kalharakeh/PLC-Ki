@@ -36,6 +36,32 @@ public sealed class PlcKiOptions
     public AskOptions Ask { get; set; } = new();
     /// <summary>How many minutes of tag values to keep in memory for "what happened" questions.</summary>
     public double HistoryMinutes { get; set; } = 15;
+    /// <summary>The program export (TiaImporter export, zip or folder) the model was built from: Code and Logic pages.</summary>
+    public string Export { get; set; } = "";
+    public TiaOptions Tia { get; set; } = new();
+}
+
+/// <summary>
+/// Where TIA Portal is, for the import page and the block generator. PLC-Ki never talks to TIA itself:
+/// "TiaImporter serve" runs next to TIA and does the work.
+///   local  = TIA is on this PC; PLC-Ki starts the helper itself (ImporterPath) on localhost
+///   remote = TIA is on another PC or a VM that runs "TiaImporter serve" (Url + Token)
+///   link   = TIA is on the user's laptop, reached through PLC-Ki Link
+/// </summary>
+public sealed class TiaOptions
+{
+    public string Mode { get; set; } = "remote";
+    public string Url { get; set; } = "";
+    public string Token { get; set; } = "";
+    /// <summary>local: path of TiaImporter.exe on this PC.</summary>
+    public string ImporterPath { get; set; } = "";
+    /// <summary>local: PLCSIM address the helper may download to (empty = no downloads).</summary>
+    public string PlcsimIp { get; set; } = "";
+    /// <summary>local: real PLC addresses the helper may download to after confirmation at its window (comma-separated).</summary>
+    public string AllowReal { get; set; } = "";
+    /// <summary>The TIA project (.ap20, path on the TIA PC) the block generator changes by default.</summary>
+    public string Project { get; set; } = "";
+    public int Port { get; set; } = 5090;
 }
 
 /// <summary>The "ask a question" assistant. The API key comes from the ANTHROPIC_API_KEY environment variable only.</summary>
@@ -60,4 +86,6 @@ public sealed class PlcOptions
     public string Security { get; set; } = "Auto";
     public int PollMs { get; set; } = 1000;
     public int TimeoutMs { get; set; } = 5000;
+    /// <summary>"direct" = this PC reads the PLC; "link" = PLC-Ki Link on the user's laptop reads it and sends the values here.</summary>
+    public string Via { get; set; } = "direct";
 }
