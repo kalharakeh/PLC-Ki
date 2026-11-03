@@ -69,4 +69,23 @@ public class RealExportShapeTests
         Assert.Equal("VAL_To_String", call.Block);
         Assert.Null(call.Instance);
     }
+
+    [Fact]
+    public void Graph_runtime_structures_give_only_step_active_and_time()
+    {
+        var export = ProgramExport.Load(Path.Combine(AppContext.BaseDirectory, "data", "demo-export.zip"));
+        var tags = ProgramExport.Tags(Assert.Single(export.Plcs)).Select(t => t.Symbol).ToList();
+        var seq = tags.Where(t => t.StartsWith("\"DB_BatchSequence\".")).ToList();
+        Assert.Contains(seq, t => t.EndsWith(".X"));
+        Assert.Contains(seq, t => t.EndsWith(".T"));
+        Assert.DoesNotContain(seq, t => t.EndsWith(".TT") || t.EndsWith(".CRIT") || t.EndsWith(".TV"));
+        Assert.Contains("\"DB_BatchSequence\".Halted", seq);   // the sequence's own statics stay
+    }
+
+    [Fact]
+    public void Named_constant_in_a_comparison_is_shown_by_name()
+    {
+        var x = System.Xml.Linq.XElement.Parse("""<Access xmlns="urn:x" Scope="LocalConstant"><Constant Name="cRobPos_Home" /></Access>""");
+        Assert.Equal("#cRobPos_Home", NetworkDecoder.AccessText(x));
+    }
 }

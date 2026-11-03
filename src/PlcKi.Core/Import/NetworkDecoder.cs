@@ -233,7 +233,8 @@ public static class NetworkDecoder
                 "A" => AndAll(Inputs(p)),
                 "X" => string.Join(" XOR ", Inputs(p).Select(Paren)),
                 "Not" => Not(In(p, "in") ?? "?"),
-                _ when pin is "eno" => "ENO",
+                // A box passes its enable on (a failing box clears ENO, rare for MOVE/convert/calls)
+                _ when pin is "eno" => In(p, "en") ?? "TRUE",
                 _ => $"{p.Instance ?? p.Name}.{pin}",
             };
             return value;
@@ -259,8 +260,12 @@ public static class NetworkDecoder
         var constant = access.Elements().FirstOrDefault(e => e.Name.LocalName == "Constant");
         if (constant != null)
         {
-            var value = constant.Elements().FirstOrDefault(e => e.Name.LocalName == "ConstantValue")?.Value ?? "?";
-            return value;
+            var value = constant.Elements().FirstOrDefault(e => e.Name.LocalName == "ConstantValue")?.Value;
+            if (value != null) return value;
+            // A named constant: #cRobPos_Home (block constant) or "cMaxParts" (global constant)
+            var cname = constant.Attribute("Name")?.Value;
+            if (cname == null) return "?";
+            return scope == "GlobalConstant" ? $"\"{cname}\"" : "#" + cname;
         }
         var symbol = access.Elements().FirstOrDefault(e => e.Name.LocalName == "Symbol");
         if (symbol == null) return "?";
