@@ -62,3 +62,45 @@ public class HistoryTests
         Assert.Equal(15.0, stats.Value.Max);
     }
 }
+
+/// <summary>The charts' data: values over time, the step each sequence was in, alarm marks.</summary>
+public class TrendTests
+{
+    [Fact]
+    public void Trend_has_values_steps_and_alarm_marks()
+    {
+        var h = new MachineHistory(TimeSpan.FromMinutes(5));
+        var t0 = DateTimeOffset.Now.AddSeconds(-30);
+        var a = TestData.Snapshot("step10-xv101-not-open", t0);
+        var b = TestData.Snapshot("step30-agitator-blocked", t0.AddSeconds(10));
+        var c = TestData.Snapshot("step30-agitator-blocked", t0.AddSeconds(20));
+        foreach (var s in new[] { a, b, c }) h.Add(s, TestData.Evaluate(s));
+
+        var tr = Trend.Build(TestData.Model, h, TimeSpan.FromMinutes(5), t0.AddSeconds(25));
+        Assert.Contains(tr.Series, x => x.Id == "Level" && x.Points.Count == 3);
+        Assert.DoesNotContain(tr.Series, x => x.Id == "Step");
+        var spans = tr.Steps.Single(x => x.Id == "Batch").Spans;
+        Assert.Equal(new[] { 10, 30 }, spans.Select(x => x.Step));
+        Assert.Equal(c.Time.ToUnixTimeMilliseconds(), spans[^1].To);
+        Assert.Contains(tr.Alarms, x => x.Id == "A02" && !x.Came);
+    }
+
+    [Fact]
+    public void Long_history_is_thinned_but_keeps_spikes()
+    {
+        var level = TestData.Model.Tags.Single(t => t.Id == "Level");
+        var h = new MachineHistory(TimeSpan.FromMinutes(60));
+        var t0 = DateTimeOffset.Now.AddMinutes(-50);
+        var baseSnap = TestData.Snapshot("step30-agitator-blocked", t0);
+        for (int i = 0; i < 3000; i++)
+        {
+            var v = new Dictionary<string, object?>(baseSnap.Values) { ["Level"] = i == 1234 ? 99.0 : 20.0 };
+            var s = new Snapshot { Time = t0.AddSeconds(i), Values = v };
+            h.Add(s, TestData.Evaluate(s));
+        }
+        var tr = Trend.Build(TestData.Model, h, TimeSpan.FromMinutes(60), t0.AddSeconds(3000), new[] { "Level" }, buckets: 100);
+        var pts = tr.Series.Single().Points;
+        Assert.True(pts.Count <= 200);
+        Assert.Contains(pts, p => p[1] == 99.0);
+    }
+}

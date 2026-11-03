@@ -144,6 +144,8 @@
         <ol class="steplist">${def.steps.map((st, i) => `<li class="${i === curIdx ? curCls : ""}"${i === curIdx ? ' aria-current="step"' : ""}><b>${st.no}</b><span>${esc(st.name)}</span></li>`).join("")}</ol>
       </details>`;
   }
+  /** The way to the full step chart and step timeline of a sequence. */
+  const chartLink = (seq) => `<div><a class="btn b small" href="#/sequence/${encodeURIComponent(seq.id)}">Step chart and timeline ›</a></div>`;
   /** Opening the full step list shows the current step in the middle of it, not step 1. */
   function bindSteps(page) {
     page.querySelectorAll("details.allsteps").forEach((d) => d.ontoggle = () => {
@@ -186,7 +188,7 @@
         })
         + (n ? sec("alt", `<h2>Blocked now</h2><p class="sub">The program asks for ${n === 1 ? "this device" : "these devices"}, but ${n === 1 ? "its" : "their"} output stays off.</p>
             <div class="grid ${n > 1 ? "two" : ""}">${blocked.map((e) => `<div class="card stack">${eqCard(e, true)}</div>`).join("")}</div>`) : "")
-        + (seq ? sec(n ? "" : "alt", `<h2>${esc(seq.name)}</h2>${n ? `<p class="sub">${esc(seq.explanation)}</p>` : ""}${stepStrip(seq)}
+        + (seq ? sec(n ? "" : "alt", `<h2>${esc(seq.name)}</h2>${n ? `<p class="sub">${esc(seq.explanation)}</p>` : ""}${stepStrip(seq)}${chartLink(seq)}
             ${seq.next.length ? `<p class="muted small" style="margin:16px 0 8px">To go on it needs</p><ul class="conds">${seq.next.flatMap((x) => x.conditions).map(cond).join("")}</ul>` : ""}`) : "")
         + guide();
       }
@@ -237,7 +239,7 @@
 
         + sec("alt", `<h2>What is going on</h2>
           <div class="grid two"><div>${s.summary.map((l) => `<p class="sub" style="margin-bottom:12px">${esc(l)}</p>`).join("")}</div>
-          ${seq ? `<div class="card"><h3>${esc(seq.name)}</h3>${stepStrip(seq)}
+          ${seq ? `<div class="card"><h3>${esc(seq.name)}</h3>${stepStrip(seq)}${chartLink(seq)}
             ${seq.next.length ? `<p class="muted small" style="margin:12px 0 8px">To go on it needs</p><ul class="conds">${seq.next.flatMap((n) => n.conditions).map(cond).join("")}</ul>` : ""}</div>` : ""}</div>`) + guide();
     },
     after(page) {
@@ -275,7 +277,7 @@
 
       const seqs = s.sequences.map((q) => `<div class="card stack">
           <div class="row"><h3 style="margin:0">${esc(q.name)}</h3><span class="pill ${seqState(q)[1]}">${seqState(q)[0]}</span></div>
-          ${stepStrip(q)}
+          ${stepStrip(q)}${chartLink(q)}
           ${q.does ? `<p style="margin:0"><span class="muted">This step should:</span> ${esc(q.does)}</p>` : ""}
           ${q.halted && q.haltReasons.length ? `<div class="notice red">${icon("warn")}<div><b>Halted, outputs are off:</b> ${q.haltReasons.map(esc).join("; ")}</div></div>` : ""}
           ${q.next.map((n) => `<div><p class="muted small" style="margin:0 0 8px">To go to step ${n.to} "${esc(n.toName)}" it needs</p><ul class="conds">${n.conditions.map(cond).join("")}</ul></div>`).join("")}
@@ -292,8 +294,11 @@
           <div class="segmented" role="group" aria-label="Show">
             <button type="button" class="${eqOnlyProblems ? "" : "on"}" data-eqf="all" aria-pressed="${!eqOnlyProblems}">All ${s.equipment.length}</button>
             <button type="button" class="${eqOnlyProblems ? "on" : ""}" data-eqf="problems" aria-pressed="${eqOnlyProblems}">Needs attention ${nProblems}</button></div></div>` : "";
+      const V = window.PKVis;
       return top
+        + (V && s.equipment.length ? sec("", `<h2>The machine at a glance</h2><p class="sub">Every device as a symbol, in the colour of what it is doing now. Tap one for the details.</p>${V.plantMap(s.equipment, selectedEq)}`) : "")
         + (seqs ? sec("alt", `<h2>Sequence</h2><p class="sub">Each step, where it is now, and what it waits for.</p>${seqs}`) : "")
+        + (V ? sec("", `<h2>Values over time</h2><p class="sub">The measured values, the step each sequence was in, and when alarms came.</p>${V.trends()}`) : "")
         + sec("", `<h2>Equipment</h2><p class="sub">Every device, and the chain from request to feedback. The first red link is why it is not running.</p>
             ${sel ? `<div class="card stack eq-open" style="margin-bottom:18px">${eqCard(sel, true)}<div class="actions"><button class="btn small" data-ask="Why is ${esc(sel.id)} ${esc(sel.state)}?">Ask why</button><button class="btn b small" data-close-eq>Close</button></div></div>` : ""}
             ${tools}
@@ -320,6 +325,7 @@
       if (r) r.onclick = () => { eqQuery = ""; eqOnlyProblems = false; PK.draw(); };
       const c = page.querySelector("[data-close-eq]");
       if (c) c.onclick = () => { selectedEq = null; PK.draw(); };
+      if (window.PKVis) window.PKVis.bindTrends(page);
       bindAsk(page);
     },
   });
