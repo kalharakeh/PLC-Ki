@@ -88,4 +88,19 @@ public class RealExportShapeTests
         var x = System.Xml.Linq.XElement.Parse("""<Access xmlns="urn:x" Scope="LocalConstant"><Constant Name="cRobPos_Home" /></Access>""");
         Assert.Equal("#cRobPos_Home", NetworkDecoder.AccessText(x));
     }
+
+    [Fact]
+    public void Scl_source_is_found_for_a_block_name_with_a_slash()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "plcki-slash-" + Guid.NewGuid().ToString("N")[..8]);
+        Directory.CreateDirectory(Path.Combine(dir, "PLC_1", "Blocks"));
+        Directory.CreateDirectory(Path.Combine(dir, "PLC_1", "SclSource"));
+        File.WriteAllText(Path.Combine(dir, "manifest.json"), """{ "project": "S", "plcs": [ { "name": "PLC_1", "folder": "PLC_1" } ] }""");
+        File.WriteAllText(Path.Combine(dir, "PLC_1", "Blocks", "0.2. Inputs_Outputs Images.xml"), """
+<Document><SW.Blocks.FC ID="0"><AttributeList><Name>0.2. Inputs/Outputs Images</Name><ProgrammingLanguage>SCL</ProgrammingLanguage></AttributeList></SW.Blocks.FC></Document>
+""".Trim());
+        File.WriteAllText(Path.Combine(dir, "PLC_1", "SclSource", "0.2. Inputs_Outputs Images.scl"), "\"mDI_CartInPos1\" := \"DI_CartInPos1\";");
+        var plc = Assert.Single(ProgramExport.Load(dir).Plcs);
+        Assert.Contains("mDI_CartInPos1", plc.Block("0.2. Inputs/Outputs Images")!.SclSource);
+    }
 }

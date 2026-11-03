@@ -126,12 +126,19 @@ public sealed class ProgramExport
             var scl = Path.Combine(dir, "SclSource");
             if (Directory.Exists(scl))
                 foreach (var f in Directory.GetFiles(scl, "*.scl", SearchOption.AllDirectories))
-                    if (plc.Blocks.FirstOrDefault(b => b.Name == Path.GetFileNameWithoutExtension(f)) is { } b)
+                    if (plc.Blocks.FirstOrDefault(b => b.Name == Path.GetFileNameWithoutExtension(f) || FileSafe(b.Name) == Path.GetFileNameWithoutExtension(f)) is { } b)
                         b.SclSource = File.ReadAllText(f).TrimStart('﻿');
             FillCommentsFromTypes(plc);
             export.Plcs.Add(plc);
         }
         return export;
+    }
+
+    /// <summary>The file name TiaImporter gives a block on Windows: "0.2. Inputs/Outputs Images" -> "0.2. Inputs_Outputs Images".</summary>
+    internal static string FileSafe(string name)
+    {
+        foreach (var c in "\\/:*?\"<>|") name = name.Replace(c, '_');
+        return name;
     }
 
     private static void ReadBlocks(ExportPlc plc, string dir, List<ExportBlock> into)
