@@ -29,9 +29,11 @@ namespace TiaImporter
         private readonly string _plcsimIp;
         private readonly DirectoryInfo _packages;
         private readonly DirectoryInfo _projects;
+        private readonly HashSet<string> _allowReal;
 
-        public Serve(int port, string token, string plcsimIp, DirectoryInfo packages, DirectoryInfo projects)
+        public Serve(int port, string token, string plcsimIp, DirectoryInfo packages, DirectoryInfo projects, IEnumerable<string> allowReal = null)
         {
+            _allowReal = new HashSet<string>(allowReal ?? Enumerable.Empty<string>());
             _port = port;
             _token = token;
             _plcsimIp = plcsimIp;
@@ -54,7 +56,10 @@ namespace TiaImporter
                     $"  netsh advfirewall firewall add rule name=\"PLC-Ki TiaImporter\" dir=in action=allow protocol=TCP localport={_port}");
             }
             Console.WriteLine($"TiaImporter serve on port {_port}. Packages in {_packages.FullName}, projects under {_projects.FullName}.");
-            Console.WriteLine(_plcsimIp != null ? $"Downloads allowed only to PLCSIM at {_plcsimIp}." : "Downloads are off (no --plcsim-ip).");
+            Console.WriteLine(_plcsimIp != null ? $"PLCSIM downloads to {_plcsimIp}." : "PLCSIM downloads are off (no --plcsim-ip).");
+            Console.WriteLine(_allowReal.Count > 0
+                ? $"REAL PLC downloads allowed to {string.Join(", ", _allowReal)}, each confirmed by typing the address in this window."
+                : "Real PLC downloads are off (no --allow-real).");
             Console.WriteLine("Press Ctrl+C to stop.");
             while (true)
             {
@@ -80,7 +85,7 @@ namespace TiaImporter
                 Reply(ctx, 200, new Dictionary<string, object>
                 {
                     ["ok"] = true, ["machine"] = Environment.MachineName, ["packages"] = _packages.FullName,
-                    ["projects"] = _projects.FullName, ["plcsimIp"] = _plcsimIp,
+                    ["projects"] = _projects.FullName, ["plcsimIp"] = _plcsimIp, ["realAllowed"] = _allowReal.Count > 0,
                 });
                 return;
             }
@@ -120,6 +125,11 @@ namespace TiaImporter
                         var reportFile = dir.GetFiles("import-report.json", SearchOption.AllDirectories).OrderByDescending(f => f.LastWriteTimeUtc).FirstOrDefault();
                         if (reportFile != null && reportFile.LastWriteTimeUtc > DateTime.UtcNow.AddMinutes(-30)) report = File.ReadAllText(reportFile.FullName);
                     }
+                    else if (Bool(body, "real"))
+                    {
+                        code = new PlcsimDownload(tee).RunReal(project, plc, _allowReal, AskHere,
+                            Path.Combine(_packages.FullName, "real-downloads.log"), req.RemoteEndPoint?.Address?.ToString() ?? "?");
+                    }
                     else
                     {
                         if (_plcsimIp == null) throw new InvalidOperationException("Downloads are off: start serve with --plcsim-ip <PLCSIM address>.");
@@ -137,6 +147,19 @@ namespace TiaImporter
                 return;
             }
             Reply(ctx, 404, new Dictionary<string, object> { ["error"] = $"Unknown request {req.HttpMethod} {path}" });
+        }
+
+        /// <summary>Asks the person at this window; no answer within 2 minutes counts as "no".</summary>
+        private static string AskHere(string question)
+        {
+            Console.Beep();
+            Console.WriteLine();
+            Console.Write(question);
+            var read = System.Threading.Tasks.Task.Run(() => Console.ReadLine());
+            if (read.Wait(TimeSpan.FromMinutes(2))) return read.Result;
+            Console.WriteLine();
+            Console.WriteLine("No answer in 2 minutes: cancelled. (Press Enter once to clear the prompt.)");
+            return null;
         }
 
         /// <summary>The project file named in the request: an existing .ap20 under the allowed folder.</summary>

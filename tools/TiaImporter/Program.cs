@@ -28,12 +28,17 @@ namespace TiaImporter
       Downloads the PLC software to PLCSIM Advanced, and only there: the PLC's address in the project must be
       the PLCSIM address, and the download must go through a PLCSIM virtual adapter. Never hardware, never a real PLC.
 
-  TiaImporter serve --token <secret> [--port 5090] [--plcsim-ip <address>] [--packages C:\PLCKi\gen]
-                    [--projects <folder with your TIA projects>]
-      Lets PLC-Ki on another PC upload generated packages, import them, compile and download to PLCSIM
-      (if --plcsim-ip is given). Every request needs the token. Projects default to Documents\Automation.
+  TiaImporter download --project <project.ap20> --real --allow <address> [--plc <PLC name>]
+      Downloads the software to a REAL PLC: only if its address in the project is the --allow address, only after
+      you type that address here, only when the CPU is already in STOP; it stays in STOP. Logged in real-downloads.log.
 
-Only download and serve with --plcsim-ip talk to a PLC, and only to PLCSIM.";
+  TiaImporter serve --token <secret> [--port 5090] [--plcsim-ip <address>] [--allow-real <address,...>]
+                    [--packages C:\PLCKi\gen] [--projects <folder with your TIA projects>]
+      Lets PLC-Ki on another PC upload generated packages, import them, compile and download to PLCSIM
+      (if --plcsim-ip is given), or to the real PLCs listed in --allow-real after you confirm each one in this
+      window. Every request needs the token. Projects default to Documents\Automation.
+
+Only download and serve talk to a PLC.";
 
         private static int Main(string[] args)
         {
@@ -89,14 +94,23 @@ Only download and serve with --plcsim-ip talk to a PLC, and only to PLCSIM.";
                     {
                         var project = Arg("--project");
                         if (project == null) { Console.WriteLine(Usage); return 2; }
+                        if (Array.IndexOf(args, "--real") >= 0)
+                        {
+                            var allow = Arg("--allow");
+                            if (allow == null) { Console.WriteLine("--real needs --allow <the PLC's address>."); return 2; }
+                            return new PlcsimDownload(Console.Out).RunReal(new FileInfo(Path.GetFullPath(project)), Arg("--plc"), new[] { allow },
+                                q => { Console.Write(q); return Console.ReadLine(); },
+                                Path.Combine(@"C:\PLCKi\gen", "real-downloads.log"), "command line");
+                        }
                         return new PlcsimDownload(Console.Out).Run(new FileInfo(Path.GetFullPath(project)), Arg("--plc"), Arg("--plcsim-ip"));
                     }
                 case "serve":
                     {
                         var projects = Arg("--projects") ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Automation");
+                        var allowReal = (Arg("--allow-real") ?? "").Split(new[] { ',', ';', ' ' }, StringSplitOptions.RemoveEmptyEntries);
                         return new Serve(int.Parse(Arg("--port") ?? "5090"), Arg("--token"), Arg("--plcsim-ip"),
                             new DirectoryInfo(Path.GetFullPath(Arg("--packages") ?? @"C:\PLCKi\gen")),
-                            new DirectoryInfo(Path.GetFullPath(projects))).Run();
+                            new DirectoryInfo(Path.GetFullPath(projects)), allowReal).Run();
                     }
                 default:
                     Console.WriteLine(Usage);

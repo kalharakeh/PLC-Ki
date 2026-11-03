@@ -16,7 +16,9 @@ step, alarm and program location it is based on, so you can check it in TIA Port
 
 > **Read-only.** The app never writes to a PLC. There is no write code path, not even a disabled one.
 > The only exception is in the separate TIA tool for the block generator: `tools/TiaImporter` can download
-> generated code to **PLCSIM Advanced** for testing, and refuses any other target.
+> generated code to **PLCSIM Advanced** for testing, and to a real PLC only with guards: the address must be listed
+> on the TIA PC, a person there types it to confirm, the CPU must already be in STOP and stays in STOP, software only,
+> never inside the automatic fix loop, and every attempt is logged. See `docs/block-generator.md`.
 
 ## How it works
 

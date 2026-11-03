@@ -51,8 +51,9 @@ public sealed class VmClient
     public Task<VmResult> ImportAsync(string package, string project, string? plc, string version, CancellationToken ct) =>
         PostAsync("import", new { package, project, plc, version }, ct);
 
-    public Task<VmResult> DownloadAsync(string project, string? plc, CancellationToken ct) =>
-        PostAsync("download", new { project, plc }, ct);
+    /// <summary>PLCSIM download, or with <paramref name="real"/> the guarded real-PLC download (confirmed at the TIA PC).</summary>
+    public Task<VmResult> DownloadAsync(string project, string? plc, CancellationToken ct, bool real = false) =>
+        PostAsync("download", new { project, plc, real }, ct);
 
     private async Task<VmResult> PostAsync(string path, object body, CancellationToken ct)
     {

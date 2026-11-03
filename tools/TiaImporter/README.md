@@ -1,18 +1,24 @@
 # TiaImporter
 
-Command-line helper that uses **TIA Portal V20 Openness**. Only `download` and `serve` (with `--plcsim-ip`) talk to a
-PLC, and only to PLCSIM Advanced.
+Command-line helper that uses **TIA Portal V20 Openness**. Only `download` and `serve` talk to a PLC: to PLCSIM
+Advanced, or to a real PLC only with `--real` / `--allow-real` and the guards below.
 
 ```
 TiaImporter export --archive <project.zap20> --out <empty folder>
 TiaImporter setup-demo --project <project.ap20> --demo <plc-demo folder> [--plc <PLC name>]
 TiaImporter import-blocks --project <project.ap20> --package <package folder> [--plc <PLC name>] [--version v002] [--replace] [--keep-on-error]
 TiaImporter download --project <project.ap20> --plcsim-ip <address> [--plc <PLC name>]
-TiaImporter serve --token <secret> [--port 5090] [--plcsim-ip <address>] [--packages C:\PLCKi\gen] [--projects <folder>]
+TiaImporter download --real --allow <address> --project <project.ap20> [--plc <PLC name>]
+TiaImporter serve --token <secret> [--port 5090] [--plcsim-ip <address>] [--allow-real <address,...>] [--packages C:\PLCKi\gen] [--projects <folder>]
 ```
 
 `download` and `serve` download only to PLCSIM: the PLC's address in the project must be the PLCSIM address and the
 PC interface must be a PLCSIM adapter; software only. `serve` is what `PlcKi.Server develop` talks to.
+
+Real PLC (`download --real` or `serve --allow-real`): only to the addresses listed; someone at the TIA PC types the
+PLC's address to confirm each time (2 minutes, otherwise cancelled); the CPU must already be in STOP (a running CPU
+is refused, never stopped) and is left in STOP; software only; never through a PLCSIM adapter. Every attempt, also
+refused ones, is added to `real-downloads.log` in the packages folder (`C:\PLCKi\gen`).
 
 `import-blocks` loads blocks written by `PlcKi.Server generate` into the project you name, compiles, and writes
 `import-report.json` for the next fix round. See [docs/block-generator.md](../../docs/block-generator.md).
