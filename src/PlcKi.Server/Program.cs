@@ -172,6 +172,14 @@ static async Task<int> RunAppAsync(string[] appArgs, bool probe, JobService jobs
         return Results.Ok(list);
     });
 
+    // Values over time for the charts, from the same in-memory history (read-only). tags= is a comma list of tag ids.
+    app.MapGet("/api/trend", (MachineHistory history, MachineModel m, double? minutes, string? tags) =>
+    {
+        var window = TimeSpan.FromMinutes(Math.Clamp(minutes ?? history.KeepValues.TotalMinutes, 1, history.KeepValues.TotalMinutes));
+        var ids = string.IsNullOrWhiteSpace(tags) ? null : tags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        return Results.Ok(Trend.Build(m, history, window, DateTimeOffset.Now, ids));
+    });
+
     // "Ask a question": Claude answers from the live values and the machine model (read-only lookups)
     app.MapGet("/api/ask", (AskService ask) =>
     {

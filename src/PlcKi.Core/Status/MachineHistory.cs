@@ -62,6 +62,12 @@ public sealed class MachineHistory
         lock (_lock) return _events.Where(e => e.Time >= now - window).ToList();
     }
 
+    /// <summary>The kept reads in the window, oldest first (a copy).</summary>
+    public List<Snapshot> Snapshots(TimeSpan window, DateTimeOffset now)
+    {
+        lock (_lock) return _snapshots.Where(s => s.Time >= now - window).ToList();
+    }
+
     public DateTimeOffset? OldestValueTime
     {
         get { lock (_lock) return _snapshots.Count > 0 ? _snapshots.Peek().Time : null; }
