@@ -40,7 +40,22 @@ public class NetworkDecoderTests
         Assert.Contains("Transition T7 T7_BatchCounted: step 60 Done -> step 1 Idle when #Done.X", logic);
         Assert.Contains("#Healthy := NOT #AnyFault AND #EStopOK AND NOT #Paused AND #Auto;", logic);
         Assert.Contains("IF #Stop THEN #Paused := TRUE; END_IF;   // set", logic);
+        Assert.Contains("IF #AnyFault THEN #Paused := TRUE; END_IF;   // set", logic);
+        Assert.Contains("IF NOT #EStopOK THEN #Paused := TRUE; END_IF;   // set", logic);
         Assert.DoesNotContain(".TT", logic);
+        Assert.DoesNotContain("NoHeating", logic);
+    }
+
+    [Fact]
+    public void Export_has_the_current_demo_program()
+    {
+        // v7: step timeouts are edge-latched, each with its own previous-cycle bit, and the heating check is in FB_Station.
+        var alarms = Plc.Value.Block("FB_AlarmHandler")!.SclSource!;
+        foreach (var (step, alarm) in new[] { (10, "A16"), (20, "A17"), (30, "A18"), (50, "A19") })
+            Assert.Contains($"{alarm}_Step{step}_Timeout := (#Step{step}_Timeout AND NOT #Step{step}_TimeoutOld)", alarms);
+        var station = Plc.Value.Block("FB_Station")!.SclSource!;
+        Assert.Contains("#NoHeating := #tHeat.Q AND #TT301.Value < #TempAtHeatOn + 2.0;", station);
+        Assert.Contains("E301_NoHeating := #NoHeating", station);
     }
 
     [Fact]
