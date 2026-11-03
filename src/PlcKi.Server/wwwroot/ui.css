@@ -391,7 +391,7 @@ section:not(.dark) .path span { border-color: var(--line-strong); }
 
 /* sheet and toast */
 .sheet-wrap { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; background: rgba(0, 0, 0, 0.3); padding: 16px; animation: fade 0.25s var(--ease); }
-.sheet { background: var(--panel); border-radius: 24px; box-shadow: var(--shadow-lift); width: min(520px, 100%); padding: 26px; display: grid; gap: 14px; animation: pop 0.45s var(--spring); }
+.sheet { max-height: calc(100vh - 40px); overflow-y: auto; background: var(--panel); border-radius: 24px; box-shadow: var(--shadow-lift); width: min(520px, 100%); padding: 26px; display: grid; gap: 14px; animation: pop 0.45s var(--spring); }
 .sheet h2 { font-size: 24px; margin: 0; }
 .countdown { font-size: 48px; font-weight: 700; letter-spacing: -0.03em; color: var(--fault); text-align: center; }
 @keyframes fade { from { opacity: 0; } }

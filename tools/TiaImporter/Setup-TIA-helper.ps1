@@ -23,8 +23,10 @@ function Say($text, $icon = "Information") {
 }
 
 if (-not (Test-Path $exe)) {
-  Say "TiaImporter.exe was not found:`n$exe`n`nBuild it once (see README.md in this folder), then run this setup again." "Warning"
-  exit 1
+  $build = [System.Windows.Forms.MessageBox]::Show("TiaImporter is not built on this computer yet.`n`nBuild it now? This takes about a minute (needs the .NET 8 SDK and TIA Portal V20).", $title, "YesNo", "Question")
+  if ($build -ne "Yes") { exit 1 }
+  & (Join-Path $here "Update-TIA-helper.ps1") -NoPull -NoStart
+  if (-not (Test-Path $exe)) { Say "The build did not work. See the black window for why." "Warning"; exit 1 }
 }
 
 # What was set up before, if anything

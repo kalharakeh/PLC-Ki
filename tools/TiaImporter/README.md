@@ -45,7 +45,10 @@ loaded. It then opens port 5090 (URL reservation and firewall rule), saves the s
 
 From then on the helper starts by itself when you log in, in a blue window called **PLC-Ki TIA helper** that shows
 the address and token to enter in PLC-Ki. Leave it open: a real-PLC download is confirmed there. If it was closed,
-double-click **`Start-TIA-helper`**. Run `Setup-TIA-helper` again to change the token or addresses, or to turn the
+double-click **`Start-TIA-helper`**. After PLC-Ki was updated, double-click **`Update-TIA-helper`**: it stops the
+helper, runs `git pull`, builds TiaImporter, approves the new exe in TIA Openness (`allow-openness.ps1`), checks that
+your user is in *Siemens TIA Openness* (and offers to add it), and starts the helper again. `Setup-TIA-helper` also
+offers to build TiaImporter when it is missing. Run `Setup-TIA-helper` again to change the token or addresses, or to turn the
 start at log-in off. TIA itself only opens (in the background) when PLC-Ki sends work.
 
 ## Requirements

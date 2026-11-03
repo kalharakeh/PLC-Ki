@@ -313,7 +313,10 @@
       },
       render(params) {
         if (!state.program) {
-          if (state.programError) return PK.hero({ title: "No program loaded yet.", sub: esc(state.programError),
+          if (state.programError) return PK.hero({ title: "No program loaded yet.",
+            sub: "This page shows the PLC program with live values once PLC-Ki has read it from a TIA archive. " + (state.user && state.user.role === "admin"
+              ? "Import it under Setup, Program: it takes a few minutes." : "An administrator imports it under Setup, Program."),
+            extra: `<p class="faint small" style="margin-top:14px">${esc(state.programError)}</p>`,
             actions: state.user && state.user.role === "admin" ? `<a class="btn" href="#/setup/program">Import the program</a>` : "" });
           return PK.hero({ title: "Loading the program…" });
         }

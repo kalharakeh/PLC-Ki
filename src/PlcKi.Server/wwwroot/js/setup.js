@@ -63,6 +63,43 @@ const PKSetup = (() => {
   }
 
   const stateText = { running: ["Running", "info"], done: ["Finished", "ok"], problems: ["Finished with problems", "warn"], failed: ["Failed", "bad"], stopped: ["Stopped", "bad"] };
+  /** Why a job failed, in plain words, from its log: { text, todo }. */
+  function jobProblem(job) {
+    if (job.state === "stopped") return { text: "You stopped this job.", todo: "Start it again when you are ready. What was done so far is kept." };
+    const log = job.log || "";
+    const has = (re) => re.test(log);
+    if (has(/Siemens TIA Openness|not a member of|EngineeringSecurityException|UnauthorizedAccess/i))
+      return { text: "Your Windows user on the TIA PC may not use TIA Openness.", todo: "On the VM: Computer Management, Local Users and Groups, Groups, \"Siemens TIA Openness\": add your user. Then log off and on again, and start the job again." };
+    if (has(/whitelist|allow access|access was denied by the user|firewall.*openness/i))
+      return { text: "TIA Portal did not allow TiaImporter to use it.", todo: "On the VM: double-click Update-TIA-helper in C:\\PLCKi\\PLC-Ki\\tools\\TiaImporter once (it approves TiaImporter in TIA), or answer \"Yes to all\" when TIA asks." };
+    if (has(/refused the token|\b401\b.*(helper|5090|vm)|(helper|5090|vm).*\b401\b/i))
+      return PK.plain("refused the token");
+    if (has(/No answer from .*:\d+|Cannot reach the TIA helper|Link is not connected|connection refused.*5090|actively refused/i))
+      return PK.plain("TIA helper timeout");
+    if (has(/newer version|older version|upgrade the project|cannot be opened with this version|not compatible with/i))
+      return { text: "The archive was made with another TIA Portal version.", todo: "PLC-Ki uses TIA Portal V20. Open the project in TIA V20 (it offers to upgrade it), archive it again, and import that." };
+    if (has(/licen[cs]e[^\n]*(no valid|missing|expired|not found|fail)|(no valid|missing|expired)[^\n]*licen[cs]e/i))
+      return { text: "TIA Portal has no valid license on the TIA PC.", todo: "Check the STEP 7 Professional license in the Automation License Manager on the VM." };
+    if (has(/credit balance|billing|insufficient.*(credit|funds)/i))
+      return { text: "The Claude account has no credit left.", todo: "Add credit at console.anthropic.com (Billing), then start the job again." };
+    if (has(/authentication_error|invalid x-api-key|ANTHROPIC_API_KEY|no (claude )?api key/i))
+      return PK.plain("api key");
+    if (has(/overloaded|rate_limit|\b529\b|\b429\b/i))
+      return { text: "Claude is busy right now.", todo: "Wait a minute and start the job again." };
+    if (has(/out of memory|OutOfMemory|0xc000012d|not enough memory/i))
+      return { text: "The TIA PC ran out of memory.", todo: "Close programs you don't need on the VM, or give the VM more memory (16 GB works well with TIA and PLCSIM)." };
+    if (has(/know-how|protected block/i) && job.state === "problems")
+      return { text: "Some blocks are know-how protected.", todo: "PLC-Ki cannot read protected blocks. Remove the protection in a copy of the project if those blocks matter." };
+    if (has(/PLCSIM|download/i) && has(/fail|error|refused|not reachable/i) && /download|PLCSIM/i.test(job.title || ""))
+      return { text: "The download to PLCSIM did not work.", todo: "On the VM: check PLCSIM Advanced runs the virtual PLC (green), and its address is the PLCSIM address in Setup. Then start the job again." };
+    if (has(/compil\w*[^\n]*\b[1-9]\d* error/i) || has(/\berrors?: *[1-9]/i))
+      return { text: "TIA found compile errors.", todo: "Open the log below for the lines TIA complained about. More fixing rounds (More options) let Claude fix them by itself." };
+    const lines = log.split("\n").map((l) => l.replace(/^\s*\|\s?/, "").trim()).filter((l) => l && !l.startsWith(">"));
+    const last = lines.reverse().find((l) => /error|fail|cannot|could not|not found|refused|problem/i.test(l)) || lines[0] || "";
+    const p = PK.plain(last);
+    return { text: p.todo ? p.text : job.state === "problems" ? "It finished, but with problems." : "The job stopped with an error.", todo: p.todo || (last ? "The log says: " + last.slice(0, 240) : "Open the log below.") };
+  }
+
   function jobCard(job, extra = "") {
     const [t, cls] = stateText[job.state] || [job.state, "info"];
     const lines = (job.log || "").split("\n").filter((l) => l.trim() && !l.startsWith("> "));
@@ -72,6 +109,7 @@ const PKSetup = (() => {
         ${job.state === "running" ? `<button class="btn red-tinted small" data-stop="${esc(job.id)}">${icon("stop")}Stop</button>` : ""}</div>
       ${extra}
       ${job.state === "running" ? `<div class="progress indet" style="margin-top:12px"><div></div></div><p class="muted small" style="margin:8px 0 0">${esc(lastLine.replace(/^\s*\|\s?/, "").slice(0, 200))}</p>` : ""}
+      ${["failed", "problems", "stopped"].includes(job.state) ? (() => { const p = jobProblem(job); return `<div class="notice ${job.state === "failed" ? "red" : "gold"}" style="margin-top:12px">${icon("warn")}<div><b>${esc(p.text)}</b>${p.todo ? `<br>${esc(p.todo)}` : ""}</div></div>`; })() : ""}
       <details class="more" ${job.state !== "running" && job.state !== "done" ? "open" : ""}><summary>Log</summary>
         <div class="joblog" data-log>${esc(job.log || "")}</div></details>
     </div>`;
@@ -169,7 +207,7 @@ const PKSetup = (() => {
             <li><b>Once, double-click <code>Setup-TIA-helper</code></b> in <code>C:\\PLCKi\\PLC-Ki\\tools\\TiaImporter</code>. It asks for the token and the PLCSIM address,
               opens the port, and starts the helper.</li>
             <li><b>Every day: nothing.</b> The helper starts by itself when you log into the VM, in a window called <b>PLC-Ki TIA helper</b>.
-              If that window was closed, double-click <code>Start-TIA-helper</code> in the same folder.</li>
+              If that window was closed, double-click <code>Start-TIA-helper</code> in the same folder. After a PLC-Ki update, double-click <code>Update-TIA-helper</code>.</li>
           </ol>
         </details>`
       : `<div class="grid two">
@@ -557,6 +595,6 @@ const PKSetup = (() => {
     },
   });
 
-  return { setupNav, follow, jobCard, bindJob, restartBar, bindRestart, loadSettings, saveSettings, restart, presets, presetOf,
+  return { setupNav, follow, jobCard, jobProblem, bindJob, restartBar, bindRestart, loadSettings, saveSettings, restart, presets, presetOf,
     get settings() { return settings; }, get info() { return info; } };
 })();

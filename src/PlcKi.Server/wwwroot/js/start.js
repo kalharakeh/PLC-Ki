@@ -13,6 +13,7 @@ const PKStart = (() => {
   const local = store(window.localStorage), session = store(window.sessionStorage);
   const DEMO = /demo-mixing-station\.json$/i;
   const VM_DIR = "C:\\PLCKi\\PLC-Ki";
+  const SETUP_URL = "https://github.com/kalharakeh/PLC-Ki/actions/workflows/ci.yml?query=branch%3Amain";
   const helperExe = `${VM_DIR}\\tools\\TiaImporter\\bin\\Release\\net48\\TiaImporter.exe`;
 
   // ---------- what is set up ----------
@@ -133,7 +134,11 @@ const PKStart = (() => {
           <div class="grid two">
             <div><h3>What runs where</h3><dl class="where-list">${d.where.map(([a, b]) => `<dt>${esc(a)}</dt><dd>${esc(b)}</dd>`).join("")}</dl></div>
             <div><h3>Every day</h3><ul class="plainlist">${d.every.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>
-          </div></div>`,
+          </div>
+          ${p === "same" ? "" : `<p class="faint small" style="margin:16px 0 0">Tip: installed with <a href="${SETUP_URL}" target="_blank" rel="noopener">PLC-Ki-Setup.exe</a>
+            (GitHub, Actions, latest run, Artifacts), PLC-Ki runs by itself in the background and starts with Windows, so there is no window to keep open.</p>`}</div>
+        ${p === "same" && PKSetup.info.service ? `<div class="notice gold">${icon("info")}<div>PLC-Ki runs as a Windows service on this PC, so it cannot open the TIA helper window itself.
+          Set the helper up as for a VM (double-click Setup-TIA-helper on this PC) and choose <b>PC with a TIA VM</b> with the address <code>http://localhost:5090</code>.</div></div>` : ""}`,
     };
   }
 
@@ -196,7 +201,8 @@ const PKStart = (() => {
             <li><b>Get the newest PLC-Ki on the VM.</b> Open Command Prompt on the VM and paste this one line:${cmd("On the VM", `cd /d ${VM_DIR} && git pull`)}</li>
             <li><b>Double-click <code>Setup-TIA-helper</code></b> in File Explorer, in <code>${VM_DIR}\\tools\\TiaImporter</code>. Say Yes when Windows asks.
               A small window asks for a token (a password you make up, at least 8 characters) and the PLCSIM address, then starts the helper.</li>
-            <li><b>That's it.</b> From now on the helper starts by itself when you log into the VM, in a window called <b>PLC-Ki TIA helper</b>. Leave it open.</li>
+            <li><b>That's it.</b> From now on the helper starts by itself when you log into the VM, in a window called <b>PLC-Ki TIA helper</b>. Leave it open.
+              After a PLC-Ki update, double-click <code>Update-TIA-helper</code> in the same folder: it gets the newest version, builds it and starts it again.</li>
           </ol></div>
         <div class="card stack"><span class="where where-pc">Here · on the PC</span>
           <h3>Tell PLC-Ki where the VM is</h3>

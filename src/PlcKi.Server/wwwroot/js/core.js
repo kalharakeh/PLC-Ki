@@ -339,6 +339,57 @@ const PK = (() => {
     catch { const r = document.createRange(); r.selectNodeContents(el); getSelection().removeAllRanges(); getSelection().addRange(r); toast("Selected. Press Ctrl+C to copy."); }
   });
 
+  // ---- Help: what the current page shows and how to read it ----
+  const HELP = {
+    alarm: ["Active alarm", "The start page. It shows the alarm that matters most right now and how to get the machine going again.", [
+      "With several alarms, the first chip is the first-out: the alarm that came first. Fix that one first; the others often follow from it.",
+      "Fix it: work down the list and tap each step when done. The ticks are only on this screen.",
+      "Where in the machine: the device behind the alarm and the chain Requested › Interlocks › Output › Feedback. The first red link is why it is not working.",
+      "Where in the software: from the main cycle (OB1) down to the bit that sets the alarm. Show the logic opens that network with live values.",
+      "Ask about this alarm: Claude looks at the live values, the last minutes and the program, and says why it is on and what to check."]],
+    plant: ["Plant", "What the machine is doing now: the sequence, every device, and data to and from other systems.", [
+      "Sequence: the blue step is where it is now, red means halted. Below it, what it needs to go to the next step: ✓ is met, ✗ is missing.",
+      "Equipment: each device with the chain Requested › Interlocks › Output › Feedback. The first red link is why it is not running. Click a device for its interlocks.",
+      "Data exchange: signals to and from MES, a filler and so on, with their live values."]],
+    alarms: ["Alarms", "Every alarm the program can raise, active or not, with its meaning, where it is set, likely causes and the fix.", [
+      "Search by number, text or device. Active alarms are at the top.",
+      "Click an alarm to open its causes and fix. Red tags are faults (they stop the machine), gold tags are warnings."]],
+    logic: ["Logic", "Each network of a block drawn as a rung, with live values.", [
+      "Green passes, red blocks. Read from left to right: the first red contact is what stops the output.",
+      "Pick a block on the left. Coming from an alarm, the network that sets it is marked.",
+      "Values update every two seconds. PLC-Ki only reads: nothing here changes the PLC."]],
+    code: ["Code", "Every block as written in TIA, with the live value after each signal.", [
+      "Pick a block on the left. SCL shows as text; LAD and GRAPH as readable text with the same meaning.",
+      "The chips after a signal are its live value. Values update every two seconds."]],
+    "setup/start": ["Get started", "Sets PLC-Ki up one question at a time. You can come back here any time.", [
+      "Each step is saved when you press Continue. Skip what you don't need now: TIA Portal is only needed to import a program or build blocks.",
+      "At the end, Apply restarts PLC-Ki with the new settings (a few seconds)."]],
+    "setup/connections": ["Connections", "Where PLC-Ki, TIA Portal and the PLC are, and whether each link works.", [
+      "The drawing turns each line green when it works and red when it does not. Grey means not checked yet.",
+      "Test the address checks that something answers on the PLC's S7 port. It sends nothing to the PLC.",
+      "Save, then Apply: PLC-Ki uses new connection settings after a quick restart."]],
+    "setup/program": ["Program", "Teaches PLC-Ki a machine from its TIA program.", [
+      "1. Drop the TIA archive (.zap20). 2. TIA exports it on the TIA PC (needs the TIA helper). 3. Claude builds the model: a few minutes, about a dollar. 4. Check the numbers and press Use this program.",
+      "Import again when the program in the PLC changes, so the explanations match."]],
+    "setup/generator": ["Block generator", "Say what you need; Claude writes the blocks, TIA imports and compiles them, PLCSIM runs them.", [
+      "Each job becomes a package with versions v001, v002 and so on. To change blocks, open a package and say what to change.",
+      "Use a copy of the TIA project, not the plant's master.",
+      "A real PLC needs two confirmations: you type the version here, and someone types the PLC address in the TIA helper window. The CPU must be in STOP."]],
+    "setup/settings": ["Settings", "The machine model, the Claude key, who may open PLC-Ki, and logins.", [
+      "Operators see every machine page; administrators also see Setup.",
+      "Other computers may open PLC-Ki: off means only this PC."]],
+  };
+  function helpSheet() {
+    const name = current ? current.name : "alarm";
+    const [title, intro, tips] = HELP[name] || HELP.alarm;
+    const admin = state.user && state.user.role === "admin";
+    const s = sheet(`<span class="eyebrow">Help</span><h2>${esc(title)}</h2><p class="muted" style="margin:0">${esc(intro)}</p>
+      <ul class="plainlist">${tips.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>
+      <p class="faint small" style="margin:0">The light at the top right shows the PLC connection; click it for what it means. Ask answers questions about the machine on every page.</p>
+      <div class="row end">${admin && name !== "setup/start" ? `<a class="btn b" href="#/setup/start" data-close>Get started</a>` : ""}<button class="btn" data-close>OK</button></div>`);
+    s.el.querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", s.close));
+  }
+
   async function start() {
     fillIcons();
     try {
@@ -355,6 +406,7 @@ const PK = (() => {
     };
     try { state.model = await api("GET", "/api/model"); } catch { /* shown on pages */ }
     try { state.info = await api("GET", "/api/info"); $("machine").textContent = state.info.machine; } catch { /* */ }
+    $("help-open").onclick = helpSheet;
     $("conn").setAttribute("role", "button");
     $("conn").tabIndex = 0;
     $("conn").title = "What does this mean?";
@@ -369,6 +421,6 @@ const PK = (() => {
     pollJobs();
   }
 
-  return { plain, connInfo, connSheet, cmd, sec, hero, reveal: (el) => reveal(el), $, esc, icon, fillIcons, kindIcon, api, state, view, go, draw, route, toast, sheet, confirmSheet, cond, md, ago,
+  return { plain, connInfo, connSheet, helpSheet, cmd, sec, hero, reveal: (el) => reveal(el), $, esc, icon, fillIcons, kindIcon, api, state, view, go, draw, route, toast, sheet, confirmSheet, cond, md, ago,
     loadProgram, valueBySymbol, norm, start, get current() { return current; } };
 })();
