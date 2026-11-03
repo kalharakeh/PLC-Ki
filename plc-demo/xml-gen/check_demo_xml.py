@@ -21,7 +21,7 @@ IF_NS = "{http://www.siemens.com/automation/Openness/SW/Interface/v5}"
 REQUIRED_INPUTS = {
     "Contact": ["in", "operand"], "Coil": ["in", "operand"], "SCoil": ["in", "operand"], "RCoil": ["in", "operand"],
     "TrCoil": ["in"], "IlCoil": ["in"], "SvCoil": ["in"], "Move": ["en", "in", "out1"],
-    "Add": ["en", "in1", "in2", "out"], "Mul": ["en", "in1", "in2", "out"],
+    "Add": ["en", "in1", "in2", "out"], "Mul": ["en", "in1", "in2", "out"], "Sub": ["en", "in1", "in2", "out"],
     "Gt": ["pre", "in1", "in2"], "Ge": ["pre", "in1", "in2"], "Lt": ["pre", "in1", "in2"],
     "Le": ["pre", "in1", "in2"], "Eq": ["pre", "in1", "in2"], "TON": ["IN", "PT"],
 }
