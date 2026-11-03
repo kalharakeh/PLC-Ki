@@ -46,6 +46,7 @@ Usage: PlcKi.Server develop --vm <http://tia-pc:5090> --project <project .ap20 o
         var token = o.GetValueOrDefault("token") ?? Environment.GetEnvironmentVariable("PLCKI_VM_TOKEN");
         if (vm == null && string.IsNullOrWhiteSpace(token)) { Console.Error.WriteLine("Give --token (the one TiaImporter serve was started with) or set PLCKI_VM_TOKEN."); return 2; }
         vm ??= new VmClient(o["vm"], token!);
+        vm.Progress ??= text => Console.Write(Indent(text));   // the TIA PC's log, live
         var rounds = int.TryParse(o.GetValueOrDefault("rounds"), out var r) ? r : 3;
         if (o.ContainsKey("download") && o.ContainsKey("download-real")) { Console.Error.WriteLine("Use --download (PLCSIM) or --download-real, not both."); return 2; }
         var watchSeconds = int.TryParse(o.GetValueOrDefault("watch"), out var w) ? w : 30;
@@ -85,7 +86,6 @@ Usage: PlcKi.Server develop --vm <http://tia-pc:5090> --project <project .ap20 o
             Console.WriteLine($"=== {version.Folder}: import and compile on the TIA PC ===");
             await vm.UploadAsync(outDir, package, ct);
             var import = await vm.ImportAsync(package, o["project"], plc, version.Folder, ct);
-            Console.Write(Indent(import.Log));
             var report = import.ReportJson != null ? System.Text.Json.JsonSerializer.Deserialize<ImportReport>(import.ReportJson) ?? new() : new ImportReport();
             if (import.ReportJson == null)
                 report.FileErrors.Add(new ReportFileError { File = "(import)", Error = LastLine(import.Log) });
@@ -102,7 +102,6 @@ Usage: PlcKi.Server develop --vm <http://tia-pc:5090> --project <project .ap20 o
                 }
                 Console.WriteLine($"=== {version.Folder}: download to PLCSIM ===");
                 var dl = await vm.DownloadAsync(o["project"], plc, ct);
-                Console.Write(Indent(dl.Log));
                 report.Download = dl.ExitCode == 0 ? "OK" : LastLine(dl.Log);
                 if (dl.ExitCode == 0 && watch != null)
                 {
@@ -162,7 +161,6 @@ Usage: PlcKi.Server develop --vm <http://tia-pc:5090> --project <project .ap20 o
         }
         Console.WriteLine("Now confirm on the TIA PC: type the PLC's address in the TiaImporter serve window (2 minutes).");
         var dl = await vm.DownloadAsync(project, plc, ct, real: true);
-        Console.Write(Indent(dl.Log));
         report.Download = dl.ExitCode == 0 ? "OK (real PLC, left in STOP)" : LastLine(dl.Log);
         report.Save(reportPath);
         Console.WriteLine(dl.ExitCode == 0

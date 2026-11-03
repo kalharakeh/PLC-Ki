@@ -16,11 +16,20 @@ public sealed class VmClient
 {
     private readonly HttpClient _http;
 
+    /// <summary>How often to ask the TIA PC how a job is going.</summary>
+    public TimeSpan PollInterval { get; set; } = TimeSpan.FromSeconds(3);
+
+    /// <summary>How long the TIA PC may be unreachable during a job before giving up (a download can reset its adapter).</summary>
+    public TimeSpan Patience { get; set; } = TimeSpan.FromMinutes(10);
+
+    /// <summary>Gets each new piece of the TIA PC's log while a job runs.</summary>
+    public Action<string>? Progress { get; set; }
+
     public VmClient(string baseUrl, string token, HttpMessageHandler? handler = null)
     {
         _http = handler != null ? new HttpClient(handler) : new HttpClient();
         _http.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
-        _http.Timeout = TimeSpan.FromMinutes(30);   // TIA start, import, compile and download take minutes
+        _http.Timeout = TimeSpan.FromMinutes(2);   // per request; the long work runs as a job that is polled
         _http.DefaultRequestHeaders.Add("X-PlcKi-Token", token);
     }
 
@@ -55,18 +64,50 @@ public sealed class VmClient
     public Task<VmResult> DownloadAsync(string project, string? plc, CancellationToken ct, bool real = false) =>
         PostAsync("download", new { project, plc, real }, ct);
 
+    /// <summary>Starts the job on the TIA PC, then asks every few seconds until it is done. Short network drops are retried.</summary>
     private async Task<VmResult> PostAsync(string path, object body, CancellationToken ct)
     {
-        using var content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
-        using var resp = await _http.PostAsync(path, content, ct);
-        var text = await resp.Content.ReadAsStringAsync(ct);
-        if (!resp.IsSuccessStatusCode) throw new InvalidOperationException($"TIA PC answered {(int)resp.StatusCode}: {Error(text)}");
-        using var doc = JsonDocument.Parse(text);
-        var root = doc.RootElement;
-        return new VmResult(
-            root.GetProperty("exitCode").GetInt32(),
-            root.TryGetProperty("log", out var log) ? log.GetString() ?? "" : "",
-            root.TryGetProperty("report", out var r) && r.ValueKind == JsonValueKind.Object ? r.GetRawText() : null);
+        string job;
+        using (var content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json"))
+        using (var resp = await _http.PostAsync(path, content, ct))
+        {
+            var text = await resp.Content.ReadAsStringAsync(ct);
+            if (!resp.IsSuccessStatusCode) throw new InvalidOperationException($"TIA PC answered {(int)resp.StatusCode}: {Error(text)}");
+            using var doc = JsonDocument.Parse(text);
+            job = doc.RootElement.GetProperty("job").GetString()!;
+        }
+
+        var shown = 0;
+        var lastContact = DateTime.UtcNow;
+        while (true)
+        {
+            await Task.Delay(PollInterval, ct);
+            string text;
+            try
+            {
+                using var resp = await _http.GetAsync("jobs/" + Uri.EscapeDataString(job), ct);
+                text = await resp.Content.ReadAsStringAsync(ct);
+                if (!resp.IsSuccessStatusCode) throw new InvalidOperationException($"TIA PC answered {(int)resp.StatusCode}: {Error(text)}");
+            }
+            catch (Exception ex) when ((ex is HttpRequestException || ex is TaskCanceledException) && !ct.IsCancellationRequested)
+            {
+                if (DateTime.UtcNow - lastContact > Patience)
+                    throw new InvalidOperationException($"Lost the TIA PC for {Patience.TotalMinutes:0} min during the job: {ex.Message}");
+                continue;   // the job goes on over there; ask again
+            }
+            lastContact = DateTime.UtcNow;
+            using var doc = JsonDocument.Parse(text);
+            var root = doc.RootElement;
+            var log = root.TryGetProperty("log", out var l) ? l.GetString() ?? "" : "";
+            var done = root.TryGetProperty("done", out var d) && d.ValueKind == JsonValueKind.True;
+            var upto = done ? log.Length : log.LastIndexOf('\n') + 1;   // whole lines only, until the end
+            if (upto > shown) { Progress?.Invoke(log[shown..upto]); shown = upto; }
+            if (!done) continue;
+            return new VmResult(
+                root.GetProperty("exitCode").GetInt32(),
+                log,
+                root.TryGetProperty("report", out var r) && r.ValueKind == JsonValueKind.Object ? r.GetRawText() : null);
+        }
     }
 
     private static string Error(string text)
