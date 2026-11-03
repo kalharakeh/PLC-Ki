@@ -113,6 +113,10 @@ then download to PLCSIM and watch for 30 s (read-only): if the CPU leaves RUN or
 Claude as the next fix round. The blocks only run if something calls them, so ask for the call (an OB or a call in
 an existing block via `--edit`) when you want the runtime check to mean something.
 
+The TIA PC runs each import and download as a job, and the PC asks every 3 s how it is going, showing the TIA log as
+it comes. If the PC loses the TIA PC for a while (sleep, or the download resetting the adapter), it keeps asking for
+up to 10 minutes; the job carries on regardless.
+
 ### Download to a real PLC (guarded)
 
 Only after an engineer has reviewed the version. On the VM, list the real PLCs that may be loaded:

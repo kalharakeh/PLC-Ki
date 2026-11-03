@@ -12,12 +12,13 @@ namespace TiaImporter
 {
     /// <summary>
     /// "serve": a small HTTP service on the TIA PC, so PLC-Ki on another PC can run the generate, import, compile and
-    /// PLCSIM download loop without copying folders by hand. One request at a time; every request needs the token.
+    /// PLCSIM download loop without copying folders by hand. One import or download at a time, run as a job the PC polls; every request needs the token.
     ///
     ///   GET  /status                 alive check, settings
     ///   PUT  /packages/{name}        body: zip of a package folder (generated.json + v001, v002, ...)
-    ///   POST /import                 {"package","project","plc","version","replace","keepOnError"} -> log + import-report
-    ///   POST /download               {"project","plc"} -> download to PLCSIM only (see PlcsimDownload)
+    ///   POST /import                 {"package","project","plc","version","replace","keepOnError"} -> {"job"}
+    ///   POST /download               {"project","plc","real"} -> {"job"}: PLCSIM, or a guarded real PLC (see PlcsimDownload)
+    ///   GET  /jobs/{id}              {"done","log"} and when done {"exitCode","report"}
     ///
     /// Projects are opened only when a request names them, and only .ap20 files under the allowed folder.
     /// </summary>
@@ -30,6 +31,7 @@ namespace TiaImporter
         private readonly DirectoryInfo _packages;
         private readonly DirectoryInfo _projects;
         private readonly HashSet<string> _allowReal;
+        private readonly Dictionary<string, Job> _jobs = new Dictionary<string, Job>();
 
         public Serve(int port, string token, string plcsimIp, DirectoryInfo packages, DirectoryInfo projects, IEnumerable<string> allowReal = null)
         {
@@ -63,7 +65,7 @@ namespace TiaImporter
             Console.WriteLine("Press Ctrl+C to stop.");
             while (true)
             {
-                var ctx = listener.GetContext();   // one request at a time: TIA runs once at a time anyway
+                var ctx = listener.GetContext();   // requests are answered one by one; imports and downloads run as jobs
                 try { Handle(ctx); }
                 catch (Exception ex)
                 {
@@ -104,47 +106,74 @@ namespace TiaImporter
                 Reply(ctx, 200, new Dictionary<string, object> { ["ok"] = true, ["folder"] = dir.FullName });
                 return;
             }
+            if (req.HttpMethod == "GET" && path.StartsWith("/jobs/"))
+            {
+                Job job;
+                lock (_jobs) _jobs.TryGetValue(path.Substring("/jobs/".Length), out job);
+                if (job == null) { Reply(ctx, 404, new Dictionary<string, object> { ["error"] = "Unknown job (serve was restarted?)." }); return; }
+                Reply(ctx, 200, job.Answer());
+                return;
+            }
             if (req.HttpMethod == "POST" && (path == "/import" || path == "/download"))
             {
+                // Checked here, so a bad request is refused at once; the work itself runs as a job the PC polls,
+                // so a short network drop (the download can reset the adapter) does not lose the result.
                 JsonElement body;
                 using (var r = new StreamReader(req.InputStream, Encoding.UTF8)) body = JsonDocument.Parse(r.ReadToEnd()).RootElement.Clone();
                 var project = Project(Str(body, "project"));
                 var plc = Str(body, "plc");
-                var log = new StringWriter();
-                var tee = new Tee(Console.Out, log);
-                int code;
-                string report = null;
-                try
+                var requestedBy = req.RemoteEndPoint?.Address?.ToString() ?? "?";
+                DirectoryInfo dir = null;
+                if (path == "/import")
                 {
-                    if (path == "/import")
-                    {
-                        var name = Str(body, "package");
-                        if (name == null || !PackageName.IsMatch(name)) throw new InvalidOperationException("Name the package.");
-                        var dir = new DirectoryInfo(Path.Combine(_packages.FullName, name));
-                        var started = DateTime.UtcNow.AddSeconds(-2);
-                        code = new BlockImport(tee).Run(project, dir, plc, Str(body, "version"), Bool(body, "replace"), Bool(body, "keepOnError"));
-                        var reportFile = dir.GetFiles("import-report.json", SearchOption.AllDirectories).OrderByDescending(f => f.LastWriteTimeUtc).FirstOrDefault();
-                        if (reportFile != null && reportFile.LastWriteTimeUtc >= started) report = File.ReadAllText(reportFile.FullName);
-                    }
-                    else if (Bool(body, "real"))
-                    {
-                        code = new PlcsimDownload(tee).RunReal(project, plc, _allowReal, AskHere,
-                            Path.Combine(_packages.FullName, "real-downloads.log"), req.RemoteEndPoint?.Address?.ToString() ?? "?");
-                    }
-                    else
-                    {
-                        if (_plcsimIp == null) throw new InvalidOperationException("Downloads are off: start serve with --plcsim-ip <PLCSIM address>.");
-                        code = new PlcsimDownload(tee).Run(project, plc, _plcsimIp);
-                    }
+                    var name = Str(body, "package");
+                    if (name == null || !PackageName.IsMatch(name)) throw new InvalidOperationException("Name the package.");
+                    dir = new DirectoryInfo(Path.Combine(_packages.FullName, name));
                 }
-                catch (Exception ex)
+                else if (!Bool(body, "real") && _plcsimIp == null)
+                    throw new InvalidOperationException("Downloads are off: start serve with --plcsim-ip <PLCSIM address>.");
+
+                Job job;
+                lock (_jobs)
                 {
-                    tee.WriteLine("ERROR: " + ex.Message);
-                    code = 1;
+                    if (_jobs.Values.Any(j => !j.Done))
+                    {
+                        Reply(ctx, 409, new Dictionary<string, object> { ["error"] = "The TIA PC is busy with another import or download. Try again when it has finished." });
+                        return;
+                    }
+                    job = new Job();
+                    _jobs[job.Id] = job;
+                    foreach (var old in _jobs.Values.Where(j => j.Done).OrderBy(j => j.Started).Take(Math.Max(0, _jobs.Count - 10)).ToList()) _jobs.Remove(old.Id);
                 }
-                var answer = new Dictionary<string, object> { ["exitCode"] = code, ["log"] = log.ToString() };
-                if (report != null) answer["report"] = JsonDocument.Parse(report).RootElement.Clone();
-                Reply(ctx, 200, answer);
+                var tee = new Tee(Console.Out, job);
+                var thread = new System.Threading.Thread(() =>
+                {
+                    int code;
+                    string report = null;
+                    try
+                    {
+                        if (dir != null)
+                        {
+                            var started = DateTime.UtcNow.AddSeconds(-2);
+                            code = new BlockImport(tee).Run(project, dir, plc, Str(body, "version"), Bool(body, "replace"), Bool(body, "keepOnError"));
+                            var reportFile = dir.Exists ? dir.GetFiles("import-report.json", SearchOption.AllDirectories).OrderByDescending(f => f.LastWriteTimeUtc).FirstOrDefault() : null;
+                            if (reportFile != null && reportFile.LastWriteTimeUtc >= started) report = File.ReadAllText(reportFile.FullName);   // only a report this job wrote
+                        }
+                        else if (Bool(body, "real"))
+                            code = new PlcsimDownload(tee).RunReal(project, plc, _allowReal, AskHere, Path.Combine(_packages.FullName, "real-downloads.log"), requestedBy);
+                        else
+                            code = new PlcsimDownload(tee).Run(project, plc, _plcsimIp);
+                    }
+                    catch (Exception ex)
+                    {
+                        tee.WriteLine("ERROR: " + ex.Message);
+                        code = 1;
+                    }
+                    job.Finish(code, report);
+                    Console.WriteLine($"{DateTime.Now:HH:mm:ss} job {job.Id} finished with exit code {code}.");
+                }) { IsBackground = true };
+                thread.Start();
+                Reply(ctx, 202, new Dictionary<string, object> { ["job"] = job.Id });
                 return;
             }
             Reply(ctx, 404, new Dictionary<string, object> { ["error"] = $"Unknown request {req.HttpMethod} {path}" });
@@ -216,15 +245,49 @@ namespace TiaImporter
             ctx.Response.Close();
         }
 
-        /// <summary>Writes to the console and to the reply log at the same time.</summary>
+        /// <summary>One import or download running in the background; the PC polls GET /jobs/{id} until it is done.</summary>
+        private sealed class Job
+        {
+            private readonly StringBuilder _log = new StringBuilder();
+            private int _exitCode;
+            private string _report;
+            public readonly string Id = Guid.NewGuid().ToString("N");
+            public readonly DateTime Started = DateTime.UtcNow;
+            public volatile bool Done;
+
+            public void Append(string text) { lock (_log) _log.Append(text); }
+
+            public void Finish(int exitCode, string report)
+            {
+                lock (_log) { _exitCode = exitCode; _report = report; }
+                Done = true;
+            }
+
+            public Dictionary<string, object> Answer()
+            {
+                lock (_log)
+                {
+                    var a = new Dictionary<string, object> { ["job"] = Id, ["done"] = Done, ["log"] = _log.ToString() };
+                    if (Done)
+                    {
+                        a["exitCode"] = _exitCode;
+                        if (_report != null) a["report"] = JsonDocument.Parse(_report).RootElement.Clone();
+                    }
+                    return a;
+                }
+            }
+        }
+
+        /// <summary>Writes to the console and to the job's log at the same time.</summary>
         private sealed class Tee : TextWriter
         {
-            private readonly TextWriter _a, _b;
-            public Tee(TextWriter a, TextWriter b) { _a = a; _b = b; }
+            private readonly TextWriter _console;
+            private readonly Job _job;
+            public Tee(TextWriter console, Job job) { _console = console; _job = job; }
             public override Encoding Encoding => Encoding.UTF8;
-            public override void Write(char value) { _a.Write(value); _b.Write(value); }
-            public override void Write(string value) { _a.Write(value); _b.Write(value); }
-            public override void WriteLine(string value) { _a.WriteLine(value); _b.WriteLine(value); }
+            public override void Write(char value) { _console.Write(value); _job.Append(value.ToString()); }
+            public override void Write(string value) { _console.Write(value); _job.Append(value); }
+            public override void WriteLine(string value) { _console.WriteLine(value); _job.Append(value + Environment.NewLine); }
         }
     }
 }

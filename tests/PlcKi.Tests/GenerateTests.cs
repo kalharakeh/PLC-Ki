@@ -234,14 +234,30 @@ public class DevelopTests
         public readonly List<string> Uploaded = new();
         public readonly List<string> DownloadBodies = new();
         public int Imports => _imports;
+        public int Polls, Drops;
+        public bool DropEveryFirstPoll = true;   // as when the download resets the TIA PC's adapter
         private int _imports;
+        private readonly Dictionary<string, string> _jobs = new();
+        private readonly HashSet<string> _polledOnce = new();
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
         {
             Assert.Equal("secret-token", request.Headers.GetValues("X-PlcKi-Token").Single());
             var path = request.RequestUri!.AbsolutePath;
-            Calls.Add(request.Method + " " + path);
             string body = "{\"ok\":true}";
+            if (path.StartsWith("/jobs/"))
+            {
+                Polls++;
+                var id = path["/jobs/".Length..];
+                if (_polledOnce.Add(id))
+                {
+                    if (DropEveryFirstPoll) { Drops++; throw new HttpRequestException("The specified network name is no longer available"); }
+                    body = "{\"job\":\"" + id + "\",\"done\":false,\"log\":\"Starting TIA Portal...\\n\"}";
+                }
+                else body = _jobs[id];
+                return new HttpResponseMessage(System.Net.HttpStatusCode.OK) { Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json") };
+            }
+            Calls.Add(request.Method + " " + path);
             if (request.Method == HttpMethod.Put)
             {
                 using var zip = new System.IO.Compression.ZipArchive(await request.Content!.ReadAsStreamAsync(ct));
@@ -261,6 +277,14 @@ public class DevelopTests
                 DownloadBodies.Add(await request.Content!.ReadAsStringAsync(ct));
                 body = "{\"exitCode\":0,\"log\":\"Download: Success\\n\"}";
             }
+            if (request.Method == HttpMethod.Post)
+            {
+                // The TIA PC answers with a job; the result comes from polling it
+                var id = "j" + (_jobs.Count + 1);
+                _jobs[id] = body.Insert(1, "\"job\":\"" + id + "\",\"done\":true,");
+                body = "{\"job\":\"" + id + "\"}";
+                return new HttpResponseMessage(System.Net.HttpStatusCode.Accepted) { Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json") };
+            }
             return new HttpResponseMessage(System.Net.HttpStatusCode.OK) { Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json") };
         }
     }
@@ -272,7 +296,7 @@ public class DevelopTests
         try
         {
             var tia = new FakeTiaPc();
-            var vm = new VmClient("http://tia-pc:5090", "secret-token", tia);
+            var vm = new VmClient("http://tia-pc:5090", "secret-token", tia) { PollInterval = TimeSpan.Zero };
             var answer = "<file name=\"10_FB_GenValve.scl\">\nFUNCTION_BLOCK \"FB_GenValve\"\nVAR_INPUT\n Open : Bool;\nEND_VAR\nBEGIN\nEND_FUNCTION_BLOCK\n</file>\n<review>ok</review>";
             var api = new ModelBuilderTests.FakeStreamingApi(answer, answer.Replace("<review>ok", "<review>fixed"));
             var code = await DevelopCommand.RunAsync(["--vm", "http://tia-pc:5090", "--project", @"C:\Users\Software\Documents\Automation\Test\Test.ap20",
@@ -281,6 +305,7 @@ public class DevelopTests
             Assert.Equal(0, code);
             Assert.Equal(new[] { "GET /status", "PUT /packages/valve", "POST /import", "PUT /packages/valve", "POST /import", "POST /download" }, tia.Calls);
             Assert.Contains("generated.json", tia.Uploaded);
+            Assert.Equal(3, tia.Drops);   // every job lost its first poll, and the loop carried on
             Assert.Contains("v002/10_FB_GenValve.scl", tia.Uploaded);
             // The fix round told Claude what TIA said
             var fixTask = api.Requests[1].GetProperty("messages")[0].GetProperty("content")[1].GetProperty("text").GetString()!;
@@ -297,7 +322,7 @@ public class DevelopTests
     {
         var dir = Path.Combine(Directory.CreateTempSubdirectory("plcki-dev-").FullName, "valve");
         var tia = new FakeTiaPc();
-        var vm = new VmClient("http://tia-pc:5090", "secret-token", tia);
+        var vm = new VmClient("http://tia-pc:5090", "secret-token", tia) { PollInterval = TimeSpan.Zero };
         var answer = "<file name=\"10_FB_GenValve.scl\">\nFUNCTION_BLOCK \"FB_GenValve\"\nVAR_INPUT\n Open : Bool;\nEND_VAR\nBEGIN\nEND_FUNCTION_BLOCK\n</file>\n<review>ok</review>";
         var api = new ModelBuilderTests.FakeStreamingApi(answer, answer.Replace("<review>ok", "<review>fixed"));
         var code = await DevelopCommand.RunAsync(["--vm", "http://tia-pc:5090", "--project", @"C:\Users\Software\Documents\Automation\Test\Test.ap20",
