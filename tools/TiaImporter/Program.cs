@@ -18,7 +18,7 @@ namespace TiaImporter
 
   TiaImporter import-blocks --project <project.ap20> --package <package folder> [--plc <PLC name>]
                             [--version v002] [--replace] [--keep-on-error]
-      Loads blocks written by "PlcKi.Server generate" (latest version, or --version) into the named project:
+      Loads blocks written by PlcKi.Server generate (latest version, or --version) into the named project:
       tag tables, data types, DBs, SCL/LAD/FBD/GRAPH blocks. Compiles and writes import-report.json into the
       version folder. Refuses to overwrite existing blocks, types or tags the package was not asked to change
       (unless --replace) and keeps a copy of each replaced block in before\. Saves the project only when

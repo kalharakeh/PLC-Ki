@@ -210,6 +210,12 @@ Generated code must be reviewed by an engineer before it goes to a real machine.
             Console.WriteLine($"{result.Problems.Count} problem(s) are left after the offline check:");
             foreach (var p in result.Problems) Console.WriteLine("  - " + p);
         }
+        if (existingNames == null)
+        {
+            Console.WriteLine();
+            Console.WriteLine("Note: without --context the names were not checked against your PLC program. If a block, type or tag");
+            Console.WriteLine("already exists there, import-blocks refuses it; give the export with --context to avoid that.");
+        }
         Console.WriteLine();
         Console.WriteLine("Next, on the TIA PC (works on the project you name, nothing is downloaded to a PLC):");
         Console.WriteLine($"  TiaImporter import-blocks --project <your project .ap20> --package <this folder>{(plcName != null ? " --plc " + plcName : "")}");
