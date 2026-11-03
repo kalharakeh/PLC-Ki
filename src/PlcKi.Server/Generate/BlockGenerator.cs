@@ -52,7 +52,7 @@ public sealed class BlockGenerator
     private readonly Action<string> _log;
 
     public int MaxRepairs { get; init; } = 3;
-    public int MaxTokens { get; init; } = 64000;
+    public int MaxTokens { get; init; } = 128000;   // edits of big real-plant blocks plus thinking need room
 
     public BlockGenerator(AnthropicClient client, string model, Effort effort, Action<string> log)
     {
@@ -163,7 +163,7 @@ public sealed class BlockGenerator
         if (stop != null && stop.Contains("refusal", StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Claude declined to write these blocks.");
         if (stop != null && stop.Contains("max_tokens", StringComparison.OrdinalIgnoreCase))
-            _log("  The answer hit the length limit; it may be cut off. Ask for fewer blocks per request.");
+            _log("  The answer hit the length limit and is cut off. Ask for fewer or smaller blocks per request, or choose a lower 'How hard Claude thinks'.");
         return text.ToString();
     }
 }
