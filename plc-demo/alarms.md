@@ -25,7 +25,7 @@ FAULT alarms halt the sequence (outputs off, step kept). WARNING alarms only inf
 | A17 Step 20 timeout | FB_BatchSequence | Fill B longer than 120 s | XV102 not open, supply empty | Check XV102 and ingredient B supply | (none) |
 | A18 Step 30 timeout | FB_BatchSequence | Mix and heat longer than 600 s | Heater weak, TempSP too high | Check heater, recipe TempSP | `E301_HeaterFailed` (A20 comes first) |
 | A19 Step 50 timeout | FB_BatchSequence | Drain longer than 180 s | Pump not delivering, outlet blocked | Check P401 and outlet line | (none) |
-| A20 E301 no heating | FB_BatchSequence | Heater on 60 s, temperature rose < 2 degC | Heating element broken, heater fuse | Check heater element and fuses | `E301_HeaterFailed` |
+| A20 E301 no heating | FB_Station | Heater on 60 s, temperature rose < 2 degC | Heating element broken, heater fuse | Check heater element and fuses | `E301_HeaterFailed` |
 | A21 Filler not ready | FB_BatchSequence | Step 40 waiting > 60 s for filler | Filler stopped or not in auto | Check the filler, signal `DB_LineInterface.Filler_ReadyToReceive` | `Filler_NeverReady` |
 | A22 MES heartbeat lost | FB_Station | `MES_Heartbeat` unchanged for 5 s | MES down, network | Check MES connection | `MES_HeartbeatLost` |
 | A23 Recipe invalid | FB_BatchSequence | Start pressed with implausible recipe | Wrong recipe values | Fix `DB_Recipe` (LevelA < LevelB <= 90, TempSP 20..85, speed 100..1500) | set `DB_Recipe.LevelA` > `LevelB` |

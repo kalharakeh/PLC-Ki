@@ -15,6 +15,9 @@ VERSION : 0.1
       tOwnHb {InstructionName := 'TON_TIME'; LibVersion := '1.0'} : TON_TIME;   // 1 s pulse for our own heartbeat
       OwnHbDone : Bool;   // TRUE for one cycle after each 1 s pulse
       LastMesHb : Int;   // MES heartbeat value in the previous cycle
+      tHeat {InstructionName := 'TON_TIME'; LibVersion := '1.0'} : TON_TIME;   // Heater on without a break (60 s)
+      TempAtHeatOn : Real;   // Temperature when the heater last switched on [degC]
+      NoHeating : Bool;   // Heater on for 60 s but temperature rose less than 2 degC
    END_VAR
 
 BEGIN
@@ -51,6 +54,14 @@ BEGIN
 	
 	// Heater only with the agitator running (no local overheating) and no overtemperature
 	"DB_IO".E301_OnCmd := "DB_BatchSequence".HeatE301 AND #M201.AtSpeed AND NOT "DB_IO".E301_OverTemp AND NOT #TT301.WireBreak;
+	
+	// Heating check: heater on for 60 s without a break but the temperature rose less than 2 degC.
+	// The window starts again each time the heater switches on, also after a halt.
+	IF NOT "DB_IO".E301_OnCmd THEN
+	    #TempAtHeatOn := #TT301.Value;
+	END_IF;
+	#tHeat(IN := "DB_IO".E301_OnCmd, PT := T#60S);
+	#NoHeating := #tHeat.Q AND #TT301.Value < #TempAtHeatOn + 2.0;
 	
 	// Pump may not run dry
 	#P401(Run := "DB_BatchSequence".RunP401, Permit := #LT101.Value > 0.5 AND "DB_IO".EStop_OK,
@@ -96,7 +107,7 @@ BEGIN
 	        Step20_Timeout := "DB_BatchSequence".TimeoutStep20,
 	        Step30_Timeout := "DB_BatchSequence".TimeoutStep30,
 	        Step50_Timeout := "DB_BatchSequence".TimeoutStep50,
-	        E301_NoHeating := "DB_BatchSequence".NoHeating,
+	        E301_NoHeating := #NoHeating,
 	        Filler_NotReady := "DB_BatchSequence".WaitFillerTooLong,
 	        MES_HeartbeatLost := #tMesHb.Q,
 	        RecipeInvalid := "DB_BatchSequence".StartRecipeInvalid,
