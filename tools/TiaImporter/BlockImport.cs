@@ -127,7 +127,7 @@ namespace TiaImporter
                         var before = Directory.CreateDirectory(Path.Combine(dir.FullName, "before"));
                         foreach (var n in replaced)
                         {
-                            var target = new FileInfo(Path.Combine(before.FullName, n + ".xml"));
+                            var target = new FileInfo(Path.Combine(before.FullName, Exporter.Safe(n) + ".xml"));
                             if (target.Exists) target.Delete();
                             if (blocks.TryGetValue(n, out var b)) b.Export(target, ExportOptions.WithDefaults);
                             else types[n].Export(target, ExportOptions.WithDefaults);

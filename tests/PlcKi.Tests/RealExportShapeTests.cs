@@ -103,4 +103,15 @@ public class RealExportShapeTests
         var plc = Assert.Single(ProgramExport.Load(dir).Plcs);
         Assert.Contains("mDI_CartInPos1", plc.Block("0.2. Inputs/Outputs Images")!.SclSource);
     }
+
+    [Fact]
+    public void Block_with_a_slash_can_be_read_for_editing()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "plcki-edit-" + Guid.NewGuid().ToString("N")[..8]);
+        Directory.CreateDirectory(Path.Combine(dir, "PLC_1", "SclSource"));
+        File.WriteAllText(Path.Combine(dir, "manifest.json"), """{ "project": "S", "plcs": [ { "name": "PLC_1", "folder": "PLC_1" } ] }""");
+        File.WriteAllText(Path.Combine(dir, "PLC_1", "SclSource", "0.2. Inputs_Outputs Images.scl"), "FUNCTION \"0.2. Inputs/Outputs Images\" : Void");
+        var found = Assert.Single(PlcKi.Core.Generate.ExportSources.Read(dir, null, new[] { "0.2. Inputs/Outputs Images" }));
+        Assert.Equal(".scl", found.Extension);
+    }
 }
