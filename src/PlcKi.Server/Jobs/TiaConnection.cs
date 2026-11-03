@@ -54,8 +54,8 @@ public sealed class TiaConnection
         "link" when !_link.TiaReady => "PLC-Ki Link is connected but has no TIA helper. Start Link with --tia and the path of TiaImporter.exe.",
         "link" when Url == null => "PLC-Ki is still starting.",
         "local" when string.IsNullOrWhiteSpace(_opt.ImporterPath) => "Enter where TiaImporter.exe is on this PC.",
-        "remote" when Url == null => "Enter the address of the TIA PC, for example http://192.168.10.3:5090.",
-        "remote" when string.IsNullOrWhiteSpace(Token) => "Enter the token TiaImporter serve was started with.",
+        "remote" when Url == null => "Enter the address of the TIA PC, for example http://192.168.0.20:5090.",
+        "remote" when string.IsNullOrWhiteSpace(Token) => "Enter the token shown in the TIA helper window on the TIA PC.",
         _ => null,
     };
 
@@ -111,7 +111,8 @@ public sealed class TiaConnection
         {
             ["mode"] = _opt.Mode, ["url"] = Url, ["helperRunning"] = HelperRunning, ["project"] = _opt.Project,
         };
-        if (NotSetUp() is { } why) { baseInfo["ok"] = false; baseInfo["message"] = why; return baseInfo; }
+        // Not set up yet is not a failure: the pages show it grey ("Not set yet"), not red
+        if (NotSetUp() is { } why) { baseInfo["ok"] = false; baseInfo["notSet"] = true; baseInfo["message"] = why; return baseInfo; }
         try
         {
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);

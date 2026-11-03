@@ -94,7 +94,8 @@ public sealed class StatusEngine
         var summary = new List<string>();
         if (connection.State != "connected" && connection.State != "snapshot")
         {
-            summary.Add(connection.Error is { Length: > 0 }
+            summary.Add(connection.State == "notset" ? "No PLC is set yet, so there are no live values."
+                : connection.Error is { Length: > 0 }
                 ? $"Not connected to the PLC at {connection.Address}: {connection.Error}"
                 : $"Not connected to the PLC at {connection.Address} ({connection.State}).");
             if (hasValues) summary.Add($"Values below are from the last good read at {connection.LastGoodRead:HH:mm:ss}.");

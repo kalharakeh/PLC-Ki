@@ -78,7 +78,7 @@ public sealed class AskOptions
 
 public sealed class PlcOptions
 {
-    public string Address { get; set; } = "192.168.10.10";
+    public string Address { get; set; } = "";
     /// <summary>Only needed when the CPU is protected. Better set with the PLCKI_PLC_PASSWORD environment variable.</summary>
     public string Password { get; set; } = "";
     public string Username { get; set; } = "";

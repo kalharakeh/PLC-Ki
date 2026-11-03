@@ -131,6 +131,7 @@ public sealed class MachineHistory
                 "connected" => $"Connected to the PLC at {b.Connection.Address}.",
                 "snapshot" => "Reading values from a test file.",
                 "connecting" => "Connecting to the PLC...",
+                "notset" => "No PLC address is set yet.",
                 _ => $"Lost the PLC connection ({b.Connection.State})" +
                      (b.Connection.Error is { Length: > 0 } err ? $": {err}" : "."),
             }));

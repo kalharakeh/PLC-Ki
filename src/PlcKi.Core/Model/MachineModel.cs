@@ -15,6 +15,8 @@ public sealed class MachineModel
     public string? Description { get; set; }
     /// <summary>Where this model came from (hand-written, or the archive it was generated from).</summary>
     public string? Source { get; set; }
+    /// <summary>The program export this model was built from (shown on Code and Logic). Optional; relative to the app folder.</summary>
+    public string? Export { get; set; }
     public List<TagDef> Tags { get; set; } = new();
     /// <summary>Tag ids shown as the main process values at the top of the page.</summary>
     public List<string> Overview { get; set; } = new();

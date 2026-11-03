@@ -132,8 +132,14 @@ static async Task<int> RunAppAsync(string[] appArgs, bool probe, JobService jobs
         OnPrepareResponse = ctx => ctx.Context.Response.Headers.CacheControl = "no-cache",
     });
 
-    app.MapGet("/api/status", (LiveState s) =>
-        s.Status is { } st ? Results.Ok(st) : Results.Json(new { state = "starting" }, statusCode: 503));
+    // Each start of PLC-Ki gets its own id: an open page that sees a new one reloads, so it never shows the
+    // program or model of the previous run next to the new one.
+    var runId = Guid.NewGuid().ToString("N")[..10];
+    app.MapGet("/api/status", (LiveState s, HttpContext http) =>
+    {
+        http.Response.Headers["X-PlcKi-Run"] = runId;
+        return s.Status is { } st ? Results.Ok(st) : Results.Json(new { state = "starting" }, statusCode: 503);
+    });
 
     app.MapGet("/api/model", (MachineModel m) => Results.Json(m, MachineModel.JsonOptions));
 
@@ -156,11 +162,21 @@ static async Task<int> RunAppAsync(string[] appArgs, bool probe, JobService jobs
         });
     });
 
+    // What happened lately (alarms came and went, steps, blocked devices), newest first. Kept in memory since PLC-Ki started.
+    app.MapGet("/api/events", (MachineHistory history, string? kind, int? max) =>
+    {
+        var list = history.Events(TimeSpan.FromDays(30), DateTimeOffset.Now)
+            .Where(e => string.IsNullOrEmpty(kind) || e.Kind == kind)
+            .Reverse().Take(Math.Clamp(max ?? 50, 1, 500))
+            .Select(e => new { time = e.Time, kind = e.Kind, text = e.Text });
+        return Results.Ok(list);
+    });
+
     // "Ask a question": Claude answers from the live values and the machine model (read-only lookups)
     app.MapGet("/api/ask", (AskService ask) =>
     {
         var (enabled, reason) = ask.Availability();
-        return Results.Ok(new { enabled, reason, model = opt.Ask.Model });
+        return Results.Ok(new { enabled, reason, code = enabled ? null : opt.Ask.Enabled ? "nokey" : "off", model = opt.Ask.Model });
     });
 
     app.MapPost("/api/ask", async (AskRequest req, AskService ask, CancellationToken ct) =>
@@ -198,6 +214,8 @@ static async Task<int> RunAppAsync(string[] appArgs, bool probe, JobService jobs
     app.MapGet("/api/program", (ProgramService p) => Results.Ok(p.Overview()));
     app.MapGet("/api/program/blocks/{name}", (string name, ProgramService p) =>
         p.Block(name) is { } b ? Results.Ok(b) : Results.NotFound(new { error = $"Block {name} is not in the program export." }));
+
+    app.MapGet("/api/program/search", (string? q, ProgramService p) => Results.Ok(p.Search(q ?? "")));
 
     app.MapPlant();     // /api/auth/... and /api/admin/... (settings, users)
     app.MapSetup();     // /api/admin/... jobs, TIA connection, program import, block generator

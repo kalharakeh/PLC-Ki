@@ -114,7 +114,11 @@ const PK = (() => {
     shownHash = location.hash;
     const { name, params } = parseRoute();
     const v = views[name] || views.alarm;
-    document.querySelectorAll("#nav a").forEach((a) => a.classList.toggle("active", a.dataset.route === name || (a.dataset.route === "setup" && name.startsWith("setup/"))));
+    document.querySelectorAll("#nav a").forEach((a) => a.classList.toggle("active", a.dataset.route === name || (a.dataset.route === "setup" && name.startsWith("setup/") && name !== "setup/generator")));
+    // The one page that can load blocks into a PLC says so where the rest say "read-only"
+    $("foot-text").textContent = name === "setup/generator"
+      ? "PLC-Ki reads from the PLC only. The one exception is this page: the block generator loads blocks into PLCSIM, or into a real PLC after two people confirm."
+      : "PLC-Ki reads from the PLC only: it never writes values or changes the CPU state.";
     const page = $("page");
     if (current && current.view.leave) current.view.leave();
     current = { name, view: v, params };
@@ -125,6 +129,14 @@ const PK = (() => {
     page.scrollTop = 0;
     window.scrollTo(0, 0);
     setTitle();
+  }
+
+  /** Change the address shown (e.g. #/alarms/A02 for an opened alarm) without leaving the page, so it can be shared. */
+  function setHash(h) {
+    if (location.hash === h) return;
+    history.replaceState(null, "", h);
+    shownHash = location.hash;
+    if (current) current.params = parseRoute().params;
   }
 
   // ---- updating the page in place ----
@@ -219,6 +231,7 @@ const PK = (() => {
         connecting: ["Connecting|" + c.address, "warn"],
         disconnected: ["Not connected|" + c.address, "bad"],
         waiting: ["Waiting for Link|", "warn"],
+        notset: ["No PLC set yet|", "warn"],
       };
       [text, cls] = map[c.state] || [c.state, "warn"];
     }
@@ -253,11 +266,122 @@ const PK = (() => {
   }
 
   /** The browser tab shows the page and the number of active alarms, e.g. "(2) Plant · PLC-Ki". */
+  /** Tab title and icon: a screen in another tab or on the wall shows the alarm, e.g. "(1) FAULT A02 · PLC-Ki". */
   function setTitle() {
-    const n = ((state.status && state.status.activeAlarms) || []).length;
+    const al = (state.status && state.status.activeAlarms) || [];
     const page = current ? (HELP[current.name] || [""])[0] : "";
-    const t = `${n ? `(${n}) ` : ""}${page ? page + " · " : ""}PLC-Ki`;
+    const t = al.length ? `(${al.length}) ${al[0].severity} ${al[0].id} · PLC-Ki` : `${page ? page + " · " : ""}PLC-Ki`;
     if (document.title !== t) document.title = t;
+    const level = !al.length ? "ok" : al.some((a) => a.severity === "FAULT") ? "fault" : "warn";
+    if (setTitle.level !== level) {
+      setTitle.level = level;
+      const fill = { ok: "#2a64c9", fault: "#d93025", warn: "#c27c0e" }[level];
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="${fill}"/><path d="M9 9v14M9 16h6M15 9v14M19 9v14M19 16l6-7M19 16l6 7" stroke="#fff" stroke-width="2.6" stroke-linecap="round" fill="none"/></svg>`;
+      let link = document.querySelector("link[rel=icon]");
+      if (!link) { link = document.createElement("link"); link.rel = "icon"; document.head.append(link); }
+      link.href = "data:image/svg+xml," + encodeURIComponent(svg);
+    }
+    alertNew(al);
+  }
+
+  // ---- This screen: alert on new alarms, keep the screen on. Saved per browser. ----
+  const screenOpt = (() => { try { return JSON.parse(localStorage.getItem("plcki.screen") || "{}"); } catch { return {}; } })();
+  const saveScreenOpt = () => { try { localStorage.setItem("plcki.screen", JSON.stringify(screenOpt)); } catch { /* private window */ } };
+  let seenAlarms = null;
+  function alertNew(al) {
+    if (!state.status || Date.now() - state.lastOk > 5000) return;
+    const ids = new Set(al.map((a) => a.id));
+    const fresh = seenAlarms ? al.filter((a) => !seenAlarms.has(a.id)) : [];
+    seenAlarms = ids;
+    if (!fresh.length) return;
+    if (screenOpt.sound) beep(fresh.some((a) => a.severity === "FAULT"));
+    if (screenOpt.notify && "Notification" in window && Notification.permission === "granted") {
+      const a = fresh[0];
+      try { const n = new Notification(`${a.severity} ${a.id}: ${a.text}`, { body: state.status.machine || "PLC-Ki", tag: "plcki-" + a.id }); n.onclick = () => { window.focus(); go("#/alarm"); }; } catch { /* not allowed here */ }
+    }
+  }
+  let audio;
+  function beep(fault) {
+    try {
+      audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+      const tones = fault ? [880, 660, 880] : [660];
+      tones.forEach((f, i) => {
+        const o = audio.createOscillator(), g = audio.createGain();
+        o.frequency.value = f; o.connect(g); g.connect(audio.destination);
+        const t0 = audio.currentTime + i * 0.22;
+        g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.25, t0 + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.18);
+        o.start(t0); o.stop(t0 + 0.2);
+      });
+    } catch { /* no sound on this browser */ }
+  }
+  let wakeLock = null;
+  async function keepAwake(on) {
+    try {
+      if (on && !wakeLock && "wakeLock" in navigator) { wakeLock = await navigator.wakeLock.request("screen"); wakeLock.addEventListener("release", () => { wakeLock = null; }); }
+      if (!on && wakeLock) { await wakeLock.release(); wakeLock = null; }
+    } catch { wakeLock = null; }
+  }
+  // The browser drops the lock when the tab is hidden; take it again when it comes back.
+  document.addEventListener("visibilitychange", () => { if (screenOpt.awake && document.visibilityState === "visible") keepAwake(true); });
+
+  /**
+   * Set a password: one's own (asks for the current one) or, for an administrator, someone else's.
+   * Asks twice so a typing mistake does not lock anyone out.
+   */
+  function passwordSheet(forName) {
+    const own = !forName;
+    const s = sheet(`<h2>${own ? "Change my password" : "New password for " + esc(forName)}</h2>
+      <form class="stack" style="gap:12px" data-pw-form>
+        ${own ? `<label class="field">Current password<input type="password" id="pw-cur" autocomplete="current-password" required></label>` : ""}
+        <label class="field">New password <span class="hint">at least 8 characters</span><input type="password" id="pw-new" autocomplete="new-password" minlength="8" required ${own ? "" : "autofocus"}></label>
+        <label class="field">New password again<input type="password" id="pw-rep" autocomplete="new-password" required></label>
+        <p class="muted small" id="pw-err" role="alert" style="margin:0;color:var(--fault-ink)"></p>
+        <div class="row end"><button type="button" class="btn gray" data-close>Cancel</button><button type="submit" class="btn">Set password</button></div>
+      </form>`);
+    const f = s.el.querySelector("[data-pw-form]");
+    const err = (t) => { s.el.querySelector("#pw-err").textContent = t; };
+    if (own) setTimeout(() => s.el.querySelector("#pw-cur").focus(), 50);
+    f.onsubmit = async (e) => {
+      e.preventDefault();
+      const pw = f.querySelector("#pw-new").value, rep = f.querySelector("#pw-rep").value;
+      if (pw.length < 8) return err("The new password needs at least 8 characters.");
+      if (pw !== rep) return err("The two new passwords are not the same. Type them again.");
+      try {
+        if (own) await api("POST", "/api/auth/password", { current: f.querySelector("#pw-cur").value, password: pw });
+        else await api("PUT", `/api/admin/users/${encodeURIComponent(forName)}/password`, { password: pw });
+        s.close();
+        toast(own ? "Your password is changed." : `Password for ${forName} is changed.`);
+      } catch (x) { err(x.message); }
+    };
+  }
+
+  function screenSheet() {
+    const secure = window.isSecureContext;
+    const canNotify = secure && "Notification" in window;
+    const canWake = secure && "wakeLock" in navigator;
+    const row = (key, title, text, ok, why) => `<label class="opt-row ${ok ? "" : "off"}"><input type="checkbox" data-opt="${key}" ${screenOpt[key] && ok ? "checked" : ""} ${ok ? "" : "disabled"}>
+      <span><b>${esc(title)}</b><br><span class="muted small">${esc(ok ? text : why)}</span></span></label>`;
+    const notHere = "Not possible on this connection: the browser allows it only on the PLC-Ki PC itself (localhost) or over https.";
+    const s = sheet(`<span class="eyebrow">This screen</span><h2>Alarms and screen</h2>
+      <p class="muted" style="margin:0">Only for this browser on this device. Nothing here changes the machine.</p>
+      <div class="stack" style="gap:12px">
+        ${row("sound", "Beep when a new alarm comes", "A short tone: three beeps for a fault, one for a warning. Leave this page open in a tab.", true, "")}
+        ${row("notify", "Show a notice when a new alarm comes", "A message from the browser, also when PLC-Ki is in a background tab.", canNotify, notHere)}
+        ${row("awake", "Keep this screen on", "For a screen on the line: the display does not go dark while this page is open.", canWake, notHere)}
+      </div>
+      <div class="row end"><button class="btn plain" type="button" data-test-beep>Test the beep</button><button class="btn" data-close>Done</button></div>`);
+    s.el.addEventListener("change", async (e) => {
+      const box = e.target.closest("[data-opt]"); if (!box) return;
+      const key = box.dataset.opt;
+      if (key === "notify" && box.checked && Notification.permission !== "granted") {
+        const p = await Notification.requestPermission().catch(() => "denied");
+        if (p !== "granted") { box.checked = false; toast("The browser did not allow notices. Allow them in the browser's site settings.", "error"); return; }
+      }
+      screenOpt[key] = box.checked; saveScreenOpt();
+      if (key === "awake") keepAwake(box.checked);
+      if (key === "sound" && box.checked) beep(false);
+    });
+    s.el.querySelector("[data-test-beep]").onclick = () => beep(true);
   }
 
   async function pollStatus() {
@@ -265,6 +389,13 @@ const PK = (() => {
       const r = await fetch("/api/status", { cache: "no-store" });
       if (r.status === 401) { location.href = "/login.html?next=" + encodeURIComponent("/" + location.hash); return; }
       if (r.ok) { state.status = await r.json(); state.lastOk = Date.now(); }
+      const run = r.headers.get("X-PlcKi-Run");
+      if (run && state.run && run !== state.run) {
+        // PLC-Ki was restarted (maybe with another model or program): start this page fresh
+        if (!dirty) { location.reload(); return; }
+        toast("PLC-Ki was restarted. Save, then reload the page to see the current program.", "error");
+      }
+      if (run) state.run = run;
     } catch { /* shown as not reachable */ }
     renderConn();
     if (current && current.view.live) draw();
@@ -338,6 +469,8 @@ const PK = (() => {
     document.body.append(wrap);
     fillIcons(wrap);
     const el = wrap.firstElementChild;
+    const h = el.querySelector("h2, h1");   // screen readers name the dialog by its heading
+    if (h) { h.id = h.id || "sheet-h-" + Math.random().toString(36).slice(2, 8); el.setAttribute("aria-labelledby", h.id); }
     let closed = false;
     const close = () => {
       if (closed) return;
@@ -478,23 +611,32 @@ const PK = (() => {
     if (/timed out|timeout|within \d+ s|no answer/i.test(m) && /5090|tia|helper|importer/i.test(m)) return { text: "The TIA helper did not answer.", todo: "On the VM (or TIA PC): check the window \"PLC-Ki TIA helper\" is open. If not, double-click Start-TIA-helper in C:\\PLCKi\\PLC-Ki\\tools\\TiaImporter." };
     if (/refused the token|401/i.test(m)) return { text: "The TIA helper does not accept the token.", todo: "Type the same token here as the one shown in the TIA helper window on the VM." };
     if (/timed out|timeout|no answer|unreachable|no route|host is down/i.test(m)) return { text: `${plc} does not answer.`, todo: `Check the PLC is on and the cable or virtual switch is connected. On the PC, ping ${plc} should answer. For PLCSIM: is the virtual PLC started in PLCSIM Advanced?` };
+    if (/no such host|name or service not known|nodename nor servname|not known on this network|host not found/i.test(m)) return { text: `${plc} is not known on the network.`, todo: "Check the spelling. Use the PLC's IP address from TIA (Device configuration › PROFINET interface), for example 192.168.0.10." };
+    if (/is not an IP address/i.test(m)) return { text: m, todo: "" };
     if (/refused/i.test(m)) return { text: `Something is at ${plc}, but it does not accept the connection.`, todo: "Check it is really the PLC's address, and that PUT/GET or the access level allows reading (TIA: CPU properties, Protection & Security)." };
-    if (/password|access|legitimation|protection/i.test(m)) return { text: "The PLC asks for a password.", todo: "Enter the CPU's access password under Setup, Connections (More PLC options)." };
+    if (/password|access|legitimation|protection/i.test(m)) return { text: "The PLC asks for a password.", todo: "Enter the CPU's access password under Setup, Connections (More PLC options).", op: "Ask an administrator to enter the PLC's access password in PLC-Ki." };
     if (/api key|anthropic/i.test(m)) return { text: "No Claude API key is set.", todo: "Add it under Setup, Settings (Assistant). It starts with sk-ant-." };
     return { text: m, todo: "" };
   }
 
-  /** What the PLC connection state means, for the pill sheet and empty pages. */
+  /** What the PLC connection state means, for the pill sheet and empty pages. Operators cannot open Setup, so they read who to ask. */
   function connInfo() {
+    const i = connInfoAll();
+    if (state.user && state.user.role === "admin") return i;
+    if (i.todo && /Setup|Connections|Link/.test(i.todo)) i.todo = i.op || "Ask an administrator of PLC-Ki to check the connection to the PLC.";
+    return i;
+  }
+  function connInfoAll() {
     const c = state.status && state.status.connection;
     const stale = Date.now() - state.lastOk > 5000;
     if (!state.status || stale) return { level: "bad", title: "PLC-Ki is not answering.", text: "This page cannot reach PLC-Ki.", todo: "Check that the PLC-Ki window on the PC is still open. If it was closed, double-click Start-PLC-Ki in the PLC-Ki folder, then reload this page." };
     if (c.state === "connected") return { level: "ok", title: `Reading the PLC at ${c.address}.`, text: "Values are live, read once a second. PLC-Ki only reads: it never writes values or changes the CPU state.", todo: "" };
-    if (c.state === "snapshot") return { level: "info", title: "Showing test values, not a PLC.", text: "PLC-Ki reads values from a test file.", todo: "To read a real PLC, choose Live PLC under Setup, Connections (More PLC options)." };
+    if (c.state === "snapshot") return { level: "info", title: "Showing test values, not a PLC.", text: "PLC-Ki reads values from a test file.", todo: "To read a real PLC, choose Live PLC under Setup, Connections (More PLC options).", op: "Ask an administrator to switch PLC-Ki to the real PLC." };
+    if (c.state === "notset") return { level: "warn", title: "No PLC is set yet.", text: "PLC-Ki does not know which PLC to read, so there are no live values.", todo: "Enter the PLC's address under Setup, Connections.", op: "Ask an administrator to set up the connection to the PLC." };
     if (c.state === "connecting") return { level: "warn", title: `Connecting to ${c.address}…`, text: "This takes a few seconds.", todo: "" };
-    if (c.state === "waiting") return { level: "warn", title: "Waiting for PLC-Ki Link.", text: "The PLC is read by PLC-Ki Link on your laptop, and it is not connected.", todo: "On the laptop, start PLC-Ki Link (Setup, Connections shows the command)." };
+    if (c.state === "waiting") return { level: "warn", title: "Waiting for PLC-Ki Link.", text: "The PLC is read by PLC-Ki Link on your laptop, and it is not connected.", todo: "On the laptop, start PLC-Ki Link (Setup, Connections shows the command).", op: "Ask an administrator to start PLC-Ki Link on the laptop that is connected to the PLC." };
     const p = plain(c.error, { plc: c.address });
-    return { level: "bad", title: `No connection to the PLC at ${c.address}.`, text: p.text === c.error ? "" : p.text, todo: p.todo, detail: c.error };
+    return { level: "bad", title: `No connection to the PLC at ${c.address}.`, text: p.text === c.error ? "" : p.text, todo: p.todo, op: p.op, detail: c.error };
   }
 
   function connSheet() {
@@ -565,11 +707,13 @@ const PK = (() => {
     const name = current ? current.name : "alarm";
     const [title, intro, tips] = HELP[name] || HELP.alarm;
     const admin = state.user && state.user.role === "admin";
-    sheet(`<span class="eyebrow">Help</span><h2>${esc(title)}</h2><p class="muted" style="margin:0">${esc(intro)}</p>
+    const h = sheet(`<span class="eyebrow">Help</span><h2>${esc(title)}</h2><p class="muted" style="margin:0">${esc(intro)}</p>
       <ul class="plainlist">${tips.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>
       <p class="faint small" style="margin:0">The light at the top right shows the PLC connection; click it for what it means. Ask answers questions about the machine on every page.</p>
+      <p class="faint small" style="margin:0"><button type="button" class="linkbtn" data-screen>Alarm sound and screen</button>: beep or show a notice when an alarm comes, keep a line screen on.</p>
       <p class="faint small keys" style="margin:0"><kbd>?</kbd> this help · <kbd>/</kbd> ask a question · <kbd>Esc</kbd> close</p>
       <div class="row end">${admin && name !== "setup/start" ? `<a class="btn b" href="#/setup/start" data-close>Get started</a>` : ""}<button class="btn" data-close>OK</button></div>`);
+    h.el.querySelector("[data-screen]").onclick = () => { h.close(); screenSheet(); };
   }
 
   async function start() {
@@ -589,6 +733,10 @@ const PK = (() => {
     try { state.model = await api("GET", "/api/model"); } catch { /* shown on pages */ }
     try { state.info = await api("GET", "/api/info"); $("machine").textContent = state.info.machine; } catch { /* */ }
     $("help-open").onclick = helpSheet;
+    $("screen-open").onclick = screenSheet;
+    $("pw-open").onclick = () => passwordSheet();
+    $("pw-open").classList.toggle("hidden", !state.user);
+    if (screenOpt.awake) keepAwake(true);
     $("conn").setAttribute("role", "button");
     $("conn").tabIndex = 0;
     $("conn").title = "What does this mean?";
@@ -613,9 +761,12 @@ const PK = (() => {
       else if (e.key === "/" && window.PKAsk) { e.preventDefault(); window.PKAsk.open(); }
     });
     window.addEventListener("scroll", () => $("topnav").classList.toggle("scrolled", window.scrollY > 4), { passive: true });
-    const navh = () => document.documentElement.style.setProperty("--navh", $("topnav").offsetHeight + "px");
+    const navh = () => {
+      document.documentElement.style.setProperty("--navh", $("topnav").offsetHeight + "px");
+      document.documentElement.style.setProperty("--bannerh", $("banner").offsetHeight + "px");   // 0 when hidden
+    };
     navh();
-    if ("ResizeObserver" in window) new ResizeObserver(navh).observe($("topnav"));
+    if ("ResizeObserver" in window) { const ro = new ResizeObserver(navh); ro.observe($("topnav")); ro.observe($("banner")); }
     if (admin && !location.hash && typeof PKStart !== "undefined" && (await PKStart.firstRun())) history.replaceState(null, "", "#/setup/start");
     route();
     pollStatus();
@@ -623,6 +774,6 @@ const PK = (() => {
     pollJobs();
   }
 
-  return { dirty: setDirty, get isDirty() { return !!dirty; }, plain, connInfo, connSheet, helpSheet, cmd, sec, hero, on, $, esc, icon, fillIcons, kindIcon, api, state, view, go, draw, route, toast, sheet, confirmSheet, cond, md, ago, clock, date, when,
+  return { dirty: setDirty, get isDirty() { return !!dirty; }, plain, connInfo, connSheet, helpSheet, screenSheet, passwordSheet, setHash, cmd, sec, hero, on, $, esc, icon, fillIcons, kindIcon, api, state, view, go, draw, route, toast, sheet, confirmSheet, cond, md, ago, clock, date, when,
     loadProgram, valueBySymbol, norm, start, get current() { return current; } };
 })();

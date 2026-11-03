@@ -129,7 +129,7 @@ const PKStart = (() => {
     return {
       title: "Which setup is yours?",
       sub: "PLC-Ki needs the PLC for live values, and TIA Portal only to import a program or build blocks. Pick the one that looks like yours. You can change it later.",
-      body: `<div class="setups">${Object.entries(PKSetup.presets).map(([k, x]) => `<button type="button" class="setup-opt ${p === k ? "on" : ""}" data-preset="${k}">
+      body: `<div class="setups">${Object.entries(PKSetup.presets).map(([k, x]) => `<button type="button" class="setup-opt ${p === k ? "on" : ""}" data-preset="${k}" aria-pressed="${p === k}" aria-label="${esc(x.title + ". " + x.text)}">
           ${mini(k)}<b>${esc(x.title)}</b><small>${esc(x.text)}</small></button>`).join("")}</div>
         <div class="card explain">
           <div class="grid two">
@@ -137,7 +137,7 @@ const PKStart = (() => {
             <div><h3>Every day</h3><ul class="plainlist">${d.every.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>
           </div>
           ${p === "same" ? "" : `<p class="faint small" style="margin:16px 0 0">Tip: installed with <a href="${SETUP_URL}" target="_blank" rel="noopener">PLC-Ki-Setup.exe</a>
-            (GitHub, Actions, latest run, Artifacts), PLC-Ki runs by itself in the background and starts with Windows, so there is no window to keep open.</p>`}</div>
+            (the installer), PLC-Ki runs by itself in the background and starts with Windows, so there is no window to keep open.</p>`}</div>
         ${p === "same" && PKSetup.info.service ? `<div class="notice gold">${icon("info")}<div>PLC-Ki runs as a Windows service on this PC, so it cannot open the TIA helper window itself.
           Set the helper up as for a VM (double-click Setup-TIA-helper on this PC) and choose <b>PC with a TIA VM</b> with the address <code>http://localhost:5090</code>.</div></div>` : ""}`,
     };
@@ -173,7 +173,7 @@ const PKStart = (() => {
               ${liveNow ? `<span class="pill ok"><span class="dot"></span>Live now</span>` : ""}</div></div>
           ${result(plcTest)}
           <details class="more"><summary>Where do I find the address?</summary><p class="muted small" style="margin:8px 0 0">In TIA Portal: <b>Devices &amp; networks</b>, click the CPU, then
-            <b>Properties › PROFINET interface › Ethernet addresses</b>. For PLCSIM Advanced it is the address of the virtual PLC (in your test setup 192.168.10.10).
+            <b>Properties › PROFINET interface › Ethernet addresses</b>. For PLCSIM Advanced it is the address of the virtual PLC, as shown in PLCSIM Advanced.
             ${viaLink ? "" : "This PC must be in the same network: <code>ping</code> to the address should answer."}</p></details>
           <details class="more"><summary>The CPU has a password</summary><div style="margin-top:8px">${viaLink
             ? `<p class="muted small" style="margin:0">With Link the password stays on the laptop: add <code>--plc-password &lt;password&gt;</code> to the Link command.</p>`
@@ -193,13 +193,13 @@ const PKStart = (() => {
       body = `<div class="card stack"><h3>TIA Portal is on this PC</h3>
         <p class="muted" style="margin:0">PLC-Ki starts the TIA helper by itself, in its own window, when it needs TIA. Tell it where the helper is.</p>
         ${field("w-tiaImporterPath", "TiaImporter.exe on this PC", w.tiaImporterPath, { placeholder: helperExe })}
-        ${field("w-tiaPlcsimIp", "PLCSIM address (for test downloads)", w.tiaPlcsimIp, { placeholder: "e.g. 192.168.10.10, empty = no PLCSIM downloads" })}
+        ${field("w-tiaPlcsimIp", "PLCSIM address (for test downloads)", w.tiaPlcsimIp, { placeholder: "e.g. 192.168.0.10, empty = no PLCSIM downloads" })}
         ${check}</div>`;
     } else if (m === "remote") {
       body = `<div class="card stack"><span class="where where-vm">On the VM · once</span>
           <h3>Set up the TIA helper on the VM</h3>
           <ol class="howto">
-            <li><b>Get the newest PLC-Ki on the VM.</b> Open Command Prompt on the VM and paste this one line:${cmd("On the VM", `cd /d ${VM_DIR} && git pull`)}</li>
+            <li><b>Put the newest PLC-Ki on the VM</b>, in <code>${VM_DIR}</code>: copy the PLC-Ki folder from this PC. If it is already there and was downloaded with git, this one line in Command Prompt updates it:${cmd("On the VM", `cd /d ${VM_DIR} && git pull`)}</li>
             <li><b>Double-click <code>Setup-TIA-helper</code></b> in File Explorer, in <code>${VM_DIR}\\tools\\TiaImporter</code>. Say Yes when Windows asks.
               A small window asks for a token (a password you make up, at least 8 characters) and the PLCSIM address, then starts the helper.</li>
             <li><b>That's it.</b> From now on the helper starts by itself when you log into the VM, in a window called <b>PLC-Ki TIA helper</b>. Leave it open.
@@ -207,7 +207,7 @@ const PKStart = (() => {
           </ol></div>
         <div class="card stack"><span class="where where-pc">Here · on the PC</span>
           <h3>Tell PLC-Ki where the VM is</h3>
-          <div class="grid two">${field("w-tiaUrl", "VM address", w.tiaUrl, { placeholder: "http://192.168.10.3:5090", hint: "The VM's IP address, port 5090." })}
+          <div class="grid two">${field("w-tiaUrl", "VM address", w.tiaUrl, { placeholder: "http://192.168.0.20:5090", hint: "The VM's IP address, port 5090." })}
             ${field("w-tiaToken", "Token", "", { type: "password", placeholder: PKSetup.info.tiaToken === "set" ? "•••••••• (saved)" : "the same token as on the VM", hint: PKSetup.info.tiaToken === "set" ? "Saved. Leave empty to keep it." : "Shown in the TIA helper window on the VM." })}</div>
           ${field("w-tiaProject", "TIA project for generated blocks (optional)", w.tiaProject, { placeholder: "C:\\Users\\…\\Documents\\Automation\\…\\Project.ap20", hint: "A path on the VM. Use a copy, not the plant's master project." })}
           ${check}</div>`;
@@ -230,7 +230,7 @@ const PKStart = (() => {
       title: "Turn on Ask.",
       sub: "Claude answers questions about the machine (\"why is the alarm on?\") and reads your program once, at import, to write the plain-English explanations. Both need a Claude API key.",
       body: `<div class="card stack">
-        ${k !== "none" ? `<div class="notice green">${icon("check")}<div>${k === "environment" ? "A key is set on this PC (ANTHROPIC_API_KEY). You can leave this empty." : "A key is saved. Leave empty to keep it."}</div></div>` : ""}
+        ${k !== "none" ? `<div class="notice green">${icon("check")}<div>${k === "environment" ? "A key is already set on this PC (outside PLC-Ki). You can leave this empty." : "A key is saved. Leave empty to keep it."}</div></div>` : ""}
         ${field("w-apiKey", "Claude API key", "", { type: "password", placeholder: "sk-ant-…", hint: "From console.anthropic.com, API keys. Stored encrypted on this PC." })}
         <p class="faint small" style="margin:0">Questions cost a few cents each. Importing a program costs a few dollars, once.</p></div>`,
       skip: true,

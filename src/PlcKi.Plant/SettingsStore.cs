@@ -114,8 +114,52 @@ public sealed class SettingsStore
         };
     }
 
+    /// <summary>
+    /// A restart is needed when settings were saved here, or when what is saved now differs from what is running
+    /// (for example settings.json was changed by another copy of PLC-Ki or by hand).
+    /// </summary>
+    public bool RestartNeeded() => _ctx.RestartNeeded || (_ctx.Running != null && _ctx.Running.RestartKey() != Current().RestartKey());
+
+    // ---- which program export belongs to which model ----
+    private string ExportMapFile => Path.Combine(_ctx.DataDir, "model-exports.json");
+    private string Full(string p) => Path.GetFullPath(_ctx.ResolveAppPath(p.Trim()));
+
+    /// <summary>The export a model was built from: recorded by the import, or named in the model file itself.</summary>
+    public string? ExportFor(string model)
+    {
+        if (string.IsNullOrWhiteSpace(model)) return null;
+        try
+        {
+            if (File.Exists(ExportMapFile) && JsonNode.Parse(File.ReadAllText(ExportMapFile)) is JsonObject map)
+                foreach (var (k, v) in map)
+                    if (string.Equals(Full(k), Full(model), StringComparison.OrdinalIgnoreCase) && v?.GetValue<string>() is { Length: > 0 } e) return e;
+        }
+        catch (Exception) { /* a broken map is ignored */ }
+        try { return MachineModel.Load(_ctx.ResolveAppPath(model)).Export is { Length: > 0 } x ? x : null; }
+        catch (Exception) { return null; }
+    }
+
+    /// <summary>Remember that this model was built from this export (called by the import).</summary>
+    public void LinkExport(string model, string export)
+    {
+        lock (_lock)
+        {
+            JsonObject map;
+            try { map = File.Exists(ExportMapFile) ? JsonNode.Parse(File.ReadAllText(ExportMapFile)) as JsonObject ?? new() : new(); }
+            catch (Exception) { map = new(); }
+            map[model] = export;
+            Directory.CreateDirectory(_ctx.DataDir);
+            File.WriteAllText(ExportMapFile, map.ToJsonString(Json));
+        }
+    }
+
     public void Save(PlantSettings s)
     {
+        // Another model was picked but the export was left as it was: take the model's own export, so Code and
+        // Logic never show program A next to model B. No known export: none, and the pages say so.
+        var was = Current();
+        if (!string.Equals(s.Model?.Trim(), was.Model?.Trim(), StringComparison.Ordinal) && string.Equals(s.Export?.Trim() ?? "", was.Export?.Trim() ?? "", StringComparison.Ordinal))
+            s.Export = ExportFor(s.Model ?? "") ?? "";
         Validate(s);
         lock (_lock)
         {
@@ -190,12 +234,11 @@ public sealed class SettingsStore
     public void Validate(PlantSettings s)
     {
         if (s.Source is not ("s7" or "snapshot")) throw new PlantException("Source is 's7' (live PLC) or 'snapshot' (test file).");
-        var addr = s.Address?.Trim() ?? "";
-        if (addr.Length == 0 || (!IPAddress.TryParse(addr, out _) && Uri.CheckHostName(addr) == UriHostNameType.Unknown))
-            throw new PlantException("Enter the PLC address as an IP address (for example 192.168.0.10) or a host name.");
+        // Empty is allowed: "not set yet" on a fresh install
+        if (AddressProblem(s.Address) is { } bad) throw new PlantException(bad);
         if (s.Security is not ("Auto" or "Tls" or "LegacyChallenge")) throw new PlantException("Security is Auto, Tls or LegacyChallenge.");
-        if (s.PollMs is < 100 or > 60_000) throw new PlantException("Read interval: 100 to 60000 ms.");
-        if (s.TimeoutMs is < 500 or > 60_000) throw new PlantException("Timeout: 500 to 60000 ms.");
+        if (s.PollMs is < 100 or > 60_000) throw new PlantException("Read every: 0.1 to 60 seconds (100 to 60000 ms).");
+        if (s.TimeoutMs is < 500 or > 60_000) throw new PlantException("Wait for an answer: 0.5 to 60 seconds (500 to 60000 ms).");
         if (s.HistoryMinutes is < 1 or > 240) throw new PlantException("History: 1 to 240 minutes.");
         if (s.AskEffort is not ("low" or "medium" or "high" or "max")) throw new PlantException("Effort is low, medium, high or max.");
         if (s.Port is < 1 or > 65535) throw new PlantException("Port: 1 to 65535.");
@@ -209,12 +252,28 @@ public sealed class SettingsStore
         if (s.PlcVia is not ("direct" or "link")) throw new PlantException("The PLC is read directly or through PLC-Ki Link.");
         if (s.TiaMode is not ("local" or "remote" or "link")) throw new PlantException("TIA is on this PC, on another PC, or reached through PLC-Ki Link.");
         if (s.TiaMode == "remote" && !string.IsNullOrWhiteSpace(s.TiaUrl) && !Uri.TryCreate(s.TiaUrl.Trim(), UriKind.Absolute, out _))
-            throw new PlantException("Enter the TIA PC as an address like http://192.168.10.3:5090.");
+            throw new PlantException("Enter the TIA PC as an address like http://192.168.0.20:5090.");
         if (s.TiaToken is { Length: > 0 } tok && tok.Trim().Length < 8) throw new PlantException("The TIA helper's token needs at least 8 characters.");
         if (!string.IsNullOrWhiteSpace(s.Export) && !File.Exists(_ctx.ResolveAppPath(s.Export.Trim())) && !Directory.Exists(_ctx.ResolveAppPath(s.Export.Trim())))
             throw new PlantException($"The program export was not found: {s.Export}");
         if (s.ApiKey is { Length: > 0 } key && !key.Trim().StartsWith("sk-", StringComparison.Ordinal))
             throw new PlantException("That does not look like a Claude API key (they start with sk-).");
+    }
+
+    /// <summary>Why a PLC address is not usable, in plain words; null when it is fine or empty.</summary>
+    public static string? AddressProblem(string? address)
+    {
+        var addr = address?.Trim() ?? "";
+        if (addr.Length == 0) return null;
+        // Digits and dots: must be a full IPv4 address (999.1.1 would otherwise be looked up as a host name)
+        if (System.Text.RegularExpressions.Regex.IsMatch(addr, @"^[\d.]+$"))
+        {
+            var parts = addr.Split('.');
+            return parts.Length == 4 && parts.All(p => p.Length is > 0 and <= 3 && int.Parse(p) <= 255) ? null
+                : $"{addr} is not an IP address. It has four numbers from 0 to 255 with dots between them, for example 192.168.0.10.";
+        }
+        return IPAddress.TryParse(addr, out _) || Uri.CheckHostName(addr) != UriHostNameType.Unknown ? null
+            : $"{addr} is not an IP address or a computer name. Use the address from TIA (Device configuration › PROFINET interface), for example 192.168.0.10.";
     }
 
     private static int? PortFromUrls(string urls)

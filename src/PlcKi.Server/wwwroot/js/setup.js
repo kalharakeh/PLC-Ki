@@ -18,9 +18,26 @@ const PKSetup = (() => {
     return d;
   }
 
+  /** Saved settings that differ from what this PLC-Ki is running with (for example changed by another copy). */
+  const RUN_LABELS = { source: "Values from", address: "PLC address", plcVia: "PLC read", model: "Machine model", export: "Program export", port: "Port", tiaMode: "TIA", tiaUrl: "TIA PC" };
+  const short = (v) => (v === "" || v == null ? "not set" : String(v).split(/[\\/]/).pop());
+  function runDiff() {
+    const r = info && info.running;
+    if (!r || !settings) return [];
+    return Object.keys(RUN_LABELS).filter((k) => String(r[k] ?? "") !== String(settings[k] ?? "") && !(k === "port" && settings.port === r.port))
+      .map((k) => `${RUN_LABELS[k]}: running ${short(r[k])}, saved ${short(settings[k])}`);
+  }
+  /** "Running now: …" under a field whose saved value is not the one in use. */
+  function runNote(key) {
+    const r = info && info.running;
+    return r && settings && String(r[key] ?? "") !== String(settings[key] ?? "") ? `<span class="hint run-now">Running now: ${esc(short(r[key]))}</span>` : "";
+  }
+
   function restartBar(el) {
     if (!info || !info.restartNeeded) return "";
-    return `<div class="notice gold" style="align-items:center">${icon("info")}<div style="flex:1"><b>Saved.</b> PLC-Ki uses the new settings after a restart.
+    const diff = runDiff();
+    return `<div class="notice gold" style="align-items:center">${icon("info")}<div style="flex:1"><b>Saved, not in use yet.</b> PLC-Ki runs with the settings it started with and uses the saved ones after a restart.
+      ${diff.length ? `<br><span class="small">${diff.map(esc).join(" · ")}</span>` : ""}
       ${info.canRestart ? "" : " Stop PLC-Ki (Ctrl+C in its window) and start it again."}</div>
       ${info.canRestart ? `<button class="btn gold small" data-restart>Apply now</button>` : ""}</div>`;
   }
@@ -184,7 +201,7 @@ const PKSetup = (() => {
 
   /** The setup as a clean schematic: boxes for the computers, lines for the links, green / red once checked. */
   function diagram(c) {
-    const tiaOk = tiaStatus ? tiaStatus.ok : null;
+    const tiaOk = tiaStatus && !tiaStatus.notSet ? tiaStatus.ok : null;
     const plcState = state.status && state.status.connection.state;
     const plcOk = plcState === "connected" ? true : plcState === "disconnected" ? false : null;
     const col = (v) => (v === true ? "var(--ok)" : v === false ? "var(--fault)" : "var(--muted)");
@@ -232,30 +249,30 @@ const PKSetup = (() => {
     .map(([k, l]) => `<a class="btn ${k === here ? "" : "b"} small" href="#/setup/${k}">${l}</a>`).join("")}</div>`;
 
   function choice(name, current, options) {
-    return `<div class="choice">${options.map((o) => `<button type="button" data-${name}="${o.value}" class="${current === o.value ? "on" : ""}" ${o.disabled ? "disabled" : ""}>
+    return `<div class="choice" role="group">${options.map((o) => `<button type="button" data-${name}="${o.value}" class="${current === o.value ? "on" : ""}" aria-pressed="${current === o.value}" aria-label="${esc(o.label + ". " + o.text)}" ${o.disabled ? "disabled" : ""}>
       <span class="ico">${icon(o.icon)}</span><b>${esc(o.label)}</b><small>${esc(o.text)}</small>${o.soon ? `<span class="tag gold soon">Next update</span>` : ""}</button>`).join("")}</div>`;
   }
 
   function connectionsHtml() {
     const c = conn;
-    const preset = presetOf(c);
+    const preset = c.setupChosen ? presetOf(c) : null;   // a fresh install has not picked one yet
     const tiaFields = c.tiaMode === "local" ? `
         <div class="grid two">
           <label class="field">TiaImporter.exe on this PC<input id="tiaImporterPath" value="${esc(c.tiaImporterPath)}" placeholder="C:\\PLCKi\\PLC-Ki\\tools\\TiaImporter\\bin\\Release\\net48\\TiaImporter.exe"><span class="hint">PLC-Ki starts it in its own window and stops it when PLC-Ki stops.</span></label>
           <label class="field">TIA project for generated blocks<input id="tiaProject" value="${esc(c.tiaProject)}" placeholder="C:\\Users\\you\\Documents\\Automation\\Line1\\Line1.ap20"><span class="hint">Can also be chosen on the Block generator page.</span></label>
-          <label class="field">PLCSIM address (downloads for testing)<input id="tiaPlcsimIp" value="${esc(c.tiaPlcsimIp)}" placeholder="e.g. 192.168.10.10, empty = no PLCSIM downloads"></label>
+          <label class="field">PLCSIM address (downloads for testing)<input id="tiaPlcsimIp" value="${esc(c.tiaPlcsimIp)}" placeholder="e.g. 192.168.0.10, empty = no PLCSIM downloads"></label>
           <label class="field">Real PLCs that may be loaded<input id="tiaAllowReal" value="${esc(c.tiaAllowReal)}" placeholder="empty = never"><span class="hint">Each download is still confirmed by typing the address in the TiaImporter window, with the CPU in STOP.</span></label>
         </div>
         <div class="row" style="margin-top:12px"><button class="btn b small" data-start-helper>${tiaStatus && tiaStatus.helperRunning ? "Restart" : "Start"} the TIA helper</button></div>`
       : c.tiaMode === "remote" ? `
         <div class="grid two">
-          <label class="field">TIA PC address<input id="tiaUrl" value="${esc(c.tiaUrl)}" placeholder="http://192.168.10.3:5090"></label>
+          <label class="field">TIA PC address<input id="tiaUrl" value="${esc(c.tiaUrl)}" placeholder="http://192.168.0.20:5090"></label>
           <label class="field">Token <span class="hint">${info.tiaToken === "set" ? "Saved. Leave empty to keep it." : "Shown in the PLC-Ki TIA helper window on the VM."}</span><input id="tiaToken" type="password" autocomplete="new-password" placeholder="${info.tiaToken === "set" ? "••••••••" : "at least 8 characters"}"></label>
           <label class="field">TIA project for generated blocks<input id="tiaProject" value="${esc(c.tiaProject)}" placeholder="path on the TIA PC, e.g. C:\\Users\\Software\\Documents\\Automation\\…\\.ap20"></label>
         </div>
         <details class="more" ${tiaStatus && !tiaStatus.ok ? "open" : ""}><summary>How to set up the TIA helper on the VM</summary>
           <ol class="howto" style="margin-top:12px">
-            <li><b>Once, get the newest PLC-Ki on the VM.</b> Open Command Prompt on the VM and paste this line:${PK.cmd("On the VM", "cd /d C:\\PLCKi\\PLC-Ki && git pull")}</li>
+            <li><b>Once, put the newest PLC-Ki on the VM</b> in <code>C:\\PLCKi\\PLC-Ki</code>: copy the PLC-Ki folder from this PC. If it was downloaded there with git, this line in Command Prompt updates it:${PK.cmd("On the VM", "cd /d C:\\PLCKi\\PLC-Ki && git pull")}</li>
             <li><b>Once, double-click <code>Setup-TIA-helper</code></b> in <code>C:\\PLCKi\\PLC-Ki\\tools\\TiaImporter</code>. It asks for the token and the PLCSIM address,
               opens the port, and starts the helper.</li>
             <li><b>Every day: nothing.</b> The helper starts by itself when you log into the VM, in a window called <b>PLC-Ki TIA helper</b>.
@@ -269,6 +286,7 @@ const PKSetup = (() => {
 
     const tiaPlain = tiaStatus && !tiaStatus.ok ? PK.plain(tiaStatus.message) : null;
     const tiaMsg = !tiaStatus ? `<span class="pill">Checking…</span>`
+      : tiaStatus.notSet ? `<span class="pill"><span class="dot"></span>Not set yet</span><span class="muted small" style="flex-basis:100%">${esc(tiaStatus.message)} Only needed to import a program or for the block generator.</span>`
       : `<span class="pill ${tiaStatus.ok ? "ok" : "bad"}"><span class="dot"></span>${esc(tiaStatus.ok ? tiaStatus.message || "Reachable" : tiaPlain.text)}</span>
          ${tiaPlain && tiaPlain.todo ? `<span class="muted small" style="flex-basis:100%">${esc(tiaPlain.todo)}</span>` : ""}
          ${tiaStatus.ok ? `<span class="faint small">PLCSIM downloads: ${tiaStatus.plcsimIp ? esc(tiaStatus.plcsimIp) : "off"} · real PLC downloads: ${tiaStatus.realAllowed ? "allowed (confirmed at the TIA PC)" : "off"}</span>` : ""}`;
@@ -289,7 +307,7 @@ const PKSetup = (() => {
           { value: "link", label: "Through my laptop", text: "PLC-Ki Link on the laptop reads it and sends the values here.", icon: "laptop" },
         ]).replace('class="choice"', 'class="choice two"')}
         <div class="grid two">
-          <label class="field">PLC address<input id="address" value="${esc(c.address)}" placeholder="192.168.0.1"></label>
+          <label class="field">PLC address<input id="address" value="${esc(c.address)}" placeholder="e.g. 192.168.0.10" inputmode="decimal">${runNote("address")}</label>
           ${c.plcVia === "link" ? `<p class="muted small" style="align-self:end;margin:0 0 10px">The laptop reads this address. If the CPU has access protection, its password stays on the laptop (<code>--plc-password</code>).</p>`
             : `<label class="field">Password <span class="hint">${info.plcPassword === "settings" ? "saved" : info.plcPassword === "environment" ? "from PLCKI_PLC_PASSWORD" : "only if the CPU has access protection"}</span><input id="plcPassword" type="password" autocomplete="new-password"></label>`}
         </div>
@@ -299,8 +317,8 @@ const PKSetup = (() => {
         <details class="more" style="margin-top:0"><summary>More PLC options</summary>
           <div class="grid three" style="margin-top:12px">
             <label class="field">Security<select id="security">${["Auto", "Tls", "LegacyChallenge"].map((x) => `<option ${c.security === x ? "selected" : ""}>${x}</option>`).join("")}</select></label>
-            <label class="field">Read every (ms)<input id="pollMs" type="number" value="${c.pollMs}"></label>
-            <label class="field">Timeout (ms)<input id="timeoutMs" type="number" value="${c.timeoutMs}"></label>
+            <label class="field">Read the PLC every <span class="hint">milliseconds; 1000 = once a second</span><input id="pollMs" type="number" min="100" max="60000" step="100" value="${c.pollMs}"></label>
+            <label class="field">Wait for an answer up to <span class="hint">milliseconds; 5000 = 5 seconds</span><input id="timeoutMs" type="number" min="500" max="60000" step="500" value="${c.timeoutMs}"></label>
             <label class="field">Values from<select id="source"><option value="s7" ${c.source === "s7" ? "selected" : ""}>Live PLC</option><option value="snapshot" ${c.source === "snapshot" ? "selected" : ""}>Test file (no PLC)</option></select></label>
             <label class="field">Test file<select id="snapshotFile">${(lists.snapshots || []).map((f) => `<option value="${esc(f.path)}" ${f.path === c.snapshotFile ? "selected" : ""}>${esc(f.label)}</option>`).join("")}</select></label>
           </div>
@@ -357,6 +375,7 @@ const PKSetup = (() => {
   }
 
   function readConn(page) {
+    if (!conn) return;      // still loading
     const v = (id) => { const el = page.querySelector("#" + id); return el ? el.value : undefined; };
     for (const k of ["address", "security", "source", "snapshotFile", "tiaUrl", "tiaImporterPath", "tiaPlcsimIp", "tiaAllowReal", "tiaProject"]) {
       const x = v(k); if (x !== undefined) conn[k] = x.trim();
@@ -368,6 +387,7 @@ const PKSetup = (() => {
 
   /** Shows the "Unsaved changes" bar while the form differs from what is saved. */
   function trackConn() {
+    if (!conn || !settings) return;
     const a = JSON.stringify({ ...conn, _plcPassword: 0, _tiaToken: 0 }), b = JSON.stringify({ ...settings, _plcPassword: 0, _tiaToken: 0 });
     const changed = a !== b || !!conn._plcPassword || !!conn._tiaToken;
     if (changed !== PK.isDirty) PK.dirty(changed ? () => { const s = PK.$("page").querySelector("[data-save]"); if (s) s.click(); } : null);
@@ -607,12 +627,12 @@ const PKSetup = (() => {
     render() {
       if (!settings) return PK.hero({ title: "Loading…" });
       const s = settings;
-      const keyText = { settings: "A key is saved here.", environment: "Using the ANTHROPIC_API_KEY environment variable. A key entered here replaces it.", none: "No key yet: the Ask box stays off until you add one." }[info.apiKey];
+      const keyText = { settings: "A key is saved here.", environment: "A key is already set on this PC (outside PLC-Ki). A key entered here replaces it.", none: "No key yet: the Ask box stays off until you add one." }[info.apiKey];
       const sw = (id, on, title, text) => `<div class="row"><div style="flex:1"><b style="font-weight:600">${title}</b><div class="muted small">${text}</div></div><label class="switch"><input type="checkbox" id="${id}" ${on ? "checked" : ""}><span></span></label></div>`;
       return PK.sec("hero compact", `${setupNav("settings")}<h1>Settings.</h1><p class="sub">The machine model, the assistant, and who can open PLC-Ki from where.</p>${restartBar()}`)
         + PK.sec("alt", `<div class="grid two" data-settings-form>
           <div class="card stack"><h3>Machine</h3>
-            <label class="field">Machine model<select id="model">${(lists.models || []).map((f) => `<option value="${esc(f.path)}" ${f.path === s.model ? "selected" : ""}>${esc(f.label)}${f.uploaded ? " (imported)" : ""}</option>`).join("")}</select><span class="hint">New models come from the Program page.</span></label>
+            <label class="field">Machine model<select id="model">${(lists.models || []).map((f) => `<option value="${esc(f.path)}" ${f.path === s.model ? "selected" : ""}>${esc(f.label)}${f.uploaded ? " (imported)" : ""}</option>`).join("")}</select><span class="hint">New models come from the Program page. Its program export is picked with it.</span>${runNote("model")}</label>
             <label class="field">History kept (minutes)<input id="historyMinutes" type="number" value="${s.historyMinutes}"><span class="hint">For questions like "what happened before the alarm?"</span></label></div>
           <div class="card stack"><h3>Assistant</h3>
             ${sw("askEnabled", s.askEnabled, "Ask box", "Claude answers questions about the machine.")}
@@ -621,17 +641,19 @@ const PKSetup = (() => {
           <div class="card stack"><h3>Access</h3>
             ${sw("allowRemote", s.allowRemote, "Other computers may open PLC-Ki", "Off: only this PC. On: anyone on the network who has a login.")}
             ${sw("publicView", s.publicView, "Viewing without login", "For a screen on the line. Setup still needs an administrator.")}
-            <label class="field" style="max-width:200px">Port<input id="port" type="number" value="${s.port}"></label></div>
+            <label class="field" style="max-width:200px">Port<input id="port" type="number" value="${s.port}">${runNote("port")}</label></div>
         </div>
         <div class="actions" style="margin-top:24px"><button class="btn big" data-save-settings>Save</button></div>`)
         + PK.sec("", `<h2>Logins</h2><p class="sub">Operators see every machine page. Administrators also see Setup.</p>
           <ul class="list">${(users || []).map((u) => `<li><span class="ico">${icon("user")}</span>
             <span style="flex:1"><b style="font-weight:600">${esc(u.name)}</b>${state.user && u.name === state.user.name ? " (you)" : ""}<div class="faint">${u.role === "admin" ? "Administrator" : "Operator"}</div></span>
             ${state.user && u.name !== state.user.name ? `<button class="btn plain small" data-role="${esc(u.name)}" data-to="${u.role === "admin" ? "operator" : "admin"}">Make ${u.role === "admin" ? "operator" : "administrator"}</button>
-              <button class="btn plain small" data-pw="${esc(u.name)}">New password</button><button class="btn plain small" style="color:var(--fault)" data-del="${esc(u.name)}">Delete</button>` : ""}</li>`).join("")}</ul>
+              <button class="btn plain small" data-pw="${esc(u.name)}">New password</button><button class="btn plain small" style="color:var(--fault)" data-del="${esc(u.name)}">Delete</button>` : `<button class="btn plain small" data-pw-own>Change my password</button>`}</li>`).join("")}</ul>
           <h3 style="margin-top:26px">Add a login</h3>
-          <div class="grid three"><input id="nu-name" placeholder="Name"><input id="nu-pw" type="password" placeholder="Password (8+ characters)" autocomplete="new-password">
-            <div class="row"><select id="nu-role" style="flex:1"><option value="operator">Operator</option><option value="admin">Administrator</option></select><button class="btn" data-add-user>Add</button></div></div>
+          <div class="grid three"><label class="field">Name<input id="nu-name" autocomplete="off"></label>
+            <label class="field">Password <span class="hint">at least 8 characters</span><input id="nu-pw" type="password" autocomplete="new-password"></label>
+            <label class="field">Role<select id="nu-role"><option value="operator">Operator: sees the machine pages</option><option value="admin">Administrator: also Setup</option></select></label></div>
+          <div class="row end" style="margin-top:10px"><button class="btn" data-add-user>Add login</button></div>
           <p class="faint" style="margin:16px 0 0">Data folder: ${esc(info.dataDir)}</p>`);
     },
     after(page) {
@@ -652,20 +674,24 @@ const PKSetup = (() => {
         saveBtn.disabled = false;
       };
       const act = async (fn, ok) => { try { await fn(); toast(ok); users = await api("GET", "/api/admin/users"); PK.draw(); } catch (e) { toast(e.message, "error"); } };
-      page.querySelectorAll("[data-role]").forEach((b) => b.onclick = () => act(() => api("PUT", `/api/admin/users/${encodeURIComponent(b.dataset.role)}/role`, { role: b.dataset.to }), "Role changed."));
+      page.querySelectorAll("[data-role]").forEach((b) => b.onclick = async () => {
+        const toAdmin = b.dataset.to === "admin";
+        if (await PK.confirmSheet({ title: `Make ${b.dataset.role} ${toAdmin ? "an administrator" : "an operator"}?`,
+          text: toAdmin ? "Administrators can open Setup: change the connections, the program, the settings and the logins." : "Operators see every machine page but cannot open Setup.",
+          ok: toAdmin ? "Make administrator" : "Make operator", danger: toAdmin }))
+          act(() => api("PUT", `/api/admin/users/${encodeURIComponent(b.dataset.role)}/role`, { role: b.dataset.to }), "Role changed.");
+      });
+      const own = page.querySelector("[data-pw-own]");
+      if (own) own.onclick = () => PK.passwordSheet();
       page.querySelectorAll("[data-del]").forEach((b) => b.onclick = async () => {
         if (await PK.confirmSheet({ title: `Delete ${b.dataset.del}?`, text: "They can no longer log in.", ok: "Delete", danger: true }))
           act(() => api("DELETE", `/api/admin/users/${encodeURIComponent(b.dataset.del)}`), "Deleted.");
       });
-      page.querySelectorAll("[data-pw]").forEach((b) => b.onclick = () => {
-        const s = PK.sheet(`<h2>New password for ${esc(b.dataset.pw)}</h2><input type="password" id="np" autocomplete="new-password" placeholder="8+ characters"><div class="row end"><button class="btn gray" data-c>Cancel</button><button class="btn" data-ok>Set</button></div>`);
-        s.el.querySelector("[data-c]").onclick = s.close;
-        s.el.querySelector("[data-ok]").onclick = () => { const pw = s.el.querySelector("#np").value; s.close(); act(() => api("PUT", `/api/admin/users/${encodeURIComponent(b.dataset.pw)}/password`, { password: pw }), "Password changed."); };
-      });
+      page.querySelectorAll("[data-pw]").forEach((b) => b.onclick = () => PK.passwordSheet(b.dataset.pw));
       page.querySelector("[data-add-user]").onclick = () => act(() => api("POST", "/api/admin/users", { name: v("nu-name").value, password: v("nu-pw").value, role: v("nu-role").value }), "Login added.");
     },
   });
 
-  return { setupNav, follow, jobCard, jobProblem, bindJob, restartBar, bindRestart, loadSettings, saveSettings, restart, presets, presetOf,
+  return { runDiff, setupNav, follow, jobCard, jobProblem, bindJob, restartBar, bindRestart, loadSettings, saveSettings, restart, presets, presetOf,
     get settings() { return settings; }, get info() { return info; } };
 })();

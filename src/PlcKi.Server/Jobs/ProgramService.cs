@@ -79,6 +79,32 @@ public sealed class ProgramService
         };
     }
 
+    /// <summary>Where a signal is used: blocks whose source or decoded logic mention it, with the first lines (read-only text search).</summary>
+    public object Search(string query, int maxBlocks = 60)
+    {
+        var (_, plc, error) = _loaded.Value;
+        var q = (query ?? "").Trim();
+        if (plc == null) return new { available = false, error, results = Array.Empty<object>() };
+        if (q.Length < 2) return new { available = true, error = (string?)null, results = Array.Empty<object>() };
+        var results = new List<object>();
+        foreach (var b in plc.Blocks)
+        {
+            var text = b.SclSource ?? b.DecodedLogic;
+            if (text == null || text.IndexOf(q, StringComparison.OrdinalIgnoreCase) < 0) continue;
+            var lines = text.Split('\n')
+                .Select((l, i) => (No: i + 1, Text: l.TrimEnd('\r')))
+                .Where(x => x.Text.Contains(q, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            results.Add(new
+            {
+                block = b.Name, kind = b.Kind, language = b.Language, count = lines.Count,
+                lines = lines.Take(4).Select(x => new { no = x.No, text = x.Text.Trim().Length > 160 ? x.Text.Trim()[..157] + "..." : x.Text.Trim() }),
+            });
+            if (results.Count >= maxBlocks) break;
+        }
+        return new { available = true, error = (string?)null, results };
+    }
+
     private static object Member(ExportMember m) => new
     {
         m.Name, m.Section, m.Datatype, m.Comment, m.StartValue,

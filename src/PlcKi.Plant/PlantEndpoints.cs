@@ -21,6 +21,10 @@ public static class PlantEndpoints
 {
     public static WebApplication MapPlant(this WebApplication app)
     {
+        // Remember what this PLC-Ki started with, so the settings page can show what is running now
+        var started = app.Services.GetRequiredService<PlantContext>();
+        started.Running ??= app.Services.GetRequiredService<SettingsStore>().Current();
+
         var auth = app.MapGroup("/api/auth");
         var admin = app.MapGroup("/api/admin");
         // Every handler turns a PlantException into a readable error for the page
@@ -85,10 +89,10 @@ public static class PlantEndpoints
             return Results.NoContent();
         });
 
-        admin.MapGet("/settings", (SettingsStore store, PlantContext ctx) => Results.Ok(new
+        admin.MapGet("/settings", (SettingsStore store, PlantContext ctx, HttpContext http) => Results.Ok(new
         {
             settings = store.Current(),
-            info = Info(ctx),
+            info = Info(ctx, store, http),
             models = Files(ctx, "models", "*.json", ctx.ModelsDir),
             snapshots = Files(ctx, Path.Combine("models", "snapshots"), "*.json", null),
         }));
@@ -97,7 +101,7 @@ public static class PlantEndpoints
         {
             store.Save(s);
             lf.CreateLogger("PlcKi.Plant").LogInformation("Settings changed by {Name}.", http.User.Identity?.Name);
-            return Results.Ok(new { settings = store.Current(), info = Info(ctx) });
+            return Results.Ok(new { settings = store.Current(), info = Info(ctx, store, http) });
         });
 
         // Is anything listening on the S7 port (TCP 102) at this address? Opens a TCP connection and closes it; sends nothing.
@@ -105,6 +109,7 @@ public static class PlantEndpoints
         {
             var address = req.Address?.Trim() ?? "";
             if (address.Length == 0) throw new PlantException("Enter an address first.");
+            if (SettingsStore.AddressProblem(address) is { } bad) return Results.Ok(new { ok = false, message = bad });
             using var tcp = new TcpClient();
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
             var started = DateTime.UtcNow;
@@ -119,7 +124,13 @@ public static class PlantEndpoints
             }
             catch (SocketException ex)
             {
-                return Results.Ok(new { ok = false, message = $"{address}: {ex.Message}" });
+                return Results.Ok(new { ok = false, message = ex.SocketErrorCode switch
+                {
+                    SocketError.HostNotFound or SocketError.NoData or SocketError.TryAgain => $"{address} is not known on this network. Check the spelling, or use the PLC's IP address from TIA.",
+                    SocketError.ConnectionRefused => $"Something is at {address}, but it does not accept connections on the S7 port (102). Check it is really the PLC.",
+                    SocketError.NetworkUnreachable or SocketError.HostUnreachable => $"{address} cannot be reached from this PC. Check that this PC is in the PLC's subnet and the cable is in.",
+                    _ => $"{address}: {ex.Message}",
+                } });
             }
         });
 
@@ -201,11 +212,17 @@ public static class PlantEndpoints
         return app;
     }
 
-    private static object Info(PlantContext ctx) => new
+    private static object Info(PlantContext ctx, SettingsStore store, HttpContext http) => new
     {
         dataDir = ctx.DataDir,
         service = ctx.IsService,
-        restartNeeded = ctx.RestartNeeded,
+        restartNeeded = store.RestartNeeded(),
+        // What runs now (the settings at start). The port is the one this page was opened on.
+        running = ctx.Running is { } r ? new
+        {
+            r.Source, r.Address, r.Model, r.Export, r.SnapshotFile, r.PlcVia, r.PollMs, r.TimeoutMs, r.TiaMode, r.TiaUrl, r.AllowRemote,
+            port = http.Request.Host.Port ?? r.Port,
+        } : null,
         apiKey = ctx.ApiKeyInSettings ? "settings" : ctx.ApiKeyInEnvironment ? "environment" : "none",
         plcPassword = ctx.PlcPasswordInEnvironment ? "environment" : ctx.PlcPasswordInSettings ? "settings" : "none",
         tiaToken = ctx.TiaTokenInSettings || !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("PLCKI_VM_TOKEN")) ? "set" : "none",

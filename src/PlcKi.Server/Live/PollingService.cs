@@ -59,6 +59,13 @@ public sealed class PollingService : BackgroundService
 
         while (!ct.IsCancellationRequested)
         {
+            // A fresh install has no PLC address yet: say so, and check again for a while (no connection attempts)
+            if (_source.Kind != "snapshot" && _opt.Plc.Via != "link" && string.IsNullOrWhiteSpace(_source.Address))
+            {
+                Publish(last, "notset", null, lastGood, missing);
+                if (ct.WaitHandle.WaitOne(5000)) break;
+                continue;
+            }
             if (!_source.IsConnected)
             {
                 Publish(last, "connecting", error, lastGood, missing);

@@ -115,7 +115,7 @@ public static class SetupEndpoints
             return Results.Ok(job.View(0));
         });
 
-        api.MapPost("/import/build", (BuildRequest req, JobService jobs, PlantContext ctx, PlcKiOptions opt, HttpContext http) =>
+        api.MapPost("/import/build", (BuildRequest req, JobService jobs, PlantContext ctx, PlcKiOptions opt, SettingsStore store, HttpContext http) =>
         {
             var export = Inside(ctx, req.Export ?? "", "exports", allowApp: true);
             var name = ExportCommand.SafeName(string.IsNullOrWhiteSpace(req.Name) ? Path.GetFileNameWithoutExtension(export) : req.Name!);
@@ -125,6 +125,7 @@ public static class SetupEndpoints
             if (req.Compare) { args.Add("--compare"); args.Add(ctx.ResolveAppPath(opt.Model)); }
             var job = jobs.Start("import", $"Build the machine model from {Path.GetFileName(export)}", User(http), args, null,
                 new() { ["model"] = outFile, ["export"] = export });
+            store.LinkExport(outFile, export);   // choosing this model later also picks its export
             return Results.Ok(job.View(0));
         });
 
@@ -148,9 +149,9 @@ public static class SetupEndpoints
             var model = Inside(ctx, req.Model ?? "", null, allowModels: true, allowApp: true);
             var s = store.Current();
             s.Model = model;
-            if (!string.IsNullOrWhiteSpace(req.Export)) s.Export = Inside(ctx, req.Export!, "exports", allowApp: true);
+            if (!string.IsNullOrWhiteSpace(req.Export)) { s.Export = Inside(ctx, req.Export!, "exports", allowApp: true); store.LinkExport(model, s.Export); }
             store.Save(s);
-            return Results.Ok(new { restartNeeded = ctx.RestartNeeded });
+            return Results.Ok(new { restartNeeded = store.RestartNeeded() });
         });
 
         // ---- block generator ----

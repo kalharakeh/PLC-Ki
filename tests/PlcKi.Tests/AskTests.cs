@@ -158,6 +158,6 @@ public class AskTests
         var ask = new AskService(new AskOptions(), tools, live, NullLogger<AskService>.Instance);
         var (enabled, reason) = ask.Availability();
         Assert.False(enabled);
-        Assert.Contains("ANTHROPIC_API_KEY", reason);
+        Assert.Contains("Claude key", reason);
     }
 }
