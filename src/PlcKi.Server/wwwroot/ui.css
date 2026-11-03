@@ -66,7 +66,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 .nav .brand { font-weight: 600; letter-spacing: -0.01em; font-size: 15px; white-space: nowrap; color: var(--ink); }
 .nav .brand small { color: var(--muted); font-weight: 400; margin-left: 6px; }
 .nav .links { display: flex; gap: 4px; font-size: 13.5px; margin: 0 auto; }
-.nav .links a { color: var(--muted); padding: 6px 10px; border-radius: 999px; white-space: nowrap; display: inline-flex; gap: 6px; align-items: center; }
+.nav .links a { color: color-mix(in srgb, var(--muted) 70%, var(--ink)); padding: 6px 10px; border-radius: 999px; white-space: nowrap; display: inline-flex; gap: 6px; align-items: center; }
 .nav .links a:hover { color: var(--ink); text-decoration: none; }
 .nav .links a.active { color: var(--ink); background: var(--bg-alt); font-weight: 600; }
 .nav .right { display: flex; gap: 10px; align-items: center; }
@@ -269,7 +269,7 @@ details.more[open] > summary::before { transform: rotate(90deg); }
 .fix li.done::before { content: "✓"; background: var(--ok); border-color: var(--ok); color: #fff; }
 .causes { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
 .causes li { display: flex; gap: 12px; font-size: 16px; }
-.causes li b { color: var(--warn); font-weight: 700; min-width: 16px; }
+.causes li b { color: var(--warn-ink); font-weight: 700; min-width: 16px; }
 .path { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-family: var(--mono); font-size: 13.5px; }
 .path span { border: 1px solid rgba(255, 255, 255, 0.2); padding: 5px 10px; border-radius: 999px; }
 section:not(.dark) .path span { border-color: var(--line-strong); }
@@ -588,7 +588,8 @@ kbd { font-family: var(--font); font-size: 12px; font-weight: 600; min-width: 20
 }
 @media (max-width: 600px) {
   .toolbar input[type="search"] { max-width: none; flex-basis: 100%; }
-  .toolbar .segmented { width: 100%; justify-content: space-between; }
+  .toolbar .segmented { width: 100%; justify-content: space-between; flex-wrap: nowrap; overflow-x: auto; }
+  .toolbar .segmented button { padding: 8px 10px; white-space: nowrap; }
 }
 
 /* ---------- values that are not live ---------- */
@@ -617,7 +618,7 @@ section.guide-sec { padding-block: 28px; }
 /* ---------- layout (UX review B) ---------- */
 .stack > *, .card { min-width: 0; }
 /* Work pages people use every day: a compact header, wider text */
-html { scroll-padding-top: calc(var(--navh, 60px) + 12px); }
+html { scroll-padding-top: calc(var(--navh, 60px) + var(--bannerh, 0px) + 12px); }
 section.hero.compact { padding-block: 28px 24px; }
 section.hero.compact h1 { font-size: clamp(26px, 2.6vw, 34px); max-width: none; margin-bottom: 8px; }
 section.hero.compact .sub { font-size: 17px; max-width: 80ch; margin-bottom: 14px; }
@@ -654,7 +655,7 @@ section.hero.compact .subnav { margin-bottom: 18px; }
     padding: 4px 4px calc(4px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line);
     background: color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px); }
   .nav .links a { flex-direction: column; gap: 2px; padding: 6px 2px; border-radius: 12px; font-size: 10.5px; position: relative; min-width: 0; }
-  .nav .links a.hidden { display: none; }
+  .nav .links a.hidden, .nav .links a.nav-gen { display: none; }
   .nav .links a.active { background: transparent; color: var(--accent); }
   .nav .links .ti { display: block; width: 24px; height: 24px; }
   .nav .links .ti svg { width: 24px; height: 24px; }
@@ -665,3 +666,45 @@ section.hero.compact .subnav { margin-bottom: 18px; }
   .toast { bottom: calc(80px + env(safe-area-inset-bottom)); }
   .has-dirty .toast { bottom: calc(140px + env(safe-area-inset-bottom)); }
 }
+
+/* ---------- interaction (UX review C) ---------- */
+.skip { position: absolute; left: 12px; top: -60px; z-index: 200; background: var(--accent); color: #fff; padding: 10px 16px; border-radius: 12px; font-weight: 600; }
+.skip:focus { top: 10px; text-decoration: none; }
+.opt-row { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border: 1px solid var(--line); border-radius: 14px; cursor: pointer; }
+.opt-row input { margin-top: 3px; width: 18px; height: 18px; accent-color: var(--accent); flex: none; }
+.opt-row.off { cursor: default; opacity: 0.7; }
+html.ask-off main [data-ask] { display: none; }
+.msg .meta a { color: inherit; text-decoration: underline; text-decoration-color: var(--line-strong); }
+.msg.pending .linkbtn { margin-left: 6px; }
+.msg.pending:has(.pend-text)::after { content: none; }
+.msg.pending .pend-text::after { content: " …"; animation: beat 1s infinite; }
+.fix-b { background: none; border: 0; padding: 3px 0 0; margin: 0; font: inherit; color: inherit; text-align: left; cursor: pointer; text-decoration: inherit; flex: 1; border-radius: 6px; }
+/* Alarms page: the numbers are the filters */
+.k.kbtn { font: inherit; color: inherit; text-align: left; background: none; border: 1px solid transparent; border-radius: 14px; padding: 8px 12px; margin: -8px -12px; cursor: pointer; transition: background 0.2s var(--ease), border-color 0.2s var(--ease); }
+.k.kbtn:hover { background: var(--bg-alt); }
+.k.kbtn.on { border-color: var(--accent); background: var(--accent-soft); }
+.k.kbtn span { color: var(--muted); }
+.list.events li { gap: 12px; align-items: baseline; flex-wrap: wrap; }
+.ev-time { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 14px; min-width: 150px; }
+.ev-kind { font-size: 12.5px; font-weight: 600; padding: 2px 9px; border-radius: 999px; background: var(--bg-alt); color: var(--muted); }
+.ev-kind.came { background: var(--fault-soft); color: var(--fault-ink); }
+.ev-kind.went { background: var(--ok-soft); color: var(--ok-ink); }
+.ev-kind:empty { display: none; }
+.eq-more { font-size: 13px; font-weight: 600; color: var(--accent); justify-self: end; margin-top: -4px; }
+.eq.sel .eq-more { visibility: hidden; }
+/* Logic and Code pages */
+.blk-q { margin: 4px 0 6px; font-size: 14px; padding: 8px 12px; border-radius: 999px; }
+.contact.cmp .nm { max-width: 220px; white-space: normal; overflow: visible; overflow-wrap: anywhere; text-align: center; }
+.stmt.graph .gl { display: block; padding: 0 8px; border-radius: 6px; }
+.stmt.graph .gl.cur { background: var(--accent-soft); color: var(--ink); }
+.now-tag { display: inline-block; font-family: var(--font); font-size: 11px; font-weight: 700; color: #fff; background: var(--accent); border-radius: 999px; padding: 1px 8px; margin-right: 8px; vertical-align: 1px; }
+.findbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+.findbar input { max-width: 320px; padding: 8px 12px; font-size: 14px; border-radius: 999px; }
+.code .ln.found { background: color-mix(in srgb, var(--warn-soft) 80%, transparent); }
+.code .op { cursor: pointer; text-decoration: underline dotted; text-decoration-color: var(--line-strong); text-underline-offset: 3px; }
+.code .op:hover { text-decoration-color: var(--accent); color: var(--accent); }
+/* Block generator: the option that changes a real machine looks different from the safe ones */
+.choice button.danger { border-color: color-mix(in srgb, var(--fault) 45%, var(--line-strong)); }
+.choice button.danger .ico, .choice button.danger b { color: var(--fault-ink); }
+.choice button.danger.on { border-color: var(--fault); box-shadow: 0 0 0 1px var(--fault); background: var(--fault-soft); }
+.hint.run-now { color: var(--warn-ink); font-weight: 600; }

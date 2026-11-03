@@ -64,9 +64,9 @@ public sealed class AskService
     /// <summary>Whether the box can be used, and if not, why (shown on the page).</summary>
     public (bool Enabled, string? Reason) Availability()
     {
-        if (!_opt.Enabled) return (false, "The assistant is switched off in the settings (PlcKi:Ask:Enabled).");
+        if (!_opt.Enabled) return (false, "Ask is switched off for this PLC-Ki.");
         if (_client == null && string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY")))
-            return (false, "Set the ANTHROPIC_API_KEY environment variable and restart PLC-Ki to ask questions.");
+            return (false, "Ask needs a Claude key, and none is set yet.");
         return (true, null);
     }
 
@@ -140,7 +140,7 @@ public sealed class AskService
             }
             catch (AnthropicUnauthorizedException)
             {
-                throw new AskException("The API key was rejected. Check ANTHROPIC_API_KEY.", 502);
+                throw new AskException("The Claude key was not accepted. An administrator enters a new one under Setup, Settings (Assistant).", 502);
             }
             catch (AnthropicRateLimitException)
             {

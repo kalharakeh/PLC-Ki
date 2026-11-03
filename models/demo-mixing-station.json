@@ -5,6 +5,8 @@
   "name": "Demo mixing station",
   "description": "Batch tank: fill ingredient A and B, mix and heat, hold for the filler, drain.",
   "source": "hand-written from plc-demo/scl (PLC-Ki phase 2)",
+  // The program export the Code and Logic pages show with this model
+  "export": "models/demo-export.zip",
 
   "tags": [
     // --- Sequence ("DB_BatchSequence" is the instance DB of FB_BatchSequence, GRAPH) ---

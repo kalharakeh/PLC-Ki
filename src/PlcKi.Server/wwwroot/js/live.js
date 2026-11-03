@@ -111,7 +111,13 @@
       ${e.blockedBy ? `<div class="eq-why">${icon("warn")}<span>${esc(e.blockedBy.charAt(0).toUpperCase() + e.blockedBy.slice(1))}</span></div>` : ""}
       ${vals}
       ${full && e.permits.length ? `<div><h3 style="margin-top:6px">Interlocks</h3><ul class="conds">${e.permits.map(cond).join("")}</ul></div>` : ""}
-      ${full && e.explanation && !e.blockedBy ? `<p class="muted small" style="margin:0">${esc(e.explanation)}</p>` : ""}`;
+      ${full && e.explanation && !e.blockedBy ? `<p class="muted small" style="margin:0">${esc(e.explanation)}</p>` : ""}
+      ${full ? logicLink(e) : `<span class="eq-more" aria-hidden="true">Details ›</span>`}`;
+  }
+  /** "Show the logic" for a device: its block and instance from the model's location ("FB_VFD, instance "Station".M201"). */
+  function logicLink(e) {
+    const l = parseLoc(e.location);
+    return l.block ? `<div><a class="btn b small" href="#/logic/${[l.block, l.instance].filter(Boolean).map(encodeURIComponent).join("/")}">Show the logic</a></div>` : "";
   }
 
   function stepStrip(seq) {
@@ -190,9 +196,9 @@
             ${loc.block ? `<a class="btn b" href="#/logic/${[loc.block, loc.instance, loc.output].filter(Boolean).map(encodeURIComponent).join("/")}">Show where it is set</a>` : ""}</div>
           <div class="kpis" style="margin-top:34px">${kpis.map(([v, l, c]) => `<div class="k ${c || ""}"><b>${esc(v)}</b><span>${esc(l)}</span></div>`).join("")}</div>`)
 
-        + sec("alt", `<h2>Fix it</h2><p class="sub">Work down the list. Tap a step when it is done.</p>
+        + sec("alt", `<h2>Fix it</h2><p class="sub">Work down the list. Tap a step when it is done. The ticks are only on this screen.</p>
           <div class="grid two">
-            <div class="card">${a.fix.length ? `<ol class="fix">${a.fix.map((f, i) => `<li class="${done.has(i) ? "done" : ""}" data-fix="${i}">${esc(f)}</li>`).join("")}</ol>` : `<p class="muted">No fix written for this alarm yet. Ask about it.</p>`}</div>
+            <div class="card">${a.fix.length ? `<ol class="fix">${a.fix.map((f, i) => `<li class="${done.has(i) ? "done" : ""}"><button type="button" class="fix-b" data-fix="${i}" aria-pressed="${done.has(i)}">${esc(f)}</button></li>`).join("")}</ol>` : `<p class="muted">No fix written for this alarm yet. Ask about it.</p>`}</div>
             <div class="card"><h3>Likely causes</h3>${a.causes.length ? `<ol class="causes">${a.causes.map((c, i) => `<li><b>${i + 1}</b><span>${esc(c)}</span></li>`).join("")}</ol>` : `<p class="muted">None written yet.</p>`}</div>
           </div>`)
 
@@ -211,9 +217,9 @@
     },
     after(page) {
       page.querySelectorAll("[data-alarm]").forEach((b) => b.onclick = () => { selectedAlarm = b.dataset.alarm; PK.draw(); });
-      page.querySelectorAll("[data-fix]").forEach((li) => li.onclick = () => {
+      page.querySelectorAll("[data-fix]").forEach((b) => b.onclick = () => {
         const set = (fixDone[selectedAlarm] ||= new Set());
-        const i = Number(li.dataset.fix);
+        const i = Number(b.dataset.fix);
         set.has(i) ? set.delete(i) : set.add(i);
         PK.draw();
       });
@@ -297,11 +303,23 @@
   let alarmFilter = "";
   let alarmKind = "all";        // all | active | faults | warnings
   let openAlarm = null;
+  let deepLink = null;          // #/alarms/A02: opened once, then scrolled to
+  let scrollToAlarm = null;
+  let events = null, eventsAt = 0;
+  async function loadEvents() {
+    eventsAt = Date.now();
+    try { events = await PK.api("GET", "/api/events?kind=alarm&max=30"); } catch { events = events || []; }
+    PK.draw();
+  }
   PK.view("alarms", {
     live: true,
+    leave() { deepLink = null; },
     render() {
       const s = state.status, m = state.model;
       if (!s || !m) return waitingPage();
+      const want = PK.current && PK.current.params[0];
+      if (want && want !== deepLink) { deepLink = want; openAlarm = want; alarmKind = "all"; alarmFilter = ""; scrollToAlarm = want; }
+      if (Date.now() - eventsAt > 5000) loadEvents();
       const active = new Set(s.activeAlarms.map((a) => a.id));
       const q = alarmFilter.toLowerCase();
       const kindOk = { all: () => true, active: (a) => active.has(a.id), faults: (a) => a.severity !== "WARNING", warnings: (a) => a.severity === "WARNING" }[alarmKind] || (() => true);
@@ -310,7 +328,7 @@
       const faults = m.alarms.filter((a) => a.severity !== "WARNING").length;
       const rows = all.map((a) => {
         const on = active.has(a.id), open = openAlarm === a.id;
-        return `<li class="click" data-open="${esc(a.id)}" style="flex-wrap:wrap" tabindex="0" aria-expanded="${open}">
+        return `<li class="click" data-open="${esc(a.id)}" id="alarm-${esc(a.id)}" style="flex-wrap:wrap" tabindex="0" aria-expanded="${open}">
           <span class="tag ${a.severity === "WARNING" ? "gold" : "red"}">${esc(a.id)}</span>
           <span style="flex:1;min-width:200px"><b style="font-weight:600">${esc(a.text)}</b>${a.location ? `<div class="faint">${esc(a.location)}</div>` : ""}</span>
           ${on ? `<span class="pill ${a.severity === "WARNING" ? "warn" : "bad"}"><span class="dot"></span>Active</span>` : ""}<span class="chev">${open ? "⌄" : "›"}</span>
@@ -319,6 +337,7 @@
                 ${a.causes.length ? `<h3>Likely causes</h3><ol class="causes small">${a.causes.map((c, i) => `<li><b>${i + 1}</b><span>${esc(c)}</span></li>`).join("")}</ol>` : ""}</div>
               <div>${a.fix.length ? `<h3>How to fix</h3><ol class="fix small">${a.fix.map((c) => `<li style="font-size:15px;cursor:default">${esc(c)}</li>`).join("")}</ol>` : ""}
                 <div class="actions" style="margin-top:14px">${on ? `<a class="btn small" href="#/alarm">Open on Active alarm</a>` : ""}
+                ${(() => { const l = parseLoc(a.location); return l.block ? `<a class="btn b small" href="#/logic/${[l.block, l.instance, l.output].filter(Boolean).map(encodeURIComponent).join("/")}">Show where it is set</a>` : ""; })()}
                 <button class="btn b small" data-ask="Explain alarm ${esc(a.id)}: when does it come, why, and how is it fixed?">Ask</button></div></div>
             </div>` : ""}
         </li>`;
@@ -326,15 +345,22 @@
       return hero({
         title: "Every alarm, explained.",
         sub: "Each alarm the program can raise, with its meaning, where it is set, the likely causes and the fix.",
-        extra: `<div class="kpis" style="margin-top:12px"><div class="k ${s.activeAlarms.length ? "bad" : "ok"}"><b>${s.activeAlarms.length}</b><span>active now</span></div>
-          <div class="k"><b>${m.alarms.length}</b><span>alarms in the program</span></div><div class="k"><b>${faults}</b><span>faults (stop the machine)</span></div>
-          <div class="k"><b>${m.alarms.length - faults}</b><span>warnings</span></div></div>`,
+        extra: `<div class="kpis" style="margin-top:12px">${[["active", s.activeAlarms.length, "active now", s.activeAlarms.length ? "bad" : "ok"], ["all", m.alarms.length, "alarms in the program", ""],
+            ["faults", faults, "faults (stop the machine)", ""], ["warnings", m.alarms.length - faults, "warnings", ""]]
+            .map(([k, n, l, c]) => `<button type="button" class="k kbtn ${c} ${alarmKind === k ? "on" : ""}" data-akind="${k}" aria-pressed="${alarmKind === k}" aria-label="Show ${esc(l)}: ${n}"><b>${n}</b><span>${esc(l)}</span></button>`).join("")}</div>`,
       }) + sec("alt", `<div class="toolbar"><input type="search" id="alarm-search" placeholder="Search by number, text or device" value="${esc(alarmFilter)}" aria-label="Search alarms">
           <div class="segmented" role="group" aria-label="Show">${[["all", "All", m.alarms.length], ["active", "Active", s.activeAlarms.length], ["faults", "Faults", faults], ["warnings", "Warnings", m.alarms.length - faults]]
             .map(([k, l, n]) => `<button type="button" class="${alarmKind === k ? "on" : ""}" data-akind="${k}" aria-pressed="${alarmKind === k}">${l} ${n}</button>`).join("")}</div></div>
           ${rows ? `<ul class="list">${rows}</ul>` : `<div class="nomatch">${alarmKind === "active" && !q ? `${icon("check")}<b>No alarm is active.</b><span>The machine reports no fault or warning right now.</span>`
             : `${icon("search")}<b>No alarm matches.</b><span>Search by the alarm number (like ${esc((m.alarms[0] || {}).id || "A101")}), a word from the text, or a device tag.</span>`}
-            ${q || alarmKind !== "all" ? `<button class="btn b small" data-areset>Show all alarms</button>` : ""}</div>`}`);
+            ${q || alarmKind !== "all" ? `<button class="btn b small" data-areset>Show all alarms</button>` : ""}</div>`}`)
+        + sec("", `<h2>Recent alarms</h2><p class="sub">When alarms came and went since PLC-Ki started watching. Newest first.</p>
+          ${!events ? `<p class="muted">Loading…</p>` : events.length ? `<ul class="list events">${events.map((e) => {
+            const mm = /^(\S+) (came|went|was already active)/.exec(e.text);
+            const id = mm && mm[1], kind = mm ? (mm[2] === "went" ? "went" : mm[2] === "came" ? "came" : "start") : "";
+            return `<li><span class="ev-time">${esc(PK.date(e.time, true))}</span><span class="ev-kind ${kind}">${{ came: "Came", went: "Went", start: "Already on" }[kind] || ""}</span>
+              <span style="flex:1;min-width:180px">${id ? `<a href="#/alarms/${encodeURIComponent(id)}">${esc(id)}</a> ` : ""}${esc(id ? e.text.replace(/^\S+ (came|went|was already active when watching started):?\s*/, "") : e.text)}</span></li>`;
+          }).join("")}</ul>` : `<p class="muted">No alarm came or went since PLC-Ki started watching.</p>`}`);
     },
     after(page) {
       const inp = page.querySelector("#alarm-search");
@@ -347,11 +373,21 @@
         li.onclick = (e) => {
           if (e.target.closest("a,button")) return;
           openAlarm = openAlarm === li.dataset.open ? null : li.dataset.open;
+          PK.setHash(openAlarm ? "#/alarms/" + encodeURIComponent(openAlarm) : "#/alarms");
+          deepLink = openAlarm;
           PK.draw();
         };
         li.onkeydown = (e) => { if ((e.key === "Enter" || e.key === " ") && e.target === li) { e.preventDefault(); li.click(); } };
       });
       bindAsk(page);
+      if (scrollToAlarm) {
+        // Wait until the opened alarm is on the page (the first draws can still be "Loading"), then bring it into view
+        const id = "alarm-" + scrollToAlarm;
+        scrollToAlarm = null;
+        let tries = 0;
+        const go = () => { const el = document.getElementById(id); if (el) el.scrollIntoView({ block: "start" }); else if (tries++ < 30) setTimeout(go, 100); };
+        setTimeout(go, 50);
+      }
     },
   });
 

@@ -48,6 +48,9 @@ public sealed class PlantContext
     /// <summary>Settings were saved that only take effect after a restart.</summary>
     public bool RestartNeeded { get; set; }
 
+    /// <summary>The settings this PLC-Ki started with: what is running now, even when settings.json changed since.</summary>
+    public PlantSettings? Running { get; set; }
+
     public static string DefaultDataDir(bool isService) => isService && OperatingSystem.IsWindows()
         ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "PLC-Ki")
         : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData, Environment.SpecialFolderOption.Create), "PLC-Ki");

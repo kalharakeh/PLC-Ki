@@ -98,7 +98,7 @@
     const since = j.waitingSince ? new Date(j.waitingSince).getTime() : Date.now();
     g.sheet = PK.sheet(`<span class="eyebrow" style="color:var(--fault)">Real PLC · step 2 of 2</span>
       <h2>Now at the TIA PC.</h2>
-      <p class="muted" style="margin:0">Someone at the TIA PC types the PLC's address in the <b>TiaImporter serve</b> window. Only addresses on that PC's allow-list are accepted,
+      <p class="muted" style="margin:0">Someone at the TIA PC types the PLC's address in the <b>PLC-Ki TIA helper</b> window. Only addresses on that PC's allow-list are accepted,
         and the CPU must be in STOP. If nobody confirms in time, nothing is downloaded.</p>
       <div class="countdown" data-left>2:00</div>
       <div class="progress"><div data-bar style="width:100%;background:var(--fault)"></div></div>
@@ -139,7 +139,7 @@
   }
 
   function choice(name, current, options) {
-    return `<div class="choice">${options.map((o) => `<button type="button" data-${name}="${o.value}" class="${current === o.value ? "on" : ""}">
+    return `<div class="choice" role="group">${options.map((o) => `<button type="button" data-${name}="${o.value}" class="${current === o.value ? "on" : ""} ${o.danger ? "danger" : ""}" aria-pressed="${current === o.value}">
       <span class="ico">${icon(o.icon)}</span><b>${esc(o.label)}</b><small>${esc(o.text)}</small></button>`).join("")}</div>`;
   }
 
@@ -155,13 +155,13 @@
       : `<input id="g-project" value="${esc(f.project)}" placeholder="C:\\Users\\…\\MyProject.ap20"><span class="hint">${g.projectsError ? "Type the full path. The TIA PC did not list its projects: " + esc(g.projectsError) : "Looking for projects on the TIA PC…"}</span>`;
     const realAllowed = g.tia && g.tia.realAllowed && g.tia.realAllowed.length;
     const dl = f.download === "plcsim"
-      ? `<div class="grid two"><label class="field">PLCSIM address<input id="g-plcAddress" value="${esc(f.plcAddress)}" placeholder="${esc((g.tia && g.tia.plcsimIp) || "192.168.10.10")}"><span class="hint">Empty: the TIA PC's PLCSIM address.</span></label>
+      ? `<div class="grid two"><label class="field">PLCSIM address<input id="g-plcAddress" value="${esc(f.plcAddress)}" placeholder="${esc((g.tia && g.tia.plcsimIp) || "e.g. 192.168.0.10")}"><span class="hint">Empty: the TIA PC's PLCSIM address.</span></label>
           <label class="field">Watch for (seconds)<input id="g-watch" type="number" min="5" max="600" value="${f.watch}"><span class="hint">PLC-Ki reads the new blocks while they run.</span></label></div>`
       : f.download === "real"
         ? `<div class="notice red">${icon("shield")}<div><b>A real PLC needs two people-confirmations.</b> When it compiles, you type the version here after reviewing it.
-            Then someone at the TIA PC types the PLC address in the TiaImporter window (2 minutes). Only addresses on that PC's allow-list work, the CPU must be in STOP,
+            Then someone at the TIA PC types the PLC address in the PLC-Ki TIA helper window (2 minutes). Only addresses on that PC's allow-list work, the CPU must be in STOP,
             it is tried once (no fixing loop), and every step is logged. The CPU stays in STOP afterwards.
-            ${g.tia ? (realAllowed ? `<br>Allowed on the TIA PC: <b>${esc(g.tia.realAllowed.join(", "))}</b>.` : `<br><b>No address is allowed on the TIA PC yet.</b> Start TiaImporter serve there with --allow-real &lt;address&gt;.`) : ""}</div></div>`
+            ${g.tia ? (realAllowed ? `<br>Allowed on the TIA PC: <b>${esc(g.tia.realAllowed.join(", "))}</b>.` : `<br><b>No address is allowed on the TIA PC yet.</b> At the TIA PC, run Setup-TIA-helper again and enter the PLC's address as allowed for real downloads.`) : ""}</div></div>`
         : "";
     return `<div class="card stack">
       <h3 style="margin:0">${g.open && f.name === g.open ? `Change ${esc(f.name)}` : "New blocks"}</h3>
@@ -177,7 +177,7 @@
       ${choice("dl", f.download, [
         { value: "none", icon: "tia", label: "Stop in TIA", text: "Import and compile only. You download yourself." },
         { value: "plcsim", icon: "vm", label: "Run in PLCSIM", text: "Download to PLCSIM, watch it run, fix what fails." },
-        { value: "real", icon: "cpu", label: "Real PLC", text: "Once, after two confirmations. CPU must be in STOP." },
+        { value: "real", icon: "warn", label: "Real PLC: changes a machine", text: "Loads the blocks into a real CPU once, after two people confirm. The CPU must be in STOP.", danger: true },
       ])}
       ${dl}
       <details class="more"><summary>More options</summary><div class="stack" style="margin-top:12px">

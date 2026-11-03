@@ -169,3 +169,20 @@ public class PlantTests : IDisposable
         Assert.Equal(PlcPw, config["PlcKi:Plc:Password"]);
     }
 }
+
+public class PlcAddressTests
+{
+    [Theory]
+    [InlineData("192.168.0.10", true)]
+    [InlineData("", true)]                  // not set yet is allowed
+    [InlineData("plc-line1", true)]
+    [InlineData("999.1.1", false)]          // digits and dots, but not an IP address
+    [InlineData("192.168.0.256", false)]
+    [InlineData("not an address!", false)]
+    public void Address_is_checked_before_it_is_used(string address, bool ok)
+    {
+        var problem = SettingsStore.AddressProblem(address);
+        Assert.Equal(ok, problem == null);
+        if (!ok) Assert.Contains("for example 192.168.0.10", problem);
+    }
+}
