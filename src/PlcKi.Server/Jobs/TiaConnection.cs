@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text.Json;
 using PlcKi.Server.Generate;
+using PlcKi.Server.Link;
 using PlcKi.Server.Live;
 
 namespace PlcKi.Server.Jobs;
@@ -18,11 +19,13 @@ public sealed class TiaConnection
     private static readonly string LocalToken = Convert.ToHexString(RandomNumberGenerator.GetBytes(16));
 
     private readonly TiaOptions _opt;
+    private readonly LinkHub _link;
     private readonly ILogger<TiaConnection> _log;
 
-    public TiaConnection(PlcKiOptions opt, ILogger<TiaConnection> log)
+    public TiaConnection(PlcKiOptions opt, LinkHub link, ILogger<TiaConnection> log)
     {
         _opt = opt.Tia;
+        _link = link;
         _log = log;
     }
 
@@ -33,10 +36,12 @@ public sealed class TiaConnection
     {
         "local" => $"http://localhost:{_opt.Port}",
         "remote" => string.IsNullOrWhiteSpace(_opt.Url) ? null : _opt.Url.Trim().TrimEnd('/'),
+        "link" => _link.RelayUrl,
         _ => null,
     };
 
-    public string? Token => _opt.Mode == "local" && string.IsNullOrWhiteSpace(_opt.Token) ? LocalToken
+    public string? Token => _opt.Mode == "link" ? _link.RelayToken
+        : _opt.Mode == "local" && string.IsNullOrWhiteSpace(_opt.Token) ? LocalToken
         : string.IsNullOrWhiteSpace(_opt.Token) ? Environment.GetEnvironmentVariable("PLCKI_VM_TOKEN") : _opt.Token;
 
     public bool HelperRunning => _helper is { HasExited: false };
@@ -44,7 +49,10 @@ public sealed class TiaConnection
     /// <summary>Why TIA cannot be used, or null when it is set up (reachability is checked separately).</summary>
     public string? NotSetUp() => _opt.Mode switch
     {
-        "link" => "TIA through PLC-Ki Link comes with the next update. For now choose \"This PC\" or \"Another PC\".",
+        "link" when !_link.HasKey => "Make a Link key below and start PLC-Ki Link on the laptop with TIA.",
+        "link" when !_link.Connected => "PLC-Ki Link is not connected. Start it on the laptop with TIA (the command is below).",
+        "link" when !_link.TiaReady => "PLC-Ki Link is connected but has no TIA helper. Start Link with --tia and the path of TiaImporter.exe.",
+        "link" when Url == null => "PLC-Ki is still starting.",
         "local" when string.IsNullOrWhiteSpace(_opt.ImporterPath) => "Enter where TiaImporter.exe is on this PC.",
         "remote" when Url == null => "Enter the address of the TIA PC, for example http://192.168.10.3:5090.",
         "remote" when string.IsNullOrWhiteSpace(Token) => "Enter the token TiaImporter serve was started with.",

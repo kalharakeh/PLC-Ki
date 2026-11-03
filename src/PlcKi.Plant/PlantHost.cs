@@ -149,6 +149,8 @@ public static class PlantHost
     {
         var path = http.Request.Path;
         if (Open.Contains(path.Value ?? "")) { await next(); return; }
+        // PLC-Ki Link and the TIA relay check their own key or token (Link/LinkEndpoints.cs)
+        if (path.StartsWithSegments("/link")) { await next(); return; }
 
         var users = http.RequestServices.GetRequiredService<UserStore>();
         var user = http.User.Identity?.IsAuthenticated == true ? http.User : null;

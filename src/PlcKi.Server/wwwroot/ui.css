@@ -204,6 +204,9 @@ section.alt .step { background: var(--panel); }
 .step.done .n { color: var(--ok); }
 .step.now { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), var(--shadow); }
 .step.off { opacity: 0.55; }
+section.dark .step { background: rgba(255, 255, 255, 0.05); border-color: rgba(255, 255, 255, 0.12); box-shadow: none; color: var(--ink-dark); }
+section.dark .step.now { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+section.dark .step p { color: var(--muted-dark); }
 
 /* lists */
 .list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: var(--r); background: var(--panel); overflow: hidden; }
