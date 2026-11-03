@@ -13,6 +13,10 @@
     job: null, unfollow: null, sheet: null, sheetFor: null,
   };
 
+  const stateCls = (st) => /error/i.test(st || "") ? "bad" : /warn/i.test(st || "") ? "warn" : "ok";
+  /** Project names repeat across folders: add the folder when they do. */
+  const projectLabel = (p, all) => all.filter((x) => x.name === p.name).length > 1
+    ? `${p.name}  (${p.path.split(/[\\/]/).slice(-3, -1).join("\\")})` : p.name;
   async function textOf(url) {
     const r = await fetch(url, { cache: "no-store" });
     if (!r.ok) throw new Error(r.status === 404 ? "File not found." : `Request failed (${r.status}).`);
@@ -143,7 +147,7 @@
     const projects = g.projects || [];
     const known = projects.some((p) => p.path === f.project);
     const projectField = g.projects
-      ? `<select id="g-project"><option value="">Choose a project</option>${projects.map((p) => `<option value="${esc(p.path)}" ${p.path === f.project ? "selected" : ""}>${esc(p.name)}</option>`).join("")}
+      ? `<select id="g-project"><option value="">Choose a project</option>${projects.map((p) => `<option value="${esc(p.path)}" ${p.path === f.project ? "selected" : ""}>${esc(projectLabel(p, projects))}</option>`).join("")}
           ${f.project && !known ? `<option value="${esc(f.project)}" selected>${esc(f.project)}</option>` : ""}</select>
          <span class="hint">Projects on the TIA PC${g.tia && g.tia.projectsFolder ? " under " + esc(g.tia.projectsFolder) : ""}. Use a copy, not the plant's master project.</span>`
       : `<input id="g-project" value="${esc(f.project)}" placeholder="C:\\Users\\…\\MyProject.ap20"><span class="hint">${g.projectsError ? "Type the full path. The TIA PC did not list its projects: " + esc(g.projectsError) : "Looking for projects on the TIA PC…"}</span>`;
@@ -196,14 +200,14 @@
         <span class="ico">${icon("file")}</span>
         <span style="flex:1;min-width:0"><b style="font-weight:600">${esc(p.name)}</b> <span class="faint">${esc(p.latest || "")}</span>
           <div class="faint" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(p.request || "")}</div></span>
-        ${p.state ? `<span class="pill ${/error/i.test(p.state) ? "bad" : "ok"}">${esc(p.state)}</span>` : ""}<span class="chev">›</span></li>`).join("")}</ul></div>`;
+        ${p.state ? `<span class="pill ${stateCls(p.state)}">${esc(p.state)}</span>` : ""}<span class="chev">›</span></li>`).join("")}</ul></div>`;
   }
 
   function reportHtml(r) {
     if (!r) return `<p class="muted small" style="margin:0">Not imported into TIA yet.</p>`;
     const ok = r.fileErrors.length === 0 && r.errorCount === 0 && r.compileState && !/error/i.test(r.compileState);
     return `<div class="kv">
-        <span>Compile</span><b><span class="pill ${ok ? "ok" : "bad"}">${esc(r.compileState || "not compiled")}</span> ${r.errorCount} errors, ${r.warningCount} warnings</b>
+        <span>Compile</span><b><span class="pill ${ok ? stateCls(r.compileState) : "bad"}">${esc(r.compileState || "not compiled")}</span> ${r.errorCount} errors, ${r.warningCount} warnings</b>
         <span>Project</span><b class="mono">${esc(r.project)}</b>
         ${r.download ? `<span>Download</span><b>${esc(r.download)}</b>` : ""}
       </div>
@@ -222,7 +226,7 @@
         <button class="btn" data-change>Change it</button></div>
       <div class="stack" style="margin-top:22px">${d.versions.map((v, i) => `<details class="card more" ${i === 0 ? "open" : ""}>
         <summary><b>${esc(v.folder)}</b> <span class="muted">· ${esc(kindText[v.kind] || v.kind)} · ${new Date(v.time).toLocaleString()}</span>
-          ${v.report ? `<span class="pill ${v.report.errorCount || v.report.fileErrors.length ? "bad" : "ok"}" style="margin-left:8px">${esc(v.report.compileState || "?")}</span>` : ""}</summary>
+          ${v.report ? `<span class="pill ${v.report.errorCount || v.report.fileErrors.length ? "bad" : stateCls(v.report.compileState)}" style="margin-left:8px">${esc(v.report.compileState || "?")}</span>` : ""}</summary>
         <div class="grid two" style="margin-top:14px;align-items:start">
           <div class="stack">
             ${v.request ? `<div><span class="eyebrow">Asked for</span><p style="margin:6px 0 0">${esc(v.request)}</p></div>` : ""}
