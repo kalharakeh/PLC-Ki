@@ -120,9 +120,17 @@ const PKSetup = (() => {
       return { pct, phase, hint: "Usually 2 to 10 minutes, depending on the program size." };
     }
     if (job.kind === "import") {
-      const pct = Math.min(95, Math.round(5 + secs / 300 * 90));
-      const phase = at(/Compared with|Wrote /) ? "Checking the model" : at(/round 2|Round 2|repair/i) ? "Claude is fixing what the check found" : at(/program text/) ? "Claude is reading the program and writing the model" : "Reading the program export";
-      return { pct, phase, hint: "Usually 3 to 6 minutes. The percentage is an estimate." };
+      // Time grows with the program: about 5 minutes for the demo (80 kB of program text), 20 for a 650 kB plant
+      const kb = Number((log.match(/Program digest: (\d+) kB/) || [])[1] || 100);
+      const est = 180 + kb * 1.6;
+      const written = Number(([...log.matchAll(/written (\d+) kB of the model/g)].pop() || [])[1] || 0);
+      const pct = Math.min(95, Math.round(5 + secs / est * 85));
+      const phase = at(/Compared with|Wrote /) ? "Checking the model"
+        : at(/Correcting \d+ problem/) ? "Claude is fixing what the check found"
+        : written > 0 ? `Claude is writing the model (${written} kB so far)`
+        : at(/reading the program/) ? "Claude is reading the program and thinking" : "Reading the program export";
+      const mins = Math.max(3, Math.round(est / 60));
+      return { pct, phase, hint: `About ${mins} minutes for a program this size; it can take longer. While Claude writes, the kB count keeps growing.` };
     }
     return null;
   }

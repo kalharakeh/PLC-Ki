@@ -120,7 +120,7 @@ public sealed class ModelBuilder
 
         var text = new StringBuilder();
         string? stop = null;
-        int dots = 0;
+        int dots = 0, thoughts = 0, thinking = 0;
         await foreach (var ev in _client.Beta.Messages.CreateStreaming(parameters, ct))
         {
             if (ev.TryPickStart(out var start))
@@ -132,7 +132,13 @@ public sealed class ModelBuilder
             else if (ev.TryPickContentBlockDelta(out var d) && d.Delta.TryPickText(out var t))
             {
                 text.Append(t.Text);
-                if (text.Length / 2000 > dots) { dots++; Console.Write("."); }
+                // A whole line every 10 kB: the browser shows job output line by line, so dots would only appear at the end
+                if (text.Length / 10000 > dots) { dots++; _log($"  Claude has written {dots * 10} kB of the model so far..."); }
+            }
+            else if (ev.TryPickContentBlockDelta(out var dt) && dt.Delta.TryPickThinking(out var th))
+            {
+                thinking += th.Thinking.Length;
+                if (thinking / 20000 > thoughts) { thoughts++; _log("  Claude is still thinking it through..."); }
             }
             else if (ev.TryPickDelta(out var md))
             {
@@ -140,7 +146,6 @@ public sealed class ModelBuilder
                 result.OutputTokens += md.Usage.OutputTokens;
             }
         }
-        if (dots > 0) Console.WriteLine();
         if (stop != null && stop.Contains("refusal", StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Claude declined to write the model for this program.");
         if (stop != null && stop.Contains("max_tokens", StringComparison.OrdinalIgnoreCase))
