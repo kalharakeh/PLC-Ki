@@ -30,13 +30,13 @@ dotnet run --project src\PlcKi.Server -- probe
 The first run downloads packages and builds, which takes a minute. At the end it says either
 `OK: all 83 tags read`, or which tags failed, or `NOT CONNECTED` with the reason.
 
-**2. Start the app:**
+**2. Start the app:** double-click **`Start-PLC-Ki`** in the repository folder. It opens <http://localhost:5080> in
+the browser when PLC-Ki is ready; close its window to stop PLC-Ki. (Same as `dotnet run --project src\PlcKi.Server`.)
 
-```
-dotnet run --project src\PlcKi.Server
-```
-
-Open <http://localhost:5080>. Stop it with Ctrl+C.
+**3. Get started.** The first time an administrator logs in, PLC-Ki opens **Setup, Get started**: one question per
+page (which setup you have, the PLC address with a Test button, TIA Portal, the Claude key, your program). Until
+everything is set up, the start page shows a *Getting started* card with what is done and what comes next. Click the
+connection light at the top right at any time for what it means and what to do.
 
 ## The pages
 
@@ -58,7 +58,7 @@ Where TIA runs (Setup, Connections):
 
 - **This PC**: PLC-Ki starts `TiaImporter serve --local` itself, in its own window (only this PC can reach it). Set
   the TiaImporter path once.
-- **Another PC or VM**: start `TiaImporter serve --token <secret>` there and enter its address and token.
+- **Another PC or VM**: once, double-click `tools\TiaImporter\Setup-TIA-helper` there; after that the helper starts by itself at log-in (see [tools/TiaImporter/README.md](../../tools/TiaImporter/README.md)). Enter its address and token in PLC-Ki.
 - **My laptop (PLC-Ki on a server)**: PLC-Ki Link on the laptop carries the TIA work (see below).
 
 ### PLC-Ki on a server: PLC-Ki Link

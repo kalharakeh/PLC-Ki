@@ -105,11 +105,17 @@ namespace TiaImporter
             var counts = new Dictionary<string, int> { ["blocks"] = 0, ["types"] = 0, ["tagTables"] = 0, ["sclSources"] = 0 };
             var sclBlocks = new List<PlcBlock>();
 
+            // Progress lines "blocks 12/52 (23%)": the PLC-Ki import page turns them into a percentage
+            _blocksTotal = CountBlocks(sw.BlockGroup);
+            _blocksDone = 0;
+            _log.WriteLine($"Exporting {_blocksTotal} blocks...");
             ExportBlockGroup(sw.BlockGroup, dir.CreateSubdirectory("Blocks"), counts, sclBlocks);
+            _log.WriteLine("Exporting data types and tag tables...");
             ExportTypeGroup(sw.TypeGroup, dir.CreateSubdirectory("Types"), counts);
             ExportTagGroup(sw.TagTableGroup, dir.CreateSubdirectory("Tags"), counts);
 
             // Readable SCL text in addition to the XML, one file per SCL block.
+            if (sclBlocks.Count > 0) _log.WriteLine($"Writing the SCL source of {sclBlocks.Count} blocks...");
             var sclDir = dir.CreateSubdirectory("SclSource");
             foreach (var block in sclBlocks)
             {
@@ -125,10 +131,30 @@ namespace TiaImporter
             return counts;
         }
 
+        private int _blocksTotal, _blocksDone;
+
+        private static int CountBlocks(PlcBlockGroup group)
+        {
+            var n = group.Blocks.Count;
+            foreach (PlcBlockUserGroup sub in group.Groups) n += CountBlocks(sub);
+            return n;
+        }
+
+        /// <summary>One more block handled; about every 5 % a progress line.</summary>
+        private void BlockDone()
+        {
+            _blocksDone++;
+            if (_blocksTotal <= 0) return;
+            var step = Math.Max(1, _blocksTotal / 20);
+            if (_blocksDone == _blocksTotal || _blocksDone % step == 0)
+                _log.WriteLine($"  blocks {_blocksDone}/{_blocksTotal} ({_blocksDone * 100 / _blocksTotal}%)");
+        }
+
         private void ExportBlockGroup(PlcBlockGroup group, DirectoryInfo dir, Dictionary<string, int> counts, List<PlcBlock> sclBlocks)
         {
             foreach (PlcBlock block in group.Blocks)
             {
+                BlockDone();
                 if (block.IsKnowHowProtected)
                 {
                     _problems.Add(new { kind = "know-how-protected", name = block.Name, detail = "Only the interface can be explained." });

@@ -63,6 +63,82 @@ const PKSetup = (() => {
   }
 
   const stateText = { running: ["Running", "info"], done: ["Finished", "ok"], problems: ["Finished with problems", "warn"], failed: ["Failed", "bad"], stopped: ["Stopped", "bad"] };
+  /** Why a job failed, in plain words, from its log: { text, todo }. */
+  function jobProblem(job) {
+    if (job.state === "stopped") return { text: "You stopped this job.", todo: "Start it again when you are ready. What was done so far is kept." };
+    const log = job.log || "";
+    const has = (re) => re.test(log);
+    if (has(/Siemens TIA Openness|not a member of|EngineeringSecurityException|UnauthorizedAccess/i))
+      return { text: "Your Windows user on the TIA PC may not use TIA Openness.", todo: "On the VM: Computer Management, Local Users and Groups, Groups, \"Siemens TIA Openness\": add your user. Then log off and on again, and start the job again." };
+    if (has(/whitelist|allow access|access was denied by the user|firewall.*openness/i))
+      return { text: "TIA Portal did not allow TiaImporter to use it.", todo: "On the VM: double-click Update-TIA-helper in C:\\PLCKi\\PLC-Ki\\tools\\TiaImporter once (it approves TiaImporter in TIA), or answer \"Yes to all\" when TIA asks." };
+    if (has(/refused the token|\b401\b.*(helper|5090|vm)|(helper|5090|vm).*\b401\b/i))
+      return PK.plain("refused the token");
+    if (has(/No answer from .*:\d+|Cannot reach the TIA helper|Link is not connected|connection refused.*5090|actively refused/i))
+      return PK.plain("TIA helper timeout");
+    if (has(/newer version|older version|upgrade the project|cannot be opened with this version|not compatible with/i))
+      return { text: "The archive was made with another TIA Portal version.", todo: "PLC-Ki uses TIA Portal V20. Open the project in TIA V20 (it offers to upgrade it), archive it again, and import that." };
+    if (has(/licen[cs]e[^\n]*(no valid|missing|expired|not found|fail)|(no valid|missing|expired)[^\n]*licen[cs]e/i))
+      return { text: "TIA Portal has no valid license on the TIA PC.", todo: "Check the STEP 7 Professional license in the Automation License Manager on the VM." };
+    if (has(/credit balance|billing|insufficient.*(credit|funds)/i))
+      return { text: "The Claude account has no credit left.", todo: "Add credit at console.anthropic.com (Billing), then start the job again." };
+    if (has(/authentication_error|invalid x-api-key|ANTHROPIC_API_KEY|no (claude )?api key/i))
+      return PK.plain("api key");
+    if (has(/overloaded|rate_limit|\b529\b|\b429\b/i))
+      return { text: "Claude is busy right now.", todo: "Wait a minute and start the job again." };
+    if (has(/out of memory|OutOfMemory|0xc000012d|not enough memory/i))
+      return { text: "The TIA PC ran out of memory.", todo: "Close programs you don't need on the VM, or give the VM more memory (16 GB works well with TIA and PLCSIM)." };
+    if (has(/know-how|protected block/i) && job.state === "problems")
+      return { text: "Some blocks are know-how protected.", todo: "PLC-Ki cannot read protected blocks. Remove the protection in a copy of the project if those blocks matter." };
+    if (has(/PLCSIM|download/i) && has(/fail|error|refused|not reachable/i) && /download|PLCSIM/i.test(job.title || ""))
+      return { text: "The download to PLCSIM did not work.", todo: "On the VM: check PLCSIM Advanced runs the virtual PLC (green), and its address is the PLCSIM address in Setup. Then start the job again." };
+    if (has(/compil\w*[^\n]*\b[1-9]\d* error/i) || has(/\berrors?: *[1-9]/i))
+      return { text: "TIA found compile errors.", todo: "Open the log below for the lines TIA complained about. More fixing rounds (More options) let Claude fix them by itself." };
+    const lines = log.split("\n").map((l) => l.replace(/^\s*\|\s?/, "").trim()).filter((l) => l && !l.startsWith(">"));
+    const last = lines.reverse().find((l) => /error|fail|cannot|could not|not found|refused|problem/i.test(l)) || lines[0] || "";
+    const p = PK.plain(last);
+    return { text: p.todo ? p.text : job.state === "problems" ? "It finished, but with problems." : "The job stopped with an error.", todo: p.todo || (last ? "The log says: " + last.slice(0, 240) : "Open the log below.") };
+  }
+
+  /** How far a job is: { pct, phase, hint } from its log, or null when it cannot tell (then the bar just moves). */
+  function jobProgress(job) {
+    const log = job.log || "";
+    const at = (re) => re.test(log);
+    const secs = job.started ? (Date.now() - new Date(job.started).getTime()) / 1000 : 0;
+    if (job.kind === "export") {
+      let pct = 2, phase = "Sending the archive to the TIA PC";
+      if (at(/TIA opens the archive/)) { pct = 10; phase = "Waiting for TIA on the TIA PC"; }
+      if (at(/Starting TIA Portal/)) { pct = 15; phase = "Starting TIA Portal in the background"; }
+      if (at(/Retrieving /)) { pct = 25; phase = "Opening the archive in TIA (the slowest part)"; }
+      if (at(/PLC [^\n]+ \/ /)) { pct = 40; phase = "Exporting the PLC program"; }
+      const m = [...log.matchAll(/blocks (\d+)\/(\d+) \((\d+)%\)/g)].pop();
+      if (m) { pct = 40 + Math.round(Number(m[3]) * 0.45); phase = `Exporting blocks: ${m[1]} of ${m[2]} done`; }
+      if (at(/types and tag tables/)) { pct = Math.max(pct, 86); phase = "Exporting data types and tag tables"; }
+      if (at(/Done\. \d+ PLC/)) { pct = 92; phase = "Copying the export back to this PC"; }
+      if (at(/Export saved/)) { pct = 100; phase = "Done"; }
+      // between two log lines, creep forward a little so it never looks frozen
+      return { pct, phase, hint: "Usually 2 to 10 minutes, depending on the program size." };
+    }
+    if (job.kind === "import") {
+      const pct = Math.min(95, Math.round(5 + secs / 300 * 90));
+      const phase = at(/Compared with|Wrote /) ? "Checking the model" : at(/round 2|Round 2|repair/i) ? "Claude is fixing what the check found" : at(/program text/) ? "Claude is reading the program and writing the model" : "Reading the program export";
+      return { pct, phase, hint: "Usually 3 to 6 minutes. The percentage is an estimate." };
+    }
+    return null;
+  }
+
+  function progressHtml(job, lastLine) {
+    const secs = job.started ? Math.max(0, Math.round((Date.now() - new Date(job.started).getTime()) / 1000)) : 0;
+    const time = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")} so far`;
+    const p = jobProgress(job);
+    const line = esc(lastLine.replace(/^\s*\|\s?/, "").slice(0, 200));
+    if (!p) return `<div class="jobprog"><div class="top"><span class="phase">Working…</span><span class="time">${time}</span></div>
+      <div class="progress indet"><div></div></div><p class="muted small" style="margin:0">${line}</p></div>`;
+    return `<div class="jobprog"><div class="top"><span class="pct">${p.pct}%</span><span class="phase">${esc(p.phase)}</span><span class="time">${time}</span></div>
+      <div class="progress"><div style="width:${p.pct}%"></div></div>
+      <p class="muted small" style="margin:0">${esc(p.hint)}${/blocks \d+\//.test(line) ? "" : ` Latest: ${line}`}</p></div>`;
+  }
+
   function jobCard(job, extra = "") {
     const [t, cls] = stateText[job.state] || [job.state, "info"];
     const lines = (job.log || "").split("\n").filter((l) => l.trim() && !l.startsWith("> "));
@@ -71,7 +147,8 @@ const PKSetup = (() => {
       <div class="row"><b style="font-size:16px">${esc(job.title)}</b><span class="pill ${cls}"><span class="dot"></span>${t}</span><span class="spacer"></span>
         ${job.state === "running" ? `<button class="btn red-tinted small" data-stop="${esc(job.id)}">${icon("stop")}Stop</button>` : ""}</div>
       ${extra}
-      ${job.state === "running" ? `<div class="progress indet" style="margin-top:12px"><div></div></div><p class="muted small" style="margin:8px 0 0">${esc(lastLine.replace(/^\s*\|\s?/, "").slice(0, 200))}</p>` : ""}
+      ${job.state === "running" ? progressHtml(job, lastLine) : ""}
+      ${["failed", "problems", "stopped"].includes(job.state) ? (() => { const p = jobProblem(job); return `<div class="notice ${job.state === "failed" ? "red" : "gold"}" style="margin-top:12px">${icon("warn")}<div><b>${esc(p.text)}</b>${p.todo ? `<br>${esc(p.todo)}` : ""}</div></div>`; })() : ""}
       <details class="more" ${job.state !== "running" && job.state !== "done" ? "open" : ""}><summary>Log</summary>
         <div class="joblog" data-log>${esc(job.log || "")}</div></details>
     </div>`;
@@ -134,11 +211,16 @@ const PKSetup = (() => {
         ${wire(410, 130, 220, 130, linkStatus ? linkStatus.connected : null, "connects out", !(linkStatus && linkStatus.connected))}
         ${wire(640, 130, 740, 130, linkStatus && linkStatus.plc ? linkStatus.plc.connected : null, "S7")}${plc(740, 84)}`;
     }
-    return `<div class="schematic"><svg viewBox="0 0 960 250" role="img" aria-label="How PLC-Ki, TIA Portal and the PLC are connected" font-family="inherit">${svg}</svg></div>
+    const st = (v) => v === true ? ["var(--ok)", "working"] : v === false ? ["var(--fault)", "no answer"] : ["var(--muted)", "not checked yet"];
+    const rows = c.tiaMode === "link" || c.plcVia === "link"
+      ? [["PLC-Ki › your laptop (Link)", linkStatus ? linkStatus.connected : null], ["Laptop › PLC " + (c.address || ""), linkStatus && linkStatus.plc ? linkStatus.plc.connected : null]]
+      : [["PLC-Ki › TIA helper" + (c.tiaMode === "remote" ? " on the VM" : ""), tiaOk], ["PLC-Ki › PLC " + (c.address || ""), plcOk]];
+    const list = `<ul class="linklist">${rows.map(([t, v]) => `<li><span class="sw" style="background:${st(v)[0]}"></span>${esc(t)}<small>${st(v)[1]}</small></li>`).join("")}</ul>`;
+    return list + `<div class="schematic"><svg viewBox="0 0 960 250" role="img" aria-label="How PLC-Ki, TIA Portal and the PLC are connected" font-family="inherit">${svg}</svg></div>
       <div class="legend"><span><span class="sw" style="background:var(--ok)"></span>checked, working</span><span><span class="sw" style="background:var(--fault)"></span>no answer</span><span><span class="sw" style="background:var(--muted)"></span>not checked yet</span></div>`;
   }
 
-  const setupNav = (here) => `<div class="subnav">${[["connections", "Connections"], ["program", "Program"], ["generator", "Block generator"], ["settings", "Settings"]]
+  const setupNav = (here) => `<div class="subnav">${[["start", "Get started"], ["connections", "Connections"], ["program", "Program"], ["generator", "Block generator"], ["settings", "Settings"]]
     .map(([k, l]) => `<a class="btn ${k === here ? "" : "b"} small" href="#/setup/${k}">${l}</a>`).join("")}</div>`;
 
   function choice(name, current, options) {
@@ -160,30 +242,33 @@ const PKSetup = (() => {
       : c.tiaMode === "remote" ? `
         <div class="grid two">
           <label class="field">TIA PC address<input id="tiaUrl" value="${esc(c.tiaUrl)}" placeholder="http://192.168.10.3:5090"></label>
-          <label class="field">Token <span class="hint">${info.tiaToken === "set" ? "Saved. Leave empty to keep it." : "The password TiaImporter serve was started with."}</span><input id="tiaToken" type="password" autocomplete="new-password" placeholder="${info.tiaToken === "set" ? "••••••••" : "at least 8 characters"}"></label>
+          <label class="field">Token <span class="hint">${info.tiaToken === "set" ? "Saved. Leave empty to keep it." : "Shown in the PLC-Ki TIA helper window on the VM."}</span><input id="tiaToken" type="password" autocomplete="new-password" placeholder="${info.tiaToken === "set" ? "••••••••" : "at least 8 characters"}"></label>
           <label class="field">TIA project for generated blocks<input id="tiaProject" value="${esc(c.tiaProject)}" placeholder="path on the TIA PC, e.g. C:\\Users\\Software\\Documents\\Automation\\…\\.ap20"></label>
         </div>
-        <details class="more"><summary>How to start the TIA helper on the TIA PC</summary>
-          <p class="muted small">On the TIA PC (your VM), once, in a <b>Command Prompt as administrator</b>:</p>
-          <div class="joblog">netsh http add urlacl url=http://+:5090/ user=%USERNAME%
-netsh advfirewall firewall add rule name="PLC-Ki TiaImporter" dir=in action=allow protocol=TCP localport=5090</div>
-          <p class="muted small">Then each time, in a normal Command Prompt on the TIA PC (TIA closed), and leave the window open:</p>
-          <div class="joblog">cd /d C:\\PLCKi\\PLC-Ki\\tools\\TiaImporter
-bin\\Release\\net48\\TiaImporter.exe serve --token &lt;the token above&gt; --plcsim-ip 192.168.10.10</div>
-          <p class="muted small">Add <code>--allow-real &lt;PLC address&gt;</code> only if generated blocks may go to a real PLC.</p>
+        <details class="more" ${tiaStatus && !tiaStatus.ok ? "open" : ""}><summary>How to set up the TIA helper on the VM</summary>
+          <ol class="howto" style="margin-top:12px">
+            <li><b>Once, get the newest PLC-Ki on the VM.</b> Open Command Prompt on the VM and paste this line:${PK.cmd("On the VM", "cd /d C:\\PLCKi\\PLC-Ki && git pull")}</li>
+            <li><b>Once, double-click <code>Setup-TIA-helper</code></b> in <code>C:\\PLCKi\\PLC-Ki\\tools\\TiaImporter</code>. It asks for the token and the PLCSIM address,
+              opens the port, and starts the helper.</li>
+            <li><b>Every day: nothing.</b> The helper starts by itself when you log into the VM, in a window called <b>PLC-Ki TIA helper</b>.
+              If that window was closed, double-click <code>Start-TIA-helper</code> in the same folder. After a PLC-Ki update, double-click <code>Update-TIA-helper</code>.</li>
+          </ol>
         </details>`
       : `<div class="grid two">
           <label class="field">TIA project for generated blocks<input id="tiaProject" value="${esc(c.tiaProject)}" placeholder="path on the laptop, e.g. C:\\Users\\you\\Documents\\Automation\\…\\.ap20"><span class="hint">Can also be chosen on the Block generator page.</span></label>
         </div>
         <p class="muted small" style="margin:0">PLC-Ki Link starts the TIA helper on the laptop (see PLC-Ki Link below). PLCSIM and real-PLC downloads are allowed there, on the laptop's command.</p>`;
 
+    const tiaPlain = tiaStatus && !tiaStatus.ok ? PK.plain(tiaStatus.message) : null;
     const tiaMsg = !tiaStatus ? `<span class="pill">Checking…</span>`
-      : `<span class="pill ${tiaStatus.ok ? "ok" : "bad"}"><span class="dot"></span>${esc(tiaStatus.message || (tiaStatus.ok ? "Reachable" : "Not reachable"))}</span>
+      : `<span class="pill ${tiaStatus.ok ? "ok" : "bad"}"><span class="dot"></span>${esc(tiaStatus.ok ? tiaStatus.message || "Reachable" : tiaPlain.text)}</span>
+         ${tiaPlain && tiaPlain.todo ? `<span class="muted small" style="flex-basis:100%">${esc(tiaPlain.todo)}</span>` : ""}
          ${tiaStatus.ok ? `<span class="faint small">PLCSIM downloads: ${tiaStatus.plcsimIp ? esc(tiaStatus.plcsimIp) : "off"} · real PLC downloads: ${tiaStatus.realAllowed ? "allowed (confirmed at the TIA PC)" : "off"}</span>` : ""}`;
 
     return PK.sec("hero", `${setupNav("connections")}
         <h1>Where everything is.</h1>
-        <p class="sub">PLC-Ki needs the PLC for live values and TIA Portal for importing programs and the block generator. Pick the setup that matches yours.</p>
+        <p class="sub">PLC-Ki needs the PLC for live values and TIA Portal for importing programs and the block generator. Pick the setup that matches yours.
+          New here? <a href="#/setup/start">Get started</a> walks you through it one step at a time.</p>
         ${restartBar()}
         ${choice("preset", preset, Object.entries(presets).map(([k, p]) => ({ value: k, label: p.title, text: p.text, icon: p.icon, })))}
         <div style="margin-top:22px">${diagram(c)}</div>`)
@@ -201,7 +286,8 @@ bin\\Release\\net48\\TiaImporter.exe serve --token &lt;the token above&gt; --plc
             : `<label class="field">Password <span class="hint">${info.plcPassword === "settings" ? "saved" : info.plcPassword === "environment" ? "from PLCKI_PLC_PASSWORD" : "only if the CPU has access protection"}</span><input id="plcPassword" type="password" autocomplete="new-password"></label>`}
         </div>
         ${c.plcVia === "link" ? "" : `<div class="row"><button class="btn b small" data-test-plc>Test the address</button>
-          ${plcTest ? `<span class="pill ${plcTest.ok ? "ok" : "bad"}"><span class="dot"></span>${esc(plcTest.message)}</span>` : ""}</div>`}
+          ${plcTest ? `<span class="pill ${plcTest.ok ? "ok" : "bad"}"><span class="dot"></span>${esc(plcTest.ok ? plcTest.message : PK.plain(plcTest.message, { plc: conn.address }).text)}</span>` : ""}</div>
+          ${plcTest && !plcTest.ok && PK.plain(plcTest.message).todo ? `<p class="muted small" style="margin:0">${esc(PK.plain(plcTest.message, { plc: conn.address }).todo)}</p>` : ""}`}
         <details class="more" style="margin-top:0"><summary>More PLC options</summary>
           <div class="grid three" style="margin-top:12px">
             <label class="field">Security<select id="security">${["Auto", "Tls", "LegacyChallenge"].map((x) => `<option ${c.security === x ? "selected" : ""}>${x}</option>`).join("")}</select></label>
@@ -242,8 +328,7 @@ bin\\Release\\net48\\TiaImporter.exe serve --token &lt;the token above&gt; --plc
       : `<span class="pill ${c.tiaMode === "link" ? "bad" : ""}"><span class="dot"></span>${esc(l.tiaMessage || "No TIA helper")}</span>`) : "";
     const key = linkKey || "<the key>";
     const server = location.origin;
-    const cmd = `cd /d %USERPROFILE%\\Downloads\\PLC-Ki
-dotnet run --project src\\PlcKi.Server -- link --server ${server} --key ${key}${c.tiaMode === "link" ? ` --tia "C:\\PLCKi\\PLC-Ki\\tools\\TiaImporter\\bin\\Release\\net48\\TiaImporter.exe"` : ""}`;
+    const cmd = `cd /d %USERPROFILE%\\Downloads\\PLC-Ki && dotnet run --project src\\PlcKi.Server -- link --server ${server} --key ${key}${c.tiaMode === "link" ? ` --tia "C:\\PLCKi\\PLC-Ki\\tools\\TiaImporter\\bin\\Release\\net48\\TiaImporter.exe"` : ""}`;
     return PK.sec("dark", `<span class="eyebrow">PLC-Ki Link</span><h2 style="margin-top:6px">Your laptop, connected out.</h2>
       <p class="sub">A small program on the laptop that reaches the PLC${c.tiaMode === "link" ? " and has TIA" : ""}. It only connects out to this server, so no firewall or VPN changes on the plant side.
         It reads the PLC read-only${c.tiaMode === "link" ? " and carries the TIA work to the laptop's TIA" : ""}.</p>
@@ -255,8 +340,8 @@ dotnet run --project src\\PlcKi.Server -- link --server ${server} --key ${key}${
           ${linkKey ? `<span class="pill ok"><span class="dot"></span>New key below. Copy it now.</span>` : l && l.hasKey ? `<span class="small" style="opacity:.7">A key exists (made ${esc(new Date(l.keyCreated).toLocaleString())}).</span>` : ""}</div></div></div>
         <div class="step ${l && l.connected ? "done" : l && l.hasKey ? "now" : ""}"><span class="n">2</span><div><b>On the laptop, start Link</b>
           <p class="small" style="margin:6px 0 10px;opacity:.8">In a Command Prompt, in the PLC-Ki folder (a clone of the repository, as on your PC). Leave the window open${c.tiaMode === "link" ? "; it opens the TIA helper's window too" : ""}.</p>
-          <div class="joblog" style="user-select:all">${esc(cmd)}</div>
-          <div class="row" style="margin-top:10px"><button class="btn white small" data-copy-cmd>Copy</button>
+          ${PK.cmd("On the laptop", cmd)}
+          <div class="row" style="margin-top:10px">
             ${c.tiaMode === "link" ? `<span class="small" style="opacity:.8">Add <code>--plcsim-ip &lt;address&gt;</code> for PLCSIM tests, <code>--allow-real &lt;address&gt;</code> only if blocks may go to a real PLC.</span>` : ""}</div></div></div>
         <div class="step ${l && l.connected ? "done" : ""}"><span class="n">3</span><div><b>Back here, it turns green</b>
           <p class="small" style="margin:6px 0 0;opacity:.8">The status above shows the laptop, the PLC and TIA within a few seconds.</p></div></div>
@@ -309,11 +394,6 @@ dotnet run --project src\\PlcKi.Server -- link --server ${server} --key ${key}${
       if (lk) lk.onclick = async () => {
         if (linkStatus && linkStatus.hasKey && !(await PK.confirmSheet({ title: "Make a new key?", text: "The laptop's Link stops working until it is started with the new key.", ok: "Make a new key" }))) return;
         try { linkKey = (await api("POST", "/api/admin/link/key")).key; await loadLink(); PK.draw(); } catch (e) { toast(e.message); }
-      };
-      const cc = page.querySelector("[data-copy-cmd]");
-      if (cc) cc.onclick = async () => {
-        const text = page.querySelector(".joblog[style*=user-select]").textContent;
-        try { await navigator.clipboard.writeText(text); toast("Copied."); } catch { toast("Select the text and copy it."); }
       };
       const c = page.querySelector("[data-check-tia]");
       if (c) c.onclick = checkTia;
@@ -378,7 +458,9 @@ dotnet run --project src\\PlcKi.Server -- link --server ${server} --key ${key}${
   }
 
   function startJob(job, after) {
+    const fresh = !imp.job || imp.job.id !== job.id;
     imp.job = job;
+    if (fresh) setTimeout(() => { const c = document.querySelector(".step .card.job"); if (c) c.scrollIntoView({ behavior: "smooth", block: "center" }); }, 80);
     if (imp.unfollow) imp.unfollow();
     imp.unfollow = follow(job, async (j) => {
       PK.draw();
@@ -431,16 +513,17 @@ dotnet run --project src\\PlcKi.Server -- link --server ${server} --key ${key}${
           ${ch ? `<p style="margin:12px 0 0">Chosen: <b>${esc(ch.name)}</b> <span class="tag ${isArchive ? "gold" : "blue"}">${isArchive ? "TIA archive" : "program export"}</span></p>` : ""}
           ${earlier}`)}
         ${step(2, "Export it with TIA Portal", "Only for archives. TIA opens it in the background on the TIA PC (see Connections) and exports every block. The archive is not changed.",
-          isArchive ? `<button class="btn" data-export ${jobRunning ? "disabled" : ""}>Export with TIA</button>` : `<span class="faint">${ch ? "Not needed: this is already an export." : "Waiting for a file."}</span>`)}
-        ${step(3, "Build the machine model", "Claude reads the program and writes what each step, device and alarm means. A few minutes, a few dollars of API use.",
+          (isArchive ? `<button class="btn" data-export ${jobRunning ? "disabled" : ""}>Export with TIA</button>` : `<span class="faint">${ch ? "Not needed: this is already an export." : "Waiting for a file."}</span>`)
+          + (imp.job && imp.job.kind === "export" ? jobCard(imp.job) : ""))}
+        ${step(3, "Build the machine model", "Claude reads the program and writes what each step, device and alarm means. A few minutes, usually one to a few dollars of API use.",
           ch && !isArchive ? `${plcPick}
             <div class="row"><span class="small muted">Effort</span><div class="segmented">${["medium", "high", "max"].map((e) => `<button class="${imp.effort === e ? "on" : ""}" data-effort="${e}">${e}</button>`).join("")}</div>
               <label class="check small"><input type="checkbox" id="compare" ${imp.compare ? "checked" : ""}>Compare with the current model</label></div>
             <div class="row" style="margin-top:14px"><button class="btn" data-build ${jobRunning || (exp && exp.plcs.length > 1 && !imp.plc) ? "disabled" : ""}>Build the model</button>
-              ${exp && exp.plcs.length > 1 && !imp.plc ? `<span class="faint">Choose the PLC first.</span>` : ""}</div>` : `<span class="faint">Needs a program export.</span>`)}
+              ${exp && exp.plcs.length > 1 && !imp.plc ? `<span class="faint">Choose the PLC first.</span>` : ""}</div>` + (imp.job && imp.job.kind === "import" ? jobCard(imp.job) : "") : `<span class="faint">Needs a program export.</span>`)}
         ${step(4, "Check it and use it", "What Claude found. Use it, and PLC-Ki restarts with this machine.", review || `<span class="faint">The result shows here.</span>`)}
         </div>
-        ${imp.job ? `<div style="margin-top:22px">${jobCard(imp.job)}</div>` : ""}`);
+        ${imp.job && imp.job.kind !== "export" && imp.job.kind !== "import" ? `<div style="margin-top:22px">${jobCard(imp.job)}</div>` : ""}`);
   }
 
   PK.view("setup/program", {
@@ -559,5 +642,6 @@ dotnet run --project src\\PlcKi.Server -- link --server ${server} --key ${key}${
     },
   });
 
-  return { setupNav, follow, jobCard, bindJob, restartBar, bindRestart, loadSettings, get settings() { return settings; } };
+  return { setupNav, follow, jobCard, jobProblem, bindJob, restartBar, bindRestart, loadSettings, saveSettings, restart, presets, presetOf,
+    get settings() { return settings; }, get info() { return info; } };
 })();

@@ -10,7 +10,30 @@
   let selectedEq = null;
 
   const sorted = (alarms) => [...alarms].sort((a, b) => (a.severity === "WARNING") - (b.severity === "WARNING"));
-  const waiting = `<section class="hero"><div class="wrap"><h1>Waiting for PLC-Ki…</h1></div></section>`;
+  const opened = Date.now();
+  /** No status from PLC-Ki (yet): say so, and what to do if it stays that way. */
+  function waitingPage() {
+    if (Date.now() - opened < 6000) return hero({ title: "Connecting to PLC-Ki…", sub: "One moment." });
+    const i = PK.connInfo();
+    return hero({ eyebrow: `<span class="pill bad"><span class="dot"></span>Not reachable</span>`, title: esc(i.title), sub: esc(i.todo),
+      actions: `<button class="btn" onclick="location.reload()">Try again</button>` });
+  }
+  const guide = () => (typeof PKStart !== "undefined" ? PKStart.card() : "");
+
+  /** The PLC is not read (not connected, or waiting for Link): explain instead of showing old values. */
+  function offlinePage() {
+    const i = PK.connInfo();
+    const admin = state.user && state.user.role === "admin";
+    return hero({
+      eyebrow: `<span class="pill ${i.level}"><span class="dot"></span>${i.level === "warn" ? "Waiting" : "Not connected"}</span>`,
+      title: "No live values from the PLC.",
+      sub: esc(i.text || i.title),
+      actions: admin ? `<a class="btn" href="#/setup/start/plc">Fix the connection</a><button class="btn b" data-conn-help>What does this mean?</button>`
+        : `<button class="btn" data-conn-help>What does this mean?</button>`,
+      extra: i.todo ? `<div class="notice gold" style="margin-top:26px;max-width:720px">${icon("info")}<div><b>What to do</b><br>${esc(i.todo)}${admin ? "" : "<br>If it stays like this, tell your administrator."}</div></div>` : "",
+    });
+  }
+  const offline = () => { const c = state.status && state.status.connection; return c && (c.state === "disconnected" || c.state === "waiting"); };
 
   /** 'FB_Valve, instance "Station".XV101 (output FaultNotOpen)' -> { block, instance, output } */
   function parseLoc(loc) {
@@ -94,6 +117,8 @@
   }
 
   function bindAsk(page) {
+    if (typeof PKStart !== "undefined") PKStart.bindCard(page);
+    page.querySelectorAll("[data-conn-help]").forEach((b) => b.onclick = PK.connSheet);
     page.querySelectorAll("[data-ask]").forEach((b) => b.onclick = () => window.PKAsk && window.PKAsk.open(b.dataset.ask));
   }
 
@@ -103,14 +128,15 @@
     mount() { PK.loadProgram().then(PK.draw); PK.draw(); },
     render() {
       const s = state.status;
-      if (!s) return waiting;
+      if (!s) return waitingPage();
       const alarms = sorted(s.activeAlarms);
       for (const a of alarms) firstSeen[a.id] ||= Date.now();
       for (const id of Object.keys(firstSeen)) if (!alarms.some((a) => a.id === id)) delete firstSeen[id];
       const seq = s.sequences.find((q) => q.halted) || s.sequences[0];
+      if (offline()) return guide() + offlinePage();
 
       if (!alarms.length) {
-        return hero({
+        return guide() + hero({
           eyebrow: `<span class="pill ok"><span class="dot"></span>No alarm</span>`,
           title: "No alarm is active.",
           sub: esc(s.summary[0] || ""),
@@ -138,7 +164,7 @@
         [since && Date.now() - since > 3000 ? PK.ago(since).replace(" ago", "") : "now", "on this screen"],
       ].filter(Boolean).slice(0, 4);
 
-      return sec("hero", `${chips}
+      return guide() + sec("hero", `${chips}
           <div class="eyebrow"><span class="pill ${warn ? "warn" : "bad"}"><span class="dot"></span>${esc(a.severity)} · ${esc(a.id)}</span></div>
           <h1>${esc(a.text)}</h1>
           ${a.condition ? `<p class="sub">${esc(a.condition)}</p>` : ""}
@@ -182,7 +208,8 @@
     live: true,
     render() {
       const s = state.status;
-      if (!s) return waiting;
+      if (!s) return waitingPage();
+      if (offline()) return guide() + offlinePage();
       const main = s.sequences[0];
       const [stText, stCls] = main ? seqState(main) : ["", ""];
       const top = hero({
@@ -203,7 +230,7 @@
         </div>`).join("");
 
       const sel = s.equipment.find((e) => e.id === selectedEq);
-      return top
+      return guide() + top
         + (seqs ? sec("alt", `<h2>Sequence</h2><p class="sub">Each step, where it is now, and what it waits for.</p>${seqs}`) : "")
         + sec("", `<h2>Equipment</h2><p class="sub">Every device, and the chain from request to feedback. The first red link is why it is not running.</p>
             ${sel ? `<div class="card stack" style="margin-bottom:18px">${eqCard(sel, true)}<div class="actions"><button class="btn small" data-ask="Why is ${esc(sel.id)} ${esc(sel.state)}?">Ask why</button><button class="btn b small" data-close-eq>Close</button></div></div>` : ""}
@@ -229,7 +256,7 @@
     live: true,
     render() {
       const s = state.status, m = state.model;
-      if (!s || !m) return waiting;
+      if (!s || !m) return waitingPage();
       const active = new Set(s.activeAlarms.map((a) => a.id));
       const q = alarmFilter.toLowerCase();
       const all = m.alarms.filter((a) => !q || (a.id + " " + a.text + " " + (a.location || "")).toLowerCase().includes(q))
@@ -261,6 +288,7 @@
     },
     after(page) {
       const inp = page.querySelector("#alarm-search");
+      if (!inp) return;
       inp.oninput = () => { alarmFilter = inp.value; PK.draw(); const i = PK.$("alarm-search"); i.focus(); i.setSelectionRange(i.value.length, i.value.length); };
       page.querySelectorAll("[data-open]").forEach((li) => li.onclick = (e) => {
         if (e.target.closest("a,button")) return;

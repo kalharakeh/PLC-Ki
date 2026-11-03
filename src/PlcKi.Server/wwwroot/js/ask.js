@@ -77,7 +77,7 @@
 
   fetch("/api/ask").then((r) => r.json()).then((s) => {
     if (s.enabled) return;
-    $("ask-off").textContent = s.reason || "The assistant is not available.";
+    $("ask-off").textContent = (s.reason || "The assistant is not available.") + " An administrator turns it on under Setup, Get started (step Ask).";
     $("ask-off").classList.remove("hidden");
     form.classList.add("hidden");
     chips.classList.add("hidden");
