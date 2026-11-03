@@ -53,7 +53,25 @@ Usage: PlcKi.Server develop --vm <http://tia-pc:5090> --project <project .ap20 o
         o.TryGetValue("plc-address", out var plcAddress);
         o.TryGetValue("plc", out var plc);
 
-        try { await vm.StatusAsync(ct); Console.WriteLine($"TIA PC reachable at {o["vm"]}."); }
+        try
+        {
+            var status = await vm.StatusAsync(ct);
+            Console.WriteLine($"TIA PC reachable at {o["vm"]}.");
+            // No address given: watch the PLCSIM the TIA PC downloads to
+            if (plcAddress == null && o.ContainsKey("download"))
+            {
+                try
+                {
+                    using var doc = System.Text.Json.JsonDocument.Parse(status);
+                    if (doc.RootElement.TryGetProperty("plcsimIp", out var ip) && ip.ValueKind == System.Text.Json.JsonValueKind.String && ip.GetString() is { Length: > 0 } sim)
+                    {
+                        plcAddress = sim;
+                        Console.WriteLine($"Watching PLCSIM at {sim} after the download.");
+                    }
+                }
+                catch (System.Text.Json.JsonException) { /* old helper: no watch */ }
+            }
+        }
         catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException or TaskCanceledException)
         {
             Console.Error.WriteLine($"Cannot reach TiaImporter serve at {o["vm"]}: {ex.Message}");

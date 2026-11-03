@@ -59,8 +59,28 @@ Where TIA runs (Setup, Connections):
 - **This PC**: PLC-Ki starts `TiaImporter serve --local` itself, in its own window (only this PC can reach it). Set
   the TiaImporter path once.
 - **Another PC or VM**: start `TiaImporter serve --token <secret>` there and enter its address and token.
-- **My laptop (PLC-Ki on a server)**: needs PLC-Ki Link, a small program on the laptop that connects out to the
-  server; coming in the next update.
+- **My laptop (PLC-Ki on a server)**: PLC-Ki Link on the laptop carries the TIA work (see below).
+
+### PLC-Ki on a server: PLC-Ki Link
+
+When PLC-Ki runs on a server that reaches neither the PLC nor TIA, a laptop that reaches both runs **PLC-Ki Link**.
+Link only connects out to the server (no firewall or VPN changes on the plant side). It reads the PLC read-only with
+the same driver and sends the values once a second, and with `--tia` it starts `TiaImporter serve --local` on the
+laptop and carries the server's TIA calls to it. A real-PLC download is still confirmed in that helper's window, on
+the laptop.
+
+1. On the server, Setup, Connections: choose **Server + my laptop**, save, and click **Make a key**. Turn on
+   "Other computers may open PLC-Ki" (Settings) so the laptop can reach the server.
+2. On the laptop (needs the .NET 8 SDK and a clone of this repository), in the PLC-Ki folder:
+
+```
+dotnet run --project src\PlcKi.Server -- link --server http://<server>:5080 --key <key> --tia "C:\PLCKi\PLC-Ki\tools\TiaImporter\bin\Release\net48\TiaImporter.exe"
+```
+
+Options: `--plc <address>` reads another address than the server's setting, `--plc-password` (or
+`PLCKI_PLC_PASSWORD`) for a protected CPU (the password stays on the laptop), `--plcsim-ip` and `--allow-real` for
+the TIA helper, `--snapshot <file>` sends test values instead of reading a PLC. Without `--tia`, Link only carries
+the PLC values. The Connections page shows Link, the PLC and TIA turning green.
 
 Long work (TIA export, building a model, the block generator) runs as a job: the same command as on the command line,
 started by PLC-Ki, with its progress and log on the page. One job at a time.

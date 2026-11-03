@@ -7,6 +7,7 @@ using PlcKi.Server.Ask;
 using PlcKi.Server.Generate;
 using PlcKi.Server.Import;
 using PlcKi.Server.Jobs;
+using PlcKi.Server.Link;
 using PlcKi.Server.Live;
 
 // PLC-Ki server.
@@ -16,6 +17,7 @@ using PlcKi.Server.Live;
 //   PlcKi.Server generate ...    write PLC blocks from a plain request with Claude (see Generate/GenerateCommand.cs)
 //   PlcKi.Server develop ...     generate, import, compile, fix, PLCSIM download and watch, with TiaImporter serve
 //   PlcKi.Server export ...      send a .zap20 to TiaImporter serve and fetch the program export
+//   PlcKi.Server link ...        PLC-Ki Link: on a laptop, carry PLC values and TIA work to a PLC-Ki server (see Link/)
 // The pages under Setup run the same commands as jobs (see Jobs/), so everything here also works with buttons.
 // Settings come from appsettings.json and can be overridden on the command line, e.g.
 //   PlcKi.Server --PlcKi:Plc:Address=192.168.10.10
@@ -29,6 +31,8 @@ if (args.Length > 0 && args[0].Equals("develop", StringComparison.OrdinalIgnoreC
     return await DevelopCommand.RunAsync(args[1..]);
 if (args.Length > 0 && args[0].Equals("export", StringComparison.OrdinalIgnoreCase))
     return await ExportCommand.RunAsync(args[1..]);
+if (args.Length > 0 && args[0].Equals("link", StringComparison.OrdinalIgnoreCase))
+    return await LinkCommand.RunAsync(args[1..]);
 
 bool probe = args.Length > 0 && args[0].Equals("probe", StringComparison.OrdinalIgnoreCase);
 var appArgs = probe ? args[1..] : args;
@@ -36,10 +40,11 @@ var appArgs = probe ? args[1..] : args;
 // Jobs outlive an in-page restart, so applying new settings never kills an import that is running
 using var jobLogs = LoggerFactory.Create(b => b.AddSimpleConsole(o => o.SingleLine = true));
 using var jobs = new JobService(jobLogs.CreateLogger<JobService>());
+var linkHub = new LinkHub();     // Link's connection and TIA calls also outlive an in-page restart
 while (true)
 {
     var restart = false;
-    var code = await RunAppAsync(appArgs, probe, jobs, () => restart = true);
+    var code = await RunAppAsync(appArgs, probe, jobs, linkHub, () => restart = true);
     if (!restart)
     {
         TiaConnection.StopLocalHelper();
@@ -49,7 +54,7 @@ while (true)
     Console.WriteLine("Restarting PLC-Ki with the new settings...");
 }
 
-static async Task<int> RunAppAsync(string[] appArgs, bool probe, JobService jobs, Action requestRestart)
+static async Task<int> RunAppAsync(string[] appArgs, bool probe, JobService jobs, LinkHub linkHub, Action requestRestart)
 {
     var builder = WebApplication.CreateBuilder(new WebApplicationOptions
     {
@@ -81,6 +86,7 @@ static async Task<int> RunAppAsync(string[] appArgs, bool probe, JobService jobs
 
     IPlcSource CreateSource(ILogger log) => opt.Source.Equals("snapshot", StringComparison.OrdinalIgnoreCase)
         ? new SnapshotFileSource(Resolve(opt.SnapshotFile))
+        : opt.Plc.Via == "link" ? new LinkPlcSource(linkHub, opt.Plc)
         : new S7CommPlusSource(opt.Plc, log);
 
     if (probe)
@@ -93,6 +99,8 @@ static async Task<int> RunAppAsync(string[] appArgs, bool probe, JobService jobs
     builder.Services.AddSingleton(opt);
     builder.Services.AddSingleton(model);
     builder.Services.AddSingleton(jobs);
+    linkHub.Load(plant.DataDir);
+    builder.Services.AddSingleton(linkHub);
     builder.Services.AddSingleton<TiaConnection>();
     builder.Services.AddSingleton(sp => new ProgramService(opt, model, Resolve));
     builder.Services.AddSingleton(new StatusEngine(model));
@@ -193,13 +201,17 @@ static async Task<int> RunAppAsync(string[] appArgs, bool probe, JobService jobs
 
     app.MapPlant();     // /api/auth/... and /api/admin/... (settings, users)
     app.MapSetup();     // /api/admin/... jobs, TIA connection, program import, block generator
+    app.MapLink();      // /link/... for PLC-Ki Link on the laptop, /api/admin/link for the Connections page
 
     app.Lifetime.ApplicationStarted.Register(() =>
     {
         var urls = string.Join(", ", app.Urls);
+        if (app.Urls.Select(u => Uri.TryCreate(u.Replace("://*", "://localhost").Replace("://+", "://localhost"), UriKind.Absolute, out var x) ? x : null)
+                .FirstOrDefault(x => x?.Scheme == "http") is { } local)
+            linkHub.LocalBase = $"http://localhost:{local.Port}";
         Console.WriteLine();
         Console.WriteLine($"PLC-Ki is running. Open {urls} in your browser.");
-        Console.WriteLine($"Model: {model.Name} ({model.Tags.Count} tags). Source: {opt.Source} {(opt.Source == "s7" ? opt.Plc.Address : opt.SnapshotFile)}. Read-only.");
+        Console.WriteLine($"Model: {model.Name} ({model.Tags.Count} tags). Source: {opt.Source} {(opt.Source != "s7" ? opt.SnapshotFile : opt.Plc.Via == "link" ? opt.Plc.Address + " through PLC-Ki Link" : opt.Plc.Address)}. Read-only.");
         var (askOn, askWhy) = app.Services.GetRequiredService<AskService>().Availability();
         Console.WriteLine(askOn ? $"Ask a question: on ({opt.Ask.Model})." : $"Ask a question: off. {askWhy}");
         if (opt.Tia.Mode == "local")

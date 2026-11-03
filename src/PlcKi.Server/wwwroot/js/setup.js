@@ -87,6 +87,7 @@ const PKSetup = (() => {
   // ---------- Connections ----------
   let tiaStatus = null;
   let plcTest = null;
+  let linkStatus = null, linkKey = null, linkTimer = null;
   let conn = null;      // edited copy
 
   const presets = {
@@ -128,10 +129,10 @@ const PKSetup = (() => {
         ${wire(260, 110, 700, 70, tiaOk, "TIA helper, port 5090")}
         ${wire(260, 150, 700, 190, plcOk, "S7, read-only")}${plc(700, 144)}`;
     } else {
-      svg = `${box(30, 74, 210, 112, "PLC-Ki", [{ t: "on the server", mono: false }, { t: location.host, mono: true }], true)}
-        ${box(380, 64, 250, 132, "Your laptop", [{ t: "PLC-Ki Link" }, { t: "TIA Portal" }, { t: "your browser" }])}
-        ${wire(380, 130, 240, 130, null, "connects out to the server", true)}
-        ${wire(630, 130, 730, 130, null, "S7", true)}${plc(730, 84)}`;
+      svg = `${box(20, 74, 200, 112, "PLC-Ki", [{ t: "on the server", mono: false }, { t: location.host, mono: true }], true)}
+        ${box(410, 64, 230, 132, "Your laptop", [{ t: linkStatus && linkStatus.connected ? "PLC-Ki Link · " + (linkStatus.machine || "") : "PLC-Ki Link" }, { t: linkStatus && linkStatus.tia ? "TIA Portal, helper ready" : "TIA Portal" }, { t: "your browser" }])}
+        ${wire(410, 130, 220, 130, linkStatus ? linkStatus.connected : null, "connects out", !(linkStatus && linkStatus.connected))}
+        ${wire(640, 130, 740, 130, linkStatus && linkStatus.plc ? linkStatus.plc.connected : null, "S7")}${plc(740, 84)}`;
     }
     return `<div class="schematic"><svg viewBox="0 0 960 250" role="img" aria-label="How PLC-Ki, TIA Portal and the PLC are connected" font-family="inherit">${svg}</svg></div>
       <div class="legend"><span><span class="sw" style="background:var(--ok)"></span>checked, working</span><span><span class="sw" style="background:var(--fault)"></span>no answer</span><span><span class="sw" style="background:var(--muted)"></span>not checked yet</span></div>`;
@@ -171,7 +172,10 @@ netsh advfirewall firewall add rule name="PLC-Ki TiaImporter" dir=in action=allo
 bin\\Release\\net48\\TiaImporter.exe serve --token &lt;the token above&gt; --plcsim-ip 192.168.10.10</div>
           <p class="muted small">Add <code>--allow-real &lt;PLC address&gt;</code> only if generated blocks may go to a real PLC.</p>
         </details>`
-      : `<div class="notice gold"><div><b>Coming in the next update.</b> A small program, PLC-Ki Link, runs on your laptop. It connects out to this server (no firewall changes), reads the PLC for it and does the TIA work with the TIA on your laptop. Until then, choose "This PC" or "Another PC".</div></div>`;
+      : `<div class="grid two">
+          <label class="field">TIA project for generated blocks<input id="tiaProject" value="${esc(c.tiaProject)}" placeholder="path on the laptop, e.g. C:\\Users\\you\\Documents\\Automation\\…\\.ap20"><span class="hint">Can also be chosen on the Block generator page.</span></label>
+        </div>
+        <p class="muted small" style="margin:0">PLC-Ki Link starts the TIA helper on the laptop (see PLC-Ki Link below). PLCSIM and real-PLC downloads are allowed there, on the laptop's command.</p>`;
 
     const tiaMsg = !tiaStatus ? `<span class="pill">Checking…</span>`
       : `<span class="pill ${tiaStatus.ok ? "ok" : "bad"}"><span class="dot"></span>${esc(tiaStatus.message || (tiaStatus.ok ? "Reachable" : "Not reachable"))}</span>
@@ -181,7 +185,7 @@ bin\\Release\\net48\\TiaImporter.exe serve --token &lt;the token above&gt; --plc
         <h1>Where everything is.</h1>
         <p class="sub">PLC-Ki needs the PLC for live values and TIA Portal for importing programs and the block generator. Pick the setup that matches yours.</p>
         ${restartBar()}
-        ${choice("preset", preset, Object.entries(presets).map(([k, p]) => ({ value: k, label: p.title, text: p.text, icon: p.icon, soon: k === "server" })))}
+        ${choice("preset", preset, Object.entries(presets).map(([k, p]) => ({ value: k, label: p.title, text: p.text, icon: p.icon, })))}
         <div style="margin-top:22px">${diagram(c)}</div>`)
 
       + PK.sec("alt", `<div class="row" style="align-items:baseline"><h2>The PLC</h2><span class="pill warn">Read-only</span></div>
@@ -189,14 +193,15 @@ bin\\Release\\net48\\TiaImporter.exe serve --token &lt;the token above&gt; --plc
         <div class="card stack">
         ${choice("plcvia", c.plcVia, [
           { value: "direct", label: "From here", text: "PLC-Ki reads the PLC over the network.", icon: "pc" },
-          { value: "link", label: "Through my laptop", text: "PLC-Ki Link on the laptop reads it and sends the values here.", icon: "laptop", disabled: true, soon: true },
+          { value: "link", label: "Through my laptop", text: "PLC-Ki Link on the laptop reads it and sends the values here.", icon: "laptop" },
         ]).replace('class="choice"', 'class="choice two"')}
         <div class="grid two">
           <label class="field">PLC address<input id="address" value="${esc(c.address)}" placeholder="192.168.0.1"></label>
-          <label class="field">Password <span class="hint">${info.plcPassword === "settings" ? "saved" : info.plcPassword === "environment" ? "from PLCKI_PLC_PASSWORD" : "only if the CPU has access protection"}</span><input id="plcPassword" type="password" autocomplete="new-password"></label>
+          ${c.plcVia === "link" ? `<p class="muted small" style="align-self:end;margin:0 0 10px">The laptop reads this address. If the CPU has access protection, its password stays on the laptop (<code>--plc-password</code>).</p>`
+            : `<label class="field">Password <span class="hint">${info.plcPassword === "settings" ? "saved" : info.plcPassword === "environment" ? "from PLCKI_PLC_PASSWORD" : "only if the CPU has access protection"}</span><input id="plcPassword" type="password" autocomplete="new-password"></label>`}
         </div>
-        <div class="row"><button class="btn b small" data-test-plc>Test the address</button>
-          ${plcTest ? `<span class="pill ${plcTest.ok ? "ok" : "bad"}"><span class="dot"></span>${esc(plcTest.message)}</span>` : ""}</div>
+        ${c.plcVia === "link" ? "" : `<div class="row"><button class="btn b small" data-test-plc>Test the address</button>
+          ${plcTest ? `<span class="pill ${plcTest.ok ? "ok" : "bad"}"><span class="dot"></span>${esc(plcTest.message)}</span>` : ""}</div>`}
         <details class="more" style="margin-top:0"><summary>More PLC options</summary>
           <div class="grid three" style="margin-top:12px">
             <label class="field">Security<select id="security">${["Auto", "Tls", "LegacyChallenge"].map((x) => `<option ${c.security === x ? "selected" : ""}>${x}</option>`).join("")}</select></label>
@@ -213,12 +218,49 @@ bin\\Release\\net48\\TiaImporter.exe serve --token &lt;the token above&gt; --plc
         ${choice("tiamode", c.tiaMode, [
           { value: "local", label: "This PC", text: "TIA Portal is installed here.", icon: "pc" },
           { value: "remote", label: "Another PC or VM", text: "A PC or VM next to this one runs TIA and the helper.", icon: "vm" },
-          { value: "link", label: "My laptop", text: "Through PLC-Ki Link.", icon: "laptop", soon: true },
+          { value: "link", label: "My laptop", text: "Through PLC-Ki Link.", icon: "laptop" },
         ])}
         <div>${tiaFields}</div>
         <div class="row">${tiaMsg}<span class="spacer"></span><button class="btn plain small" data-check-tia>Check again</button></div>
         </div>
-        <div class="actions" style="margin-top:28px"><button class="btn big" data-save>Save</button><span class="muted small" id="save-msg"></span></div>`);
+        ${c.plcVia === "link" || c.tiaMode === "link" ? "" : saveRow}`)
+      + (c.plcVia === "link" || c.tiaMode === "link" ? linkHtml(c) : "");
+  }
+
+  const saveRow = `<div class="actions" style="margin-top:28px"><button class="btn big" data-save>Save</button><span class="muted small" id="save-msg"></span></div>`;
+
+  /** PLC-Ki Link: the laptop that reaches the PLC and has TIA connects out to this server. */
+  function linkHtml(c) {
+    const l = linkStatus;
+    const ago = (t) => { if (!t) return "never"; const s = Math.round((Date.now() - new Date(t)) / 1000); return s < 5 ? "just now" : s < 120 ? s + " s ago" : Math.round(s / 60) + " min ago"; };
+    const state = !l ? `<span class="pill">Checking…</span>`
+      : l.connected ? `<span class="pill ok"><span class="dot"></span>Connected from ${esc(l.machine || "the laptop")}</span>`
+      : `<span class="pill bad"><span class="dot"></span>${l.hasKey ? "Not connected" + (l.lastSeen ? ", last seen " + ago(l.lastSeen) : "") : "No key yet"}</span>`;
+    const plc = l && l.plc ? (l.plc.connected ? `<span class="pill ok"><span class="dot"></span>Reading PLC ${esc(l.plc.address || "")}</span>`
+      : `<span class="pill bad"><span class="dot"></span>PLC: ${esc(l.plc.error || "no answer")}</span>`) : "";
+    const tia = l && l.connected ? (l.tia ? `<span class="pill ok"><span class="dot"></span>TIA helper ready</span>`
+      : `<span class="pill ${c.tiaMode === "link" ? "bad" : ""}"><span class="dot"></span>${esc(l.tiaMessage || "No TIA helper")}</span>`) : "";
+    const key = linkKey || "<the key>";
+    const server = location.origin;
+    const cmd = `cd /d %USERPROFILE%\\Downloads\\PLC-Ki
+dotnet run --project src\\PlcKi.Server -- link --server ${server} --key ${key}${c.tiaMode === "link" ? ` --tia "C:\\PLCKi\\PLC-Ki\\tools\\TiaImporter\\bin\\Release\\net48\\TiaImporter.exe"` : ""}`;
+    return PK.sec("dark", `<span class="eyebrow">PLC-Ki Link</span><h2 style="margin-top:6px">Your laptop, connected out.</h2>
+      <p class="sub">A small program on the laptop that reaches the PLC${c.tiaMode === "link" ? " and has TIA" : ""}. It only connects out to this server, so no firewall or VPN changes on the plant side.
+        It reads the PLC read-only${c.tiaMode === "link" ? " and carries the TIA work to the laptop's TIA" : ""}.</p>
+      <div class="row" style="margin-top:6px">${state}${plc}${tia}</div>
+      <div class="steps col" style="margin-top:26px">
+        <div class="step ${l && l.hasKey ? "done" : "now"}"><span class="n">1</span><div><b>Save this setup, then make a key</b>
+          <p class="small" style="margin:6px 0 10px;opacity:.8">The key lets the laptop in. It is shown once; a new key replaces the old one.</p>
+          <div class="row">${saveRow.replace('style="margin-top:28px"', "")}<button class="btn white small" data-link-key>${l && l.hasKey ? "Make a new key" : "Make a key"}</button>
+          ${linkKey ? `<span class="pill ok"><span class="dot"></span>New key below. Copy it now.</span>` : l && l.hasKey ? `<span class="small" style="opacity:.7">A key exists (made ${esc(new Date(l.keyCreated).toLocaleString())}).</span>` : ""}</div></div></div>
+        <div class="step ${l && l.connected ? "done" : l && l.hasKey ? "now" : ""}"><span class="n">2</span><div><b>On the laptop, start Link</b>
+          <p class="small" style="margin:6px 0 10px;opacity:.8">In a Command Prompt, in the PLC-Ki folder (a clone of the repository, as on your PC). Leave the window open${c.tiaMode === "link" ? "; it opens the TIA helper's window too" : ""}.</p>
+          <div class="joblog" style="user-select:all">${esc(cmd)}</div>
+          <div class="row" style="margin-top:10px"><button class="btn white small" data-copy-cmd>Copy</button>
+            ${c.tiaMode === "link" ? `<span class="small" style="opacity:.8">Add <code>--plcsim-ip &lt;address&gt;</code> for PLCSIM tests, <code>--allow-real &lt;address&gt;</code> only if blocks may go to a real PLC.</span>` : ""}</div></div></div>
+        <div class="step ${l && l.connected ? "done" : ""}"><span class="n">3</span><div><b>Back here, it turns green</b>
+          <p class="small" style="margin:6px 0 0;opacity:.8">The status above shows the laptop, the PLC and TIA within a few seconds.</p></div></div>
+      </div>`);
   }
 
   function readConn(page) {
@@ -237,10 +279,18 @@ bin\\Release\\net48\\TiaImporter.exe serve --token &lt;the token above&gt; --plc
     PK.draw();
   }
 
+  async function loadLink() {
+    try { linkStatus = await api("GET", "/api/admin/link/"); } catch { /* next time */ }
+  }
+
   PK.view("setup/connections", {
     live: true,      // the diagram follows the PLC state
+    leave() { clearInterval(linkTimer); linkTimer = null; },
     async mount() {
-      conn = null; tiaStatus = null; plcTest = null;
+      conn = null; tiaStatus = null; plcTest = null; linkKey = null;
+      clearInterval(linkTimer);
+      linkTimer = setInterval(async () => { if (conn && (conn.plcVia === "link" || conn.tiaMode === "link")) { const was = linkStatus && linkStatus.connected; await loadLink(); PK.draw(); if (linkStatus && linkStatus.connected && !was) checkTia(); } }, 3000);
+      loadLink();
       try { await loadSettings(); conn = { ...settings }; } catch (e) { PK.$("page").innerHTML = `<div class="notice red">${esc(e.message)}</div>`; return; }
       PK.draw();
       checkTia();
@@ -250,11 +300,21 @@ bin\\Release\\net48\\TiaImporter.exe serve --token &lt;the token above&gt; --plc
       bindRestart(page);
       const keep = () => readConn(page);
       page.querySelectorAll("input,select").forEach((el) => el.addEventListener("change", keep));
-      page.querySelectorAll("[data-preset]").forEach((b) => b.onclick = () => { keep(); const p = presets[b.dataset.preset]; conn.tiaMode = p.tiaMode; conn.plcVia = p.plcVia === "link" ? "direct" : p.plcVia; if (b.dataset.preset === "server") toast("PLC-Ki Link for this setup comes in the next update."); PK.draw(); });
+      page.querySelectorAll("[data-preset]").forEach((b) => b.onclick = () => { keep(); const p = presets[b.dataset.preset]; conn.tiaMode = p.tiaMode; conn.plcVia = p.plcVia; PK.draw(); });
       page.querySelectorAll("[data-tiamode]").forEach((b) => b.onclick = () => { keep(); conn.tiaMode = b.dataset.tiamode; PK.draw(); });
       page.querySelectorAll("[data-plcvia]").forEach((b) => b.onclick = () => { keep(); conn.plcVia = b.dataset.plcvia; PK.draw(); });
       const t = page.querySelector("[data-test-plc]");
       if (t) t.onclick = async () => { keep(); plcTest = { ok: false, message: "Testing…" }; PK.draw(); try { plcTest = await api("POST", "/api/admin/test-plc", { address: conn.address }); } catch (e) { plcTest = { ok: false, message: e.message }; } PK.draw(); };
+      const lk = page.querySelector("[data-link-key]");
+      if (lk) lk.onclick = async () => {
+        if (linkStatus && linkStatus.hasKey && !(await PK.confirmSheet({ title: "Make a new key?", text: "The laptop's Link stops working until it is started with the new key.", ok: "Make a new key" }))) return;
+        try { linkKey = (await api("POST", "/api/admin/link/key")).key; await loadLink(); PK.draw(); } catch (e) { toast(e.message); }
+      };
+      const cc = page.querySelector("[data-copy-cmd]");
+      if (cc) cc.onclick = async () => {
+        const text = page.querySelector(".joblog[style*=user-select]").textContent;
+        try { await navigator.clipboard.writeText(text); toast("Copied."); } catch { toast("Select the text and copy it."); }
+      };
       const c = page.querySelector("[data-check-tia]");
       if (c) c.onclick = checkTia;
       const h = page.querySelector("[data-start-helper]");
