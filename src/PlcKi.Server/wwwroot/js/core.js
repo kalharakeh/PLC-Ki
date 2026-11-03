@@ -144,17 +144,18 @@ const PK = (() => {
     if (!state.status || stale) { text = "PLC-Ki not reachable"; cls = "bad"; }
     else {
       const map = {
-        connected: ["Live · " + c.address, "ok"],
-        snapshot: ["Test values · " + c.address.split(/[\\/]/).pop(), "info"],
-        connecting: ["Connecting to " + c.address, "warn"],
-        disconnected: ["Not connected · " + c.address, "bad"],
-        waiting: ["Waiting for PLC-Ki Link", "warn"],
+        connected: ["Live|" + c.address, "ok"],
+        snapshot: ["Test values|" + c.address.split(/[\\/]/).pop(), "info"],
+        connecting: ["Connecting|" + c.address, "warn"],
+        disconnected: ["Not connected|" + c.address, "bad"],
+        waiting: ["Waiting for Link|", "warn"],
       };
       [text, cls] = map[c.state] || [c.state, "warn"];
     }
     pill.className = "pill " + cls;
     pill.title = "What does this mean?";
-    pill.innerHTML = `<span class="dot"></span><span>${esc(text)}</span>`;
+    const [main, extra] = String(text).split("|");
+    pill.innerHTML = `<span class="dot"></span><span>${esc(main)}</span>${extra ? `<span class="pill-extra">· ${esc(extra)}</span>` : ""}`;
     const alarms = (state.status && state.status.activeAlarms) || [];
     const b = $("nav-alarm-badge");
     b.textContent = alarms.length;

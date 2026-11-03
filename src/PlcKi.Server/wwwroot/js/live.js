@@ -288,6 +288,7 @@
     },
     after(page) {
       const inp = page.querySelector("#alarm-search");
+      if (!inp) return;
       inp.oninput = () => { alarmFilter = inp.value; PK.draw(); const i = PK.$("alarm-search"); i.focus(); i.setSelectionRange(i.value.length, i.value.length); };
       page.querySelectorAll("[data-open]").forEach((li) => li.onclick = (e) => {
         if (e.target.closest("a,button")) return;

@@ -100,6 +100,45 @@ const PKSetup = (() => {
     return { text: p.todo ? p.text : job.state === "problems" ? "It finished, but with problems." : "The job stopped with an error.", todo: p.todo || (last ? "The log says: " + last.slice(0, 240) : "Open the log below.") };
   }
 
+  /** How far a job is: { pct, phase, hint } from its log, or null when it cannot tell (then the bar just moves). */
+  function jobProgress(job) {
+    const log = job.log || "";
+    const at = (re) => re.test(log);
+    const secs = job.started ? (Date.now() - new Date(job.started).getTime()) / 1000 : 0;
+    if (job.kind === "export") {
+      let pct = 2, phase = "Sending the archive to the TIA PC";
+      if (at(/TIA opens the archive/)) { pct = 10; phase = "Waiting for TIA on the TIA PC"; }
+      if (at(/Starting TIA Portal/)) { pct = 15; phase = "Starting TIA Portal in the background"; }
+      if (at(/Retrieving /)) { pct = 25; phase = "Opening the archive in TIA (the slowest part)"; }
+      if (at(/PLC [^\n]+ \/ /)) { pct = 40; phase = "Exporting the PLC program"; }
+      const m = [...log.matchAll(/blocks (\d+)\/(\d+) \((\d+)%\)/g)].pop();
+      if (m) { pct = 40 + Math.round(Number(m[3]) * 0.45); phase = `Exporting blocks: ${m[1]} of ${m[2]} done`; }
+      if (at(/types and tag tables/)) { pct = Math.max(pct, 86); phase = "Exporting data types and tag tables"; }
+      if (at(/Done\. \d+ PLC/)) { pct = 92; phase = "Copying the export back to this PC"; }
+      if (at(/Export saved/)) { pct = 100; phase = "Done"; }
+      // between two log lines, creep forward a little so it never looks frozen
+      return { pct, phase, hint: "Usually 2 to 10 minutes, depending on the program size." };
+    }
+    if (job.kind === "import") {
+      const pct = Math.min(95, Math.round(5 + secs / 300 * 90));
+      const phase = at(/Compared with|Wrote /) ? "Checking the model" : at(/round 2|Round 2|repair/i) ? "Claude is fixing what the check found" : at(/program text/) ? "Claude is reading the program and writing the model" : "Reading the program export";
+      return { pct, phase, hint: "Usually 3 to 6 minutes. The percentage is an estimate." };
+    }
+    return null;
+  }
+
+  function progressHtml(job, lastLine) {
+    const secs = job.started ? Math.max(0, Math.round((Date.now() - new Date(job.started).getTime()) / 1000)) : 0;
+    const time = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")} so far`;
+    const p = jobProgress(job);
+    const line = esc(lastLine.replace(/^\s*\|\s?/, "").slice(0, 200));
+    if (!p) return `<div class="jobprog"><div class="top"><span class="phase">Working…</span><span class="time">${time}</span></div>
+      <div class="progress indet"><div></div></div><p class="muted small" style="margin:0">${line}</p></div>`;
+    return `<div class="jobprog"><div class="top"><span class="pct">${p.pct}%</span><span class="phase">${esc(p.phase)}</span><span class="time">${time}</span></div>
+      <div class="progress"><div style="width:${p.pct}%"></div></div>
+      <p class="muted small" style="margin:0">${esc(p.hint)}${/blocks \d+\//.test(line) ? "" : ` Latest: ${line}`}</p></div>`;
+  }
+
   function jobCard(job, extra = "") {
     const [t, cls] = stateText[job.state] || [job.state, "info"];
     const lines = (job.log || "").split("\n").filter((l) => l.trim() && !l.startsWith("> "));
@@ -108,7 +147,7 @@ const PKSetup = (() => {
       <div class="row"><b style="font-size:16px">${esc(job.title)}</b><span class="pill ${cls}"><span class="dot"></span>${t}</span><span class="spacer"></span>
         ${job.state === "running" ? `<button class="btn red-tinted small" data-stop="${esc(job.id)}">${icon("stop")}Stop</button>` : ""}</div>
       ${extra}
-      ${job.state === "running" ? `<div class="progress indet" style="margin-top:12px"><div></div></div><p class="muted small" style="margin:8px 0 0">${esc(lastLine.replace(/^\s*\|\s?/, "").slice(0, 200))}</p>` : ""}
+      ${job.state === "running" ? progressHtml(job, lastLine) : ""}
       ${["failed", "problems", "stopped"].includes(job.state) ? (() => { const p = jobProblem(job); return `<div class="notice ${job.state === "failed" ? "red" : "gold"}" style="margin-top:12px">${icon("warn")}<div><b>${esc(p.text)}</b>${p.todo ? `<br>${esc(p.todo)}` : ""}</div></div>`; })() : ""}
       <details class="more" ${job.state !== "running" && job.state !== "done" ? "open" : ""}><summary>Log</summary>
         <div class="joblog" data-log>${esc(job.log || "")}</div></details>
@@ -172,7 +211,12 @@ const PKSetup = (() => {
         ${wire(410, 130, 220, 130, linkStatus ? linkStatus.connected : null, "connects out", !(linkStatus && linkStatus.connected))}
         ${wire(640, 130, 740, 130, linkStatus && linkStatus.plc ? linkStatus.plc.connected : null, "S7")}${plc(740, 84)}`;
     }
-    return `<div class="schematic"><svg viewBox="0 0 960 250" role="img" aria-label="How PLC-Ki, TIA Portal and the PLC are connected" font-family="inherit">${svg}</svg></div>
+    const st = (v) => v === true ? ["var(--ok)", "working"] : v === false ? ["var(--fault)", "no answer"] : ["var(--muted)", "not checked yet"];
+    const rows = c.tiaMode === "link" || c.plcVia === "link"
+      ? [["PLC-Ki › your laptop (Link)", linkStatus ? linkStatus.connected : null], ["Laptop › PLC " + (c.address || ""), linkStatus && linkStatus.plc ? linkStatus.plc.connected : null]]
+      : [["PLC-Ki › TIA helper" + (c.tiaMode === "remote" ? " on the VM" : ""), tiaOk], ["PLC-Ki › PLC " + (c.address || ""), plcOk]];
+    const list = `<ul class="linklist">${rows.map(([t, v]) => `<li><span class="sw" style="background:${st(v)[0]}"></span>${esc(t)}<small>${st(v)[1]}</small></li>`).join("")}</ul>`;
+    return list + `<div class="schematic"><svg viewBox="0 0 960 250" role="img" aria-label="How PLC-Ki, TIA Portal and the PLC are connected" font-family="inherit">${svg}</svg></div>
       <div class="legend"><span><span class="sw" style="background:var(--ok)"></span>checked, working</span><span><span class="sw" style="background:var(--fault)"></span>no answer</span><span><span class="sw" style="background:var(--muted)"></span>not checked yet</span></div>`;
   }
 
@@ -414,7 +458,9 @@ const PKSetup = (() => {
   }
 
   function startJob(job, after) {
+    const fresh = !imp.job || imp.job.id !== job.id;
     imp.job = job;
+    if (fresh) setTimeout(() => { const c = document.querySelector(".step .card.job"); if (c) c.scrollIntoView({ behavior: "smooth", block: "center" }); }, 80);
     if (imp.unfollow) imp.unfollow();
     imp.unfollow = follow(job, async (j) => {
       PK.draw();
@@ -467,16 +513,17 @@ const PKSetup = (() => {
           ${ch ? `<p style="margin:12px 0 0">Chosen: <b>${esc(ch.name)}</b> <span class="tag ${isArchive ? "gold" : "blue"}">${isArchive ? "TIA archive" : "program export"}</span></p>` : ""}
           ${earlier}`)}
         ${step(2, "Export it with TIA Portal", "Only for archives. TIA opens it in the background on the TIA PC (see Connections) and exports every block. The archive is not changed.",
-          isArchive ? `<button class="btn" data-export ${jobRunning ? "disabled" : ""}>Export with TIA</button>` : `<span class="faint">${ch ? "Not needed: this is already an export." : "Waiting for a file."}</span>`)}
-        ${step(3, "Build the machine model", "Claude reads the program and writes what each step, device and alarm means. A few minutes, a few dollars of API use.",
+          (isArchive ? `<button class="btn" data-export ${jobRunning ? "disabled" : ""}>Export with TIA</button>` : `<span class="faint">${ch ? "Not needed: this is already an export." : "Waiting for a file."}</span>`)
+          + (imp.job && imp.job.kind === "export" ? jobCard(imp.job) : ""))}
+        ${step(3, "Build the machine model", "Claude reads the program and writes what each step, device and alarm means. A few minutes, usually one to a few dollars of API use.",
           ch && !isArchive ? `${plcPick}
             <div class="row"><span class="small muted">Effort</span><div class="segmented">${["medium", "high", "max"].map((e) => `<button class="${imp.effort === e ? "on" : ""}" data-effort="${e}">${e}</button>`).join("")}</div>
               <label class="check small"><input type="checkbox" id="compare" ${imp.compare ? "checked" : ""}>Compare with the current model</label></div>
             <div class="row" style="margin-top:14px"><button class="btn" data-build ${jobRunning || (exp && exp.plcs.length > 1 && !imp.plc) ? "disabled" : ""}>Build the model</button>
-              ${exp && exp.plcs.length > 1 && !imp.plc ? `<span class="faint">Choose the PLC first.</span>` : ""}</div>` : `<span class="faint">Needs a program export.</span>`)}
+              ${exp && exp.plcs.length > 1 && !imp.plc ? `<span class="faint">Choose the PLC first.</span>` : ""}</div>` + (imp.job && imp.job.kind === "import" ? jobCard(imp.job) : "") : `<span class="faint">Needs a program export.</span>`)}
         ${step(4, "Check it and use it", "What Claude found. Use it, and PLC-Ki restarts with this machine.", review || `<span class="faint">The result shows here.</span>`)}
         </div>
-        ${imp.job ? `<div style="margin-top:22px">${jobCard(imp.job)}</div>` : ""}`);
+        ${imp.job && imp.job.kind !== "export" && imp.job.kind !== "import" ? `<div style="margin-top:22px">${jobCard(imp.job)}</div>` : ""}`);
   }
 
   PK.view("setup/program", {
