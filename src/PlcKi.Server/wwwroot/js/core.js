@@ -153,7 +153,7 @@ const PK = (() => {
       [text, cls] = map[c.state] || [c.state, "warn"];
     }
     pill.className = "pill " + cls;
-    pill.title = (c && c.error) || "";
+    pill.title = "What does this mean?";
     pill.innerHTML = `<span class="dot"></span><span>${esc(text)}</span>`;
     const alarms = (state.status && state.status.activeAlarms) || [];
     const b = $("nav-alarm-badge");
@@ -220,12 +220,13 @@ const PK = (() => {
 
   // ---- small UI helpers ----
   let toastTimer;
-  function toast(text) {
+  function toast(text, kind) {
     const t = $("toast");
     t.textContent = text;
+    t.classList.toggle("err", kind === "error");
     t.classList.add("on");
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => t.classList.remove("on"), 3200);
+    toastTimer = setTimeout(() => t.classList.remove("on"), kind === "error" ? 7000 : 3200);
   }
 
   /** A modal sheet; returns {el, close}. */
@@ -285,6 +286,59 @@ const PK = (() => {
     return new Date(t).toLocaleDateString();
   };
 
+  // ---- plain language: what a status or error means and what to do ----
+  /** Turns a technical error into { text, todo } a person can act on. */
+  function plain(message, where = {}) {
+    const m = String(message || "");
+    const plc = where.plc || (state.status && state.status.connection && state.status.connection.address) || "the PLC";
+    if (/failed to fetch|networkerror|load failed/i.test(m)) return { text: "PLC-Ki itself is not answering.", todo: "Check that the PLC-Ki window on the PC is still open. Start it again with Start-PLC-Ki in the PLC-Ki folder." };
+    if (/timed out|timeout|within \d+ s|no answer/i.test(m) && /5090|tia|helper|importer/i.test(m)) return { text: "The TIA helper did not answer.", todo: "On the VM (or TIA PC): check the window \"PLC-Ki TIA helper\" is open. If not, double-click Start-TIA-helper in C:\\PLCKi\\PLC-Ki\\tools\\TiaImporter." };
+    if (/refused the token|401/i.test(m)) return { text: "The TIA helper does not accept the token.", todo: "Type the same token here as the one shown in the TIA helper window on the VM." };
+    if (/timed out|timeout|no answer|unreachable|no route|host is down/i.test(m)) return { text: `${plc} does not answer.`, todo: `Check the PLC is on and the cable or virtual switch is connected. On the PC, ping ${plc} should answer. For PLCSIM: is the virtual PLC started in PLCSIM Advanced?` };
+    if (/refused/i.test(m)) return { text: `Something is at ${plc}, but it does not accept the connection.`, todo: "Check it is really the PLC's address, and that PUT/GET or the access level allows reading (TIA: CPU properties, Protection & Security)." };
+    if (/password|access|legitimation|protection/i.test(m)) return { text: "The PLC asks for a password.", todo: "Enter the CPU's access password under Setup, Connections (More PLC options)." };
+    if (/api key|anthropic/i.test(m)) return { text: "No Claude API key is set.", todo: "Add it under Setup, Settings (Assistant). It starts with sk-ant-." };
+    return { text: m, todo: "" };
+  }
+
+  /** What the PLC connection state means, for the pill sheet and empty pages. */
+  function connInfo() {
+    const c = state.status && state.status.connection;
+    const stale = Date.now() - state.lastOk > 5000;
+    if (!state.status || stale) return { level: "bad", title: "PLC-Ki is not answering.", text: "This page cannot reach PLC-Ki.", todo: "Check that the PLC-Ki window on the PC is still open. If it was closed, double-click Start-PLC-Ki in the PLC-Ki folder, then reload this page." };
+    if (c.state === "connected") return { level: "ok", title: `Reading the PLC at ${c.address}.`, text: "Values are live, read once a second. PLC-Ki only reads: it never writes values or changes the CPU state.", todo: "" };
+    if (c.state === "snapshot") return { level: "info", title: "Showing test values, not a PLC.", text: "PLC-Ki reads values from a test file.", todo: "To read a real PLC, choose Live PLC under Setup, Connections (More PLC options)." };
+    if (c.state === "connecting") return { level: "warn", title: `Connecting to ${c.address}…`, text: "This takes a few seconds.", todo: "" };
+    if (c.state === "waiting") return { level: "warn", title: "Waiting for PLC-Ki Link.", text: "The PLC is read by PLC-Ki Link on your laptop, and it is not connected.", todo: "On the laptop, start PLC-Ki Link (Setup, Connections shows the command)." };
+    const p = plain(c.error, { plc: c.address });
+    return { level: "bad", title: `No connection to the PLC at ${c.address}.`, text: p.text === c.error ? "" : p.text, todo: p.todo, detail: c.error };
+  }
+
+  function connSheet() {
+    const i = connInfo();
+    const admin = state.user && state.user.role === "admin";
+    const s = sheet(`<span class="pill ${i.level}" style="align-self:flex-start;justify-self:start"><span class="dot"></span>${{ ok: "Connected", bad: "Not connected", warn: "Waiting", info: "Test values" }[i.level]}</span>
+      <h2>${esc(i.title)}</h2>${i.text ? `<p class="muted" style="margin:0">${esc(i.text)}</p>` : ""}
+      ${i.todo ? `<div class="notice ${i.level === "bad" ? "red" : "gold"}">${icon("info")}<div><b>What to do</b><br>${esc(i.todo)}</div></div>` : ""}
+      ${i.detail ? `<details class="more"><summary>Technical detail</summary><p class="faint small" style="margin:8px 0 0">${esc(i.detail)}</p></details>` : ""}
+      <div class="row end">${admin && i.level !== "ok" ? `<a class="btn b" href="#/setup/connections" data-close>Open Connections</a>` : ""}<button class="btn" data-close>OK</button></div>`);
+    s.el.querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", s.close));
+  }
+
+  /** A command to type, with where to type it ("On the VM") and a Copy button. One line where possible. */
+  function cmd(where, text, note = "") {
+    const id = "c" + Math.random().toString(36).slice(2, 8);
+    return `<div class="cmd"><div class="cmd-head"><span class="where where-${esc(where.split(" ").pop().toLowerCase())}">${esc(where)}</span>${note ? `<span class="faint small">${note}</span>` : ""}<span class="spacer"></span>
+      <button type="button" class="btn plain small" data-copy="${id}">Copy</button></div><pre id="${id}">${esc(text)}</pre></div>`;
+  }
+  document.addEventListener("click", async (e) => {
+    const b = e.target.closest("[data-copy]");
+    if (!b) return;
+    const el = document.getElementById(b.dataset.copy);
+    try { await navigator.clipboard.writeText(el.textContent); b.textContent = "Copied"; setTimeout(() => { b.textContent = "Copy"; }, 1600); }
+    catch { const r = document.createRange(); r.selectNodeContents(el); getSelection().removeAllRanges(); getSelection().addRange(r); toast("Selected. Press Ctrl+C to copy."); }
+  });
+
   async function start() {
     fillIcons();
     try {
@@ -301,14 +355,20 @@ const PK = (() => {
     };
     try { state.model = await api("GET", "/api/model"); } catch { /* shown on pages */ }
     try { state.info = await api("GET", "/api/info"); $("machine").textContent = state.info.machine; } catch { /* */ }
+    $("conn").setAttribute("role", "button");
+    $("conn").tabIndex = 0;
+    $("conn").title = "What does this mean?";
+    $("conn").onclick = connSheet;
+    $("conn").onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); connSheet(); } };
     window.addEventListener("hashchange", route);
     window.addEventListener("scroll", () => $("topnav").classList.toggle("scrolled", window.scrollY > 4), { passive: true });
+    if (admin && !location.hash && typeof PKStart !== "undefined" && (await PKStart.firstRun())) history.replaceState(null, "", "#/setup/start");
     route();
     pollStatus();
     pollValues();
     pollJobs();
   }
 
-  return { sec, hero, reveal: (el) => reveal(el), $, esc, icon, fillIcons, kindIcon, api, state, view, go, draw, route, toast, sheet, confirmSheet, cond, md, ago,
+  return { plain, connInfo, connSheet, cmd, sec, hero, reveal: (el) => reveal(el), $, esc, icon, fillIcons, kindIcon, api, state, view, go, draw, route, toast, sheet, confirmSheet, cond, md, ago,
     loadProgram, valueBySymbol, norm, start, get current() { return current; } };
 })();

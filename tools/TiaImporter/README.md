@@ -36,6 +36,18 @@ per PLC:
 <out>\<PLC>\SclSource\*.scl    readable source of SCL blocks
 ```
 
+## The TIA helper for PLC-Ki, without typing commands
+
+On the TIA PC or VM, once: double-click **`Setup-TIA-helper`** in this folder (answer Yes when Windows asks for
+administrator rights). A small window asks for the token, the PLCSIM address and, optionally, real PLCs that may be
+loaded. It then opens port 5090 (URL reservation and firewall rule), saves the settings for your Windows user in
+`%LOCALAPPDATA%\PLC-Ki\tia-helper-settings.cmd`, adds **PLC-Ki TIA helper** to your Startup folder, and starts it.
+
+From then on the helper starts by itself when you log in, in a blue window called **PLC-Ki TIA helper** that shows
+the address and token to enter in PLC-Ki. Leave it open: a real-PLC download is confirmed there. If it was closed,
+double-click **`Start-TIA-helper`**. Run `Setup-TIA-helper` again to change the token or addresses, or to turn the
+start at log-in off. TIA itself only opens (in the background) when PLC-Ki sends work.
+
 ## Requirements
 
 - Windows with **TIA Portal V20** including the Openness option (selected by default in the installer)

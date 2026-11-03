@@ -138,7 +138,7 @@ const PKSetup = (() => {
       <div class="legend"><span><span class="sw" style="background:var(--ok)"></span>checked, working</span><span><span class="sw" style="background:var(--fault)"></span>no answer</span><span><span class="sw" style="background:var(--muted)"></span>not checked yet</span></div>`;
   }
 
-  const setupNav = (here) => `<div class="subnav">${[["connections", "Connections"], ["program", "Program"], ["generator", "Block generator"], ["settings", "Settings"]]
+  const setupNav = (here) => `<div class="subnav">${[["start", "Get started"], ["connections", "Connections"], ["program", "Program"], ["generator", "Block generator"], ["settings", "Settings"]]
     .map(([k, l]) => `<a class="btn ${k === here ? "" : "b"} small" href="#/setup/${k}">${l}</a>`).join("")}</div>`;
 
   function choice(name, current, options) {
@@ -160,30 +160,33 @@ const PKSetup = (() => {
       : c.tiaMode === "remote" ? `
         <div class="grid two">
           <label class="field">TIA PC address<input id="tiaUrl" value="${esc(c.tiaUrl)}" placeholder="http://192.168.10.3:5090"></label>
-          <label class="field">Token <span class="hint">${info.tiaToken === "set" ? "Saved. Leave empty to keep it." : "The password TiaImporter serve was started with."}</span><input id="tiaToken" type="password" autocomplete="new-password" placeholder="${info.tiaToken === "set" ? "••••••••" : "at least 8 characters"}"></label>
+          <label class="field">Token <span class="hint">${info.tiaToken === "set" ? "Saved. Leave empty to keep it." : "Shown in the PLC-Ki TIA helper window on the VM."}</span><input id="tiaToken" type="password" autocomplete="new-password" placeholder="${info.tiaToken === "set" ? "••••••••" : "at least 8 characters"}"></label>
           <label class="field">TIA project for generated blocks<input id="tiaProject" value="${esc(c.tiaProject)}" placeholder="path on the TIA PC, e.g. C:\\Users\\Software\\Documents\\Automation\\…\\.ap20"></label>
         </div>
-        <details class="more"><summary>How to start the TIA helper on the TIA PC</summary>
-          <p class="muted small">On the TIA PC (your VM), once, in a <b>Command Prompt as administrator</b>:</p>
-          <div class="joblog">netsh http add urlacl url=http://+:5090/ user=%USERNAME%
-netsh advfirewall firewall add rule name="PLC-Ki TiaImporter" dir=in action=allow protocol=TCP localport=5090</div>
-          <p class="muted small">Then each time, in a normal Command Prompt on the TIA PC (TIA closed), and leave the window open:</p>
-          <div class="joblog">cd /d C:\\PLCKi\\PLC-Ki\\tools\\TiaImporter
-bin\\Release\\net48\\TiaImporter.exe serve --token &lt;the token above&gt; --plcsim-ip 192.168.10.10</div>
-          <p class="muted small">Add <code>--allow-real &lt;PLC address&gt;</code> only if generated blocks may go to a real PLC.</p>
+        <details class="more" ${tiaStatus && !tiaStatus.ok ? "open" : ""}><summary>How to set up the TIA helper on the VM</summary>
+          <ol class="howto" style="margin-top:12px">
+            <li><b>Once, get the newest PLC-Ki on the VM.</b> Open Command Prompt on the VM and paste this line:${PK.cmd("On the VM", "cd /d C:\\PLCKi\\PLC-Ki && git pull")}</li>
+            <li><b>Once, double-click <code>Setup-TIA-helper</code></b> in <code>C:\\PLCKi\\PLC-Ki\\tools\\TiaImporter</code>. It asks for the token and the PLCSIM address,
+              opens the port, and starts the helper.</li>
+            <li><b>Every day: nothing.</b> The helper starts by itself when you log into the VM, in a window called <b>PLC-Ki TIA helper</b>.
+              If that window was closed, double-click <code>Start-TIA-helper</code> in the same folder.</li>
+          </ol>
         </details>`
       : `<div class="grid two">
           <label class="field">TIA project for generated blocks<input id="tiaProject" value="${esc(c.tiaProject)}" placeholder="path on the laptop, e.g. C:\\Users\\you\\Documents\\Automation\\…\\.ap20"><span class="hint">Can also be chosen on the Block generator page.</span></label>
         </div>
         <p class="muted small" style="margin:0">PLC-Ki Link starts the TIA helper on the laptop (see PLC-Ki Link below). PLCSIM and real-PLC downloads are allowed there, on the laptop's command.</p>`;
 
+    const tiaPlain = tiaStatus && !tiaStatus.ok ? PK.plain(tiaStatus.message) : null;
     const tiaMsg = !tiaStatus ? `<span class="pill">Checking…</span>`
-      : `<span class="pill ${tiaStatus.ok ? "ok" : "bad"}"><span class="dot"></span>${esc(tiaStatus.message || (tiaStatus.ok ? "Reachable" : "Not reachable"))}</span>
+      : `<span class="pill ${tiaStatus.ok ? "ok" : "bad"}"><span class="dot"></span>${esc(tiaStatus.ok ? tiaStatus.message || "Reachable" : tiaPlain.text)}</span>
+         ${tiaPlain && tiaPlain.todo ? `<span class="muted small" style="flex-basis:100%">${esc(tiaPlain.todo)}</span>` : ""}
          ${tiaStatus.ok ? `<span class="faint small">PLCSIM downloads: ${tiaStatus.plcsimIp ? esc(tiaStatus.plcsimIp) : "off"} · real PLC downloads: ${tiaStatus.realAllowed ? "allowed (confirmed at the TIA PC)" : "off"}</span>` : ""}`;
 
     return PK.sec("hero", `${setupNav("connections")}
         <h1>Where everything is.</h1>
-        <p class="sub">PLC-Ki needs the PLC for live values and TIA Portal for importing programs and the block generator. Pick the setup that matches yours.</p>
+        <p class="sub">PLC-Ki needs the PLC for live values and TIA Portal for importing programs and the block generator. Pick the setup that matches yours.
+          New here? <a href="#/setup/start">Get started</a> walks you through it one step at a time.</p>
         ${restartBar()}
         ${choice("preset", preset, Object.entries(presets).map(([k, p]) => ({ value: k, label: p.title, text: p.text, icon: p.icon, })))}
         <div style="margin-top:22px">${diagram(c)}</div>`)
@@ -201,7 +204,8 @@ bin\\Release\\net48\\TiaImporter.exe serve --token &lt;the token above&gt; --plc
             : `<label class="field">Password <span class="hint">${info.plcPassword === "settings" ? "saved" : info.plcPassword === "environment" ? "from PLCKI_PLC_PASSWORD" : "only if the CPU has access protection"}</span><input id="plcPassword" type="password" autocomplete="new-password"></label>`}
         </div>
         ${c.plcVia === "link" ? "" : `<div class="row"><button class="btn b small" data-test-plc>Test the address</button>
-          ${plcTest ? `<span class="pill ${plcTest.ok ? "ok" : "bad"}"><span class="dot"></span>${esc(plcTest.message)}</span>` : ""}</div>`}
+          ${plcTest ? `<span class="pill ${plcTest.ok ? "ok" : "bad"}"><span class="dot"></span>${esc(plcTest.ok ? plcTest.message : PK.plain(plcTest.message, { plc: conn.address }).text)}</span>` : ""}</div>
+          ${plcTest && !plcTest.ok && PK.plain(plcTest.message).todo ? `<p class="muted small" style="margin:0">${esc(PK.plain(plcTest.message, { plc: conn.address }).todo)}</p>` : ""}`}
         <details class="more" style="margin-top:0"><summary>More PLC options</summary>
           <div class="grid three" style="margin-top:12px">
             <label class="field">Security<select id="security">${["Auto", "Tls", "LegacyChallenge"].map((x) => `<option ${c.security === x ? "selected" : ""}>${x}</option>`).join("")}</select></label>
@@ -242,8 +246,7 @@ bin\\Release\\net48\\TiaImporter.exe serve --token &lt;the token above&gt; --plc
       : `<span class="pill ${c.tiaMode === "link" ? "bad" : ""}"><span class="dot"></span>${esc(l.tiaMessage || "No TIA helper")}</span>`) : "";
     const key = linkKey || "<the key>";
     const server = location.origin;
-    const cmd = `cd /d %USERPROFILE%\\Downloads\\PLC-Ki
-dotnet run --project src\\PlcKi.Server -- link --server ${server} --key ${key}${c.tiaMode === "link" ? ` --tia "C:\\PLCKi\\PLC-Ki\\tools\\TiaImporter\\bin\\Release\\net48\\TiaImporter.exe"` : ""}`;
+    const cmd = `cd /d %USERPROFILE%\\Downloads\\PLC-Ki && dotnet run --project src\\PlcKi.Server -- link --server ${server} --key ${key}${c.tiaMode === "link" ? ` --tia "C:\\PLCKi\\PLC-Ki\\tools\\TiaImporter\\bin\\Release\\net48\\TiaImporter.exe"` : ""}`;
     return PK.sec("dark", `<span class="eyebrow">PLC-Ki Link</span><h2 style="margin-top:6px">Your laptop, connected out.</h2>
       <p class="sub">A small program on the laptop that reaches the PLC${c.tiaMode === "link" ? " and has TIA" : ""}. It only connects out to this server, so no firewall or VPN changes on the plant side.
         It reads the PLC read-only${c.tiaMode === "link" ? " and carries the TIA work to the laptop's TIA" : ""}.</p>
@@ -255,8 +258,8 @@ dotnet run --project src\\PlcKi.Server -- link --server ${server} --key ${key}${
           ${linkKey ? `<span class="pill ok"><span class="dot"></span>New key below. Copy it now.</span>` : l && l.hasKey ? `<span class="small" style="opacity:.7">A key exists (made ${esc(new Date(l.keyCreated).toLocaleString())}).</span>` : ""}</div></div></div>
         <div class="step ${l && l.connected ? "done" : l && l.hasKey ? "now" : ""}"><span class="n">2</span><div><b>On the laptop, start Link</b>
           <p class="small" style="margin:6px 0 10px;opacity:.8">In a Command Prompt, in the PLC-Ki folder (a clone of the repository, as on your PC). Leave the window open${c.tiaMode === "link" ? "; it opens the TIA helper's window too" : ""}.</p>
-          <div class="joblog" style="user-select:all">${esc(cmd)}</div>
-          <div class="row" style="margin-top:10px"><button class="btn white small" data-copy-cmd>Copy</button>
+          ${PK.cmd("On the laptop", cmd)}
+          <div class="row" style="margin-top:10px">
             ${c.tiaMode === "link" ? `<span class="small" style="opacity:.8">Add <code>--plcsim-ip &lt;address&gt;</code> for PLCSIM tests, <code>--allow-real &lt;address&gt;</code> only if blocks may go to a real PLC.</span>` : ""}</div></div></div>
         <div class="step ${l && l.connected ? "done" : ""}"><span class="n">3</span><div><b>Back here, it turns green</b>
           <p class="small" style="margin:6px 0 0;opacity:.8">The status above shows the laptop, the PLC and TIA within a few seconds.</p></div></div>
@@ -309,11 +312,6 @@ dotnet run --project src\\PlcKi.Server -- link --server ${server} --key ${key}${
       if (lk) lk.onclick = async () => {
         if (linkStatus && linkStatus.hasKey && !(await PK.confirmSheet({ title: "Make a new key?", text: "The laptop's Link stops working until it is started with the new key.", ok: "Make a new key" }))) return;
         try { linkKey = (await api("POST", "/api/admin/link/key")).key; await loadLink(); PK.draw(); } catch (e) { toast(e.message); }
-      };
-      const cc = page.querySelector("[data-copy-cmd]");
-      if (cc) cc.onclick = async () => {
-        const text = page.querySelector(".joblog[style*=user-select]").textContent;
-        try { await navigator.clipboard.writeText(text); toast("Copied."); } catch { toast("Select the text and copy it."); }
       };
       const c = page.querySelector("[data-check-tia]");
       if (c) c.onclick = checkTia;
@@ -559,5 +557,6 @@ dotnet run --project src\\PlcKi.Server -- link --server ${server} --key ${key}${
     },
   });
 
-  return { setupNav, follow, jobCard, bindJob, restartBar, bindRestart, loadSettings, get settings() { return settings; } };
+  return { setupNav, follow, jobCard, bindJob, restartBar, bindRestart, loadSettings, saveSettings, restart, presets, presetOf,
+    get settings() { return settings; }, get info() { return info; } };
 })();
