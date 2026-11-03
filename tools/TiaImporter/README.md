@@ -21,7 +21,9 @@ is refused, never stopped) and is left in STOP; software only; never through a P
 refused ones, is added to `real-downloads.log` in the packages folder (`C:\PLCKi\gen`).
 
 `import-blocks` loads blocks written by `PlcKi.Server generate` into the project you name, compiles, and writes
-`import-report.json` for the next fix round. See [docs/block-generator.md](../../docs/block-generator.md).
+`import-report.json` for the next fix round. It refuses names that already exist in the project, except
+the ones the version says it changes and the ones this same package already loaded into this same project (a version
+whose `import-report.json` says it was saved there), so running a version again is not a clash. See [docs/block-generator.md](../../docs/block-generator.md).
 
 `export` opens the archive without showing TIA (into a temporary folder; the archive is not changed) and writes,
 per PLC:

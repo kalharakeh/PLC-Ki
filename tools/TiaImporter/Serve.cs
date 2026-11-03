@@ -121,9 +121,10 @@ namespace TiaImporter
                         var name = Str(body, "package");
                         if (name == null || !PackageName.IsMatch(name)) throw new InvalidOperationException("Name the package.");
                         var dir = new DirectoryInfo(Path.Combine(_packages.FullName, name));
+                        var started = DateTime.UtcNow.AddSeconds(-2);
                         code = new BlockImport(tee).Run(project, dir, plc, Str(body, "version"), Bool(body, "replace"), Bool(body, "keepOnError"));
                         var reportFile = dir.GetFiles("import-report.json", SearchOption.AllDirectories).OrderByDescending(f => f.LastWriteTimeUtc).FirstOrDefault();
-                        if (reportFile != null && reportFile.LastWriteTimeUtc > DateTime.UtcNow.AddMinutes(-30)) report = File.ReadAllText(reportFile.FullName);
+                        if (reportFile != null && reportFile.LastWriteTimeUtc >= started) report = File.ReadAllText(reportFile.FullName);
                     }
                     else if (Bool(body, "real"))
                     {
