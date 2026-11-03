@@ -381,14 +381,55 @@ const PK = (() => {
     return `<li><span class="mark ${cls}" aria-label="${cls === "yes" ? "met" : cls === "no" ? "not met" : "unknown"}">${sym}</span><span>${esc(c.text)} ${now}</span></li>`;
   }
 
+  /**
+   * The part of Markdown that REVIEW.md and Claude's answers use: headings, lists, bold, inline code, fenced code
+   * blocks, tables and links. Block names of the loaded program become links to their logic or code.
+   */
   function md(text) {
-    // The small part of Markdown that REVIEW.md and Claude's answers use
-    const inline = (s) => esc(s).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>").replace(/`([^`]+)`/g, "<code>$1</code>");
-    const out = []; let list = null; let para = [];
+    const blocks = state.program ? new Map(state.program.blocks.map((b) => [b.name, b])) : null;
+    const blockLink = (name) => {
+      const b = blocks && blocks.get(name);
+      return b ? `<a href="#/${b.hasLogic || b.hasSource ? "logic" : "code"}/${encodeURIComponent(name)}">${esc(name)}</a>` : null;
+    };
+    const inline = (raw) => {
+      // Pull out code spans and links first, so their text is not touched by the rest
+      const keep = [];
+      const hold = (html) => `\u0000${keep.push(html) - 1}\u0000`;
+      let t = String(raw)
+        .replace(/`([^`]+)`/g, (m, c) => hold(blockLink(c) ? `<code>${blockLink(c)}</code>` : `<code>${esc(c)}</code>`))
+        .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+|#\/[^\s)]*)\)/g, (m, label, url) =>
+          hold(`<a href="${esc(url)}"${url.startsWith("http") ? ' target="_blank" rel="noopener"' : ""}>${esc(label)}</a>`))
+        .replace(/\bhttps?:\/\/[^\s<>()]+[^\s<>().,;:!?]/g, (url) => hold(`<a href="${esc(url)}" target="_blank" rel="noopener">${esc(url)}</a>`));
+      t = esc(t).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+      if (blocks) t = t.replace(/\b([A-Z][A-Za-z]{1,3}_[A-Za-z0-9_]+)\b/g, (m) => blockLink(m) || m);
+      return t.replace(/\u0000(\d+)\u0000/g, (m, i) => keep[Number(i)]);
+    };
+    const out = []; let list = null; let para = []; let code = null; let table = null;
     const fp = () => { if (para.length) { out.push("<p>" + para.map(inline).join("<br>") + "</p>"); para = []; } };
     const fl = () => { if (list) { out.push(`<${list.t}>` + list.items.map((i) => `<li>${inline(i)}</li>`).join("") + `</${list.t}>`); list = null; } };
+    const cells = (line) => line.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((c) => c.trim());
+    const ft = () => {
+      if (!table) return;
+      const [head, ...rows] = table;
+      out.push(`<div class="md-table"><table class="tbl"><tr>${head.map((c) => `<th>${inline(c)}</th>`).join("")}</tr>${rows.map((r) => `<tr>${r.map((c) => `<td>${inline(c)}</td>`).join("")}</tr>`).join("")}</table></div>`);
+      table = null;
+    };
     for (const raw of String(text || "").split(/\r?\n/)) {
+      if (code) {
+        if (/^\s*```/.test(raw)) { out.push(`<pre class="md-code"${code.lang ? ` data-lang="${esc(code.lang)}"` : ""}><code>${esc(code.lines.join("\n"))}</code></pre>`); code = null; }
+        else code.lines.push(raw);
+        continue;
+      }
       const line = raw.trimEnd();
+      const fence = line.match(/^\s*```\s*([\w+-]*)/);
+      if (fence) { fp(); fl(); ft(); code = { lang: fence[1], lines: [] }; continue; }
+      if (/^\s*\|.*\|\s*$/.test(line)) {
+        fp(); fl();
+        if (/^\s*\|?\s*:?-{2,}/.test(line)) continue;           // the |---|---| line under the head
+        (table ||= []).push(cells(line));
+        continue;
+      }
+      ft();
       const h = line.match(/^(#{1,4})\s+(.*)$/);
       const b = line.match(/^\s*[-*•]\s+(.*)$/);
       const n = line.match(/^\s*\d+[.)]\s+(.*)$/);
@@ -398,7 +439,8 @@ const PK = (() => {
       else if (list && /^\s{2,}/.test(raw)) list.items[list.items.length - 1] += " " + line.trim();
       else { fl(); para.push(line); }
     }
-    fp(); fl();
+    if (code) out.push(`<pre class="md-code"><code>${esc(code.lines.join("\n"))}</code></pre>`);
+    fp(); fl(); ft();
     return out.join("");
   }
 

@@ -273,7 +273,7 @@ const PKSetup = (() => {
          ${tiaPlain && tiaPlain.todo ? `<span class="muted small" style="flex-basis:100%">${esc(tiaPlain.todo)}</span>` : ""}
          ${tiaStatus.ok ? `<span class="faint small">PLCSIM downloads: ${tiaStatus.plcsimIp ? esc(tiaStatus.plcsimIp) : "off"} · real PLC downloads: ${tiaStatus.realAllowed ? "allowed (confirmed at the TIA PC)" : "off"}</span>` : ""}`;
 
-    return PK.sec("hero", `${setupNav("connections")}
+    return PK.sec("hero compact", `${setupNav("connections")}
         <h1>Where everything is.</h1>
         <p class="sub">PLC-Ki needs the PLC for live values and TIA Portal for importing programs and the block generator. Pick the setup that matches yours.
           New here? <a href="#/setup/start">Get started</a> walks you through it one step at a time.</p>
@@ -345,7 +345,7 @@ const PKSetup = (() => {
         <div class="step ${l && l.hasKey ? "done" : "now"}"><span class="n">1</span><div><b>Save this setup, then make a key</b>
           <p class="small" style="margin:6px 0 10px;opacity:.8">The key lets the laptop in. It is shown once; a new key replaces the old one.</p>
           <div class="row">${saveRow.replace('style="margin-top:28px"', "")}<button class="btn white small" data-link-key>${l && l.hasKey ? "Make a new key" : "Make a key"}</button>
-          ${linkKey ? `<span class="pill ok"><span class="dot"></span>New key below. Copy it now.</span>` : l && l.hasKey ? `<span class="small" style="opacity:.7">A key exists (made ${esc(new Date(l.keyCreated).toLocaleString())}).</span>` : ""}</div></div></div>
+          ${linkKey ? `<span class="pill ok"><span class="dot"></span>New key below. Copy it now.</span>` : l && l.hasKey ? `<span class="small" style="opacity:.7">A key exists (made ${esc(PK.date(l.keyCreated))}).</span>` : ""}</div></div></div>
         <div class="step ${l && l.connected ? "done" : l && l.hasKey ? "now" : ""}"><span class="n">2</span><div><b>On the laptop, start Link</b>
           <p class="small" style="margin:6px 0 10px;opacity:.8">In a Command Prompt, in the PLC-Ki folder (a clone of the repository, as on your PC). Leave the window open${c.tiaMode === "link" ? "; it opens the TIA helper's window too" : ""}.</p>
           ${PK.cmd("On the laptop", cmd)}
@@ -498,7 +498,7 @@ const PKSetup = (() => {
     };
     const fileRow = (kind) => (x) => `<li class="click ${ch && ch.path === x.path ? "sel" : ""}" data-choose="${kind}" data-path="${esc(x.path)}">
         <span class="ico">${icon(kind === "archive" ? "file" : "import")}</span>
-        <span style="flex:1"><b style="font-weight:600">${esc(x.name)}</b><div class="faint">${(x.size / 1048576).toFixed(1)} MB · ${new Date(x.time).toLocaleString()}</div></span><span class="chev">›</span></li>`;
+        <span style="flex:1"><b style="font-weight:600">${esc(x.name)}</b><div class="faint">${(x.size / 1048576).toFixed(1)} MB · ${PK.date(x.time)}</div></span><span class="chev">›</span></li>`;
     const earlier = f && (f.archives.length || f.exports.length) ? `<details class="more" ${ch ? "" : "open"}><summary>Earlier files (${f.archives.length + f.exports.length})</summary>
         <ul class="list" style="margin-top:10px">${f.exports.map(fileRow("export")).join("")}${f.archives.map(fileRow("archive")).join("")}</ul></details>` : "";
 
@@ -515,7 +515,7 @@ const PKSetup = (() => {
       : `<div class="notice red">${icon("warn")}<div>${esc(mi.error)}</div></div>`) : "";
 
     const step = (n, title, text, body) => `<div class="step ${stepCls(n)}"><div class="n">${stepCls(n) === "done" ? "✓" : n}</div><h3>${title}</h3><p style="margin-bottom:14px">${text}</p>${body}</div>`;
-    return PK.sec("hero", `${setupNav("program")}
+    return PK.sec("hero compact", `${setupNav("program")}
         <h1>Teach PLC-Ki a machine.</h1>
         <p class="sub">Give it the program. It reads every block, and Claude writes the plain-English model of steps, devices, alarms, causes and fixes, once.</p>
         ${restartBar()}
@@ -609,7 +609,7 @@ const PKSetup = (() => {
       const s = settings;
       const keyText = { settings: "A key is saved here.", environment: "Using the ANTHROPIC_API_KEY environment variable. A key entered here replaces it.", none: "No key yet: the Ask box stays off until you add one." }[info.apiKey];
       const sw = (id, on, title, text) => `<div class="row"><div style="flex:1"><b style="font-weight:600">${title}</b><div class="muted small">${text}</div></div><label class="switch"><input type="checkbox" id="${id}" ${on ? "checked" : ""}><span></span></label></div>`;
-      return PK.sec("hero", `${setupNav("settings")}<h1>Settings.</h1><p class="sub">The machine model, the assistant, and who can open PLC-Ki from where.</p>${restartBar()}`)
+      return PK.sec("hero compact", `${setupNav("settings")}<h1>Settings.</h1><p class="sub">The machine model, the assistant, and who can open PLC-Ki from where.</p>${restartBar()}`)
         + PK.sec("alt", `<div class="grid two" data-settings-form>
           <div class="card stack"><h3>Machine</h3>
             <label class="field">Machine model<select id="model">${(lists.models || []).map((f) => `<option value="${esc(f.path)}" ${f.path === s.model ? "selected" : ""}>${esc(f.label)}${f.uploaded ? " (imported)" : ""}</option>`).join("")}</select><span class="hint">New models come from the Program page.</span></label>
