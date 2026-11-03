@@ -120,12 +120,36 @@
     return l.block ? `<div><a class="btn b small" href="#/logic/${[l.block, l.instance].filter(Boolean).map(encodeURIComponent).join("/")}">Show the logic</a></div>` : "";
   }
 
+  /** The steps of a sequence. A short one shows every step as a pill (they wrap). A long one (GRAPH chains
+   *  often have 50+ steps) shows the step it is in and where it can go next, with the whole list folded away. */
   function stepStrip(seq) {
     const def = state.model && state.model.sequences.find((d) => d.id === seq.id);
-    if (!def) return "";
+    if (!def || !def.steps.length) return "";
     const curIdx = def.steps.findIndex((st) => st.no === seq.step);
-    return `<div class="stepstrip">${def.steps.map((st, i) =>
-      `<div class="st ${st.no === seq.step ? "cur" + (seq.halted ? " halted" : "") : i < curIdx ? "done" : ""}"><b>${st.no}</b>${esc(st.name)}</div>`).join("")}</div>`;
+    const cur = curIdx >= 0 ? def.steps[curIdx] : null;
+    const curCls = "cur" + (seq.halted ? " halted" : "");
+    if (def.steps.length <= 8) {
+      return `<div class="stepstrip">${def.steps.map((st, i) =>
+        `<div class="st ${i === curIdx ? curCls : i < curIdx ? "done" : ""}"><b>${st.no}</b>${esc(st.name)}</div>`).join("")}</div>`;
+    }
+    const seen = new Set();
+    const next = seq.next.filter((n) => n.to !== seq.step && !seen.has(n.to) && seen.add(n.to));
+    const now = cur ? `<div class="st ${curCls}"><b>${cur.no}</b>${esc(cur.name)}</div>`
+      : `<div class="st">${seq.step != null ? `<b>${seq.step}</b>` : ""}${esc(seq.stepName || "Step not known")}</div>`;
+    return `<div class="stepnow">
+        <span class="sn-l">Now</span>${now}
+        ${next.length ? `<span class="sn-l">Next</span>${next.map((n) => `<div class="st nx ${n.ready === false ? "wait" : n.ready ? "ready" : ""}"><b>${n.to}</b>${esc(n.toName)}</div>`).join("")}` : ""}
+      </div>
+      <details class="allsteps"><summary>All ${def.steps.length} steps${cur ? ` · this is step ${curIdx + 1} of ${def.steps.length}` : ""}</summary>
+        <ol class="steplist">${def.steps.map((st, i) => `<li class="${i === curIdx ? curCls : ""}"${i === curIdx ? ' aria-current="step"' : ""}><b>${st.no}</b><span>${esc(st.name)}</span></li>`).join("")}</ol>
+      </details>`;
+  }
+  /** Opening the full step list shows the current step in the middle of it, not step 1. */
+  function bindSteps(page) {
+    page.querySelectorAll("details.allsteps").forEach((d) => d.ontoggle = () => {
+      const list = d.querySelector(".steplist"), cur = list && list.querySelector("li.cur");
+      if (d.open && cur) list.scrollTop = cur.offsetTop - list.clientHeight / 2 + cur.offsetHeight / 2;
+    });
   }
 
   function seqState(q) {
@@ -133,6 +157,7 @@
   }
 
   function bindAsk(page) {
+    bindSteps(page);
     if (typeof PKStart !== "undefined") PKStart.bindCard(page);
     page.querySelectorAll("[data-conn-help]").forEach((b) => b.onclick = PK.connSheet);
     page.querySelectorAll("[data-ask]").forEach((b) => b.onclick = () => window.PKAsk && window.PKAsk.open(b.dataset.ask));
