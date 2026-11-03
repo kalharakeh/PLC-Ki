@@ -336,7 +336,7 @@
         }
         if (params.join("/") !== (sel ? sel.params.join("/") : "") && loading == null) select(params);
         const p = state.program;
-        const head = PK.sec("hero", `<div class="eyebrow">${esc(p.project)} · ${esc(p.plc)}${p.cpu ? " · " + esc(p.cpu) : ""}</div>
+        const head = PK.sec("hero compact", `<div class="eyebrow">${esc(p.project)} · ${esc(p.plc)}${p.cpu ? " · " + esc(p.cpu) : ""}</div>
           <h1>${kind === "code" ? "The program, live." : "Why an output is on, or not."}</h1>
           <p class="sub">${kind === "code" ? "Every block as written, with the live value after each signal." : "Each network drawn as a rung with live values. Read from left to right: the amber contact is the first one that stops the output."}</p>
           <div class="segmented"><button class="${kind === "logic" ? "on" : ""}" data-switch="logic">Logic</button><button class="${kind === "code" ? "on" : ""}" data-switch="code">Code</button></div>`);

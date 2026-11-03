@@ -85,6 +85,8 @@
   form.addEventListener("submit", (e) => { e.preventDefault(); ask(input.value); });
   input.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); ask(input.value); } });
   chips.addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) ask(b.textContent); });
+  // A link to a page of PLC-Ki in an answer: close the panel so the page shows.
+  log.addEventListener("click", (e) => { const a = e.target.closest("a[href^='#/']"); if (a) close(); });
   newBtn.addEventListener("click", () => {
     if (busy) return;
     if (conversationId) fetch(`/api/ask/${encodeURIComponent(conversationId)}`, { method: "DELETE" }).catch(() => {});

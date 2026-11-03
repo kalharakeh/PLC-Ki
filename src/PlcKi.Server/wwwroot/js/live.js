@@ -270,9 +270,10 @@
               : `<div class="nomatch">${eqOnlyProblems && !q ? `${icon("check")}<b>Every device is fine.</b><span>Nothing needs attention right now.</span>` : `${icon("search")}<b>No device matches.</b><span>Try part of the name or the tag, like ${esc((s.equipment[0] || {}).id || "XV101")}.</span>`}
                 <button class="btn b small" data-eq-reset>Show all devices</button></div>`}`)
         + (s.exchange.length ? sec("dark", `<h2>Data exchange</h2><p class="sub">Signals to and from other systems.</p>
-            <div style="overflow-x:auto"><table class="tbl"><tr><th>Partner</th><th>Direction</th><th>Signal</th><th>Value</th><th>Meaning</th></tr>
-            ${s.exchange.map((x) => `<tr><td><b>${esc(x.partner)}</b></td><td>${x.direction === "in" ? "from" : "to"} ${esc(x.partner)}</td><td>${esc(x.label)}</td><td class="val">${esc(x.value)}</td><td class="muted">${esc(x.text || "")}</td></tr>`).join("")}
-            </table></div>`) : "")
+            <table class="tbl xchg"><tr><th>With</th><th>Signal</th><th>Value</th><th>Meaning</th></tr>
+            ${s.exchange.map((x) => `<tr><td class="with"><b title="${x.direction === "in" ? "from" : "to"} ${esc(x.partner)}">${x.direction === "in" ? "← from" : "→ to"} ${esc(x.partner)}</b></td>
+              <td class="sig">${esc(x.label)}</td><td class="val">${esc(x.value)}</td><td class="muted mean">${esc(x.text || "")}</td></tr>`).join("")}
+            </table>`) : "")
         + (Object.keys(s.tagErrors || {}).length ? sec("tight", `<details class="more"><summary>${Object.keys(s.tagErrors).length} signals could not be read</summary><ul class="small">${Object.entries(s.tagErrors).map(([k, v]) => `<li><code>${esc(k)}</code>: ${esc(v)}</li>`).join("")}</ul></details>`) : "")
         + guide();
     },

@@ -31,6 +31,8 @@
     PK.draw();
     try { g.detail = await api("GET", "/api/admin/generator/packages/" + encodeURIComponent(name)); } catch (e) { toast(e.message, "error"); }
     PK.draw();
+    // The detail opens further down the page: bring it into view
+    requestAnimationFrame(() => { const el = document.querySelector(".pkg-detail"); if (el) el.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" }); });
   }
   async function showFile(version, file) {
     try {
@@ -219,13 +221,13 @@
   function detailHtml() {
     if (!g.open) return "";
     const d = g.detail;
-    if (!d) return PK.sec("", `<h2>${esc(g.open)}</h2><p class="muted">Loading…</p>`);
+    if (!d) return PK.sec("pkg-detail", `<h2>${esc(g.open)}</h2><p class="muted">Loading…</p>`);
     const kindText = { new: "First version", change: "Changed on request", fix: "Fixed after TIA's report" };
-    return PK.sec("", `<div class="row" style="align-items:flex-end"><div style="flex:1"><span class="eyebrow">Package</span><h2 style="margin:4px 0 0">${esc(d.name)}</h2>
+    return PK.sec("pkg-detail", `<div class="row" style="align-items:flex-end"><div style="flex:1"><span class="eyebrow">Package</span><h2 style="margin:4px 0 0">${esc(d.name)}</h2>
         <p class="sub" style="margin-top:6px">${d.versions.length} version${d.versions.length === 1 ? "" : "s"}${d.plc ? " · PLC " + esc(d.plc) : ""}${d.context ? " · fitted into " + esc(d.context.split(/[\\/]/).pop()) : ""}</p></div>
         <button class="btn" data-change>Change it</button></div>
       <div class="stack" style="margin-top:22px">${d.versions.map((v, i) => `<details class="card more" ${i === 0 ? "open" : ""}>
-        <summary><b>${esc(v.folder)}</b> <span class="muted">· ${esc(kindText[v.kind] || v.kind)} · ${new Date(v.time).toLocaleString()}</span>
+        <summary><b>${esc(v.folder)}</b> <span class="muted">· ${esc(kindText[v.kind] || v.kind)} · ${PK.date(v.time)}</span>
           ${v.report ? `<span class="pill ${v.report.errorCount || v.report.fileErrors.length ? "bad" : stateCls(v.report.compileState)}" style="margin-left:8px">${esc(v.report.compileState || "?")}</span>` : ""}</summary>
         <div class="grid two" style="margin-top:14px;align-items:start">
           <div class="stack">
@@ -268,7 +270,7 @@
       const t = g.tia;
       const tiaNote = t && !t.ok ? `<div class="notice gold" style="margin-top:22px">${icon("info")}<div style="flex:1"><b>TIA Portal is not reachable.</b> ${esc(t.message || "")}</div><a class="btn gold small" href="#/setup/connections">Connections</a></div>` : "";
       const pk = g.packages || [];
-      return PK.sec("hero", `${PKSetup.setupNav("generator")}<span class="eyebrow">Block generator</span><h1>Say what you need.<br>Get blocks that compile.</h1>
+      return PK.sec("hero compact", `${PKSetup.setupNav("generator")}<span class="eyebrow">Block generator</span><h1>Say what you need. Get blocks that compile.</h1>
           <p class="sub">Claude writes the blocks, TIA Portal imports and compiles them, and PLCSIM runs them. Problems go back to Claude until it is clean.
           Nothing reaches a real PLC without two people confirming.</p>
           <div class="kpis" style="margin-top:28px">
