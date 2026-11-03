@@ -99,7 +99,7 @@ public static class ExportSources
         foreach (var name in names)
         {
             var scl = Directory.Exists(System.IO.Path.Combine(plcDir, "SclSource"))
-                ? Directory.GetFiles(System.IO.Path.Combine(plcDir, "SclSource"), name + ".scl", SearchOption.AllDirectories).FirstOrDefault()
+                ? Directory.GetFiles(System.IO.Path.Combine(plcDir, "SclSource"), PlcKi.Core.Import.ProgramExport.FileSafe(name) + ".scl", SearchOption.AllDirectories).FirstOrDefault()
                 : null;
             if (scl != null) { result.Add((name, ".scl", File.ReadAllText(scl).TrimStart('﻿'))); continue; }
             foreach (var x in xmlFiles)
