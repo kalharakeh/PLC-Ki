@@ -232,6 +232,8 @@ public class DevelopTests
     {
         public readonly List<string> Calls = new();
         public readonly List<string> Uploaded = new();
+        public readonly List<string> DownloadBodies = new();
+        public int Imports => _imports;
         private int _imports;
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
@@ -254,7 +256,11 @@ public class DevelopTests
                     ? "{\"exitCode\":3,\"log\":\"Compile: Error\\n\",\"report\":{\"version\":\"" + version + "\",\"saved\":false,\"compileState\":\"Error\",\"errorCount\":1,\"warningCount\":0,\"fileErrors\":[],\"messages\":[{\"state\":\"Error\",\"path\":\"FB_GenValve\",\"description\":\"Tag XV201_Open not defined\"}]}}"
                     : "{\"exitCode\":0,\"log\":\"Compile: Success\\n\",\"report\":{\"version\":\"" + version + "\",\"saved\":true,\"compileState\":\"Success\",\"errorCount\":0,\"warningCount\":0,\"fileErrors\":[],\"messages\":[]}}";
             }
-            else if (path == "/download") body = "{\"exitCode\":0,\"log\":\"Download: Success\\n\"}";
+            else if (path == "/download")
+            {
+                DownloadBodies.Add(await request.Content!.ReadAsStringAsync(ct));
+                body = "{\"exitCode\":0,\"log\":\"Download: Success\\n\"}";
+            }
             return new HttpResponseMessage(System.Net.HttpStatusCode.OK) { Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json") };
         }
     }
@@ -285,6 +291,58 @@ public class DevelopTests
             Assert.Equal("fix", PackageHistory.Load(dir).Latest!.Kind);
         }
         finally { Directory.Delete(Path.GetDirectoryName(dir)!, true); }
+    }
+
+    private static async Task<(int code, FakeTiaPc tia, string dir)> RealRun(string? typed, params string[] extra)
+    {
+        var dir = Path.Combine(Directory.CreateTempSubdirectory("plcki-dev-").FullName, "valve");
+        var tia = new FakeTiaPc();
+        var vm = new VmClient("http://tia-pc:5090", "secret-token", tia);
+        var answer = "<file name=\"10_FB_GenValve.scl\">\nFUNCTION_BLOCK \"FB_GenValve\"\nVAR_INPUT\n Open : Bool;\nEND_VAR\nBEGIN\nEND_FUNCTION_BLOCK\n</file>\n<review>ok</review>";
+        var api = new ModelBuilderTests.FakeStreamingApi(answer, answer.Replace("<review>ok", "<review>fixed"));
+        var code = await DevelopCommand.RunAsync(["--vm", "http://tia-pc:5090", "--project", @"C:\Users\Software\Documents\Automation\Test\Test.ap20",
+            "--out", dir, "--request", "valve", "--scl-only", .. extra], ModelBuilderTests.Client(api), vm, readLine: () => typed);
+        return (code, tia, dir);
+    }
+
+    [Fact]
+    public async Task Real_download_needs_the_version_typed_and_runs_once()
+    {
+        var (code, tia, dir) = await RealRun("v002", "--download-real");
+        try
+        {
+            Assert.Equal(0, code);
+            // compile error fixed first, then exactly one real download, no PLCSIM download
+            Assert.Equal(new[] { "GET /status", "PUT /packages/valve", "POST /import", "PUT /packages/valve", "POST /import", "POST /download" }, tia.Calls);
+            Assert.Contains("\"real\":true", Assert.Single(tia.DownloadBodies));
+            Assert.Equal("OK (real PLC, left in STOP)", ImportReport.Load(Path.Combine(dir, "v002", "import-report.json")).Download);
+        }
+        finally { Directory.Delete(Path.GetDirectoryName(dir)!, true); }
+    }
+
+    [Fact]
+    public async Task Real_download_stops_without_confirmation()
+    {
+        var (code, tia, dir) = await RealRun("yes", "--download-real");
+        try
+        {
+            Assert.Equal(1, code);
+            Assert.DoesNotContain("POST /download", tia.Calls);
+            Assert.Equal("not confirmed", ImportReport.Load(Path.Combine(dir, "v002", "import-report.json")).Download);
+        }
+        finally { Directory.Delete(Path.GetDirectoryName(dir)!, true); }
+    }
+
+    [Fact]
+    public async Task Plcsim_and_real_download_together_are_refused()
+    {
+        var (code, tia, dir) = await RealRun("v001", "--download", "--download-real");
+        try
+        {
+            Assert.Equal(2, code);
+            Assert.Empty(tia.Calls);
+        }
+        finally { if (Directory.Exists(Path.GetDirectoryName(dir)!)) Directory.Delete(Path.GetDirectoryName(dir)!, true); }
     }
 
     [Fact]

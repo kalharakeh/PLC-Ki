@@ -210,17 +210,20 @@ Generated code must be reviewed by an engineer before it goes to a real machine.
             Console.WriteLine($"{result.Problems.Count} problem(s) are left after the offline check:");
             foreach (var p in result.Problems) Console.WriteLine("  - " + p);
         }
-        if (existingNames == null)
+        if (!o.ContainsKey("from-develop"))
         {
+            if (existingNames == null)
+            {
+                Console.WriteLine();
+                Console.WriteLine("Note: without --context the names were not checked against your PLC program. If a block, type or tag");
+                Console.WriteLine("already exists there, import-blocks refuses it; give the export with --context to avoid that.");
+            }
             Console.WriteLine();
-            Console.WriteLine("Note: without --context the names were not checked against your PLC program. If a block, type or tag");
-            Console.WriteLine("already exists there, import-blocks refuses it; give the export with --context to avoid that.");
+            Console.WriteLine("Next, on the TIA PC (works on the project you name, nothing is downloaded to a PLC):");
+            Console.WriteLine($"  TiaImporter import-blocks --project <your project .ap20> --package <this folder>{(plcName != null ? " --plc " + plcName : "")}");
+            Console.WriteLine("If TIA reports errors, bring the folder back and run:");
+            Console.WriteLine($"  dotnet run --project src\\PlcKi.Server -- generate --out {o["out"]} --fix");
         }
-        Console.WriteLine();
-        Console.WriteLine("Next, on the TIA PC (works on the project you name, nothing is downloaded to a PLC):");
-        Console.WriteLine($"  TiaImporter import-blocks --project <your project .ap20> --package <this folder>{(plcName != null ? " --plc " + plcName : "")}");
-        Console.WriteLine("If TIA reports errors, bring the folder back and run:");
-        Console.WriteLine($"  dotnet run --project src\\PlcKi.Server -- generate --out {o["out"]} --fix");
         return result.Problems.Count == 0 ? 0 : 1;
     }
 
@@ -228,7 +231,7 @@ Generated code must be reviewed by an engineer before it goes to a real machine.
     private static double Cost(GenerateResult r) =>
         ((r.InputTokens - r.CacheReadTokens) * 4.0 + r.CacheReadTokens * 0.4 + r.OutputTokens * 20.0) / 1_000_000;
 
-    private static readonly HashSet<string> Flags = new(StringComparer.OrdinalIgnoreCase) { "fix", "scl-only" };
+    private static readonly HashSet<string> Flags = new(StringComparer.OrdinalIgnoreCase) { "fix", "scl-only", "from-develop" };
 
     private static Dictionary<string, string>? Parse(string[] args)
     {

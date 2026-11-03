@@ -113,6 +113,23 @@ then download to PLCSIM and watch for 30 s (read-only): if the CPU leaves RUN or
 Claude as the next fix round. The blocks only run if something calls them, so ask for the call (an OB or a call in
 an existing block via `--edit`) when you want the runtime check to mean something.
 
+### Download to a real PLC (guarded)
+
+Only after an engineer has reviewed the version. On the VM, list the real PLCs that may be loaded:
+
+```
+bin\Release\net48\TiaImporter.exe serve --token <password> --plcsim-ip 192.168.10.10 --allow-real 192.168.0.1
+```
+
+On the PC, use `--download-real` instead of `--download`. Once the version compiles, `develop` stops and asks you to
+type the version name (for example `v003`) to confirm you reviewed it. Then the TiaImporter window on the TIA PC beeps
+and asks for the PLC's address; nothing is downloaded unless someone there types it within 2 minutes.
+
+- The CPU must already be in STOP. A running CPU is refused, never stopped. It stays in STOP afterwards: start it
+  yourself once the machine is safe.
+- Software only. Never through a PLCSIM adapter. No fix loop and no automatic retry after a real download.
+- Every attempt is written to `C:\PLCKi\gen\real-downloads.log` (time, user, who asked, project, PLC, outcome).
+
 ## Not yet
 
 - Reading the CPU diagnostic buffer (the watch sees the CPU state and active alarms, including system diagnostics
