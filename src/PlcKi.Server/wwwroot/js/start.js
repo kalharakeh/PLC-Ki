@@ -40,7 +40,7 @@ const PKStart = (() => {
     const preset = PKSetup.presets[PKSetup.presetOf(s)];
     const list = [];
     if (info.restartNeeded) list.push({ key: "apply", title: "Apply the saved settings", done: false, text: "PLC-Ki uses them after a quick restart (a few seconds).", btn: "Apply now", action: "restart" });
-    list.push({ key: "setup", title: "Pick your setup", done: local.get(SEEN) === "1", text: local.get(SEEN) === "1" ? preset.title : "Same PC as TIA, a PC with a TIA VM, or a server with your laptop.", href: "#/setup/start", btn: "Start" });
+    list.push({ key: "setup", title: "Pick your setup", done: !!s.setupChosen, text: s.setupChosen ? preset.title : "Same PC as TIA, a PC with a TIA VM, or a server with your laptop.", href: "#/setup/start", btn: "Start" });
     const live = c && c.state === "connected";
     list.push({ key: "plc", title: "Connect the PLC", done: live, text: live ? `Reading ${c.address}, live.` : PK.connInfo().title, href: "#/setup/start/plc", btn: "Connect" });
     const demo = DEMO.test(s.model || "");
@@ -68,18 +68,19 @@ const PKStart = (() => {
     const need = list.filter((i) => !i.optional);
     const done = need.filter((i) => i.done).length;
     if (done === need.length) return "";
-    const next = list.find((i) => !i.done);
-    return `<section class="guide-sec"><div class="wrap"><div class="guide">
-      <div class="guide-head"><div><span class="eyebrow">Getting started · ${done} of ${need.length} done</span>
-        <h2>Next: ${esc(next.title)}</h2><p class="muted">${esc(next.text)}</p></div>
-        <button class="btn plain small" data-hide-guide>Hide for now</button></div>
-      <div class="bar"><div style="width:${Math.round(done / need.length * 100)}%"></div></div>
-      ${checklist(list, true)}</div></div></section>`;
+    const next = list.find((i) => !i.done && !i.optional) || list.find((i) => !i.done);
+    // A slim bar below the page's own content: the machine comes first, set-up second
+    return `<section class="guide-sec"><div class="wrap"><div class="guide-bar" role="region" aria-label="Getting started">
+      <div class="gb-text"><span class="gb-count">Getting started · ${done} of ${need.length} done</span>
+        <span class="gb-next"><b>Next: ${esc(next.title)}.</b> ${esc(next.text)}</span></div>
+      <div class="gb-actions">${next.action === "restart" ? `<button class="btn small gold" data-restart>${esc(next.btn)}</button>` : `<a class="btn small" href="${next.href}">${esc(next.btn)}</a>`}
+        <a class="btn plain small" href="#/setup/start/done">See all</a><button class="btn plain small" data-hide-guide>Hide</button></div>
+      <div class="bar"><div style="width:${Math.round(done / need.length * 100)}%"></div></div></div></div></section>`;
   }
   function bindCard(page) {
     const h = page.querySelector("[data-hide-guide]");
     if (h) h.onclick = () => { session.set(HIDE, "1"); PK.draw(); };
-    page.querySelectorAll(".guide [data-restart]").forEach((b) => b.onclick = PKSetup.restart);
+    page.querySelectorAll(".guide-bar [data-restart]").forEach((b) => b.onclick = PKSetup.restart);
   }
 
   // ---------- the wizard ----------
@@ -253,9 +254,12 @@ const PKStart = (() => {
   function stepDone() {
     const list = ready ? items(ready).filter((i) => i.key !== "setup") : [];
     const apply = PKSetup.info.restartNeeded;
+    const left = list.filter((i) => !i.done && !i.optional && i.key !== "apply").length;
     return {
-      title: apply ? "Almost there." : "You're set up.",
-      sub: apply ? "Apply the settings and PLC-Ki restarts with them. The page comes back by itself in a few seconds." : "Here is what's ready. Anything left open can be done any time from Setup.",
+      title: apply ? "Almost there." : !ready ? "Checking…" : left === 0 ? "You're set up." : left === 1 ? "One thing left." : `${left} things left.`,
+      sub: apply ? "Apply the settings and PLC-Ki restarts with them. The page comes back by itself in a few seconds."
+        : left === 0 ? "Here is what's ready. Optional items can be done any time from Setup."
+        : "Here is what's ready and what is still open. Each one can be done any time from Setup.",
       body: `<div class="card">${ready ? checklist(list.filter((i) => i.key !== "apply")) : `<p class="muted">Checking…</p>`}</div>`,
       final: apply ? `<button class="btn big" data-restart>Apply and start</button>` : `<a class="btn big" href="#/alarm" data-seen>Go to the machine</a>`,
     };
@@ -292,7 +296,7 @@ const PKStart = (() => {
   async function save(page) {
     read(page);
     const { _plcPassword, _tiaToken, _apiKey, ...rest } = w;
-    await PKSetup.saveSettings({ ...rest, plcPassword: _plcPassword || null, tiaToken: _tiaToken || null, apiKey: _apiKey || null });
+    await PKSetup.saveSettings({ ...rest, setupChosen: true, plcPassword: _plcPassword || null, tiaToken: _tiaToken || null, apiKey: _apiKey || null });
     delete w._plcPassword; delete w._tiaToken; delete w._apiKey;
     readyAt = 0;
   }
@@ -329,12 +333,12 @@ const PKStart = (() => {
       const i = stepIndex();
       const key = STEPS[i][0];
       const nextKey = STEPS[Math.min(i + 1, STEPS.length - 1)][0];
-      page.querySelectorAll("input").forEach((el) => el.addEventListener("change", () => read(page)));
+      page.querySelectorAll("input").forEach((el) => PK.on(el, "change", () => read(page)));
       page.querySelectorAll("[data-preset]").forEach((b) => b.onclick = () => {
         const p = PKSetup.presets[b.dataset.preset];
         w.tiaMode = p.tiaMode; w.plcVia = p.plcVia; PK.draw();
       });
-      page.querySelectorAll("[data-seen]").forEach((a) => a.addEventListener("click", () => local.set(SEEN, "1")));
+      page.querySelectorAll("[data-seen]").forEach((a) => PK.on(a, "click", () => local.set(SEEN, "1")));
       const t = page.querySelector("[data-test]");
       if (t) t.onclick = async () => {
         read(page);
@@ -367,13 +371,17 @@ const PKStart = (() => {
           if (nextKey === "done") readiness(true).then(PK.draw);
         } catch (e) { busy = false; const p = PK.plain(e.message); toast(p.todo ? p.text + " " + p.todo : p.text, "error"); PK.draw(); }
       };
-      if (key === "done") page.querySelectorAll("[data-restart]").forEach((b) => b.addEventListener("click", () => local.set(SEEN, "1")));
+      if (key === "done") page.querySelectorAll("[data-restart]").forEach((b) => PK.on(b, "click", () => local.set(SEEN, "1")));
     },
   });
 
   return {
     card, bindCard, readiness,
     /** First visit of an administrator: open Get started once. */
-    async firstRun() { return local.get(SEEN) !== "1"; },
+    async firstRun() {
+      if (local.get(SEEN) === "1") return false;
+      const r = await readiness();
+      return !(r && r.settings && r.settings.setupChosen);
+    },
   };
 })();
