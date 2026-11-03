@@ -2,42 +2,28 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>PLC-Ki login</title>
-  <link rel="stylesheet" href="style.css">
-  <link rel="stylesheet" href="plant.css">
+  <link rel="stylesheet" href="ui.css">
 </head>
 <body>
-  <div class="narrow">
-    <div class="brand">
-      <span class="logo" aria-hidden="true">◆</span>
-      <div>
-        <h1>PLC-Ki</h1>
-        <p class="muted">Plain-English view of the PLC</p>
+  <div class="login-wrap">
+    <div class="login-card stack">
+      <div style="text-align:center;margin-bottom:8px">
+        <span class="eyebrow">PLC-Ki</span>
+        <h1 style="font-size:40px;margin:6px 0 4px">What is the machine doing?</h1>
+        <p class="muted" style="margin:0">Plain English from the PLC, read-only.</p>
       </div>
-    </div>
-
-    <section class="card">
-      <h2 id="title">Log in</h2>
-      <p id="intro" class="muted small hidden"></p>
-      <form id="form" class="form" autocomplete="on">
-        <div class="field">
-          <label for="name">User name</label>
-          <input id="name" type="text" autocomplete="username" required autofocus>
-        </div>
-        <div class="field">
-          <label for="password">Password</label>
-          <input id="password" type="password" autocomplete="current-password" required>
-        </div>
-        <div id="repeat-field" class="field hidden">
-          <label for="repeat">Password again</label>
-          <input id="repeat" type="password" autocomplete="new-password">
-          <p class="hint">At least 8 characters.</p>
-        </div>
-        <p id="error" class="msg-err hidden" role="alert"></p>
-        <button id="submit" class="btn" type="submit">Log in</button>
+      <form id="form" class="card stack" autocomplete="on">
+        <h3 id="title" style="margin:0">Log in</h3>
+        <p id="intro" class="muted small hidden" style="margin:0"></p>
+        <label class="field">User name<input id="name" type="text" autocomplete="username" required autofocus></label>
+        <label class="field">Password<input id="password" type="password" autocomplete="current-password" required></label>
+        <label id="repeat-field" class="field hidden">Password again<input id="repeat" type="password" autocomplete="new-password"><span class="hint">At least 8 characters.</span></label>
+        <p id="error" class="notice red hidden" role="alert" style="margin:0"></p>
+        <button id="submit" class="btn big" type="submit">Log in</button>
       </form>
-    </section>
+    </div>
   </div>
   <script src="login.js"></script>
 </body>

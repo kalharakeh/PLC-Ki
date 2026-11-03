@@ -36,6 +36,14 @@ public sealed class PlantContext
     public bool ApiKeyInSettings { get; set; }
     public bool PlcPasswordInEnvironment { get; init; }
     public bool PlcPasswordInSettings { get; set; }
+    /// <summary>A token for the TIA helper was saved on the connections page.</summary>
+    public bool TiaTokenInSettings { get; set; }
+
+    /// <summary>Started by hand: restarts the web app inside this process (set by the server), so new settings apply.</summary>
+    public Action? RestartInProcess { get; set; }
+
+    /// <summary>Program exports, packages from the block generator, uploaded archives.</summary>
+    public string WorkDir => Path.Combine(DataDir, "work");
 
     /// <summary>Settings were saved that only take effect after a restart.</summary>
     public bool RestartNeeded { get; set; }

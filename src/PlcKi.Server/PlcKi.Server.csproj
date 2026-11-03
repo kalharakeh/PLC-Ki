@@ -30,6 +30,7 @@
     <!-- Copy the web page next to the exe so "dotnet run" and the built exe serve the same files -->
     <Content Update="wwwroot\**" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\models\*.json" Link="models\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\models\*.zip" Link="models\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\models\snapshots\*.json" Link="models\snapshots\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

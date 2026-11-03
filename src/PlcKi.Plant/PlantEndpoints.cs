@@ -153,7 +153,14 @@ public static class PlantEndpoints
         admin.MapPost("/restart", (PlantContext ctx, IHostApplicationLifetime life, ILoggerFactory lf) =>
         {
             if (!ctx.IsService)
-                throw new PlantException("PLC-Ki was started by hand, so it cannot restart itself. Stop it (Ctrl+C) and start it again.", 409);
+            {
+                if (ctx.RestartInProcess == null)
+                    throw new PlantException("PLC-Ki was started by hand, so it cannot restart itself. Stop it (Ctrl+C) and start it again.", 409);
+                lf.CreateLogger("PlcKi.Plant").LogWarning("Restart requested from the page.");
+                var restart = ctx.RestartInProcess;
+                _ = Task.Run(async () => { await Task.Delay(300); restart(); });
+                return Results.Accepted();
+            }
             lf.CreateLogger("PlcKi.Plant").LogWarning("Restart requested from the settings page.");
             // Leave with an error code: the service is set up (by the installer) to be restarted by Windows after that
             _ = Task.Run(async () =>
@@ -201,6 +208,8 @@ public static class PlantEndpoints
         restartNeeded = ctx.RestartNeeded,
         apiKey = ctx.ApiKeyInSettings ? "settings" : ctx.ApiKeyInEnvironment ? "environment" : "none",
         plcPassword = ctx.PlcPasswordInEnvironment ? "environment" : ctx.PlcPasswordInSettings ? "settings" : "none",
+        tiaToken = ctx.TiaTokenInSettings || !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("PLCKI_VM_TOKEN")) ? "set" : "none",
+        canRestart = ctx.IsService || ctx.RestartInProcess != null,
     };
 
     /// <summary>Files shipped with the app (relative paths) and, optionally, uploaded ones (absolute paths).</summary>

@@ -38,6 +38,33 @@ dotnet run --project src\PlcKi.Server
 
 Open <http://localhost:5080>. Stop it with Ctrl+C.
 
+## The pages
+
+Everyone with a login sees **Active alarm** (the start page: what is wrong, how to fix it, where it is in the machine
+and in the program), **Plant** (sequence, devices, data exchange), **Alarms**, **Logic** (each network drawn as a rung
+with live values; the first red contact is what blocks) and **Code** (the source with live values). **Ask** opens the
+chat on every page.
+
+Administrators also see **Setup**, where everything that used to be a command is a button:
+
+| Page | What |
+| --- | --- |
+| Connections | Pick the setup (same PC as TIA, PC with a TIA VM, server + laptop), the PLC address, and where TIA runs. A diagram shows each link green or red. |
+| Program | Drop a TIA archive (.zap20) or an export (.zip). PLC-Ki has TIA export it, Claude builds the machine model, you check it and press *Use this program*. |
+| Block generator | Say what you need. Claude writes the blocks, TIA imports and compiles them, PLCSIM runs them. A real PLC needs the version typed here and the address typed at the TIA PC. |
+| Settings | Machine model, Claude API key, network access, logins. |
+
+Where TIA runs (Setup, Connections):
+
+- **This PC**: PLC-Ki starts `TiaImporter serve --local` itself, in its own window (only this PC can reach it). Set
+  the TiaImporter path once.
+- **Another PC or VM**: start `TiaImporter serve --token <secret>` there and enter its address and token.
+- **My laptop (PLC-Ki on a server)**: needs PLC-Ki Link, a small program on the laptop that connects out to the
+  server; coming in the next update.
+
+Long work (TIA export, building a model, the block generator) runs as a job: the same command as on the command line,
+started by PLC-Ki, with its progress and log on the page. One job at a time.
+
 ### Settings
 
 `src/PlcKi.Server/appsettings.json`, or override on the command line after `--`:
@@ -149,7 +176,8 @@ dotnet run --project src\PlcKi.Server -- generate --out C:\temp\gen\valve --requ
 
 Claude writes FBs, FCs, DBs, data types and tag tables (SCL, LAD, FBD, GRAPH) into a versioned package folder;
 `tools/TiaImporter import-blocks` imports and compiles it in TIA, and `generate --fix` sends TIA's errors back.
-Full workflow: [docs/block-generator.md](../../docs/block-generator.md).
+Full workflow: [docs/block-generator.md](../../docs/block-generator.md). The same loop runs from Setup, Block
+generator, without commands.
 
 ## If the connection fails
 
@@ -193,10 +221,10 @@ It does TLS in managed code (no OpenSSL DLLs) and supports the older challenge l
 PLC-Ki never sets it and calls none of those functions. `tests/PlcKi.Tests/ReadOnlyTests.cs` reads the compiled
 app and fails the build if that changes.
 
-## Login and settings page
+## Login and settings
 
 The first time PLC-Ki starts it asks (on this PC only) for an administrator login. After that every page needs a
-login, and administrators get a **Settings** page for the PLC address, machine model, Claude API key, network access
-and users. Values saved there go to `%LOCALAPPDATA%\PLC-Ki\settings.json` when started by hand, and are used after
+login, and administrators get the **Setup** pages for the PLC and TIA connections, program import, block generator,
+machine model, Claude API key, network access and users. Values saved there go to `%LOCALAPPDATA%\PLC-Ki\settings.json` when started by hand, and are used after
 a restart. Command-line options and environment variables still win. For installing on a plant PC as a Windows
 service, see [installer/README.md](../../installer/README.md).

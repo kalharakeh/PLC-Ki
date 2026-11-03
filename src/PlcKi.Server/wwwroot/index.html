@@ -2,95 +2,61 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>PLC-Ki live status</title>
-  <link rel="stylesheet" href="style.css">
-  <link rel="stylesheet" href="plant.css">
-  <script src="plant.js"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>PLC-Ki</title>
+  <link rel="stylesheet" href="ui.css">
 </head>
 <body>
-  <header class="top">
-    <div class="brand">
-      <span class="logo" aria-hidden="true">◆</span>
-      <div>
-        <h1>PLC-Ki</h1>
-        <p id="machine" class="muted">Loading…</p>
-      </div>
-    </div>
-    <div class="link">
-      <span class="badge readonly" title="This app only reads from the PLC. It has no way to write.">Read-only</span>
-      <span id="conn" class="pill pill-wait">connecting</span>
-      <span id="updated" class="muted small"></span>
+  <header class="nav" id="topnav">
+    <span class="brand">PLC-Ki<small id="machine">connecting…</small></span>
+    <nav class="links" id="nav" aria-label="Main">
+      <a href="#/alarm" data-route="alarm">Active alarm <span class="count hidden" id="nav-alarm-badge"></span></a>
+      <a href="#/plant" data-route="plant">Plant</a>
+      <a href="#/alarms" data-route="alarms">Alarms</a>
+      <a href="#/logic" data-route="logic">Logic</a>
+      <a href="#/code" data-route="code">Code</a>
+      <a href="#/setup/connections" data-route="setup" class="admin-only">Setup</a>
+    </nav>
+    <div class="right">
+      <span class="pill" id="conn"><span class="dot"></span><span>connecting</span></span>
+      <span class="pill info hidden" id="job-pill"></span>
+      <button class="btn small" id="ask-open" type="button">Ask</button>
     </div>
   </header>
+  <main id="page" tabindex="-1"></main>
+  <footer class="foot">PLC-Ki reads from the PLC only: it never writes values or changes the CPU state. <span id="who"></span> · <button class="linkbtn" id="logout" type="button">Log out</button></footer>
 
-  <main>
-    <section class="card summary" aria-labelledby="h-summary">
-      <h2 id="h-summary">What the machine is doing</h2>
-      <ul id="summary"></ul>
-    </section>
-
-    <section class="card ask" aria-labelledby="h-ask">
-      <div class="ask-head">
-        <h2 id="h-ask">Ask about the machine</h2>
-        <button id="ask-new" type="button" class="linkbtn hidden">New conversation</button>
+  <div class="scrim" id="scrim"></div>
+  <aside class="ask-panel" id="ask" aria-label="Ask about the machine">
+    <div class="ask-head">
+      <b>Ask about the machine</b>
+      <button class="btn plain small hidden" id="ask-new" type="button">New</button>
+      <button class="btn b small" id="ask-close" type="button">Done</button>
+    </div>
+    <div class="ask-log" id="ask-log">
+      <div class="msg a">Ask anything about what the machine is doing, an alarm, or why something is not running. I answer from the live values and the program, and name where I looked.</div>
+    </div>
+    <div class="ask-foot">
+      <div class="notice gold hidden" id="ask-off"></div>
+      <div class="chips" id="ask-examples">
+        <button type="button">What is the machine doing?</button>
+        <button type="button">Why is the alarm on and how do I fix it?</button>
+        <button type="button">What happened in the last 5 minutes?</button>
       </div>
-      <p id="ask-off" class="muted small hidden"></p>
-      <div id="ask-log" class="ask-log" aria-live="polite"></div>
-      <div id="ask-examples" class="chips">
-        <button type="button" class="chip">Why is the machine stopped?</button>
-        <button type="button" class="chip">What is it waiting for?</button>
-        <button type="button" class="chip">What happened in the last 10 minutes?</button>
-        <button type="button" class="chip">Explain the active alarm and how to fix it</button>
-      </div>
-      <form id="ask-form" class="ask-form">
-        <label for="ask-input" class="sr-only">Your question</label>
-        <textarea id="ask-input" rows="2" maxlength="4000"
-          placeholder="e.g. Why is the agitator not running?"></textarea>
-        <button id="ask-send" type="submit" class="btn">Ask</button>
+      <form id="ask-form">
+        <textarea id="ask-input" rows="1" placeholder="Ask a question" aria-label="Your question"></textarea>
+        <button class="btn" id="ask-send" type="submit">Ask</button>
       </form>
-      <p class="muted small ask-hint">Claude answers from the live values and the program model. It can only read; check before you act.</p>
-    </section>
+    </div>
+  </aside>
+  <div class="toast" id="toast" role="status"></div>
 
-    <section id="overview" class="tiles" aria-label="Process values"></section>
-
-    <section class="card" aria-labelledby="h-seq">
-      <h2 id="h-seq">Sequence</h2>
-      <div id="sequences"></div>
-    </section>
-
-    <section class="card" aria-labelledby="h-alarms">
-      <h2 id="h-alarms">Active alarms <span id="alarm-count" class="count"></span></h2>
-      <div id="alarms"></div>
-    </section>
-
-    <section class="card" aria-labelledby="h-eq">
-      <h2 id="h-eq">Equipment</h2>
-      <div id="equipment" class="eq-grid"></div>
-    </section>
-
-    <section class="card" aria-labelledby="h-x">
-      <h2 id="h-x">Data exchange</h2>
-      <div class="table-wrap">
-        <table id="exchange">
-          <thead><tr><th>Partner</th><th>Direction</th><th>Signal</th><th>Value</th><th>Meaning</th></tr></thead>
-          <tbody></tbody>
-        </table>
-      </div>
-    </section>
-
-    <section id="tag-errors-card" class="card hidden" aria-labelledby="h-te">
-      <h2 id="h-te">Tags that could not be read</h2>
-      <ul id="tag-errors" class="mono small"></ul>
-    </section>
-  </main>
-
-  <footer class="muted small">
-    Raw values with their TIA symbols: <a href="/api/values">/api/values</a> ·
-    Status as JSON: <a href="/api/status">/api/status</a>
-  </footer>
-
-  <script src="app.js"></script>
-  <script src="ask.js"></script>
+  <script src="js/core.js"></script>
+  <script src="js/live.js"></script>
+  <script src="js/program.js"></script>
+  <script src="js/setup.js"></script>
+  <script src="js/generator.js"></script>
+  <script src="js/ask.js"></script>
+  <script>PK.start();</script>
 </body>
 </html>

@@ -29,7 +29,7 @@ public sealed class VmClient
     {
         _http = handler != null ? new HttpClient(handler) : new HttpClient();
         _http.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
-        _http.Timeout = TimeSpan.FromMinutes(2);   // per request; the long work runs as a job that is polled
+        _http.Timeout = TimeSpan.FromMinutes(10);   // per request (uploads of big archives); the long work runs as a job that is polled
         _http.DefaultRequestHeaders.Add("X-PlcKi-Token", token);
     }
 
@@ -55,6 +55,37 @@ public sealed class VmClient
             if (!resp.IsSuccessStatusCode) throw new InvalidOperationException($"Upload refused ({(int)resp.StatusCode}): {Error(await resp.Content.ReadAsStringAsync(ct))}");
         }
         finally { try { File.Delete(zip); } catch { /* temp file */ } }
+    }
+
+    /// <summary>The .ap20 projects the TIA PC may open (under its projects folder).</summary>
+    public async Task<string> ProjectsAsync(CancellationToken ct)
+    {
+        using var resp = await _http.GetAsync("projects", ct);
+        var text = await resp.Content.ReadAsStringAsync(ct);
+        if (!resp.IsSuccessStatusCode) throw new InvalidOperationException($"TIA PC answered {(int)resp.StatusCode}: {Error(text)}");
+        return text;
+    }
+
+    /// <summary>Sends a .zap20 archive to the TIA PC for "export".</summary>
+    public async Task UploadArchiveAsync(string file, string name, CancellationToken ct)
+    {
+        await using var f = File.OpenRead(file);
+        using var content = new StreamContent(f);
+        content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+        using var resp = await _http.PutAsync("archives/" + Uri.EscapeDataString(name), content, ct);
+        if (!resp.IsSuccessStatusCode) throw new InvalidOperationException($"Upload refused ({(int)resp.StatusCode}): {Error(await resp.Content.ReadAsStringAsync(ct))}");
+    }
+
+    /// <summary>Exports the uploaded archive's PLC programs on the TIA PC (TIA opens it in the background).</summary>
+    public Task<VmResult> ExportAsync(string archive, CancellationToken ct) => PostAsync("export", new { archive }, ct);
+
+    /// <summary>Fetches a finished export as a zip file.</summary>
+    public async Task DownloadExportAsync(string name, string toFile, CancellationToken ct)
+    {
+        using var resp = await _http.GetAsync("exports/" + Uri.EscapeDataString(name), HttpCompletionOption.ResponseHeadersRead, ct);
+        if (!resp.IsSuccessStatusCode) throw new InvalidOperationException($"TIA PC answered {(int)resp.StatusCode}: {Error(await resp.Content.ReadAsStringAsync(ct))}");
+        await using var f = File.Create(toFile);
+        await resp.Content.CopyToAsync(f, ct);
     }
 
     public Task<VmResult> ImportAsync(string package, string project, string? plc, string version, CancellationToken ct) =>
@@ -85,7 +116,9 @@ public sealed class VmClient
             string text;
             try
             {
-                using var resp = await _http.GetAsync("jobs/" + Uri.EscapeDataString(job), ct);
+                using var each = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                each.CancelAfter(TimeSpan.FromMinutes(1));
+                using var resp = await _http.GetAsync("jobs/" + Uri.EscapeDataString(job), each.Token);
                 text = await resp.Content.ReadAsStringAsync(ct);
                 if (!resp.IsSuccessStatusCode) throw new InvalidOperationException($"TIA PC answered {(int)resp.StatusCode}: {Error(text)}");
             }

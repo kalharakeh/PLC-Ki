@@ -41,7 +41,7 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, password }),
       });
-      if (r.ok) { location.replace(setup ? '/settings.html' : target); return; }
+      if (r.ok) { location.replace(setup ? '/#/setup/connections' : target); return; }
       const body = await r.json().catch(() => ({}));
       show(body.error || `Failed (${r.status}).`);
     } catch {

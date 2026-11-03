@@ -11,6 +11,12 @@ Describe what you need in plain words; Claude writes the PLC program parts and T
 - **Review:** each version has a `REVIEW.md` for the engineer: what each block does, how to call it, assumptions, and
   what to check. Generated code must be reviewed before it goes to a real machine.
 
+**Without commands:** in PLC-Ki, open Setup, Block generator. Type the request, choose the TIA project (listed from
+the TIA PC) and what happens after it compiles: stop in TIA, run in PLCSIM, or a real PLC. The page shows each stage,
+the versions with Claude's review notes and TIA's report, and the generated files. For a real PLC it asks you to type
+the version you reviewed, then shows a 2-minute countdown while someone at the TIA PC types the PLC address in the
+TiaImporter window. The commands below do the same thing.
+
 It runs in two places, because TIA (on the VM) has no internet and Claude (on the PC) has no TIA:
 
 ```
