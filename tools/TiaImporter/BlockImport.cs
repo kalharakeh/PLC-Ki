@@ -73,44 +73,11 @@ namespace TiaImporter
                                 foreach (var x in r.EnumerateArray()) replaces.Add(x.GetString());
             }
             if (!dir.Exists) throw new DirectoryNotFoundException(dir.FullName);
+            var own = OwnNames(manifest.Exists ? package : dir.Parent, projectFile);
+            if (own.Count > 0) replaces.UnionWith(own);
 
             // 2. The files, in their number order, and the names each creates
-            var items = new List<Item>();
-            foreach (var f in dir.GetFiles().Where(f => FileName.IsMatch(f.Name)).OrderBy(f => f.Name, StringComparer.Ordinal))
-            {
-                var file = new FileInfo(f.FullName);   // full path: Openness rejects relative ones on .NET Framework
-                var ext = file.Extension.ToLowerInvariant();
-                var item = new Item { File = file };
-                var text = File.ReadAllText(file.FullName);
-                if (ext == ".json")
-                {
-                    item.Kind = "tags";
-                    using (var doc = JsonDocument.Parse(text))
-                        foreach (var t in doc.RootElement.GetProperty("tables").EnumerateArray())
-                            foreach (var tag in t.GetProperty("tags").EnumerateArray())
-                                item.Names.Add(tag.GetProperty("name").GetString());
-                }
-                else if (ext == ".xml")
-                {
-                    var el = XDocument.Parse(text).Root?.Elements().FirstOrDefault(e => e.Name.LocalName.StartsWith("SW."));
-                    if (el == null) throw new InvalidOperationException($"{file.Name}: no SW.Blocks or SW.Types element.");
-                    if ((el.Element("AttributeList")?.Element("ProgrammingLanguage")?.Value ?? "").StartsWith("F_"))
-                        throw new InvalidOperationException($"{file.Name} is a safety (F) block. The importer does not load F-blocks.");
-                    item.Kind = el.Name.LocalName.StartsWith("SW.Types.") ? "type" : "block";
-                    item.IsType = item.Kind == "type";
-                    item.Names.Add(el.Element("AttributeList")?.Element("Name")?.Value ?? Path.GetFileNameWithoutExtension(file.Name));
-                }
-                else
-                {
-                    item.Kind = "source";
-                    foreach (Match m in SclHeader.Matches(text))
-                    {
-                        item.Names.Add(m.Groups[2].Value);
-                        if (m.Groups[1].Value.Equals("TYPE", StringComparison.OrdinalIgnoreCase)) item.IsType = true;
-                    }
-                }
-                items.Add(item);
-            }
+            var items = ReadItems(dir);
             if (items.Count == 0) throw new InvalidOperationException($"No package files (like 10_FB_Name.scl) in {dir.FullName}.");
             _log.WriteLine($"Package {dir.Name}: {items.Count} file(s), {string.Join(", ", items.SelectMany(i => i.Kind == "tags" ? new[] { i.Names.Count + " tag(s)" } : i.Names.ToArray()))}");
 
@@ -278,6 +245,75 @@ namespace TiaImporter
                 }
                 Collect(m.Messages, into, indent + "  ");
             }
+        }
+
+        /// <summary>The package files of one version folder, in number order, with the names each creates.</summary>
+        private static List<Item> ReadItems(DirectoryInfo dir)
+        {
+            var items = new List<Item>();
+            foreach (var f in dir.GetFiles().Where(f => FileName.IsMatch(f.Name)).OrderBy(f => f.Name, StringComparer.Ordinal))
+            {
+                var file = new FileInfo(f.FullName);   // full path: Openness rejects relative ones on .NET Framework
+                var ext = file.Extension.ToLowerInvariant();
+                var item = new Item { File = file };
+                var text = File.ReadAllText(file.FullName);
+                if (ext == ".json")
+                {
+                    item.Kind = "tags";
+                    using (var doc = JsonDocument.Parse(text))
+                        foreach (var t in doc.RootElement.GetProperty("tables").EnumerateArray())
+                            foreach (var tag in t.GetProperty("tags").EnumerateArray())
+                                item.Names.Add(tag.GetProperty("name").GetString());
+                }
+                else if (ext == ".xml")
+                {
+                    var el = XDocument.Parse(text).Root?.Elements().FirstOrDefault(e => e.Name.LocalName.StartsWith("SW."));
+                    if (el == null) throw new InvalidOperationException($"{file.Name}: no SW.Blocks or SW.Types element.");
+                    if ((el.Element("AttributeList")?.Element("ProgrammingLanguage")?.Value ?? "").StartsWith("F_"))
+                        throw new InvalidOperationException($"{file.Name} is a safety (F) block. The importer does not load F-blocks.");
+                    item.Kind = el.Name.LocalName.StartsWith("SW.Types.") ? "type" : "block";
+                    item.IsType = item.Kind == "type";
+                    item.Names.Add(el.Element("AttributeList")?.Element("Name")?.Value ?? Path.GetFileNameWithoutExtension(file.Name));
+                }
+                else
+                {
+                    item.Kind = "source";
+                    foreach (Match m in SclHeader.Matches(text))
+                    {
+                        item.Names.Add(m.Groups[2].Value);
+                        if (m.Groups[1].Value.Equals("TYPE", StringComparison.OrdinalIgnoreCase)) item.IsType = true;
+                    }
+                }
+                items.Add(item);
+            }
+            return items;
+        }
+
+        /// <summary>
+        /// Names this package already loaded into this project: versions whose import-report.json says they were
+        /// saved into the same project file. Importing them again (a re-run, or the next version) is not a clash.
+        /// </summary>
+        private static HashSet<string> OwnNames(DirectoryInfo packageRoot, FileInfo projectFile)
+        {
+            var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (packageRoot == null || !packageRoot.Exists) return names;
+            foreach (var v in packageRoot.GetDirectories("v*").Where(d => Regex.IsMatch(d.Name, @"^v\d{3}$")))
+            {
+                var report = new FileInfo(Path.Combine(v.FullName, "import-report.json"));
+                if (!report.Exists) continue;
+                try
+                {
+                    using (var doc = JsonDocument.Parse(File.ReadAllText(report.FullName)))
+                    {
+                        var r = doc.RootElement;
+                        if (!(r.TryGetProperty("saved", out var saved) && saved.ValueKind == JsonValueKind.True)) continue;
+                        if (!(r.TryGetProperty("project", out var p) && string.Equals(p.GetString(), projectFile.FullName, StringComparison.OrdinalIgnoreCase))) continue;
+                    }
+                    foreach (var i in ReadItems(v)) foreach (var n in i.Names) names.Add(n);
+                }
+                catch (Exception) { /* an unreadable old version gives no permission */ }
+            }
+            return names;
         }
 
         private static IEnumerable<PlcBlock> AllBlocks(PlcBlockGroup group)
