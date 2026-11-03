@@ -532,3 +532,54 @@ section.wiz-body .wrap > .card + .card { margin-top: 18px; }
   *, *::before, *::after { animation: none !important; transition: none !important; }
   .reveal { opacity: 1; transform: none; }
 }
+
+/* ---------- round 4: filters, unsaved changes, keyboard, touch ---------- */
+.toolbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 18px; }
+.toolbar input[type="search"] { flex: 1 1 260px; max-width: 420px; }
+.nomatch { display: grid; justify-items: center; gap: 6px; text-align: center; padding: 36px 16px; color: var(--muted); border: 1px dashed var(--line-strong); border-radius: var(--r); }
+.nomatch svg { width: 30px; height: 30px; color: var(--muted); margin-bottom: 4px; }
+.nomatch b { color: var(--ink); font-weight: 600; font-size: 17px; }
+.nomatch .btn { margin-top: 8px; }
+li.click:focus-visible, .eq:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+.dirty-bar { position: fixed; left: 50%; bottom: 22px; z-index: 80; display: flex; align-items: center; gap: 10px; padding: 8px 8px 8px 18px; border-radius: 999px;
+  background: color-mix(in srgb, var(--panel) 82%, transparent); -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px);
+  border: 1px solid var(--line); box-shadow: var(--shadow-lift); font-size: 15px; font-weight: 600; max-width: calc(100vw - 24px);
+  transform: translateX(-50%) translateY(120%); opacity: 0; pointer-events: none; transition: transform 0.45s var(--spring), opacity 0.25s var(--ease); }
+.dirty-bar.on { transform: translateX(-50%); opacity: 1; pointer-events: auto; }
+.dirty-bar .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--warn); flex: none; }
+.dirty-bar > span:nth-child(2) { margin-right: 6px; white-space: nowrap; }
+html.has-dirty { scroll-padding-bottom: 110px; }
+.has-dirty .toast { bottom: 88px; }
+.has-dirty footer.foot { padding-bottom: 96px; }
+/* The buttons of a long sheet stay in reach while its text scrolls */
+.sheet > .row.end:last-child { position: sticky; bottom: -26px; background: var(--panel); padding: 12px 0 0; margin-top: -4px; }
+@media (max-width: 600px) {
+  /* On a phone, sheets come up from the bottom edge, like iOS */
+  .sheet-wrap { place-items: end center; padding: 0; }
+  .sheet { width: 100%; border-radius: 22px 22px 0 0; max-height: 90vh; padding-bottom: calc(22px + env(safe-area-inset-bottom)); animation: rise 0.4s var(--ease); }
+  .sheet > .row.end:last-child { bottom: calc(-22px - env(safe-area-inset-bottom)); padding-bottom: 4px; }
+  .sheet > .row.end:last-child .btn { flex: 1; }
+}
+@keyframes rise { from { transform: translateY(40px); opacity: 0; } }
+
+.sheet-wrap.out { animation: fadeout 0.16s var(--ease) forwards; }
+@keyframes fadeout { to { opacity: 0; } }
+.sheet:focus { outline: none; }
+kbd { font-family: var(--font); font-size: 12px; font-weight: 600; min-width: 20px; display: inline-grid; place-items: center; padding: 1px 6px;
+  border: 1px solid var(--line-strong); border-bottom-width: 2px; border-radius: 6px; background: var(--bg-alt); color: var(--ink); }
+
+/* Fingers need bigger targets than a mouse (tablets on the line, phones) */
+@media (pointer: coarse) {
+  .btn.small { min-height: 40px; padding: 8px 16px; }
+  .btn.plain.small { min-height: 40px; }
+  .chips button { min-height: 40px; padding: 8px 14px; font-size: 14px; }
+  .segmented button { min-height: 38px; padding: 8px 14px; font-size: 14px; }
+  .nav .links a { padding: 10px 12px; }
+  #conn { min-height: 34px; }
+  .keys { display: none; }
+}
+@media (max-width: 600px) {
+  .toolbar input[type="search"] { max-width: none; flex-basis: 100%; }
+  .toolbar .segmented { width: 100%; justify-content: space-between; }
+}

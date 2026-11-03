@@ -26,8 +26,8 @@ const PKSetup = (() => {
   }
 
   async function restart() {
-    try { await api("POST", "/api/admin/restart"); } catch (e) { toast(e.message); return; }
-    const s = PK.sheet(`<h2>Restarting PLC-Ki…</h2><p class="muted">The page comes back by itself in a few seconds.</p><div class="progress indet"><div></div></div>`);
+    try { await api("POST", "/api/admin/restart"); } catch (e) { toast(e.message, "error"); return; }
+    const s = PK.sheet(`<h2>Restarting PLC-Ki…</h2><p class="muted">The page comes back by itself in a few seconds.</p><div class="progress indet"><div></div></div>`, { dismiss: false });
     await new Promise((r) => setTimeout(r, 1500));
     for (let i = 0; i < 60; i++) {
       try { const r = await fetch("/api/auth/state", { cache: "no-store" }); if (r.ok) { location.reload(); return; } } catch { /* still down */ }
@@ -156,7 +156,7 @@ const PKSetup = (() => {
   function bindJob(page) {
     page.querySelectorAll("[data-stop]").forEach((b) => b.onclick = async () => {
       if (await PK.confirmSheet({ title: "Stop this job?", text: "What was done so far is kept. A TIA import that is already running on the TIA PC finishes there.", ok: "Stop", danger: true }))
-        api("POST", `/api/admin/jobs/${b.dataset.stop}/stop`).catch((e) => toast(e.message));
+        api("POST", `/api/admin/jobs/${b.dataset.stop}/stop`).catch((e) => toast(e.message, "error"));
     });
     page.querySelectorAll("[data-log]").forEach((l) => { l.scrollTop = l.scrollHeight; });
   }
@@ -358,6 +358,13 @@ const PKSetup = (() => {
     conn._tiaToken = v("tiaToken") || conn._tiaToken || null;
   }
 
+  /** Shows the "Unsaved changes" bar while the form differs from what is saved. */
+  function trackConn() {
+    const a = JSON.stringify({ ...conn, _plcPassword: 0, _tiaToken: 0 }), b = JSON.stringify({ ...settings, _plcPassword: 0, _tiaToken: 0 });
+    const changed = a !== b || !!conn._plcPassword || !!conn._tiaToken;
+    if (changed !== PK.isDirty) PK.dirty(changed ? () => { const s = PK.$("page").querySelector("[data-save]"); if (s) s.click(); } : null);
+  }
+
   async function checkTia() {
     tiaStatus = null; PK.draw();
     try { tiaStatus = await api("GET", "/api/admin/tia/status"); } catch (e) { tiaStatus = { ok: false, message: e.message }; }
@@ -383,8 +390,9 @@ const PKSetup = (() => {
     render() { return conn ? connectionsHtml() : PK.hero({ title: "Loading…" }); },
     after(page) {
       bindRestart(page);
-      const keep = () => readConn(page);
-      page.querySelectorAll("input,select").forEach((el) => el.addEventListener("change", keep));
+      const keep = () => { readConn(page); trackConn(); };
+      page.querySelectorAll("input,select").forEach((el) => { el.addEventListener("change", keep); el.addEventListener("input", keep); });
+      trackConn();
       page.querySelectorAll("[data-preset]").forEach((b) => b.onclick = () => { keep(); const p = presets[b.dataset.preset]; conn.tiaMode = p.tiaMode; conn.plcVia = p.plcVia; PK.draw(); });
       page.querySelectorAll("[data-tiamode]").forEach((b) => b.onclick = () => { keep(); conn.tiaMode = b.dataset.tiamode; PK.draw(); });
       page.querySelectorAll("[data-plcvia]").forEach((b) => b.onclick = () => { keep(); conn.plcVia = b.dataset.plcvia; PK.draw(); });
@@ -393,7 +401,7 @@ const PKSetup = (() => {
       const lk = page.querySelector("[data-link-key]");
       if (lk) lk.onclick = async () => {
         if (linkStatus && linkStatus.hasKey && !(await PK.confirmSheet({ title: "Make a new key?", text: "The laptop's Link stops working until it is started with the new key.", ok: "Make a new key" }))) return;
-        try { linkKey = (await api("POST", "/api/admin/link/key")).key; await loadLink(); PK.draw(); } catch (e) { toast(e.message); }
+        try { linkKey = (await api("POST", "/api/admin/link/key")).key; await loadLink(); PK.draw(); } catch (e) { toast(e.message, "error"); }
       };
       const c = page.querySelector("[data-check-tia]");
       if (c) c.onclick = checkTia;
@@ -412,10 +420,11 @@ const PKSetup = (() => {
           const { _plcPassword, _tiaToken, ...rest } = conn;
           await saveSettings({ ...rest, plcPassword: _plcPassword, tiaToken: _tiaToken });
           conn = { ...settings };
+          PK.dirty(null);
           toast(info.restartNeeded ? "Saved. Apply to use the new connections." : "Saved.");
           PK.draw();
           checkTia();
-        } catch (e) { toast(e.message); }
+        } catch (e) { toast(e.message, "error"); }
         s.disabled = false;
       };
     },
@@ -435,13 +444,13 @@ const PKSetup = (() => {
     PK.draw();
     if (kind === "export") {
       try { imp.exportInfo = await api("GET", "/api/admin/import/export-info?file=" + encodeURIComponent(path)); imp.plc = imp.exportInfo.plcs.length === 1 ? imp.exportInfo.plcs[0].name : ""; }
-      catch (e) { toast(e.message); }
+      catch (e) { toast(e.message, "error"); }
       PK.draw();
     }
   }
 
   async function upload(file) {
-    const s = PK.sheet(`<h2>Uploading ${esc(file.name)}</h2><div class="progress"><div style="width:0%" id="up-bar"></div></div><p class="muted small" id="up-text">0 %</p>`);
+    const s = PK.sheet(`<h2>Uploading ${esc(file.name)}</h2><div class="progress"><div style="width:0%" id="up-bar"></div></div><p class="muted small" id="up-text">0 %</p>`, { dismiss: false });
     try {
       const res = await new Promise((resolve, reject) => {
         const x = new XMLHttpRequest();
@@ -454,7 +463,7 @@ const PKSetup = (() => {
       s.close();
       await refreshFiles();
       await choose(res.kind, res.file);
-    } catch (e) { s.close(); toast(e.message); }
+    } catch (e) { s.close(); toast(e.message, "error"); }
   }
 
   function startJob(job, after) {
@@ -529,7 +538,7 @@ const PKSetup = (() => {
   PK.view("setup/program", {
     live: false,
     async mount() {
-      await refreshFiles().catch((e) => toast(e.message));
+      await refreshFiles().catch((e) => toast(e.message, "error"));
       const run = (state.jobs || []).find((j) => j.state === "running" && (j.kind === "export" || j.kind === "import"));
       if (run && !imp.job) startJob(run);
       PK.draw();
@@ -555,7 +564,7 @@ const PKSetup = (() => {
         try {
           const job = await api("POST", "/api/admin/import/export", { archive: imp.chosen.path });
           startJob(job, async (j) => { if (j.state === "done") { await refreshFiles(); await choose("export", j.outputs.export); toast("Exported. Now build the model."); } });
-        } catch (e) { toast(e.message); }
+        } catch (e) { toast(e.message, "error"); }
       };
       const bd = page.querySelector("[data-build]");
       if (bd) bd.onclick = async () => {
@@ -566,7 +575,7 @@ const PKSetup = (() => {
             try { imp.modelInfo = await api("GET", "/api/admin/import/model-info?file=" + encodeURIComponent(imp.model)); } catch (e) { imp.modelInfo = { ok: false, error: e.message }; }
             PK.draw();
           });
-        } catch (e) { toast(e.message); }
+        } catch (e) { toast(e.message, "error"); }
       };
       const use = page.querySelector("[data-use]");
       if (use) use.onclick = async () => {
@@ -575,7 +584,7 @@ const PKSetup = (() => {
           info = (await loadSettings()).info;
           toast("Saved. Apply to start watching this program.");
           PK.draw();
-        } catch (e) { toast(e.message); }
+        } catch (e) { toast(e.message, "error"); }
       };
     },
   });
@@ -584,7 +593,7 @@ const PKSetup = (() => {
   let users = null;
   PK.view("setup/settings", {
     async mount() {
-      try { await loadSettings(); users = await api("GET", "/api/admin/users"); } catch (e) { toast(e.message); }
+      try { await loadSettings(); users = await api("GET", "/api/admin/users"); } catch (e) { toast(e.message, "error"); }
       PK.draw();
     },
     render() {
@@ -593,7 +602,7 @@ const PKSetup = (() => {
       const keyText = { settings: "A key is saved here.", environment: "Using the ANTHROPIC_API_KEY environment variable. A key entered here replaces it.", none: "No key yet: the Ask box stays off until you add one." }[info.apiKey];
       const sw = (id, on, title, text) => `<div class="row"><div style="flex:1"><b style="font-weight:600">${title}</b><div class="muted small">${text}</div></div><label class="switch"><input type="checkbox" id="${id}" ${on ? "checked" : ""}><span></span></label></div>`;
       return PK.sec("hero", `${setupNav("settings")}<h1>Settings.</h1><p class="sub">The machine model, the assistant, and who can open PLC-Ki from where.</p>${restartBar()}`)
-        + PK.sec("alt", `<div class="grid two">
+        + PK.sec("alt", `<div class="grid two" data-settings-form>
           <div class="card stack"><h3>Machine</h3>
             <label class="field">Machine model<select id="model">${(lists.models || []).map((f) => `<option value="${esc(f.path)}" ${f.path === s.model ? "selected" : ""}>${esc(f.label)}${f.uploaded ? " (imported)" : ""}</option>`).join("")}</select><span class="hint">New models come from the Program page.</span></label>
             <label class="field">History kept (minutes)<input id="historyMinutes" type="number" value="${s.historyMinutes}"><span class="hint">For questions like "what happened before the alarm?"</span></label></div>
@@ -620,14 +629,21 @@ const PKSetup = (() => {
     after(page) {
       bindRestart(page);
       const v = (id) => page.querySelector("#" + id);
-      page.querySelector("[data-save-settings]").onclick = async () => {
+      const saveBtn = page.querySelector("[data-save-settings]");
+      const form = page.querySelector("[data-settings-form]");
+      const mark = () => PK.dirty(() => saveBtn.click());
+      form.querySelectorAll("input,select").forEach((el) => { el.addEventListener("input", mark); el.addEventListener("change", mark); });
+      saveBtn.onclick = async () => {
+        saveBtn.disabled = true;
         try {
           await saveSettings({ model: v("model").value, historyMinutes: Number(v("historyMinutes").value), askEnabled: v("askEnabled").checked,
             apiKey: v("apiKey").value.trim() || null, askEffort: v("askEffort").value, allowRemote: v("allowRemote").checked, publicView: v("publicView").checked, port: Number(v("port").value) });
-          toast("Saved."); PK.draw();
-        } catch (e) { toast(e.message); }
+          PK.dirty(null);
+          toast(info.restartNeeded ? "Saved. Apply to use the new settings." : "Saved."); PK.draw();
+        } catch (e) { toast(e.message, "error"); }
+        saveBtn.disabled = false;
       };
-      const act = async (fn, ok) => { try { await fn(); toast(ok); users = await api("GET", "/api/admin/users"); PK.draw(); } catch (e) { toast(e.message); } };
+      const act = async (fn, ok) => { try { await fn(); toast(ok); users = await api("GET", "/api/admin/users"); PK.draw(); } catch (e) { toast(e.message, "error"); } };
       page.querySelectorAll("[data-role]").forEach((b) => b.onclick = () => act(() => api("PUT", `/api/admin/users/${encodeURIComponent(b.dataset.role)}/role`, { role: b.dataset.to }), "Role changed."));
       page.querySelectorAll("[data-del]").forEach((b) => b.onclick = async () => {
         if (await PK.confirmSheet({ title: `Delete ${b.dataset.del}?`, text: "They can no longer log in.", ok: "Delete", danger: true }))
