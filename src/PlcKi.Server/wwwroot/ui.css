@@ -334,6 +334,7 @@ section:not(.dark) .path span { border-color: var(--line-strong); }
 .rung-card { border: 1px solid var(--line); border-radius: var(--r); background: var(--panel); padding: 14px 18px; }
 .rung-card + .rung-card { margin-top: 12px; }
 .rung-card.hl { border-color: var(--warn); box-shadow: 0 0 0 1px var(--warn); }
+.rung.hl { background: var(--warn-soft); border-radius: 10px; outline: 2px solid var(--warn); outline-offset: 2px; }
 .rung-title { font-weight: 600; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 15px; }
 .rung-title .faint { font-weight: 400; }
 .rung { display: flex; align-items: center; padding: 16px 2px 6px; overflow-x: auto; }

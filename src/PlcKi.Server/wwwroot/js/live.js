@@ -54,6 +54,24 @@
     };
   }
 
+  /**
+   * Where an alarm is set, for "Show where it is set": the block and network that write its bit, and the bit itself.
+   * A location can name several places ("FB x, transition y; latched in FC z, network 7"): the last part is where the
+   * alarm bit is written. Returns { block, network, symbol, href }.
+   */
+  function alarmWhere(a) {
+    const parts = String(a.location || "").split(";").map((x) => x.trim()).filter(Boolean);
+    const part = parts.length ? parts[parts.length - 1] : "";
+    const block = PK.blockOf(part) || PK.blockOf(a.location);
+    if (!block) return {};
+    const network = (part.match(/\bnetwork\s+(\d+)/i) || [])[1] || null;
+    const def = state.model && (state.model.alarms || []).find((x) => x.id === a.id);
+    const tag = def && def.tag && (state.model.tags || []).find((t) => t.id === def.tag);
+    const symbol = tag && tag.symbol && tag.symbol.startsWith('"') ? tag.symbol : null;
+    const href = "#/logic/" + [block, network ? "network-" + network : null, symbol ? "@" + symbol : null].filter(Boolean).map(encodeURIComponent).join("/");
+    return { block, network, symbol, href };
+  }
+
   function relatedEquipment(alarm) {
     const loc = parseLoc(alarm.location);
     return ((state.status && state.status.equipment) || []).filter((e) => {
@@ -201,7 +219,8 @@
       const atStart = alarms.filter((x) => x.atStart).length;
       const firstKnown = alarms.length > 1 && (!alarms[0].atStart || atStart === 1);
       const loc = parseLoc(a.location);
-      const path = callPath(loc.block);
+      const where = alarmWhere(a);
+      const path = callPath(where.block || loc.block);
 
       const chips = alarms.length > 1 ? `<div class="alarm-chips">${alarms.map((x, i) =>
         `<button class="alarm-chip ${x.severity === "WARNING" ? "warning" : ""} ${x.id === a.id ? "sel" : ""}" data-alarm="${esc(x.id)}">
@@ -220,7 +239,7 @@
           <h1>${esc(a.text)}</h1>
           ${a.condition ? `<p class="sub">${esc(a.condition)}</p>` : ""}
           <div class="actions"><button class="btn" data-ask="Why is alarm ${esc(a.id)} on, and how do I fix it?">Ask about this alarm</button>
-            ${loc.block ? `<a class="btn b" href="#/logic/${[loc.block, loc.instance, loc.output].filter(Boolean).map(encodeURIComponent).join("/")}">Show where it is set</a>` : ""}</div>
+            ${where.block ? `<a class="btn b" href="${esc(where.href)}">Show where it is set</a>` : ""}</div>
           <div class="kpis" style="margin-top:34px">${kpis.map(([v, l, c]) => `<div class="k ${c || ""}"><b>${esc(v)}</b><span>${esc(l)}</span></div>`).join("")}</div>`)
 
         + sec("alt", `<h2>Fix it</h2><p class="sub">Work down the list. Tap a step when it is done. The ticks are only on this screen.</p>
@@ -233,9 +252,9 @@
           ${eqs.length ? `<div class="grid ${eqs.length > 1 ? "two" : ""}">${eqs.map((e) => `<div class="card stack">${eqCard(e, true)}</div>`).join("")}</div>` : ""}`)
 
         + sec("dark", `<h2>Where in the software</h2><p class="sub">Where the program sets this alarm, from the main cycle down to the bit.</p>
-          ${loc.block ? `<div class="path">${(path || [{ block: loc.block }]).map((p) => `<span>${esc(p.block)}${p.instance ? " " + esc(p.instance) : ""}</span>`).join("<i>›</i>")}${loc.output ? `<i>›</i><span>${esc(loc.output)}</span>` : ""}</div>` : ""}
+          ${where.block ? `<div class="path">${(path || [{ block: where.block }]).map((p) => `<span>${esc(p.block)}${p.instance ? " " + esc(p.instance) : ""}</span>`).join("<i>›</i>")}${where.network ? `<i>›</i><span>Network ${esc(where.network)}</span>` : ""}${where.symbol ? `<i>›</i><span>${esc(where.symbol)}</span>` : ""}</div>` : ""}
           <p class="muted small" style="margin:14px 0 22px">${esc(a.location || "")}</p>
-          <div class="actions">${links(loc)}</div>`)
+          <div class="actions">${where.block ? `<a class="btn white" href="${esc(where.href)}">Show the logic</a><a class="btn b" href="${esc(where.href.replace("#/logic/", "#/code/"))}">Show the code</a>` : links(loc)}</div>`)
 
         + sec("alt", `<h2>What is going on</h2>
           <div class="grid two"><div>${s.summary.map((l) => `<p class="sub" style="margin-bottom:12px">${esc(l)}</p>`).join("")}</div>
@@ -413,7 +432,7 @@
                 ${a.causes.length ? `<h3>Likely causes</h3><ol class="causes small">${a.causes.map((c, i) => `<li><b>${i + 1}</b><span>${esc(c)}</span></li>`).join("")}</ol>` : ""}</div>
               <div>${a.fix.length ? `<h3>How to fix</h3><ol class="fix small">${a.fix.map((c) => `<li style="font-size:15px;cursor:default">${esc(c)}</li>`).join("")}</ol>` : ""}
                 <div class="actions" style="margin-top:14px">${on ? `<a class="btn small" href="#/alarm">Open on Active alarm</a>` : ""}
-                ${(() => { const l = parseLoc(a.location); return l.block ? `<a class="btn b small" href="#/logic/${[l.block, l.instance, l.output].filter(Boolean).map(encodeURIComponent).join("/")}">Show where it is set</a>` : ""; })()}
+                ${(() => { const w = alarmWhere(a); return w.block ? `<a class="btn b small" href="${esc(w.href)}">Show where it is set</a>` : ""; })()}
                 <button class="btn b small" data-ask="Explain alarm ${esc(a.id)}: when does it come, why, and how is it fixed?">Ask</button></div></div>
             </div>` : ""}
         </li>`;
