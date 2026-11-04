@@ -149,7 +149,7 @@ namespace TiaImporter
                                     _log.WriteLine($"  source {item.File.Name}");
                                     var existing = sw.ExternalSourceGroup.ExternalSources.Find(item.File.Name);
                                     existing?.Delete();
-                                    var source = sw.ExternalSourceGroup.ExternalSources.CreateFromFile(item.File.Name, item.File.FullName);
+                                    var source = sw.ExternalSourceGroup.ExternalSources.CreateFromFile(item.File.Name, WithByteOrderMark(item.File));
                                     source.GenerateBlocksFromSource();
                                     break;
                                 case "type":
@@ -343,6 +343,21 @@ namespace TiaImporter
         {
             foreach (PlcTagTable t in group.TagTables) yield return t;
             foreach (PlcTagTableUserGroup sub in group.Groups) foreach (var t in AllTables(sub)) yield return t;
+        }
+
+        /// <summary>
+        /// TIA reads an external source without a UTF-8 byte order mark as ANSI, so "DO_BöackPBLED" arrives as
+        /// "DO_BÃ¶ackPBLED" and is "not defined". A file with non-ASCII text and no mark is passed on as a copy with the mark.
+        /// </summary>
+        private static string WithByteOrderMark(FileInfo file)
+        {
+            var bytes = File.ReadAllBytes(file.FullName);
+            var hasBom = bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF;
+            if (hasBom || bytes.All(b => b < 0x80)) return file.FullName;
+            var dir = Directory.CreateDirectory(Path.Combine(file.DirectoryName, "utf8"));
+            var copy = Path.Combine(dir.FullName, file.Name);
+            File.WriteAllText(copy, new System.Text.UTF8Encoding(false).GetString(bytes), new System.Text.UTF8Encoding(true));
+            return copy;
         }
     }
 }

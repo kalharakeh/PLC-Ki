@@ -77,6 +77,10 @@ public sealed class BlockPackage
     public static bool IsPackageFile(string name) => FileNamePattern.IsMatch(name) && name != ManifestFile && name != ReportFile;
 
     /// <summary>Writes the package. Package files from an earlier version that are no longer in it are deleted.</summary>
+    /// <summary>A file TIA imports as an external source (SCL, DB, UDT, STL text).</summary>
+    public static bool IsSource(string name) =>
+        Path.GetExtension(name).ToLowerInvariant() is ".scl" or ".db" or ".udt" or ".awl";
+
     public void Save(string dir)
     {
         Directory.CreateDirectory(dir);
@@ -86,7 +90,9 @@ public sealed class BlockPackage
         foreach (var f in Files)
         {
             if (!FileNamePattern.IsMatch(f.Name)) throw new InvalidOperationException($"Not a package file name: {f.Name}");
-            File.WriteAllText(Path.Combine(dir, f.Name), f.Text, new UTF8Encoding(false));
+            // TIA reads an external source without a byte order mark as ANSI, which turns a tag like "DO_BöackPBLED" into
+            // "DO_BÃ¶ackPBLED" ("not defined"). With the mark it reads UTF-8.
+            File.WriteAllText(Path.Combine(dir, f.Name), f.Text, new UTF8Encoding(IsSource(f.Name)));
         }
         File.WriteAllText(Path.Combine(dir, ReviewFile), Review.Length > 0 ? Review + "\n" : "", new UTF8Encoding(false));
     }

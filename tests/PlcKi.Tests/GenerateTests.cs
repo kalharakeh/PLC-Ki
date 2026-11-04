@@ -80,6 +80,24 @@ END_FUNCTION_BLOCK
     }
 
     [Fact]
+    public void Sources_are_saved_with_a_byte_order_mark_so_TIA_reads_umlauts()
+    {
+        var dir = Directory.CreateTempSubdirectory("plcki-bom-").FullName;
+        try
+        {
+            var p = new BlockPackage { Review = "r" };
+            p.Files.Add(new PackageFile("30_FC_Map.scl", "FUNCTION \"FC_Map\" : Void\nBEGIN\n\"DO_BöackPBLED\" := TRUE;\nEND_FUNCTION\n"));
+            p.Files.Add(new PackageFile("40_Tags.json", "{\"tables\":[]}"));
+            p.Save(dir);
+            var scl = File.ReadAllBytes(Path.Combine(dir, "30_FC_Map.scl"));
+            Assert.Equal(new byte[] { 0xEF, 0xBB, 0xBF }, scl[..3]);
+            Assert.Contains("DO_BöackPBLED", File.ReadAllText(Path.Combine(dir, "30_FC_Map.scl")));
+            Assert.Equal((byte)'{', File.ReadAllBytes(Path.Combine(dir, "40_Tags.json"))[0]);   // JSON stays without
+        }
+        finally { Directory.Delete(dir, true); }
+    }
+
+    [Fact]
     public void Finds_typical_mistakes()
     {
         var graph = File.ReadAllText(Path.Combine(RepoRoot(), "plc-demo", "graph", "16_FB_BatchSequence.xml"));
