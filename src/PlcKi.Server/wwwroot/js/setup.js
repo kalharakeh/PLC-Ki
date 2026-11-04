@@ -275,7 +275,7 @@ const PKSetup = (() => {
       <div class="legend"><span><span class="sw" style="background:var(--ok)"></span>checked, working</span><span><span class="sw" style="background:var(--fault)"></span>no answer</span><span><span class="sw" style="background:var(--muted)"></span>not checked yet</span></div>`;
   }
 
-  const setupNav = (here) => `<div class="subnav">${[["start", "Get started"], ["connections", "Connections"], ["program", "Program"], ["settings", "Settings"]]
+  const setupNav = (here) => `<div class="subnav">${[["start", "Get started"], ["connections", "Connections"], ["program", "Program"], ["settings", "Settings"], ["qr", "QR labels"]]
     .map(([k, l]) => `<a class="btn ${k === here ? "" : "b"} small" href="#/setup/${k}">${l}</a>`).join("")}</div>`;
 
   function choice(name, current, options) {

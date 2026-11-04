@@ -215,6 +215,7 @@
           actions: n ? `<button class="btn" data-ask="Why is ${esc(blocked[0].name)} blocked, and what do I check?">Ask why</button><a class="btn b" href="#/plant">See the plant</a>`
             : `<a class="btn" href="#/plant">See the plant</a><button class="btn b" data-ask="What is the machine doing right now?">Ask</button>`,
         }) + (settingsNotice(s) ? sec("", settingsNotice(s)) : "")
+        + (window.PKMemory ? PKMemory.unnotedBlock() : "")
         + (n ? sec("alt", `<h2>Blocked now</h2><p class="sub">The program asks for ${n === 1 ? "this device" : "these devices"}, but ${n === 1 ? "its" : "their"} output stays off.</p>
             <div class="grid ${n > 1 ? "two" : ""}">${blocked.map((e) => `<div class="card stack">${eqCard(e, true)}</div>`).join("")}</div>`) : "")
         + (seq ? sec(n ? "" : "alt", `<h2>${esc(seq.name)}</h2>${n ? `<p class="sub">${esc(seq.explanation)}</p>` : ""}${stepStrip(seq)}${chartLink(seq)}
@@ -257,6 +258,9 @@
             ${where.block ? `<a class="btn b" href="${esc(where.href)}">Show where it is set</a>` : ""}</div>
           <div class="kpis" style="margin-top:34px">${kpis.map(([v, l, c]) => `<div class="k ${c || ""}"><b>${esc(v)}</b><span>${esc(l)}</span></div>`).join("")}</div>`)
 
+        + (window.PKMemory ? sec("", `<h2>This alarm before</h2><p class="sub">From the machine memory: every time PLC-Ki saw this alarm, and what the technicians found.</p>
+            <div class="card">${PKMemory.alarmBlock(a.id)}</div>`) : "")
+
         + (checks.length ? sec("", `<h2>What the program checks</h2><p class="sub">The comparisons behind this alarm, ${a.checksAtAlarm ? "with the values from the last read before it came" : "with the values now"}. ✗ is the one that failed.</p>
             <div class="card"><ul class="conds">${checks.map(cond).join("")}</ul></div>`) : "")
         + sec("alt", `<h2>Fix it</h2><p class="sub">Work down the list. Tap a step when it is done. The ticks are only on this screen.</p>
@@ -287,6 +291,7 @@
         PK.draw();
       });
       bindAsk(page);
+      if (window.PKMemory) PKMemory.bind(page);
     },
   });
 
@@ -325,7 +330,7 @@
         actions: `<button class="btn" data-ask="${attention.length ? `Why is ${esc(attention[0].name)} ${esc(attention[0].blockedBy ? "blocked" : attention[0].state)}, and what do I check?` : "What is the machine doing right now?"}">Ask about it</button>${s.activeAlarms.length ? `<a class="btn b" href="#/alarm">${s.activeAlarms.length} active alarm${s.activeAlarms.length > 1 ? "s" : ""}</a>` : ""}`,
         extra: (s.overview.length ? `<div class="kpis plant-kpis">${s.overview.slice(0, 8).map((v) => `<div class="k"><b>${esc(v.text)}</b><span>${esc(v.label)}</span></div>`).join("")}</div>` : "")
           + `<nav class="ptabs" aria-label="Plant">${PLANT_TABS.filter(([k]) => (k !== "exchange" || s.exchange.length) && (k !== "settings" || (s.settings || []).length)).map(([k, l]) =>
-            `<a href="#/plant${k === "overview" ? "" : "/" + k}" class="${k === tab ? "on" : ""}" ${k === tab ? 'aria-current="page"' : ""}>${l}${(k === "devices" || k === "settings") && counts[k] ? ` <span class="count warn">${counts[k]}</span>` : ""}</a>`).join("")}</nav>`,
+            `<a href="#/plant${k === "overview" ? "" : "/" + k}" class="${k === tab ? "on" : ""}" ${k === tab ? 'aria-current="page"' : ""}>${l}${(k === "devices" || k === "settings") && counts[k] ? ` <span class="count warn">${counts[k]}</span>` : ""}</a>`).join("")}<a href="#/station">Stations</a></nav>`,
       });
 
       let body = "";
@@ -463,7 +468,7 @@
                 <div class="actions" style="margin-top:14px">${on ? `<a class="btn small" href="#/alarm">Open on Active alarm</a>` : ""}
                 ${(() => { const w = alarmWhere(a); return w.block ? `<a class="btn b small" href="${esc(w.href)}">Show where it is set</a>` : ""; })()}
                 <button class="btn b small" data-ask="Explain alarm ${esc(a.id)}: when does it come, why, and how is it fixed?">Ask</button></div></div>
-            </div>` : ""}
+            </div>${window.PKMemory ? `<div class="mem-in-row"><h3>This alarm before</h3>${PKMemory.alarmBlock(a.id, { compact: true })}</div>` : ""}` : ""}
         </li>`;
       }).join("");
       const recent = !events ? `<p class="muted" style="margin:0">Loading…</p>` : events.length ? `<ul class="list events">${events.slice(0, recentAll ? events.length : 4).map((e) => {
@@ -499,7 +504,7 @@
       if (ar) ar.onclick = () => { alarmFilter = ""; alarmKind = "all"; PK.draw(); };
       page.querySelectorAll("[data-open]").forEach((li) => {
         li.onclick = (e) => {
-          if (e.target.closest("a,button")) return;
+          if (e.target.closest("a,button,.mem-in-row")) return;
           openAlarm = openAlarm === li.dataset.open ? null : li.dataset.open;
           PK.setHash(openAlarm ? "#/alarms/" + encodeURIComponent(openAlarm) : "#/alarms");
           deepLink = openAlarm;
@@ -508,6 +513,7 @@
         li.onkeydown = (e) => { if ((e.key === "Enter" || e.key === " ") && e.target === li) { e.preventDefault(); li.click(); } };
       });
       bindAsk(page);
+      if (window.PKMemory) PKMemory.bind(page);
       if (scrollToAlarm) {
         // Wait until the opened alarm is on the page (the first draws can still be "Loading"), then bring it into view
         const id = "alarm-" + scrollToAlarm;
@@ -519,5 +525,5 @@
     },
   });
 
-  window.PKLive = { parseLoc, bindAsk };
+  window.PKLive = { parseLoc, bindAsk, stepStrip, seqState };
 })();

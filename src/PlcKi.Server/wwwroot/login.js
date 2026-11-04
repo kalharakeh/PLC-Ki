@@ -2,7 +2,8 @@
 (() => {
   const $ = id => document.getElementById(id);
   const next = new URLSearchParams(location.search).get('next');
-  const target = next && next.startsWith('/') && !next.startsWith('//') ? next : '/';
+  // A scanned QR label opens /#/station/...: the redirect to this page keeps that part, so go back to it after login
+  const target = next && next.startsWith('/') && !next.startsWith('//') ? next : '/' + (location.hash.startsWith('#/') ? location.hash : '');
   let setup = false;
 
   function show(msg) {
