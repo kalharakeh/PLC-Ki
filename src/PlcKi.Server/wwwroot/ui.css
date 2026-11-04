@@ -1193,3 +1193,7 @@ tr.on td { background: var(--accent-soft); }
 /* Alarm checks and machine settings */
 .checks-list { list-style: none; margin: 0; padding: 0; }
 .setting-bad { color: var(--fault-ink); }
+/* Plant > Settings: the HMI panel's operator settings, grouped by screen */
+.hmi-tbl tr.grp td { padding-top: 16px; border-bottom: 1px solid var(--line-strong); color: var(--steel); }
+.hmi-tbl td.mono { word-break: break-word; }
+@media (max-width: 640px) { .hmi-tbl td.mono { font-size: 11.5px; } }

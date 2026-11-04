@@ -298,6 +298,54 @@
   // Overview (what needs attention, the sequence, the machine at a glance), Devices (list and the picked one),
   // Values over time, and Data exchange. The tab is in the address: #/plant/devices/M201, #/plant/values.
   const PLANT_TABS = [["overview", "Overview"], ["devices", "Devices"], ["values", "Values over time"], ["settings", "Settings"], ["exchange", "Data exchange"]];
+  // The HMI panel's operator settings and buttons (from the program export), loaded once for the Settings tab
+  const H = { data: null, error: null, loading: false, q: "", shown: [] };
+  async function loadHmi() {
+    if (H.data || H.error || H.loading) return;
+    H.loading = true;
+    try {
+      const r = await PK.api("GET", "/api/program/hmi");
+      if (r.available) H.data = r; else H.error = r.error || "No HMI in the program export.";
+    } catch (e) { H.error = e.message; }
+    H.loading = false;
+    PK.draw();
+  }
+  window.addEventListener("pk:program-changed", () => { H.data = null; H.error = null; });
+  const hmiLive = (f) => (window.PKTags ? PKTags.live({ symbol: f.symbol, type: f.type }) : "");
+
+  /** Every value an operator sets on the HMI panel, by screen, with its live value; then the buttons. */
+  function hmiSettingsHtml(s) {
+    if (H.loading || (!H.data && !H.error)) return `<p class="faint small">Reading the HMI panel…</p>`;
+    if (!H.data) return `<p class="faint small">${esc(H.error)}</p>`;
+    const d = H.data;
+    const q = H.q.trim().toLowerCase();
+    const hit = (f) => !q || [f.label, f.screen, f.symbol, f.comment].some((x) => String(x || "").toLowerCase().includes(q));
+    const rows = d.settings.filter(hit);
+    const take = rows.slice(0, 300);
+    H.shown = take.filter((f) => f.type && !f.modelTag).concat(d.commands.filter(hit).slice(0, 100).filter((f) => f.type && !f.modelTag));
+    const modelVal = (f) => { const m = f.modelTag && (s.settings || []).find((x) => x.id === f.modelTag); return m ? `<span class="chip" style="margin:0">${esc(m.value)}</span>` : null; };
+    const byScreen = new Map();
+    for (const f of take) { const k = (f.screenKind === "Popup" ? "Pop-up " : "Screen ") + f.screen + (f.screenNumber != null ? ` (no. ${f.screenNumber})` : ""); if (!byScreen.has(k)) byScreen.set(k, []); byScreen.get(k).push(f); }
+    const panels = d.panels.map((p) => `${esc(p.name)}${p.type ? ` · ${esc(p.type)}` : ""}`).join(", ");
+    const cmds = d.commands.filter(hit);
+    return `<div class="card stack">
+        <div><b>On the HMI panel</b> <span class="faint small">${panels} · ${d.settings.length} values the operator can change${d.commands.length ? `, ${d.commands.length} buttons` : ""}</span></div>
+        <input class="input" type="search" placeholder="Find a setting, screen or tag" value="${esc(H.q)}" id="hmi-q" aria-label="Find a setting on the HMI">
+        ${take.length ? `<table class="tbl hmi-tbl"><tr><th>On the panel</th><th>Now</th><th>PLC value</th></tr>
+          ${[...byScreen].map(([screen, fs]) => `<tr class="grp"><td colspan="3"><b>${esc(screen)}</b></td></tr>`
+            + fs.map((f) => `<tr><td>${esc(f.label || "(no text)")}${f.unit ? ` <span class="faint">[${esc(f.unit)}]</span>` : ""}${f.authorization ? ` <span class="faint small" title="User group needed on the panel">· ${esc(f.authorization)}</span>` : ""}</td>
+              <td>${modelVal(f) || (f.type ? hmiLive(f) : `<span class="faint small">not read</span>`)}</td>
+              <td class="mono small">${esc(f.symbol)}${f.comment ? `<br><span class="muted" style="font-family:inherit">${esc(f.comment)}</span>` : ""}</td></tr>`).join("")).join("")}
+          </table>` : `<p class="muted">${q ? "No setting matches." : "The panel has no input fields linked to the PLC."}</p>`}
+        ${rows.length > take.length ? `<p class="faint small">Showing ${take.length} of ${rows.length}. Search to narrow it down.</p>` : ""}
+        ${cmds.length ? `<details class="more"><summary>Buttons and switches that change PLC values (${cmds.length})</summary>
+          <table class="tbl hmi-tbl"><tr><th>On the panel</th><th>Does</th><th>PLC value</th><th>Now</th></tr>
+          ${cmds.slice(0, 100).map((f) => `<tr><td>${esc(f.where)}</td><td class="small">${esc(f.action || "")}</td><td class="mono small">${esc(f.symbol)}</td><td>${f.type ? hmiLive(f) : ""}</td></tr>`).join("")}
+          </table></details>` : ""}
+        <p class="faint small">Read from the HMI project in the TIA archive. PLC-Ki only reads these values; change them on the panel.</p>
+      </div>`;
+  }
+
   const problemOf = (e) => !!e.blockedBy || (e.level !== "ok" && e.level !== "idle");
   const rank = (e) => (e.level === "fault" || e.level === "bad" ? 0 : e.blockedBy ? 1 : e.level === "warn" ? 2 : 3);
 
@@ -324,10 +372,13 @@
         sub: main ? (main.halted ? esc("Halted: " + (main.haltReasons.join("; ") || "the outputs are off.")) : waitsFor.length ? esc("Waiting for: " + waitsFor.join("; ")) : esc(main.does || "")) : esc(s.summary[0] || ""),
         actions: `<button class="btn" data-ask="${attention.length ? `Why is ${esc(attention[0].name)} ${esc(attention[0].blockedBy ? "blocked" : attention[0].state)}, and what do I check?` : "What is the machine doing right now?"}">Ask about it</button>${s.activeAlarms.length ? `<a class="btn b" href="#/alarm">${s.activeAlarms.length} active alarm${s.activeAlarms.length > 1 ? "s" : ""}</a>` : ""}`,
         extra: (s.overview.length ? `<div class="kpis plant-kpis">${s.overview.slice(0, 8).map((v) => `<div class="k"><b>${esc(v.text)}</b><span>${esc(v.label)}</span></div>`).join("")}</div>` : "")
-          + `<nav class="ptabs" aria-label="Plant">${PLANT_TABS.filter(([k]) => (k !== "exchange" || s.exchange.length) && (k !== "settings" || (s.settings || []).length)).map(([k, l]) =>
+          + `<nav class="ptabs" aria-label="Plant">${PLANT_TABS.filter(([k]) => (k !== "exchange" || s.exchange.length) && (k !== "settings" || (s.settings || []).length || (H.data && H.data.settings.length))).map(([k, l]) =>
             `<a href="#/plant${k === "overview" ? "" : "/" + k}" class="${k === tab ? "on" : ""}" ${k === tab ? 'aria-current="page"' : ""}>${l}${(k === "devices" || k === "settings") && counts[k] ? ` <span class="count warn">${counts[k]}</span>` : ""}</a>`).join("")}</nav>`,
       });
 
+      loadHmi();
+      if (window.PKTags) PKTags.watch("plant", () => H.shown);   // live values of the panel's settings
+      if (tab !== "settings") H.shown = [];
       let body = "";
       if (tab === "overview") {
         const alarmRows = s.activeAlarms.map((x) => `<li><a class="al ${x.severity === "WARNING" ? "w" : ""}" href="#/alarm">
@@ -384,12 +435,14 @@
       } else if (tab === "values") {
         body = sec("", V ? V.trends() : `<p class="muted">Charts are not available.</p>`);
       } else if (tab === "settings") {
-        body = sec("", `<p class="sub">Values an operator or engineer sets on the HMI or in the recipe that the machine needs. ✗ means the machine cannot work with the value it has now.</p>
+        const where = (x) => x.hmi || (H.data && H.data.bySetting[x.id]) || "";
+        body = sec("", ((s.settings || []).length ? `<p class="sub">Values an operator or engineer sets on the HMI or in the recipe that the machine needs. ✗ means the machine cannot work with the value it has now.</p>
           <div class="card"><table class="tbl"><tr><th></th><th>Setting</th><th>Value</th><th>What it does</th></tr>
             ${(s.settings || []).map((x) => `<tr><td>${x.valid === false ? `<span class="mark no" aria-label="not OK">✗</span>` : x.valid === true ? `<span class="mark yes" aria-label="OK">✓</span>` : ""}</td>
-              <td><b>${esc(x.label)}</b></td><td class="val ${x.valid === false ? "setting-bad" : ""}">${esc(x.value)}</td>
-              <td class="muted">${esc(x.text || "")}${x.valid === false && x.problem ? `<br><span class="setting-bad">${esc(x.problem)}</span>` : ""}</td></tr>`).join("")}
-          </table></div>`);
+              <td><b>${esc(x.label)}</b>${where(x) ? `<br><span class="faint small">On the panel: ${esc(where(x))}</span>` : ""}</td><td class="val ${x.valid === false ? "setting-bad" : ""}">${esc(x.value)}</td>
+              <td class="muted">${esc(x.text || "")}${x.valid === false && x.problem ? `<br><span class="setting-bad">${esc(x.problem)}${where(x) ? `. Change it on the panel: ${esc(where(x))}` : ""}</span>` : ""}</td></tr>`).join("")}
+          </table></div>` : `<p class="sub">Values an operator sets on the HMI panel, with what they are now.</p>`)
+          + `<div style="margin-top:18px">${hmiSettingsHtml(s)}</div>`);
       } else {
         body = sec("", `<div class="card"><table class="tbl xchg"><tr><th>With</th><th>Signal</th><th>Value</th><th>Meaning</th></tr>
             ${s.exchange.map((x) => `<tr><td class="with"><b title="${x.direction === "in" ? "from" : "to"} ${esc(x.partner)}">${x.direction === "in" ? "← from" : "→ to"} ${esc(x.partner)}</b></td>
@@ -412,6 +465,8 @@
         PK.draw();
         if (innerWidth <= 1000) setTimeout(() => { const el = page.querySelector("[data-dev]"); if (el) window.scrollTo({ top: el.getBoundingClientRect().top + scrollY - 70, behavior: "instant" }); }, 0);
       });
+      const hq = page.querySelector("#hmi-q");
+      if (hq) hq.oninput = () => { H.q = hq.value; PK.draw(); };
       const es = page.querySelector("#eq-search");
       if (es) es.oninput = () => { eqQuery = es.value; PK.draw(); };
       page.querySelectorAll("[data-eqf]").forEach((b) => b.onclick = () => { eqOnlyProblems = b.dataset.eqf === "problems"; PK.draw(); });
