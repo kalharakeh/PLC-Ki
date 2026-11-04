@@ -12,6 +12,7 @@ namespace PlcKi.Server.Jobs;
 
 public sealed record JobInput(string? Text);
 public sealed record ExportRequest(string? Archive);
+public sealed record RefreshRequest(string? Project);
 public sealed record BuildRequest(string? Export, string? Plc, string? Name, string? Effort, bool Compare);
 public sealed record UseProgramRequest(string? Model, string? Export);
 public sealed record DevelopRequest(
@@ -115,6 +116,20 @@ public static class SetupEndpoints
             return Results.Ok(job.View(0));
         });
 
+        // "Refresh from TIA": export the TIA project as it is now and show it at once (code, logic, tags, addresses).
+        // The machine model stays; only a new model build re-reads alarms and steps.
+        api.MapPost("/import/refresh", (RefreshRequest req, JobService jobs, TiaConnection tia, PlantContext ctx, PlcKiOptions opt,
+            SettingsStore store, ProgramService program, HttpContext http) =>
+        {
+            var project = (req.Project ?? "").Trim();
+            if (project.Length == 0) project = store.Current().TiaProject?.Trim() ?? "";
+            if (project.Length == 0) throw new JobException("Choose the TIA project to read.");
+            tia.Client();   // checks the settings
+            var job = StartRefresh(jobs, tia, ctx, opt, store, program, project, User(http));
+            try { var st = store.Current(); if (st.TiaProject != project) { st.TiaProject = project; store.Save(st); } } catch (PlantException) { }
+            return Results.Ok(job.View(0));
+        });
+
         api.MapPost("/import/build", (BuildRequest req, JobService jobs, PlantContext ctx, PlcKiOptions opt, SettingsStore store, HttpContext http) =>
         {
             var export = Inside(ctx, req.Export ?? "", "exports", allowApp: true);
@@ -206,7 +221,8 @@ public static class SetupEndpoints
             return File.Exists(path) ? Results.Text(File.ReadAllText(path), "text/plain; charset=utf-8") : Results.NotFound();
         });
 
-        api.MapPost("/generator/run", (DevelopRequest req, JobService jobs, TiaConnection tia, PlantContext ctx, PlcKiOptions opt, SettingsStore store, HttpContext http) =>
+        api.MapPost("/generator/run", (DevelopRequest req, JobService jobs, TiaConnection tia, PlantContext ctx, PlcKiOptions opt, SettingsStore store,
+            ProgramService program, HttpContext http) =>
         {
             var name = (req.Package ?? "").Trim();
             if (!SafeName.IsMatch(name)) throw new JobException("Give the job a short name (letters, digits, - and _), for example pump-fb.");
@@ -244,7 +260,16 @@ public static class SetupEndpoints
                 title += " → real PLC";
             }
             else if (download != "none") throw new JobException("Download is none, plcsim or real.");
-            var job = jobs.Start("develop", title, User(http), args, tia.JobEnvironment(), new() { ["package"] = name });
+            // Blocks went into the program PLC-Ki shows: read it again afterwards, so Code, Logic and Tags show them too
+            var sameProgram = string.Equals(program.Project, ProjectName(project), StringComparison.OrdinalIgnoreCase);
+            var user = User(http);
+            var job = jobs.Start("develop", title, user, args, tia.JobEnvironment(), new() { ["package"] = name },
+                onExit: done =>
+                {
+                    if (!sameProgram || done.ExitCode != 0) return;
+                    try { StartRefresh(jobs, tia, ctx, opt, store, program, project, user); }
+                    catch (JobException) { /* another job started meanwhile: the page offers the refresh button */ }
+                });
             // Remember the project for next time (best effort: never stops the job)
             try { var st = store.Current(); if (st.TiaProject != project) { st.TiaProject = project; store.Save(st); } } catch (PlantException) { }
             return Results.Ok(job.View(0));
@@ -254,6 +279,36 @@ public static class SetupEndpoints
     }
 
     // ---- helpers ----
+
+    /// <summary>The project's file name without folder and extension; the path is a Windows path on the TIA PC.</summary>
+    public static string ProjectName(string project) =>
+        Path.GetFileNameWithoutExtension(project.Replace('\\', '/').Split('/').Last());
+
+    /// <summary>
+    /// Starts the export of <paramref name="project"/> on the TIA PC. When it succeeds, the program pages show it at once
+    /// and it is saved as the program export (no restart), linked to the running model.
+    /// </summary>
+    internal static Job StartRefresh(JobService jobs, TiaConnection tia, PlantContext ctx, PlcKiOptions opt, SettingsStore store,
+        ProgramService program, string project, string user)
+    {
+        var name = ExportCommand.SafeName(ProjectName(project));
+        var outFile = Path.Combine(Dir(ctx, "exports"), name + "-from-TIA.zip");
+        var tmp = Path.Combine(Dir(ctx, "refresh"), name + "-from-TIA.zip");   // only replaces the shown export once it is complete
+        return jobs.Start("refresh", $"Refresh the program from TIA ({name})", user,
+            new[] { "export", "--tia", tia.Url!, "--project", project, "--out", tmp },
+            tia.JobEnvironment(), new() { ["export"] = outFile },
+            beforeFinish: (job, code) =>
+            {
+                if (code != 0 || !File.Exists(tmp)) { try { File.Delete(tmp); } catch (IOException) { } return; }
+                File.Move(tmp, outFile, overwrite: true);
+                if (program.Reload(outFile) is { } error) { job.Line("PLC-Ki cannot show this export: " + error); return; }
+                opt.Export = outFile;
+                try { store.SaveExportLive(outFile); }
+                catch (PlantException ex) { job.Line("Shown now, but not saved for the next start: " + ex.Message); }
+                if (!string.IsNullOrWhiteSpace(opt.Model)) store.LinkExport(ctx.ResolveAppPath(opt.Model), outFile);
+                job.Line("PLC-Ki now shows this program: Code, Logic and Tags use the new addresses. Alarms and steps still come from the machine model.");
+            });
+    }
 
     private static string User(HttpContext http) => http.User.Identity?.Name ?? "?";
 

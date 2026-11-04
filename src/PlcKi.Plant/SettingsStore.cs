@@ -153,6 +153,20 @@ public sealed class SettingsStore
         }
     }
 
+    /// <summary>
+    /// Saves a new program export that the program pages already show (they reload it themselves), so this change
+    /// alone does not ask for a restart.
+    /// </summary>
+    public void SaveExportLive(string export)
+    {
+        var s = Current();
+        var restartWas = _ctx.RestartNeeded;
+        s.Export = export;
+        Save(s);
+        _ctx.RestartNeeded = restartWas;
+        if (_ctx.Running != null) _ctx.Running.Export = Current().Export;   // what settings.json (or a command-line option over it) says now
+    }
+
     public void Save(PlantSettings s)
     {
         // Another model was picked but the export was left as it was: take the model's own export, so Code and

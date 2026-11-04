@@ -85,6 +85,8 @@ public sealed class ProgramExport
 {
     public string Project { get; private set; } = "";
     public string? Archive { get; private set; }
+    /// <summary>When TIA wrote the export (UTC), from manifest.json.</summary>
+    public DateTimeOffset? ExportedAt { get; private set; }
     public List<ExportPlc> Plcs { get; } = new();
     public List<string> Problems { get; } = new();
 
@@ -113,6 +115,8 @@ public sealed class ProgramExport
         var m = doc.RootElement;
         export.Project = Str(m, "project") ?? Path.GetFileName(root);
         export.Archive = Str(m, "archive");
+        export.ExportedAt = DateTimeOffset.TryParse(Str(m, "exportedAt"), System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.AssumeUniversal, out var at) ? at : null;
         if (m.TryGetProperty("problems", out var probs) && probs.ValueKind == JsonValueKind.Array)
             export.Problems.AddRange(probs.EnumerateArray().Select(p => p.ToString()));
 

@@ -12,10 +12,12 @@ public static class ExportCommand
 {
     public const string Usage = """
 Usage: PlcKi.Server export --tia <http://tia-pc:5090> --archive <project.zap20> --out <export.zip>
+       PlcKi.Server export --tia <http://tia-pc:5090> --project <project.ap20 on the TIA PC> --out <export.zip>
 
   --tia <url>       the TIA PC running "TiaImporter serve" (http://localhost:5090 when it is this PC)
   --token <secret>  the token serve was started with (or set PLCKI_VM_TOKEN)
   --archive <file>  the TIA Portal archive, on this PC
+  --project <file>  or: a TIA project on the TIA PC, exported as it is now ("Refresh from TIA")
   --out <file>      where to save the export zip
 """;
 
@@ -27,27 +29,39 @@ Usage: PlcKi.Server export --tia <http://tia-pc:5090> --archive <project.zap20> 
             if (!args[i].StartsWith("--")) { Console.Error.Write(Usage); return 2; }
             o[args[i][2..]] = args[i + 1];
         }
-        if (!o.ContainsKey("tia") || !o.ContainsKey("archive") || !o.ContainsKey("out")) { Console.Error.Write(Usage); return 2; }
-        var archive = Path.GetFullPath(o["archive"]);
-        if (!File.Exists(archive)) { Console.Error.WriteLine($"Archive not found: {archive}"); return 2; }
+        var fromProject = o.GetValueOrDefault("project");
+        if (!o.ContainsKey("tia") || (!o.ContainsKey("archive") && fromProject == null) || !o.ContainsKey("out")) { Console.Error.Write(Usage); return 2; }
+        var archive = fromProject == null ? Path.GetFullPath(o["archive"]) : "";
+        if (fromProject == null && !File.Exists(archive)) { Console.Error.WriteLine($"Archive not found: {archive}"); return 2; }
         var token = o.GetValueOrDefault("token") ?? Environment.GetEnvironmentVariable("PLCKI_VM_TOKEN");
         if (vm == null && string.IsNullOrWhiteSpace(token)) { Console.Error.WriteLine("Give --token or set PLCKI_VM_TOKEN."); return 2; }
         vm ??= new VmClient(o["tia"], token!);
         vm.Progress ??= text => Console.Write(text);
 
-        // The TIA PC accepts plain names only
-        var name = SafeName(Path.GetFileNameWithoutExtension(archive)) + "-" + DateTime.Now.ToString("yyyyMMdd-HHmmss");
+        // The TIA PC accepts plain names only (the project path is on the TIA PC, so split it by hand: it may be a Windows path)
+        var source = fromProject ?? archive;
+        var baseName = Path.GetFileNameWithoutExtension(source.Replace('\\', '/').Split('/').Last());
+        var name = SafeName(baseName) + "-" + DateTime.Now.ToString("yyyyMMdd-HHmmss");
         var ext = Path.GetExtension(archive).ToLowerInvariant();
-        if (!Regex.IsMatch(ext, @"^\.zap\d+$")) { Console.Error.WriteLine("The archive must be a .zap20 file."); return 2; }
+        if (fromProject == null && !Regex.IsMatch(ext, @"^\.zap\d+$")) { Console.Error.WriteLine("The archive must be a .zap20 file."); return 2; }
 
         try
         {
             await vm.StatusAsync(ct);
             Console.WriteLine($"TIA PC reachable at {o["tia"]}.");
-            Console.WriteLine($"Sending {Path.GetFileName(archive)} ({new FileInfo(archive).Length / 1024 / 1024.0:0.0} MB)...");
-            await vm.UploadArchiveAsync(archive, name + ext, ct);
-            Console.WriteLine("TIA opens the archive in the background and exports every PLC program. This takes a few minutes.");
-            var result = await vm.ExportAsync(name + ext, ct);
+            VmResult result;
+            if (fromProject != null)
+            {
+                Console.WriteLine($"TIA exports {baseName} as it is now. If TIA Portal has it open, it is read from there as shown (saved or not).");
+                result = await vm.ExportProjectAsync(fromProject, name, ct);
+            }
+            else
+            {
+                Console.WriteLine($"Sending {Path.GetFileName(archive)} ({new FileInfo(archive).Length / 1024 / 1024.0:0.0} MB)...");
+                await vm.UploadArchiveAsync(archive, name + ext, ct);
+                Console.WriteLine("TIA opens the archive in the background and exports every PLC program. This takes a few minutes.");
+                result = await vm.ExportAsync(name + ext, ct);
+            }
             if (result.ExitCode != 0)
             {
                 Console.Error.WriteLine("The export on the TIA PC failed (see the log above).");

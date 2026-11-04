@@ -27,6 +27,8 @@
     } catch { /* next time */ }
   }, 1500);
 
+  window.addEventListener("pk:program-changed", () => { data = null; dataError = null; db = null; dbData = null; dbError = null; });
+
   async function load() {
     if (data || loading) return;
     loading = true;

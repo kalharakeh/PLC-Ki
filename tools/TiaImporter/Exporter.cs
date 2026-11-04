@@ -27,56 +27,97 @@ namespace TiaImporter
         public int Run(FileInfo archive, DirectoryInfo outDir)
         {
             if (!archive.Exists) throw new FileNotFoundException("Archive not found", archive.FullName);
+            var temp = new DirectoryInfo(Path.Combine(Path.GetTempPath(), "TiaImporter_" + Guid.NewGuid().ToString("N")));
+            try
+            {
+                return Export(archive.Name, outDir, () =>
+                {
+                    temp.Create();
+                    _log.WriteLine("Starting TIA Portal V20 without user interface...");
+                    var tia = new TiaPortal(TiaPortalMode.WithoutUserInterface);
+                    _log.WriteLine($"Retrieving {archive.Name}...");
+                    return (tia, Retrieve(tia, archive, temp), true);
+                });
+            }
+            finally
+            {
+                try { if (temp.Exists) temp.Delete(true); } catch { /* TIA may still hold a lock; temp is cleaned by Windows later */ }
+            }
+        }
+
+        /// <summary>
+        /// Exports a TIA project (.ap20) as it is now, for "Refresh from TIA": so PLC-Ki shows the program after changes
+        /// made in TIA or by the block generator. When TIA Portal already has the project open, PLC-Ki attaches to it
+        /// (TIA asks once to allow access) and leaves it open; otherwise it opens the project without user interface.
+        /// Read-only: nothing is saved.
+        /// </summary>
+        public int RunProject(FileInfo projectFile, DirectoryInfo outDir)
+        {
+            if (!projectFile.Exists) throw new FileNotFoundException("Project not found", projectFile.FullName);
+            return Export(projectFile.Name, outDir, () =>
+            {
+                foreach (var process in TiaPortal.GetProcesses())
+                {
+                    FileInfo open = null;
+                    try { open = process.ProjectPath; } catch (Exception) { /* a TIA still starting */ }
+                    if (open == null || !string.Equals(open.FullName, projectFile.FullName, StringComparison.OrdinalIgnoreCase)) continue;
+                    _log.WriteLine($"TIA Portal has {projectFile.Name} open: reading it from there (if TIA asks, allow access for TiaImporter).");
+                    var attached = process.Attach();
+                    var project = attached.Projects.FirstOrDefault(p => string.Equals(p.Path?.FullName, projectFile.FullName, StringComparison.OrdinalIgnoreCase))
+                                  ?? attached.Projects.FirstOrDefault();
+                    if (project == null) { attached.Dispose(); throw new InvalidOperationException("TIA Portal closed the project while connecting."); }
+                    return (attached, project, false);
+                }
+                _log.WriteLine("Starting TIA Portal V20 without user interface...");
+                var tia = new TiaPortal(TiaPortalMode.WithoutUserInterface);
+                _log.WriteLine($"Opening {projectFile.Name}...");
+                try { return (tia, tia.Projects.Open(projectFile), true); }
+                catch (Exception) { tia.Dispose(); throw; }
+            });
+        }
+
+        /// <summary>Exports every PLC of the project <paramref name="open"/> gives; closes it afterwards only when it opened it.</summary>
+        private int Export(string sourceName, DirectoryInfo outDir, Func<(TiaPortal Tia, Project Project, bool Close)> open)
+        {
             if (outDir.Exists && outDir.EnumerateFileSystemInfos().Any())
                 throw new IOException($"Output folder {outDir.FullName} is not empty. Use a new folder.");
             outDir.Create();
 
-            var temp = new DirectoryInfo(Path.Combine(Path.GetTempPath(), "TiaImporter_" + Guid.NewGuid().ToString("N")));
-            temp.Create();
             var manifest = new Dictionary<string, object>
             {
-                ["archive"] = archive.Name,
+                ["archive"] = sourceName,
                 ["exportedAt"] = DateTime.UtcNow.ToString("o"),
                 ["tool"] = "TiaImporter 0.1",
             };
             var plcList = new List<object>();
 
-            try
+            var (tia, project, close) = open();
+            using (tia)
             {
-                _log.WriteLine("Starting TIA Portal V20 without user interface...");
-                using (var tia = new TiaPortal(TiaPortalMode.WithoutUserInterface))
+                try
                 {
-                    _log.WriteLine($"Retrieving {archive.Name}...");
-                    var project = Retrieve(tia, archive, temp);
-                    try
+                    manifest["project"] = project.Name;
+                    foreach (var plc in TiaHelpers.FindPlcs(project))
                     {
-                        manifest["project"] = project.Name;
-                        foreach (var plc in TiaHelpers.FindPlcs(project))
+                        _log.WriteLine($"PLC {plc.DeviceName} / {plc.CpuName} ({plc.TypeIdentifier})");
+                        var plcDir = outDir.CreateSubdirectory(Safe(plc.Software.Name));
+                        var counts = ExportPlc(plc.Software, plcDir);
+                        plcList.Add(new Dictionary<string, object>
                         {
-                            _log.WriteLine($"PLC {plc.DeviceName} / {plc.CpuName} ({plc.TypeIdentifier})");
-                            var plcDir = outDir.CreateSubdirectory(Safe(plc.Software.Name));
-                            var counts = ExportPlc(plc.Software, plcDir);
-                            plcList.Add(new Dictionary<string, object>
-                            {
-                                ["name"] = plc.Software.Name,
-                                ["folder"] = plcDir.Name,
-                                ["device"] = plc.DeviceName,
-                                ["cpu"] = plc.CpuName,
-                                ["typeIdentifier"] = plc.TypeIdentifier,
-                                ["ipAddresses"] = plc.IpAddresses,
-                                ["counts"] = counts,
-                            });
-                        }
-                    }
-                    finally
-                    {
-                        project.Close();
+                            ["name"] = plc.Software.Name,
+                            ["folder"] = plcDir.Name,
+                            ["device"] = plc.DeviceName,
+                            ["cpu"] = plc.CpuName,
+                            ["typeIdentifier"] = plc.TypeIdentifier,
+                            ["ipAddresses"] = plc.IpAddresses,
+                            ["counts"] = counts,
+                        });
                     }
                 }
-            }
-            finally
-            {
-                try { temp.Delete(true); } catch { /* TIA may still hold a lock; temp is cleaned by Windows later */ }
+                finally
+                {
+                    if (close) project.Close();
+                }
             }
 
             manifest["plcs"] = plcList;
