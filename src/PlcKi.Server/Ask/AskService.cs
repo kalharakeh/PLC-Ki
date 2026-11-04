@@ -36,6 +36,7 @@ public sealed class AskService
     private readonly MachineTools _tools;
     private readonly LiveState _live;
     private readonly ILogger<AskService> _log;
+    private readonly PlcKi.Core.Knowledge.DocumentLibrary? _docs;
     private readonly string _system;
     private readonly List<BetaToolUnion> _toolDefs;
     private readonly ConcurrentDictionary<string, Conversation> _conversations = new();
@@ -48,8 +49,9 @@ public sealed class AskService
         public DateTimeOffset LastUsed = DateTimeOffset.Now;
     }
 
-    public AskService(AskOptions opt, MachineTools tools, LiveState live, ILogger<AskService> log)
+    public AskService(AskOptions opt, MachineTools tools, LiveState live, ILogger<AskService> log, PlcKi.Core.Knowledge.DocumentLibrary? docs = null)
     {
+        _docs = docs;
         _opt = opt;
         _tools = tools;
         _live = live;
@@ -241,6 +243,11 @@ public sealed class AskService
                 sb.AppendLine($"Machine memory, {a.Id}: {_live.Memory.Summary(a.Id, DateTimeOffset.Now).Insight}");
         }
         sb.AppendLine("</live_summary>");
+        // Which manuals and drawings exist (they can be added at any time, so not in the cached system prompt)
+        var docs = _docs?.List().Where(d => d.State == "ready").ToList();
+        if (docs is { Count: > 0 })
+            sb.AppendLine("<documents>" + string.Join("; ", docs.Take(40).Select(d => d.File + (d.Device != null ? $" ({d.Device})" : "") + $" [{d.Kind}]")) +
+                          (docs.Count > 40 ? $"; ... {docs.Count - 40} more" : "") + "</documents>");
         sb.AppendLine();
         sb.Append(question);
         return sb.ToString();
@@ -265,6 +272,9 @@ public sealed class AskService
             "get_equipment" => "device " + S("id"),
             "get_alarm" => "alarm " + S("id"),
             "search_program" => $"program search \"{S("query")}\"",
+            "lookup_siemens_diagnostic" => $"Siemens message \"{S("query")}\"",
+            "lookup_device_fault" => $"fault code {S("code")}" + (S("device") is { } dv ? $" ({dv})" : ""),
+            "search_documents" => $"manuals \"{S("query")}\"",
             _ => tool,
         };
     }

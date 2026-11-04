@@ -29,3 +29,13 @@ Each entry has:
 
 `KnowledgeTests` checks every entry is complete and that typical questions find the right entry; add a
 line there for a new entry.
+
+# Device fault codes and the Documents page
+
+`device-faults.json` uses the same format for devices next to the PLC: FANUC robot alarms (SRVO-, MOTN-) and
+the standard IO-Link event codes (0x5100, 0x8C10...). Categories are `Robot` and `IO-Link`.
+
+Plant-specific manuals, fault lists and drawings are not built in: people add them on the **Documents** page
+(or copy them into `<data folder>\documents\machines\<machine>\` or `...\documents\shared\`). PLC-Ki reads the PDF
+text once, finds fault code lists in it, and the Ask tools `lookup_device_fault` and `search_documents` use them,
+naming the document and page. A fault list can also be a CSV file with code, text, cause and remedy columns.

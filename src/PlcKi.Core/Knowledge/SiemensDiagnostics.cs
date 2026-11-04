@@ -64,6 +64,17 @@ public sealed class SiemensDiagnostics
     /// <summary>The knowledge base shipped with PLC-Ki.</summary>
     public static SiemensDiagnostics Default => BuiltIn.Value;
 
+    private static readonly Lazy<SiemensDiagnostics> BuiltInDevices = new(() =>
+    {
+        const string name = "PlcKi.Core.Knowledge.device-faults.json";
+        using var s = typeof(SiemensDiagnostics).Assembly.GetManifestResourceStream(name)
+                      ?? throw new InvalidOperationException($"Resource {name} is missing from PlcKi.Core.");
+        return Load(s);
+    });
+
+    /// <summary>Fault codes of other devices next to the PLC (FANUC robots, IO-Link events), same format and lookup.</summary>
+    public static SiemensDiagnostics Devices => BuiltInDevices.Value;
+
     private static readonly HashSet<string> StopWords = new(StringComparer.Ordinal)
     {
         "the", "and", "for", "what", "why", "does", "mean", "means", "how", "fix", "this", "that", "with", "from",
@@ -71,8 +82,8 @@ public sealed class SiemensDiagnostics
         "message", "shows", "showing", "says", "our", "there", "when", "after", "about", "into", "get", "got",
     };
 
-    // F07900, A07910, F1910, OB80, 16#8000, 32767 ...
-    private static readonly Regex CodeLike = new(@"\b(?:[FAC]\d{4,5}|OB\s?\d{1,3}|16#[0-9A-F]{2,4}|-?\d{5})\b",
+    // F07900, A07910, F1910, OB80, 16#8000, 32767, SRVO-062, 0x8C10 ...
+    private static readonly Regex CodeLike = new(@"\b(?:[FAC]\d{4,5}|OB\s?\d{1,3}|16#[0-9A-F]{2,4}|-?\d{5}|[A-Z]{3,5}-\d{3}|0x[0-9A-F]{4})\b",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     public DiagnosticFile File { get; }
