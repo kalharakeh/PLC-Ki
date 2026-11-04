@@ -48,6 +48,7 @@ const PK = (() => {
     search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/>',
     user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6"/>',
     plus: '<path d="M12 5v14M5 12h14"/>',
+    pen: '<path d="M4 20h4L19 9l-4-4L4 16v4z"/><path d="m14 6 4 4"/>',
     sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
     moon: '<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5Z"/>',
     help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14M12 17.5v.01"/>',
@@ -129,17 +130,20 @@ const PK = (() => {
     document.querySelectorAll("#nav a").forEach((a) => a.classList.toggle("active", a.dataset.route === name || (a.dataset.route === "setup" && name.startsWith("setup/") && name !== "setup/generator")));
     // The pages that can change a PLC say so where the rest say "read-only"
     const ro = $("ro-badge");
-    const except = name === "setup/generator" || name === "plc";
+    const canWrite = state.user && state.user.role === "admin" && (name === "tags" || name === "program");
+    const except = name === "setup/generator" || name === "plc" || canWrite;
     if (ro) {
       ro.textContent = except ? "Read-only, except here" : "Read-only";
       ro.classList.toggle("except", except);
       ro.title = name === "setup/generator" ? "The block generator can load blocks into PLCSIM, or into a real PLC after two people confirm. Every other page only reads."
         : name === "plc" ? "Start and Stop here switch the PLCSIM CPU only, after you confirm. A real PLC is never started or stopped."
+        : canWrite ? "Administrators can change a value here with the pen: on PLCSIM, or on a real PLC that is allowed in Setup, after typing a reason and the PLC address. Safety values, real inputs and outputs never. Every change is logged."
         : "PLC-Ki reads from the PLC only: it never writes values or changes the CPU state.";
     }
     $("foot-text").textContent = name === "setup/generator"
       ? "PLC-Ki reads from the PLC only. The one exception is this page: the block generator loads blocks into PLCSIM, or into a real PLC after two people confirm."
       : name === "plc" ? "PLC-Ki reads from the PLC only. The one exception is on this page: Start and Stop switch the PLCSIM CPU, never a real PLC."
+      : canWrite ? "PLC-Ki reads from the PLC. On this page administrators can change a value: on PLCSIM, or on an allowed real PLC after confirming. Safety values never. Every change is logged."
       : "PLC-Ki reads from the PLC only: it never writes values or changes the CPU state.";
     const page = $("page");
     if (current && current.view.leave) current.view.leave();

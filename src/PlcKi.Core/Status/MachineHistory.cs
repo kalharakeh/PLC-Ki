@@ -57,6 +57,16 @@ public sealed class MachineHistory
         }
     }
 
+    /// <summary>Adds an event that did not come from comparing two reads, such as a value someone changed from PLC-Ki.</summary>
+    public void Note(MachineEvent e)
+    {
+        lock (_lock)
+        {
+            _events.AddLast(e);
+            if (_events.Count > _maxEvents) _events.RemoveFirst();
+        }
+    }
+
     public List<MachineEvent> Events(TimeSpan window, DateTimeOffset now)
     {
         lock (_lock) return _events.Where(e => e.Time >= now - window).ToList();
