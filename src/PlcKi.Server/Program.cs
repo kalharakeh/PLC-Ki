@@ -28,7 +28,15 @@ if (args.Length > 0 && args[0].Equals("import", StringComparison.OrdinalIgnoreCa
 if (args.Length > 0 && args[0].Equals("generate", StringComparison.OrdinalIgnoreCase))
     return await GenerateCommand.RunAsync(args[1..]);
 if (args.Length > 0 && args[0].Equals("develop", StringComparison.OrdinalIgnoreCase))
-    return await DevelopCommand.RunAsync(args[1..]);
+{
+    // A failure talking to the TIA PC ends the job with one plain line, not a .NET stack trace
+    try { return await DevelopCommand.RunAsync(args[1..]); }
+    catch (Exception ex) when (ex is InvalidOperationException or HttpRequestException or IOException or System.Text.Json.JsonException)
+    {
+        Console.Error.WriteLine("ERROR: " + ex.Message);
+        return 2;
+    }
+}
 if (args.Length > 0 && args[0].Equals("export", StringComparison.OrdinalIgnoreCase))
     return await ExportCommand.RunAsync(args[1..]);
 if (args.Length > 0 && args[0].Equals("link", StringComparison.OrdinalIgnoreCase))

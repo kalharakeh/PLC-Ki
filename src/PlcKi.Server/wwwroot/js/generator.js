@@ -261,7 +261,7 @@
   }
   /** What to do when TIA could not open the project (the same words as the job log). */
   const importHint = (e) => /already been opened|cannot be accessed|is locked|in use/i.test(e)
-    ? "The project is open in TIA Portal (or still locked after a crash). Close it in TIA Portal on the TIA PC, or wait 2 minutes after a crash. Then press Change it and leave the box empty to import this version again."
+    ? "The project is open in TIA Portal, or a hidden TIA still holds it. Close it in TIA Portal on the TIA PC. If it is not open there: close the TIA helper window, run taskkill /im Siemens.Automation.Portal.exe /f, wait 2 minutes and start the TIA helper again. Then press Change it and leave the box empty to import this version again."
     : /not found|does not exist|could not find/i.test(e) ? "The project was not found on the TIA PC. Check the TIA project path, then import again."
     : "Check that TIA Portal and the TIA helper run on the TIA PC and the project opens there, then import again.";
 
