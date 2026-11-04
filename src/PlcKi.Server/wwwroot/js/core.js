@@ -630,13 +630,19 @@ const PK = (() => {
         .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+|#\/[^\s)]*)\)/g, (m, label, url) =>
           hold(`<a href="${esc(url)}"${url.startsWith("http") ? ' target="_blank" rel="noopener"' : ""}>${esc(label)}</a>`))
         .replace(/\bhttps?:\/\/[^\s<>()]+[^\s<>().,;:!?]/g, (url) => hold(`<a href="${esc(url)}" target="_blank" rel="noopener">${esc(url)}</a>`));
-      t = esc(t).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+      t = esc(t).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>").replace(/(^|[\s(])\*(?!\s)([^*]+?)\*(?=$|[\s.,;:!?)])/g, "$1<em>$2</em>");
       if (blocks) t = t.replace(/\b([A-Z][A-Za-z]{1,3}_[A-Za-z0-9_]+)\b/g, (m) => blockLink(m) || m);
       return t.replace(/\u0000(\d+)\u0000/g, (m, i) => keep[Number(i)]);
     };
     const out = []; let list = null; let para = []; let code = null; let table = null;
     const fp = () => { if (para.length) { out.push("<p>" + para.map(inline).join("<br>") + "</p>"); para = []; } };
-    const fl = () => { if (list) { out.push(`<${list.t}>` + list.items.map((i) => `<li>${inline(i)}</li>`).join("") + `</${list.t}>`); list = null; } };
+    // Lists keep their numbers (an "ol" that starts at 3 shows 3), and an indented item under another becomes a sub-list of it
+    const fl = () => {
+      if (!list) return;
+      const sub = (it) => it.sub.length ? `<${it.sub[0].t}>${it.sub.map((x) => `<li>${inline(x.text)}</li>`).join("")}</${it.sub[0].t}>` : "";
+      out.push(`<${list.t}${list.t === "ol" && list.start > 1 ? ` start="${list.start}"` : ""}>` + list.items.map((i) => `<li>${inline(i.text)}${sub(i)}</li>`).join("") + `</${list.t}>`);
+      list = null;
+    };
     const cells = (line) => line.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((c) => c.trim());
     const ft = () => {
       if (!table) return;
@@ -662,11 +668,17 @@ const PK = (() => {
       ft();
       const h = line.match(/^(#{1,4})\s+(.*)$/);
       const b = line.match(/^\s*[-*•]\s+(.*)$/);
-      const n = line.match(/^\s*\d+[.)]\s+(.*)$/);
+      const n = line.match(/^\s*(\d+)[.)]\s+(.*)$/);
       if (h) { fp(); fl(); out.push(`<h3>${inline(h[2])}</h3>`); }
-      else if (b || n) { fp(); const t = b ? "ul" : "ol"; if (!list || list.t !== t) { fl(); list = { t, items: [] }; } list.items.push((b || n)[1]); }
-      else if (!line.trim()) { fp(); fl(); }
-      else if (list && /^\s{2,}/.test(raw)) list.items[list.items.length - 1] += " " + line.trim();
+      else if ((b || n) && list && /^\s{2,}/.test(raw)) list.items[list.items.length - 1].sub.push({ t: b ? "ul" : "ol", text: b ? b[1] : n[2] });
+      else if (b || n) {
+        fp();
+        const t = b ? "ul" : "ol";
+        if (!list || list.t !== t) { fl(); list = { t, items: [], start: n ? Number(n[1]) : 1 }; }
+        list.items.push({ text: b ? b[1] : n[2], sub: [] });
+      }
+      else if (!line.trim()) { if (!list) fp(); }   // a blank line inside a list does not end it; the next plain line does
+      else if (list && /^\s{2,}/.test(raw)) { const it = list.items[list.items.length - 1]; (it.sub.length ? it.sub[it.sub.length - 1] : it).text += " " + line.trim(); }
       else { fl(); para.push(line); }
     }
     if (code) out.push(`<pre class="md-code"><code>${esc(code.lines.join("\n"))}</code></pre>`);
@@ -711,7 +723,8 @@ const PK = (() => {
     if (/no such host|name or service not known|nodename nor servname|not known on this network|host not found/i.test(m)) return { text: `${plc} is not known on the network.`, todo: "Check the spelling. Use the PLC's IP address from TIA (Device configuration › PROFINET interface), for example 192.168.0.10." };
     if (/is not an IP address/i.test(m)) return { text: m, todo: "" };
     if (/refused/i.test(m)) return { text: `Something is at ${plc}, but it does not accept the connection.`, todo: "Check it is really the PLC's address, and that PUT/GET or the access level allows reading (TIA: CPU properties, Protection & Security)." };
-    if (/password|access|legitimation|protection/i.test(m)) return { text: "The PLC asks for a password.", todo: "Enter the CPU's access password under Setup, Connections (More PLC options).", op: "Ask an administrator to enter the PLC's access password in PLC-Ki." };
+    if (/already been opened|project\/library .* cannot be accessed/i.test(m)) return { text: "TIA could not open the project: it is open in TIA Portal.", todo: "Close the project in TIA Portal on the TIA PC (or wait 2 minutes after a crash), then start the job again. Nothing was imported." };
+    if (/password|access.?(level|protection|denied|rights)|legitimation|protection/i.test(m)) return { text: "The PLC asks for a password.", todo: "Enter the CPU's access password under Setup, Connections (More PLC options).", op: "Ask an administrator to enter the PLC's access password in PLC-Ki." };
     if (/api key|anthropic/i.test(m)) return { text: "No Claude API key is set.", todo: "Add it under Setup, Settings (Assistant). It starts with sk-ant-." };
     return { text: m, todo: "" };
   }

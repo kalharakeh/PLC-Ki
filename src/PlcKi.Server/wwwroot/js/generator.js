@@ -251,15 +251,34 @@
     </nav>`;
   }
 
+  /** TIA's verdict as a short label and colour: "Not imported" when TIA could not open the project at all. */
+  function reportState(r) {
+    if (!r) return null;
+    if (r.fileErrors.some((e) => e.file === "(import)")) return ["Not imported", "bad"];
+    if (r.fileErrors.length) return ["Files refused", "bad"];
+    if (!r.compileState) return ["Not compiled", "warn"];
+    return [r.compileState, r.errorCount ? "bad" : stateCls(r.compileState)];
+  }
+  /** What to do when TIA could not open the project (the same words as the job log). */
+  const importHint = (e) => /already been opened|cannot be accessed|is locked|in use/i.test(e)
+    ? "The project is open in TIA Portal (or still locked after a crash). Close it in TIA Portal on the TIA PC, or wait 2 minutes after a crash. Then press Change it and leave the box empty to import this version again."
+    : /not found|does not exist|could not find/i.test(e) ? "The project was not found on the TIA PC. Check the TIA project path, then import again."
+    : "Check that TIA Portal and the TIA helper run on the TIA PC and the project opens there, then import again.";
+
   function reportHtml(r) {
     if (!r) return `<p class="muted small" style="margin:0">Not imported into TIA yet.</p>`;
-    const ok = r.fileErrors.length === 0 && r.errorCount === 0 && r.compileState && !/error/i.test(r.compileState);
+    const failed = r.fileErrors.find((e) => e.file === "(import)");
+    if (failed) return `<div class="notice red">${icon("warn")}<div><b>TIA could not open the project, so nothing was imported or compiled.</b>
+        <p class="small" style="margin:6px 0 0">${esc(importHint(failed.error))}</p>
+        <details class="more" style="margin-top:8px"><summary>What TIA said</summary><p class="small" style="margin:6px 0 0">${esc(failed.error)}</p></details></div></div>
+      ${r.project ? `<p class="faint small" style="margin:8px 0 0">Project: <span class="mono">${esc(r.project)}</span></p>` : ""}`;
+    const [label, cls] = reportState(r);
     return `<div class="kv">
-        <span>Compile</span><b><span class="pill ${ok ? stateCls(r.compileState) : "bad"}">${esc(r.compileState || "not compiled")}</span> ${r.errorCount} errors, ${r.warningCount} warnings</b>
-        <span>Project</span><b class="mono">${esc(r.project)}</b>
+        <span>Compile</span><b><span class="pill ${cls}">${esc(label)}</span> ${r.errorCount} errors, ${r.warningCount} warnings</b>
+        ${r.project ? `<span>Project</span><b class="mono">${esc(r.project)}</b>` : ""}
         ${r.download ? `<span>Download</span><b>${esc(r.download)}</b>` : ""}
       </div>
-      ${r.fileErrors.length ? `<ul class="small">${r.fileErrors.map((e) => `<li><b>${esc(e.file || "")}</b> ${esc(e.error || "")}</li>`).join("")}</ul>` : ""}
+      ${r.fileErrors.length ? `<div class="notice red" style="margin-top:10px">${icon("warn")}<div><b>TIA refused ${r.fileErrors.length === 1 ? "a file" : r.fileErrors.length + " files"}</b><ul class="small" style="margin:6px 0 0">${r.fileErrors.map((e) => `<li><b>${esc(e.file || "")}</b> ${esc(e.error || "")}</li>`).join("")}</ul></div></div>` : ""}
       ${r.messages.length ? `<details class="more"><summary>Compiler messages (${r.messages.length})</summary><ul class="small">${r.messages.map((m) => `<li>${esc([m.state, m.path, m.description].filter(Boolean).join(" · "))}</li>`).join("")}</ul></details>` : ""}
       ${r.runtime.length ? `<div class="notice gold" style="margin-top:10px">${icon("warn")}<div><b>While it ran in PLCSIM</b><ul class="small" style="margin:6px 0 0">${r.runtime.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div></div>` : ""}`;
   }
@@ -269,7 +288,8 @@
     const s = v && v.summary;
     if (!s || !s.lines || !s.lines.length) return "";
     const r = v.report;
-    const tia = withTia && r ? [`TIA: ${r.compileState || "not compiled"}, ${r.errorCount} error${r.errorCount === 1 ? "" : "s"}, ${r.warningCount} warning${r.warningCount === 1 ? "" : "s"}.`,
+    const tia = withTia && r ? [r.fileErrors.some((e) => e.file === "(import)") ? "TIA could not open the project, so nothing was imported (see below)."
+      : `TIA: ${r.compileState || "not compiled"}, ${r.errorCount} error${r.errorCount === 1 ? "" : "s"}, ${r.warningCount} warning${r.warningCount === 1 ? "" : "s"}.`,
       r.download ? `Download: ${r.download}.` : "", r.runtime && r.runtime.length ? `While it ran: ${r.runtime.length} problem${r.runtime.length === 1 ? "" : "s"} (see ${v.folder} below).` : ""].filter(Boolean) : [];
     return `<div class="gen-sum"><span class="eyebrow">${esc(title)}</span>
       <ul>${s.lines.map((l) => `<li data-k="${esc(l.kind)}">${esc(l.text)}</li>`).join("")}${tia.map((t) => `<li data-k="tia">${esc(t)}</li>`).join("")}</ul></div>`;
@@ -300,7 +320,7 @@
     const kindText = { new: "First version", change: "Changed on request", fix: "Fixed after TIA's report" };
     return `<div class="stack">${d.versions.map((v, i) => `<details class="card more gen-ver" ${i === 0 ? "open" : ""}>
         <summary><b>${esc(v.folder)}</b> <span class="muted">· ${esc(kindText[v.kind] || v.kind)} · ${PK.date(v.time)}</span>
-          ${v.report ? `<span class="pill ${v.report.errorCount || v.report.fileErrors.length ? "bad" : stateCls(v.report.compileState)}" style="margin-left:8px">${esc(v.report.compileState || "?")}</span>` : ""}</summary>
+          ${v.report ? (([l, c]) => `<span class="pill ${c}" style="margin-left:8px">${esc(l)}</span>`)(reportState(v.report)) : ""}</summary>
         <div class="grid two" style="margin-top:14px;align-items:start">
           <div class="stack">
             ${summaryHtml(v, `What ${AI} did`)}

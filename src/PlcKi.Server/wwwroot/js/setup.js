@@ -191,7 +191,7 @@ const PKSetup = (() => {
       ${extra}
       ${job.state === "running" ? progressHtml(job, lastLine) : ""}
       ${["failed", "problems", "stopped"].includes(job.state) ? (() => { const p = jobProblem(job); return `<div class="notice ${job.state === "failed" ? "red" : "gold"}" style="margin-top:12px">${icon("warn")}<div><b>${esc(p.text)}</b>${p.todo ? `<br>${esc(p.todo)}` : ""}</div></div>`; })() : ""}
-      <details class="more" ${job.state !== "running" && job.state !== "done" ? "open" : ""}><summary>Log</summary>
+      <details class="more" ${job.state === "failed" ? "open" : ""}><summary>Log</summary>
         <div class="joblog" data-log>${esc(job.log || "")}</div></details>
     </div>`;
   }

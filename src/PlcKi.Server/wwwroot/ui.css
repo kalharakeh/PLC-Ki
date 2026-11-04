@@ -1117,3 +1117,7 @@ details.more.recent > summary::before { color: var(--accent); }
   .subnav::-webkit-scrollbar { display: none; }
   .subnav > * { flex: none; }
 }
+
+/* Long words (TIA paths, tag names) break instead of running into the next column, on every page */
+main#page { overflow-wrap: break-word; }
+.gen-ver, .gen-ver .kv > *, .notice > div { min-width: 0; overflow-wrap: anywhere; }
