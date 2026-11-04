@@ -13,7 +13,10 @@ namespace PlcKi.Core.Ask;
 public sealed record ToolSpec(string Name, string Description, Dictionary<string, object> Properties, string[] Required);
 
 /// <summary>What the tools see: the latest status, the latest values and the recent history.</summary>
-public sealed record LiveView(MachineStatus? Status, Snapshot? Snapshot, MachineHistory History, DateTimeOffset Now);
+/// <param name="Captures">The seconds around each alarm (fast capture); null when not running.</param>
+/// <param name="Fast">The fast recording itself; null when not running.</param>
+public sealed record LiveView(MachineStatus? Status, Snapshot? Snapshot, MachineHistory History, DateTimeOffset Now,
+    AlarmCaptureBook? Captures = null, FastRecorder? Fast = null);
 
 /// <summary>
 /// The tools the assistant uses to look at the machine. All of them only read: the machine model and the
@@ -141,6 +144,18 @@ public sealed class MachineTools
                 ("category", new { type = "string", description = "Optional filter: CPU, PROFINET, Module, Safety, Drive or Communication" })),
             new[] { "query" }),
 
+        new("get_alarm_capture",
+            "What happened in the seconds just before (and right after) an alarm came: every change of the model tags, " +
+            "recorded much finer than the normal once-a-second reads (the PLC sends each change, usually sampled every " +
+            "100 ms). Includes short pulses the normal reads miss, how long the alarm stayed on, and alarms that only " +
+            "blipped. Use it for \"why did the alarm come?\", \"what changed right before?\", \"was there a short signal?\". " +
+            "Without an id it lists the recent captures. With seconds and no alarm id it returns the last seconds up to now.",
+            Props(
+                ("alarm", new { type = "string", description = "Alarm id, e.g. \"A12\"; the newest capture of it is returned" }),
+                ("capture", new { type = "string", description = "A capture id from the list" }),
+                ("seconds", new { type = "number", description = "Without alarm/capture: how many of the last seconds to return, up to 60" })),
+            Array.Empty<string>()),
+
         new("lookup_device_fault",
             "Meaning, cause and fix of a fault or error code shown by a device next to the PLC: drives (SINAMICS F07801), " +
             "robots (FANUC SRVO-062, KUKA, ABB), IO-Link sensors (0x8C10), valve terminals, leak detectors, barcode readers... " +
@@ -180,6 +195,7 @@ public sealed class MachineTools
                 "search_program" => Search(Str(input, "query") ?? ""),
                 "get_device_diagnostics" => _devices != null ? _devices() : new { note = "No device diagnostics here: PLC-Ki reads them only from a live PLC connection." },
                 "lookup_siemens_diagnostic" => SiemensLookup(Str(input, "query") ?? "", Str(input, "category")),
+                "get_alarm_capture" => AlarmCapture(Str(input, "alarm"), Str(input, "capture"), Num(input, "seconds")),
                 "lookup_device_fault" => DeviceFault(Str(input, "code") ?? "", Str(input, "device")),
                 "search_documents" => SearchDocuments(Str(input, "query") ?? "", Str(input, "kind")),
                 _ => new { error = $"Unknown tool {name}." },
@@ -351,6 +367,56 @@ public sealed class MachineTools
             now = Clock(v.Now),
             events = events.TakeLast(max).Select(e => new { time = Clock(e.Time), kind = e.Kind, text = e.Text }),
             olderLeftOut = events.Count > max ? events.Count - max : (int?)null,
+        };
+    }
+
+    private object AlarmCapture(string? alarm, string? capture, double? seconds)
+    {
+        var v = _live();
+        if (v.Captures == null || v.Fast == null) return new { error = "Fast capture is not running in this PLC-Ki." };
+        var how = new { mode = v.Fast.Mode, sampledEveryMs = v.Fast.CycleMs, note = v.Fast.Note };
+        if (!string.IsNullOrWhiteSpace(capture) || !string.IsNullOrWhiteSpace(alarm))
+        {
+            var c = !string.IsNullOrWhiteSpace(capture) ? v.Captures.Get(capture!) : v.Captures.Latest(alarm!);
+            if (c == null)
+                return new
+                {
+                    error = $"No capture for {(capture ?? alarm)}. Captures start when PLC-Ki sees an alarm come (not for alarms already on when it started).",
+                    recording = v.Captures.Recording(),
+                    recent = v.Captures.List().Take(10).Select(x => new { x.Id, x.AlarmId, time = Clock(x.Time) }),
+                };
+            return new
+            {
+                c.Id, c.AlarmId, c.AlarmText, alarmCameAt = Clock(c.Time), c.Mode, sampledEveryMs = c.CycleMs, normalReadsEveryMs = c.ReadMs,
+                c.OnMs, c.Blip, c.Summary,
+                note = "t is seconds from the moment the alarm came; negative = before it.",
+                pulses = c.Pulses.Select(p => new { p.Tag, t = p.T, p.Ms, p.On }),
+                tracks = c.Tracks.Select(k => new { k.Tag, k.Label, k.Related, start = k.StartText, changes = k.Changes.Take(60).Select(x => new { t = x.T, value = x.Text }) }),
+                gaps = c.Gaps.Count > 0 ? c.Gaps : null,
+                c.TracksLeftOut,
+            };
+        }
+        if (seconds is { } s)
+        {
+            var from = v.Now - TimeSpan.FromSeconds(Math.Clamp(s, 1, 60));
+            var pts = v.Fast.Window(from, v.Now);
+            const int max = 300;
+            return new
+            {
+                how, now = Clock(v.Now),
+                changes = pts.TakeLast(max).Select(p => new
+                {
+                    t = Math.Round((p.Time - v.Now).TotalSeconds, 3), tag = p.TagId,
+                    value = ValueFormat.Format(_tags.GetValueOrDefault(p.TagId), p.Value),
+                }),
+                olderLeftOut = pts.Count > max ? pts.Count - max : (int?)null,
+            };
+        }
+        return new
+        {
+            how,
+            recording = v.Captures.Recording(),
+            captures = v.Captures.List().Take(20).Select(x => new { x.Id, x.AlarmId, x.AlarmText, time = Clock(x.Time), x.Blip, x.OnMs, x.Pulses, headline = x.Headline }),
         };
     }
 

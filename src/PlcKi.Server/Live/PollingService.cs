@@ -129,11 +129,16 @@ public sealed class PollingService : BackgroundService
     private readonly ILogger<PollingService> _log;
     private readonly WatchList _watch;
     private readonly DeviceWatch _devices;
+    private readonly FastRecorder _fast;
+    private readonly AlarmCaptureBook _captures;
 
-    public PollingService(IPlcSource source, StatusEngine engine, LiveState state, PlcKiOptions opt, ILogger<PollingService> log, WatchList watch, DeviceWatch devices)
+    public PollingService(IPlcSource source, StatusEngine engine, LiveState state, PlcKiOptions opt, ILogger<PollingService> log, WatchList watch, DeviceWatch devices,
+        FastRecorder fast, AlarmCaptureBook captures)
     {
         _devices = devices;
         _watch = watch;
+        _fast = fast;
+        _captures = captures;
         _source = source;
         _engine = engine;
         _state = state;
@@ -156,6 +161,9 @@ public sealed class PollingService : BackgroundService
         var lastDrives = DateTime.MinValue;
         var lastAlarms = DateTime.MinValue;
         var alarmFailures = 0;
+        if (_source is not S7CommPlusSource)
+            _fast.SetMode("reads", _opt.Plc.PollMs, _source.Kind == "snapshot" ? "values come from a test file."
+                : "it needs a direct connection from this PC to the PLC (not through PLC-Ki Link yet).");
 
         while (!ct.IsCancellationRequested)
         {
@@ -203,6 +211,7 @@ public sealed class PollingService : BackgroundService
                 }
                 last = snap;
                 lastGood = snap.Time;
+                _fast.AddSnapshot(snap, _source.FastTagIds);
                 var extra = _watch.Current();
                 if (extra.Count > 0)
                 {
@@ -217,14 +226,17 @@ public sealed class PollingService : BackgroundService
                 }
                 ReadDevices(ref lastDrives, ref lastAlarms, ref alarmFailures);
                 Publish(snap, _source.Kind == "snapshot" ? "snapshot" : "connected", null, lastGood, missing);
+                Capture();
             }
             catch (Exception ex)
             {
                 error = ex.Message;
                 _log.LogWarning("Read from {Address} failed: {Error}", _source.Address, ex.Message);
                 _source.Disconnect();
+                _fast.Break(DateTimeOffset.Now);
                 _devices.Clear();
                 Publish(last, "disconnected", error, lastGood, missing);
+                Capture();
                 continue;
             }
 
@@ -258,6 +270,25 @@ public sealed class PollingService : BackgroundService
                 if (alarmFailures++ == 0) _log.LogInformation("The CPU's alarm list cannot be read: {Error}", ex.Message);
                 _devices.PublishAlarms(null, "The CPU's alarm list cannot be read: " + ex.Message, DateTimeOffset.Now);
             }
+        }
+    }
+
+    /// <summary>Cuts the alarm captures that are due; an alarm too short for the reads goes into the event list too.</summary>
+    private void Capture()
+    {
+        try
+        {
+            foreach (var c in _captures.Check(DateTimeOffset.Now, _opt.Plc.PollMs))
+            {
+                _log.LogInformation("Captured the seconds around alarm {Alarm} ({Tracks} tags changed).", c.AlarmId, c.Tracks.Count);
+                if (c.Blip)
+                    _state.History.Note(new MachineEvent(c.Time, "alarm",
+                        $"{c.AlarmId} blipped: on for only {c.OnMs:0} ms, too short for the normal reads: {c.AlarmText}."));
+            }
+        }
+        catch (Exception ex)
+        {
+            _log.LogError(ex, "Alarm capture failed.");
         }
     }
 

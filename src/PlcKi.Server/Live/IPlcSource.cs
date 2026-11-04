@@ -41,6 +41,10 @@ public interface IPlcSource : IDisposable
     /// </summary>
     IReadOnlyList<PlcKi.Core.Diagnostics.CpuAlarm>? ReadCpuAlarms() => null;
 
+    /// <summary>Model tags the PLC sends every change for (fast capture); the normal reads feed the recording for the rest.</summary>
+    IReadOnlySet<string> FastTagIds => NoTags;
+    static readonly IReadOnlySet<string> NoTags = new HashSet<string>();
+
     void Disconnect();
 }
 
@@ -107,6 +111,11 @@ public sealed class PlcOptions
     /// <summary>Auto (TLS, then the older challenge login), Tls, or LegacyChallenge.</summary>
     public string Security { get; set; } = "Auto";
     public int PollMs { get; set; } = 1000;
+    /// <summary>
+    /// Fast capture: the PLC samples the model tags this often (ms) and sends every change, like an HMI subscription.
+    /// Kept for the last minute and cut into a capture around each alarm. 0 = off (only the normal reads are recorded).
+    /// </summary>
+    public int FastMs { get; set; } = 100;
     public int TimeoutMs { get; set; } = 5000;
     /// <summary>"direct" = this PC reads the PLC; "link" = PLC-Ki Link on the user's laptop reads it and sends the values here.</summary>
     public string Via { get; set; } = "direct";

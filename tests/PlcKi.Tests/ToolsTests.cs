@@ -14,7 +14,9 @@ public class ToolsTests
         history.Add(snap, status);
         var memory = new PlcKi.Core.Memory.AlarmMemory(null);
         memory.Observe(status);
-        return (new MachineTools(TestData.Model, () => new LiveView(status, snap, history, DateTimeOffset.Now), memory), history);
+        var fast = new FastRecorder();
+        var captures = new AlarmCaptureBook(TestData.Model, fast);
+        return (new MachineTools(TestData.Model, () => new LiveView(status, snap, history, DateTimeOffset.Now, captures, fast), memory), history);
     }
 
     private static JsonElement Call(MachineTools tools, string name, object? input = null) =>
@@ -39,6 +41,7 @@ public class ToolsTests
             ["get_device_diagnostics"] = new { },
             ["lookup_device_fault"] = new { code = "SRVO-062" },
             ["search_documents"] = new { query = "terminal X2:14" },
+            ["get_alarm_capture"] = new { },
         };
         Assert.Equal(inputs.Keys.OrderBy(k => k), MachineTools.Specs.Select(s => s.Name).OrderBy(k => k));
         foreach (var spec in MachineTools.Specs)

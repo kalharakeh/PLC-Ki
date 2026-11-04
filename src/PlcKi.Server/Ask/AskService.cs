@@ -275,6 +275,7 @@ public sealed class AskService
             "lookup_siemens_diagnostic" => $"Siemens message \"{S("query")}\"",
             "lookup_device_fault" => $"fault code {S("code")}" + (S("device") is { } dv ? $" ({dv})" : ""),
             "search_documents" => $"manuals \"{S("query")}\"",
+            "get_alarm_capture" => "seconds before " + (S("alarm") ?? S("capture") ?? "the alarms"),
             _ => tool,
         };
     }

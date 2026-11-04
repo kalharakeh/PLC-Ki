@@ -57,12 +57,15 @@ public sealed class MachineHistory
         }
     }
 
-    /// <summary>Adds an event that did not come from comparing two reads, such as a value someone changed from PLC-Ki.</summary>
+    /// <summary>Adds an event that did not come from comparing two reads (a value someone changed from PLC-Ki, an alarm that
+    /// came and went between two reads), in time order.</summary>
     public void Note(MachineEvent e)
     {
         lock (_lock)
         {
-            _events.AddLast(e);
+            var n = _events.Last;
+            while (n != null && n.Value.Time > e.Time) n = n.Previous;
+            if (n == null) _events.AddFirst(e); else _events.AddAfter(n, e);
             if (_events.Count > _maxEvents) _events.RemoveFirst();
         }
     }
