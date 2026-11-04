@@ -10,9 +10,9 @@ namespace PlcKi.Server.Jobs;
 /// </summary>
 public sealed class ProgramService
 {
-    private readonly string? _path;
+    private string? _path;
     private readonly MachineModel _model;
-    private readonly Lazy<(ProgramExport? Export, ExportPlc? Plc, string? Error)> _loaded;
+    private Lazy<(ProgramExport? Export, ExportPlc? Plc, string? Error)> _loaded;
 
     public ProgramService(PlcKiOptions opt, MachineModel model, Func<string, string> resolve)
     {
@@ -21,12 +21,37 @@ public sealed class ProgramService
         _loaded = new(Load);
     }
 
-    private (ProgramExport?, ExportPlc?, string?) Load()
+    /// <summary>The export file shown now.</summary>
+    public string? Path => _path;
+
+    /// <summary>The TIA project the shown export came from (its name in TIA), if one is loaded.</summary>
+    public string? Project => _loaded.Value.Export?.Project;
+
+    /// <summary>
+    /// Shows another export from now on, without a restart ("Refresh from TIA"): the machine model stays, only code,
+    /// logic, tags and addresses change. Returns the error when the file cannot be read; then nothing changes.
+    /// </summary>
+    public string? Reload(string path)
     {
-        if (_path == null) return (null, null, "No program export is set. Import the program (Setup → Program) to see the code.");
+        var next = new Lazy<(ProgramExport? Export, ExportPlc? Plc, string? Error)>(() => Load(path));
+        if (next.Value.Plc == null) return next.Value.Error;
+        lock (this)
+        {
+            _path = path;
+            _allTags = null;
+            _loaded = next;
+        }
+        return null;
+    }
+
+    private (ProgramExport?, ExportPlc?, string?) Load() => Load(_path);
+
+    private (ProgramExport?, ExportPlc?, string?) Load(string? file)
+    {
+        if (file == null) return (null, null, "No program export is set. Import the program (Setup → Program) to see the code.");
         try
         {
-            var export = ProgramExport.Load(_path);
+            var export = ProgramExport.Load(file);
             // The PLC whose blocks the model talks about; otherwise the biggest one
             var plc = export.Plcs.FirstOrDefault(p => _model.Sequences.Any(s => s.Block != null && p.Block(s.Block) != null))
                       ?? export.Plcs.OrderByDescending(p => p.Blocks.Count).FirstOrDefault();
@@ -34,7 +59,7 @@ public sealed class ProgramService
         }
         catch (Exception ex)
         {
-            return (null, null, $"Cannot read the program export {_path}: {ex.Message}");
+            return (null, null, $"Cannot read the program export {file}: {ex.Message}");
         }
     }
 
@@ -50,6 +75,7 @@ public sealed class ProgramService
             available = true,
             project = export!.Project,
             archive = export.Archive,
+            exportedAt = export.ExportedAt,
             plc = plc.Name,
             cpu = plc.Cpu,
             ip = plc.IpAddresses,
@@ -108,8 +134,14 @@ public sealed class ProgramService
         return new { available = true, error = (string?)null, results };
     }
 
-    private List<ExportTag>? _allTags;
-    private List<ExportTag> AllTags(ExportPlc plc) => _allTags ??= ProgramExport.Tags(plc);
+    private (ExportPlc Plc, List<ExportTag> Tags)? _allTags;
+    private List<ExportTag> AllTags(ExportPlc plc)
+    {
+        if (_allTags is { } t && ReferenceEquals(t.Plc, plc)) return t.Tags;
+        var tags = ProgramExport.Tags(plc);
+        _allTags = (plc, tags);
+        return tags;
+    }
 
     /// <summary>
     /// The Tags page: PLC tag tables (name, address, type, comment) and the data blocks with how many values each

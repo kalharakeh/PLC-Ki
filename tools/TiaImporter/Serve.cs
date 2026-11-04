@@ -22,6 +22,7 @@ namespace TiaImporter
     ///   GET  /projects               the .ap20 projects under the allowed folder, for the PLC-Ki pages
     ///   PUT  /archives/{name}        body: a .zap20 archive to export
     ///   POST /export                 {"archive"} -> {"job"}: export the archive's PLC programs (TiaImporter export)
+    ///                                {"project","name"} -> {"job"}: export a project (.ap20) as it is now ("Refresh from TIA")
     ///   GET  /exports/{name}         the finished export as a zip
     ///   GET  /cpu                    RUN/STOP state (and LEDs) of the PLCSIM CPU at --plcsim-ip (PLCSIM Advanced API)
     ///   POST /cpu                    {"mode":"run"|"stop","ip"}: switches that PLCSIM CPU only; never a real PLC
@@ -195,13 +196,21 @@ namespace TiaImporter
                 var isExport = path == "/export";
                 var project = isExport ? null : Project(Str(body, "project"));
                 var plc = Str(body, "plc");
-                FileInfo archive = null;
-                if (isExport)
+                FileInfo archive = null, exportProject = null;
+                string exportName = null;
+                if (isExport && Str(body, "project") != null)
+                {
+                    exportProject = Project(Str(body, "project"));
+                    exportName = Str(body, "name") ?? Path.GetFileNameWithoutExtension(exportProject.Name);
+                    if (!PackageName.IsMatch(exportName)) throw new InvalidOperationException("Export names use letters, digits, _ . - only.");
+                }
+                else if (isExport)
                 {
                     var name = Str(body, "archive");
                     if (name == null || !PackageName.IsMatch(name)) throw new InvalidOperationException("Name the archive.");
                     archive = new FileInfo(Path.Combine(_packages.FullName, "archives", name));
                     if (!archive.Exists) throw new FileNotFoundException("Upload the archive first: " + name);
+                    exportName = Path.GetFileNameWithoutExtension(archive.Name);
                 }
                 var requestedBy = req.RemoteEndPoint?.Address?.ToString() ?? "?";
                 DirectoryInfo dir = null;
@@ -233,13 +242,13 @@ namespace TiaImporter
                     string report = null;
                     try
                     {
-                        if (archive != null)
+                        if (isExport)
                         {
-                            var name = Path.GetFileNameWithoutExtension(archive.Name);
+                            var name = exportName;
                             var exports = Directory.CreateDirectory(Path.Combine(_packages.FullName, "exports"));
                             var outDir = new DirectoryInfo(Path.Combine(exports.FullName, name));
                             if (outDir.Exists) outDir.Delete(true);
-                            code = new Exporter(tee).Run(archive, outDir, Bool(body, "hardwareOnly"));
+                            code = exportProject != null ? new Exporter(tee).RunProject(exportProject, outDir) : new Exporter(tee).Run(archive, outDir, Bool(body, "hardwareOnly"));
                             var zip = Path.Combine(exports.FullName, name + ".zip");
                             if (File.Exists(zip)) File.Delete(zip);
                             if (code == 0 || outDir.Exists) ZipFile.CreateFromDirectory(outDir.FullName, zip, CompressionLevel.Optimal, false);

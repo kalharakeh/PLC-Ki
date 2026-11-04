@@ -30,6 +30,8 @@ public sealed class Job
     /// <summary>Files or names the job produced, for the page (model, export, package).</summary>
     public Dictionary<string, string> Outputs { get; init; } = new();
     internal Action<Job>? OnExit { get; init; }
+    /// <summary>Runs with the exit code before the job shows as finished, so its lines are in the log the page reads.</summary>
+    internal Action<Job, int>? BeforeFinish { get; init; }
     internal bool StopRequested;
 
     public int LogLength { get { lock (_log) return _log.Length; } }
@@ -114,9 +116,9 @@ public sealed class JobService : IDisposable
 
     /// <summary>Starts "PlcKi.Server &lt;args&gt;" as a child process. Only one job runs at a time.</summary>
     public Job Start(string kind, string title, string user, IEnumerable<string> args, IDictionary<string, string?>? env = null,
-        Dictionary<string, string>? outputs = null, Action<Job>? onExit = null)
+        Dictionary<string, string>? outputs = null, Action<Job>? onExit = null, Action<Job, int>? beforeFinish = null)
     {
-        var job = new Job { Kind = kind, Title = title, StartedBy = user, Outputs = outputs ?? new(), OnExit = onExit };
+        var job = new Job { Kind = kind, Title = title, StartedBy = user, Outputs = outputs ?? new(), OnExit = onExit, BeforeFinish = beforeFinish };
         lock (_jobs)
         {
             if (Running is { } busy) throw new JobException($"Wait until \"{busy.Title}\" has finished, or stop it.", 409);
@@ -142,6 +144,7 @@ public sealed class JobService : IDisposable
         p.Exited += (_, _) =>
         {
             try { p.WaitForExit(); } catch { /* already gone */ }
+            try { job.BeforeFinish?.Invoke(job, p.ExitCode); } catch (Exception ex) { job.Line("After the job: " + ex.Message); _log.LogWarning(ex, "After job {Id}", job.Id); }
             job.Finish(p.ExitCode);
             _log.LogInformation("Job {Title} ({Id}) finished: {State}.", job.Title, job.Id, job.State);
             try { job.OnExit?.Invoke(job); } catch (Exception ex) { _log.LogWarning(ex, "After job {Id}", job.Id); }

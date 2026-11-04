@@ -101,6 +101,9 @@ public sealed class VmClient
         return text;
     }
 
+    /// <summary>Exports a TIA project (.ap20 on the TIA PC) as it is now, under <paramref name="name"/>.</summary>
+    public Task<VmResult> ExportProjectAsync(string project, string name, CancellationToken ct) => PostAsync("export", new { project, name }, ct);
+
     /// <summary>Fetches a finished export as a zip file.</summary>
     public async Task DownloadExportAsync(string name, string toFile, CancellationToken ct)
     {

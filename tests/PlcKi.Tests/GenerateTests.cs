@@ -312,6 +312,7 @@ public class DevelopTests
         public readonly List<string> Calls = new();
         public readonly List<string> Uploaded = new();
         public readonly List<string> DownloadBodies = new();
+        public readonly List<string> ExportBodies = new();
         public int Imports => _imports;
         public int Polls, Drops;
         public bool DropEveryFirstPoll = true;   // as when the download resets the TIA PC's adapter
@@ -353,6 +354,16 @@ public class DevelopTests
                     : ++_imports == 1
                     ? "{\"exitCode\":3,\"log\":\"Compile: Error\\n\",\"report\":{\"version\":\"" + version + "\",\"saved\":false,\"compileState\":\"Error\",\"errorCount\":1,\"warningCount\":0,\"fileErrors\":[],\"messages\":[{\"state\":\"Error\",\"path\":\"FB_GenValve\",\"description\":\"Tag XV201_Open not defined\"}]}}"
                     : "{\"exitCode\":0,\"log\":\"Compile: Success\\n\",\"report\":{\"version\":\"" + version + "\",\"saved\":true,\"compileState\":\"Success\",\"errorCount\":0,\"warningCount\":0,\"fileErrors\":[],\"messages\":[]}}";
+            }
+            else if (path == "/export")
+            {
+                ExportBodies.Add(await request.Content!.ReadAsStringAsync(ct));
+                body = "{\"exitCode\":0,\"log\":\"Done. 1 PLC(s), 0 problem(s).\\n\"}";
+            }
+            else if (path.StartsWith("/exports/"))
+            {
+                var zip = await File.ReadAllBytesAsync(Path.Combine(AppContext.BaseDirectory, "data", "demo-export.zip"), ct);
+                return new HttpResponseMessage(System.Net.HttpStatusCode.OK) { Content = new ByteArrayContent(zip) };
             }
             else if (path == "/download")
             {
@@ -398,6 +409,54 @@ public class DevelopTests
             Assert.Equal("fix", PackageHistory.Load(dir).Latest!.Kind);
         }
         finally { Directory.Delete(Path.GetDirectoryName(dir)!, true); }
+    }
+
+    [Fact]
+    public async Task Refresh_exports_the_project_on_the_TIA_PC_without_uploading_anything()
+    {
+        var dir = Directory.CreateTempSubdirectory("plcki-refresh-").FullName;
+        try
+        {
+            var tia = new FakeTiaPc();
+            var vm = new VmClient("http://tia-pc:5090", "secret-token", tia) { PollInterval = TimeSpan.Zero };
+            var outFile = Path.Combine(dir, "Test-from-TIA.zip");
+            var code = await PlcKi.Server.Import.ExportCommand.RunAsync(["--tia", "http://tia-pc:5090", "--project",
+                @"C:\Users\Software\Documents\Automation\Helium Copy\HeliumLeakTest_V4.5.ap20", "--out", outFile], vm);
+
+            Assert.Equal(0, code);
+            Assert.Equal("GET /status", tia.Calls[0]);
+            Assert.Equal("POST /export", tia.Calls[1]);
+            Assert.StartsWith("GET /exports/HeliumLeakTest_V4.5-", tia.Calls[2]);
+            Assert.DoesNotContain(tia.Calls, c => c.StartsWith("PUT"));   // the project is already on the TIA PC
+            var body = System.Text.Json.JsonDocument.Parse(tia.ExportBodies.Single()).RootElement;
+            Assert.Equal(@"C:\Users\Software\Documents\Automation\Helium Copy\HeliumLeakTest_V4.5.ap20", body.GetProperty("project").GetString());
+            Assert.Matches(@"^HeliumLeakTest_V4\.5-\d{8}-\d{6}$", body.GetProperty("name").GetString());
+            Assert.NotEmpty(PlcKi.Core.Import.ProgramExport.Load(outFile).Plcs);
+        }
+        finally { Directory.Delete(dir, true); }
+    }
+
+    [Fact]
+    public void The_program_pages_switch_to_a_refreshed_export_without_a_restart()
+    {
+        var data = Path.Combine(AppContext.BaseDirectory, "data");
+        var program = new PlcKi.Server.Jobs.ProgramService(new PlcKi.Server.Live.PlcKiOptions { Export = Path.Combine(data, "demo-export-scl.zip") },
+            TestData.Model, p => p);
+        var before = System.Text.Json.JsonSerializer.Serialize(program.Overview());
+
+        Assert.NotNull(program.Reload(Path.Combine(data, "missing.zip")));   // unreadable: keeps showing the old one
+        Assert.EndsWith("demo-export-scl.zip", program.Path);
+
+        Assert.Null(program.Reload(Path.Combine(data, "demo-export.zip")));
+        Assert.EndsWith("demo-export.zip", program.Path);
+        Assert.NotNull(program.Project);
+        Assert.NotEqual(before, System.Text.Json.JsonSerializer.Serialize(program.Overview()));
+    }
+
+    [Fact]
+    public void A_project_path_from_the_TIA_PC_gives_its_name()
+    {
+        Assert.Equal("HeliumLeakTest_V4.5", PlcKi.Server.Jobs.SetupEndpoints.ProjectName(@"C:\Users\Software\Documents\Automation\H\HeliumLeakTest_V4.5.ap20"));
     }
 
     [Fact]
