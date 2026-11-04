@@ -158,6 +158,8 @@
     mount(el, params) {
       load();
       if (params[0] === "db" && params[1]) { tab = "dbs"; openDb(params[1]); }
+      // Draw now: when the tags were already read (an earlier visit, or the Program page), load() has nothing to wait for
+      PK.draw();
     },
     leave() { shown = []; },
     render(params) {
