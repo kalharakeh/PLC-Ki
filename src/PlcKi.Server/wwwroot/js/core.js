@@ -56,6 +56,8 @@ const PK = (() => {
     key: '<circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M17 6l3 3M15 8l2 2"/>',
     chart: '<path d="M3 20h18"/><path d="M6 16v-5M11 16V6M16 16v-8M21 16v-3"/>',
     logout: '<path d="M15 4h4v16h-4"/><path d="M10 8l-4 4 4 4M6 12h10"/>',
+    book: '<path d="M4 5a2 2 0 0 1 2-2h13v15H6a2 2 0 0 0-2 2V5Z"/><path d="M4 20a2 2 0 0 0 2 2h13v-4"/><path d="M9 7h6"/>',
+    drawing: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9h4v6H7zM11 12h6M17 9v6"/>',
   };
   const icon = (name, cls = "") =>
     `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[name] || P.device}</svg>`;
@@ -796,6 +798,11 @@ const PK = (() => {
 
   // ---- Help: what the current page shows and how to read it ----
   const HELP = {
+    documents: ["Documents", "Device manuals, fault lists and electrical drawings. Ask and the Active alarm page look things up in them.", [
+      "Search: type words, a fault code as the device shows it (F07801, SRVO-062, 0x8C10), a terminal (X2:14) or an address (%I12.3). Fault codes come first, then the pages that match. A page opens in the browser at that page.",
+      "For this machine: documents only this machine uses, such as its EPLAN drawing. For every machine: manuals you use everywhere, such as the SINAMICS list manual.",
+      "Administrators add files by dropping them on the page. PDFs need text in them: a scanned paper page has none. A fault list can also be a CSV file with code, text, cause and remedy columns.",
+      "Built in: general Siemens, FANUC and IO-Link knowledge. When a manual knows the same code, the manual comes first."]],
     alarm: ["Active alarm", "The start page. It shows the alarm that matters most right now and how to get the machine going again.", [
       "With several alarms, the first chip is the first-out: the alarm that came first, as PLC-Ki saw them come. Fix that one first; the others often follow from it.",
       "Fix it: work down the list and tap each step when done. The ticks are only on this screen.",

@@ -136,11 +136,15 @@ static async Task<int> RunAppAsync(string[] appArgs, bool probe, JobService jobs
     builder.Services.AddSingleton<PlcKi.Server.Hardware.DiagnosticsService>();
     builder.Services.AddSingleton<PlcWriter>();
     builder.Services.AddSingleton(opt.Ask);
+    // Manuals, drawings and fault lists (Documents page): per machine and shared, under the data folder
+    var docs = new PlcKi.Core.Knowledge.DocumentLibrary(Path.Combine(plant.DataDir, "documents"), model.Name);
+    _ = docs.Scan();     // picks up files copied into the folders by hand; reads new ones in the background
+    builder.Services.AddSingleton(docs);
     builder.Services.AddSingleton(sp =>
     {
         var live = sp.GetRequiredService<LiveState>();
         var diag = sp.GetRequiredService<PlcKi.Server.Hardware.DiagnosticsService>();
-        return new MachineTools(model, () => new LiveView(live.Status, live.Snapshot, live.History, DateTimeOffset.Now), live.Memory, diag.View);
+        return new MachineTools(model, () => new LiveView(live.Status, live.Snapshot, live.History, DateTimeOffset.Now), live.Memory, diag.View, docs);
     });
     builder.Services.AddSingleton<AskService>();
     builder.Services.AddSingleton<IPlcSource>(sp => CreateSource(sp.GetRequiredService<ILoggerFactory>().CreateLogger("plc")));
@@ -306,6 +310,7 @@ static async Task<int> RunAppAsync(string[] appArgs, bool probe, JobService jobs
     app.MapMemory();    // /api/memory/... machine memory: alarm history and notes (History page)
     app.Lifetime.ApplicationStopped.Register(() => memory.Save());
     PlcKi.Server.Reports.ReportEndpoints.MapReports(app);   // /api/reports/... shift report, OEE, fault summary
+    PlcKi.Server.Docs.DocumentEndpoints.MapDocuments(app);      // /api/documents (Documents page, alarm page), uploads under /api/admin
 
     app.Lifetime.ApplicationStarted.Register(() =>
     {
