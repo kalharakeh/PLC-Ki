@@ -158,6 +158,15 @@ Usage: PlcKi.Server develop --vm <http://tia-pc:5090> --project <project .ap20 o
             if (report.Compiled && o.ContainsKey("download-real"))
                 return await RealDownloadAsync(vm, o["project"], plc, outDir, version.Folder, report, reportPath, readLine, ct);
 
+            if (report.Compiled && o.ContainsKey("download") && report.Download != "OK")
+            {
+                // It compiled, so the blocks are fine: a failed download is about PLCSIM, the network or TIA, never a job for Ki
+                Console.WriteLine();
+                Console.WriteLine($"{version.Folder} compiled and is saved in the project, but the download to PLCSIM did not work: {report.Download}");
+                Console.WriteLine(DownloadHint(report.Download ?? ""));
+                Console.WriteLine("This is not a problem in the blocks, so it does not go back to Ki.");
+                return 1;
+            }
             var done = report.Compiled && (!o.ContainsKey("download") || report.Download == "OK") && report.Runtime.Count == 0;
             if (done)
             {
@@ -231,6 +240,14 @@ Usage: PlcKi.Server develop --vm <http://tia-pc:5090> --project <project .ap20 o
         var m = System.Text.RegularExpressions.Regex.Match(line, @"^(?:Unhandled exception\.\s*)?(?:ERROR:\s*)?(?:[\w.]+(?:Exception|Error):\s*)?(.+)$");
         return m.Success ? m.Groups[1].Value : line;
     }
+
+    /// <summary>What to do when the download failed after a clean compile.</summary>
+    public static string DownloadHint(string error) =>
+        error.Contains("fail-safe", StringComparison.OrdinalIgnoreCase)
+            ? "This PLC has a safety program, and Siemens does not let any tool download it through TIA Openness. " +
+              "Download it yourself: open the project in TIA Portal on the TIA PC, select the PLC, Download to device (software, changes only), then close TIA again."
+            : "On the TIA PC: check that PLCSIM Advanced runs the virtual PLC (green) at the PLCSIM address in Setup, " +
+              "then start the job again with the box empty (it only imports and downloads again).";
 
     private static readonly HashSet<string> Flags = new(StringComparer.OrdinalIgnoreCase) { "download", "download-real", "scl-only" };
 
