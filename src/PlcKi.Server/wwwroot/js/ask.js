@@ -105,6 +105,8 @@
   }
 
   function open(question) {
+    // Public view: asking spends Claude credit, so it needs a login (the server refuses it too)
+    if (!PK.state.user) { PK.toast("Log in to ask about the machine."); return; }
     if (PK.state.ask) showOff(PK.state.ask);   // the role is known by now
     suggestions();
     $("ask").classList.add("open");

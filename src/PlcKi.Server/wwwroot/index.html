@@ -39,7 +39,7 @@
     <div class="right">
       <span class="pill" id="conn"><span class="dot"></span><span>connecting</span></span>
       <span class="pill info hidden" id="job-pill"></span>
-      <span class="ro" id="ro-badge" title="PLC-Ki reads from the PLC only: it never writes values or changes the CPU state.">Read-only</span>
+      <span class="ro hidden" id="ro-badge"></span>
       <span class="clock" id="clock" aria-hidden="true"></span>
       <button class="tb-btn" id="theme-btn" type="button" aria-label="Dark or light screen" title="Dark or light screen"><span class="ti" data-icon="moon"></span></button>
       <button class="tb-btn" id="help-open" type="button" aria-label="Help for this page" title="Help for this page (key ?)"><span class="ti" data-icon="help"></span><span class="tb-t">Help</span><kbd>?</kbd></button>
@@ -48,7 +48,7 @@
   </header>
   <div class="banner hidden" id="banner" role="status" aria-live="polite"></div>
   <main id="page" tabindex="-1"></main>
-  <footer class="foot"><span id="foot-text">PLC-Ki reads from the PLC only: it never writes values or changes the CPU state.</span>
+  <footer class="foot"><span id="foot-text"></span>
     <span class="foot-acct"><span class="who"></span> · <button class="linkbtn" type="button" data-act="screen">Alarm sound and screen</button> · <button class="linkbtn" type="button" data-act="pw">Change my password</button> · <button class="linkbtn act-logout" type="button" data-act="logout">Log out</button></span></footer>
   </div>
 

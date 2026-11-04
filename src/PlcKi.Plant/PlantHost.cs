@@ -143,6 +143,14 @@ public static class PlantHost
         p.StartsWithSegments("/api/admin") || p.Equals("/settings.html", StringComparison.OrdinalIgnoreCase)
         || p.Equals("/settings.js", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Public view shows the machine to anyone, but asking a question spends Claude credit, so it needs a login.
+    /// Only reading whether Ask is on (GET /api/ask) stays open, so the page can hide the button.
+    /// POST /api/watch stays open: it only picks which values the page shows (read-only, capped by WatchList.Max).
+    /// </summary>
+    private static bool NeedsLoginInPublicView(HttpRequest req) =>
+        req.Path.StartsWithSegments("/api/ask") && !(HttpMethods.IsGet(req.Method) && req.Path.Equals("/api/ask"));
+
     private static bool IsPage(PathString p) => p == "/" || p.Value!.EndsWith(".html", StringComparison.OrdinalIgnoreCase);
 
     private static async Task Gate(HttpContext http, Func<Task> next)
@@ -166,7 +174,7 @@ public static class PlantHost
 
         var config = http.RequestServices.GetRequiredService<IConfiguration>();
         bool publicView = config.GetValue("Plant:PublicView", false) && users.Any;
-        if (publicView && !path.StartsWithSegments("/api/auth")) { await next(); return; }
+        if (publicView && !path.StartsWithSegments("/api/auth") && !NeedsLoginInPublicView(http.Request)) { await next(); return; }
 
         await Deny(http, 401, null);
     }

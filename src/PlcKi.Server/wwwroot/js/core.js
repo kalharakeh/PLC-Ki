@@ -130,30 +130,14 @@ const PK = (() => {
   function route() {
     setDirty(null);
     shownHash = location.hash;
-    const { name, params } = parseRoute();
-    const v = views[name] || views.alarm;
+    let { name, params } = parseRoute();
+    let v = views[name];
+    if (!v) { params = [name, ...params]; name = "notfound"; v = views.notfound; }   // say so, instead of showing Active alarm
     const navName = v.nav || name;   // a page can light another menu item (Stations lights Plant)
     document.querySelectorAll("#nav a").forEach((a) => a.classList.toggle("active", a.dataset.route === navName || (a.dataset.route === "setup" && name.startsWith("setup/") && name !== "setup/generator")));
     // Phone: a page that lives under "More" lights the More tab
     const more = $("nav-more");
     if (more) more.classList.toggle("active", !!document.querySelector("#nav a.more-item.active"));
-    // The pages that can change a PLC say so where the rest say "read-only"
-    const ro = $("ro-badge");
-    const canWrite = state.user && state.user.role === "admin" && (name === "tags" || name === "program");
-    const except = name === "setup/generator" || name === "plc" || canWrite;
-    if (ro) {
-      ro.textContent = except ? "Read-only, except here" : "Read-only";
-      ro.classList.toggle("except", except);
-      ro.title = name === "setup/generator" ? "The block generator can load blocks into PLCSIM, or into a real PLC after two people confirm. Every other page only reads."
-        : name === "plc" ? "Start and Stop here switch the PLCSIM CPU only, after you confirm. A real PLC is never started or stopped."
-        : canWrite ? "Administrators can change a value here with the pen: on PLCSIM, or on a real PLC that is allowed in Setup, after typing a reason and the PLC address. Safety values, real inputs and outputs never. Every change is logged."
-        : "PLC-Ki reads from the PLC only: it never writes values or changes the CPU state.";
-    }
-    $("foot-text").textContent = name === "setup/generator"
-      ? "PLC-Ki reads from the PLC only. The one exception is this page: the block generator loads blocks into PLCSIM, or into a real PLC after two people confirm."
-      : name === "plc" ? "PLC-Ki reads from the PLC only. The one exception is on this page: Start and Stop switch the PLCSIM CPU, never a real PLC."
-      : canWrite ? "PLC-Ki reads from the PLC. On this page administrators can change a value: on PLCSIM, or on an allowed real PLC after confirming. Safety values never. Every change is logged."
-      : "PLC-Ki reads from the PLC only: it never writes values or changes the CPU state.";
     const page = $("page");
     if (current && current.view.leave) current.view.leave();
     current = { name, view: v, params };
@@ -163,7 +147,68 @@ const PK = (() => {
     else draw();
     page.scrollTop = 0;
     window.scrollTo(0, 0);
+    showAccess();
+    if (state.user && state.user.role === "admin" && (!state.changes || Date.now() - state.changes.at > 30000)) loadChanges();
     setTitle();
+  }
+
+  // ---- What PLC-Ki may change: one answer for the top badge, its tooltip, the footer, the connection sheet and Help ----
+  // Administrators ask the server (/api/admin/write/state: the same checks a change makes, minus the tag).
+  // Operators and visitors can never change anything, so they need no question.
+  let changesBusy = false;
+  async function loadChanges() {
+    if (changesBusy || !state.user || state.user.role !== "admin") return;
+    changesBusy = true;
+    try { state.changes = { ...(await api("GET", "/api/admin/write/state")), at: Date.now() }; }
+    catch { /* keeps the last answer */ }
+    changesBusy = false;
+    showAccess();
+  }
+
+  /**
+   * What may be changed on this page, for this login: { badge, short, level, text }.
+   * level: "" reads only · "except" this page can change something · "real" changes are allowed on a real PLC.
+   * badge is null while an administrator's answer is not known yet (the badge stays hidden rather than guess).
+   */
+  function access(name = current ? current.name : "alarm") {
+    const reads = (text) => ({ badge: "Reads only", short: "Reads only", level: "", text });
+    if (!state.user) return reads("Without a login, PLC-Ki only reads the PLC.");
+    if (state.user.role !== "admin") return reads("With an operator login, PLC-Ki only reads the PLC.");
+    const ch = state.changes;
+    if (!ch) return { badge: null, short: null, level: "", text: "" };
+    const plc = ch.plc || "the PLC";
+    const valuePage = name === "tags" || name === "program";
+    const pen = "Safety values never. Every change is logged.";
+    let a;
+    if (name === "setup/generator") a = { badge: "Loads blocks here", short: "Blocks", level: "except",
+      text: "The block generator on this page loads blocks into PLCSIM, or into a real PLC after two people confirm." };
+    else if (valuePage && ch.values === "plcsim") a = { badge: "Can change values here", short: "Can change", level: "except",
+      text: `On this page you can change a value with the pen, on PLCSIM. ${pen}` };
+    else if (valuePage && ch.values === "real") a = { badge: "Can change values here", short: "Can change", level: "except",
+      text: `On this page you can change a value on the real PLC ${plc} with the pen, after typing a reason and the PLC address. Inputs, outputs and safety values never. Every change is logged.` };
+    else if (name === "plc" && ch.startStop) a = { badge: "Can start and stop PLCSIM", short: "Start/Stop", level: "except",
+      text: "Start and Stop on this page switch the PLCSIM CPU, after you confirm. A real PLC is never started or stopped." };
+    else a = reads("This page only reads the PLC."
+      + (ch.values === "plcsim" ? " On Tags and Program, administrators can change values on PLCSIM."
+        : ch.values === "real" ? ` On Tags and Program, administrators can change values on the real PLC ${plc}.` : ""));
+    // A real PLC that may be changed is said on every page, in amber
+    if (ch.values === "real") { a.badge = `Changes allowed on the real PLC ${plc}`; a.short = "Real PLC"; a.level = "real"; }
+    return a;
+  }
+
+  function showAccess() {
+    const a = access();
+    const ro = $("ro-badge");
+    if (ro) {
+      ro.classList.toggle("hidden", !a.badge);
+      ro.classList.toggle("except", a.level === "except");
+      ro.classList.toggle("real", a.level === "real");
+      const html = a.badge ? `<span class="ro-l">${esc(a.badge)}</span><span class="ro-s">${esc(a.short)}</span>` : "";
+      if (ro.innerHTML !== html) ro.innerHTML = html;
+      ro.title = a.text;
+    }
+    const f = $("foot-text");
+    if (f && f.textContent !== a.text) f.textContent = a.text;
   }
 
   /** Change the address shown (e.g. #/alarms/A02 for an opened alarm) without leaving the page, so it can be shared. */
@@ -317,12 +362,14 @@ const PK = (() => {
     document.documentElement.classList.toggle("frozen", kind === "frozen");
   }
 
-  /** The browser tab shows the page and the number of active alarms, e.g. "(2) Plant · PLC-Ki". */
-  /** Tab title and icon: a screen in another tab or on the wall shows the alarm, e.g. "(1) FAULT A02 · PLC-Ki". */
+  /**
+   * Tab title and icon: a screen in another tab or on the wall shows the alarm, and two tabs stay apart by
+   * their page name, e.g. "(1) A02 · Program · PLC-Ki" or "Plant · PLC-Ki". The icon turns red or amber.
+   */
   function setTitle() {
     const al = (state.status && state.status.activeAlarms) || [];
     const page = current ? (HELP[current.name] || [""])[0] : "";
-    const t = al.length ? `(${al.length}) ${al[0].severity} ${al[0].id} · PLC-Ki` : `${page ? page + " · " : ""}PLC-Ki`;
+    const t = [al.length ? `(${al.length}) ${al[0].id}` : "", page, "PLC-Ki"].filter(Boolean).join(" · ");
     if (document.title !== t) document.title = t;
     const level = !al.length ? "ok" : al.some((a) => a.severity === "FAULT") ? "fault" : "warn";
     if (setTitle.level !== level) {
@@ -768,7 +815,7 @@ const PK = (() => {
     const c = state.status && state.status.connection;
     const stale = Date.now() - state.lastOk > 5000;
     if (!state.status || stale) return { level: "bad", title: "PLC-Ki is not answering.", text: "This page cannot reach PLC-Ki.", todo: "Check that the PLC-Ki window on the PC is still open. If it was closed, double-click Start-PLC-Ki in the PLC-Ki folder, then reload this page." };
-    if (c.state === "connected") return { level: "ok", title: `Reading the PLC at ${c.address}.`, text: "Values are live, read once a second. PLC-Ki only reads: it never writes values or changes the CPU state.", todo: "" };
+    if (c.state === "connected") return { level: "ok", title: `Reading the PLC at ${c.address}.`, text: "Values are live, read once a second.", todo: "" };
     if (c.state === "snapshot") return { level: "info", title: "Showing test values, not a PLC.", text: "PLC-Ki reads values from a test file.", todo: "To read a real PLC, choose Live PLC under Setup, Connections (More PLC options).", op: "Ask an administrator to switch PLC-Ki to the real PLC." };
     if (c.state === "notset") return { level: "warn", title: "No PLC is set yet.", text: "PLC-Ki does not know which PLC to read, so there are no live values.", todo: "Enter the PLC's address under Setup, Connections.", op: "Ask an administrator to set up the connection to the PLC." };
     if (c.state === "connecting") return { level: "warn", title: `Connecting to ${c.address}…`, text: "This takes a few seconds.", todo: "" };
@@ -780,8 +827,10 @@ const PK = (() => {
   function connSheet() {
     const i = connInfo();
     const admin = state.user && state.user.role === "admin";
+    const a = access();
     sheet(`<span class="pill ${i.level}" style="align-self:flex-start;justify-self:start"><span class="dot"></span>${{ ok: "Connected", bad: "Not connected", warn: "Waiting", info: "Test values" }[i.level]}</span>
       <h2>${esc(i.title)}</h2>${i.text ? `<p class="muted" style="margin:0">${esc(i.text)}</p>` : ""}
+      ${a.text ? `<p class="${a.level === "real" ? "notice gold" : "muted"}" style="margin:0">${esc(a.text)}</p>` : ""}
       ${i.todo ? `<div class="notice ${i.level === "bad" ? "red" : "gold"}">${icon("info")}<div><b>What to do</b><br>${esc(i.todo)}</div></div>` : ""}
       ${i.detail ? `<details class="more"><summary>Technical detail</summary><p class="faint small" style="margin:8px 0 0">${esc(i.detail)}</p></details>` : ""}
       <div class="row end">${admin && i.level !== "ok" ? `<a class="btn b" href="#/setup/connections" data-close>Open Connections</a>` : ""}<button class="btn" data-close>OK</button></div>`);
@@ -844,11 +893,11 @@ const PK = (() => {
       "Rungs: each network drawn as a rung. Green passes power, grey does not, a dashed ? has no live value. Read from left to right: the amber contact is the first one that stops the output.",
       "Text: the code as written in TIA (LAD and GRAPH as readable text with the same meaning), with the live value after each signal. Click a signal in quotes to see where else it is used.",
       "LAD, FBD and GRAPH blocks open as rungs, SCL blocks as text. Switch with Rungs / Text. Coming from an alarm, the network that sets it is marked.",
-      "Values update every two seconds. PLC-Ki only reads: nothing here changes the PLC."]],
+      "Values update every two seconds."]],
     tags: ["Tags", "The PLC tag tables with addresses, and every data block's values, live.", [
       "Tag tables: every tag with its address (%I, %Q, %M), type and comment. Search by name, address or comment.",
       "Data blocks: pick one on the left to see all its values. Optimized blocks have no addresses; values are read by name.",
-      "Up to 300 rows are read live at a time, about once a second. PLC-Ki only reads: nothing here changes the PLC."]],
+      "Up to 300 rows are read live at a time, about once a second."]],
     plc: ["PLC monitor", "The CPU as it looks on the machine: its mode, its LEDs and a display with what PLC-Ki reads.", [
       "Operating mode: RUN, STOP or STARTUP as the CPU reports it, with the position of the mode switch where the CPU tells it.",
       "The picture is drawn from the CPU's order number. Use the keys under the display, or the buttons below it, to page through Overview, Diagnostics, Settings and Modules.",
@@ -886,7 +935,7 @@ const PK = (() => {
       "Scan the QR label on the machine to open its station here. Administrators print the labels in Setup › QR labels.",
       "The stations come from the program: each device and sequence belongs to the station (instance) named in its location. An alarm belongs to the station of its device.",
       "Tap a device for its values and interlocks. Open the alarm for the full fix list and where it is set in the program.",
-      "Values update every second. PLC-Ki only reads: nothing here changes the machine."]],
+      "Values update every second."]],
     "setup/qr": ["QR labels", "Print a QR label per station or device. A phone that scans it opens that station's live page.", [
       "Pick the address phones use: the PC's address on the plant network, not localhost. Open it on a phone once to check it works.",
       "Phones only reach PLC-Ki when Settings › Other computers may open PLC-Ki is on.",
@@ -894,13 +943,48 @@ const PK = (() => {
     "setup/settings": ["Settings", "The machine model, the Claude key, who may open PLC-Ki, and logins.", [
       "Operators see every machine page; administrators also see Setup.",
       "Other computers may open PLC-Ki: off means only this PC."]],
+    notfound: ["Page not found", "The address in the browser does not match a page of PLC-Ki.", [
+      "Pick a page in the menu, or use one of the links on the page.",
+      "An old bookmark or a mistyped address leads here. Nothing is wrong with the machine."]],
   };
+  // ---- Page not found: an unknown address says so, with a way out, instead of quietly showing Active alarm ----
+  /** The page an unknown address most likely meant, only when it is obvious ("generator" → Block generator). */
+  function closestPage(typed) {
+    const admin = state.user && state.user.role === "admin";
+    const t = String(typed || "").toLowerCase();
+    const want = t.split("/").pop();
+    const names = Object.keys(views).filter((n) => n !== "notfound" && HELP[n] && (admin || !n.startsWith("setup/")));
+    const last = (n) => n.split("/").pop();
+    if (want.length >= 3) {
+      const hit = names.find((n) => last(n) === want)
+        || names.find((n) => last(n).startsWith(want) || want.startsWith(last(n)))
+        || names.find((n) => HELP[n][0].toLowerCase().includes(want));
+      if (hit) return hit;
+    }
+    return admin && t.startsWith("setup/") ? "setup/connections" : null;
+  }
+  view("notfound", {
+    render() {
+      const typed = location.hash.replace(/^#\/?/, "");
+      const near = closestPage(typed.split("/").slice(0, typed.startsWith("setup/") ? 2 : 1).join("/"));
+      const links = [
+        near ? `<a class="btn" href="#/${near}">Open ${esc(HELP[near][0])}</a>` : "",
+        near === "alarm" ? "" : `<a class="btn${near ? " gray" : ""}" href="#/alarm">Active alarm</a>`,
+        near === "plant" ? "" : `<a class="btn gray" href="#/plant">Plant</a>`,
+      ].join("");
+      return hero({ title: "Page not found", actions: links,
+        sub: `There is no page at <code>#/${esc(typed)}</code>.${near ? ` Did you mean ${esc(HELP[near][0])}?` : " It may be an old bookmark or a typo."}` });
+    },
+  });
+
   function helpSheet() {
     const name = current ? current.name : "alarm";
     const [title, intro, tips] = HELP[name] || HELP.alarm;
     const admin = state.user && state.user.role === "admin";
+    const a = access(name);
     const h = sheet(`<span class="eyebrow">Help</span><h2>${esc(title)}</h2><p class="muted" style="margin:0">${esc(intro)}</p>
       <ul class="plainlist">${tips.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>
+      ${a.text ? `<p class="small" style="margin:0">${esc(a.text)}</p>` : ""}
       <p class="faint small" style="margin:0">The light at the top right shows the PLC connection; click it for what it means. Ask answers questions about the machine on every page.</p>
       <p class="faint small" style="margin:0"><button type="button" class="linkbtn" data-screen>Alarm sound and screen</button>: beep or show a notice when an alarm comes, keep a line screen on.</p>
       <p class="faint small keys" style="margin:0"><kbd>?</kbd> this help · <kbd>/</kbd> ask a question · <kbd>Esc</kbd> close</p>
@@ -950,6 +1034,9 @@ const PK = (() => {
     } catch { /* public view */ }
     const admin = state.user && state.user.role === "admin";
     document.querySelectorAll(".admin-only").forEach((el) => el.classList.toggle("hidden", !admin));
+    // Public view without a login: Ask needs a login (it spends Claude credit), so its buttons are hidden
+    document.documentElement.classList.toggle("anon", !state.user);
+    if (admin) setInterval(loadChanges, 60000);   // "changes allowed" can change without a restart
     const who = state.user ? state.user.name + (admin ? " · administrator" : " · operator") : "Not logged in";
     document.querySelectorAll(".who").forEach((el) => { el.textContent = who; });
     document.querySelectorAll(".act-logout").forEach((el) => { el.textContent = state.user ? "Log out" : "Log in"; });
@@ -977,6 +1064,11 @@ const PK = (() => {
     $("conn").title = "What does this mean?";
     $("conn").onclick = connSheet;
     $("conn").onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); connSheet(); } };
+    // The badge says in a word what may change; a tap shows the full sentence (a phone has no tooltip)
+    $("ro-badge").setAttribute("role", "button");
+    $("ro-badge").tabIndex = 0;
+    $("ro-badge").onclick = connSheet;
+    $("ro-badge").onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); connSheet(); } };
     window.addEventListener("hashchange", onHash);
     const bar = document.createElement("div");
     bar.id = "dirty-bar";
@@ -1002,7 +1094,13 @@ const PK = (() => {
     };
     navh();
     if ("ResizeObserver" in window) { const ro = new ResizeObserver(navh); ro.observe($("topnav")); ro.observe($("banner")); }
-    if (admin && !location.hash && typeof PKStart !== "undefined" && (await PKStart.firstRun())) history.replaceState(null, "", "#/setup/start");
+    // An administrator who has not finished setup gets Get started, but not while an alarm is on: then the
+    // alarm comes first (Active alarm still shows the Get started card).
+    const alarmOn = async () => {
+      try { const s = await api("GET", "/api/status"); state.status = s; state.lastOk = Date.now(); return !!(s.activeAlarms || []).length; }
+      catch { return false; }
+    };
+    if (admin && !location.hash && typeof PKStart !== "undefined" && (await PKStart.firstRun()) && !(await alarmOn())) history.replaceState(null, "", "#/setup/start");
     route();
     pollStatus();
     pollValues();
