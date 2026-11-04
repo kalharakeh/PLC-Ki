@@ -254,12 +254,12 @@ const PKSetup = (() => {
         ${box(50, 76, 180, 120, "PLC-Ki", [{ t: location.host, mono: true }, { t: "web app" }], true)}
         ${box(260, 76, 180, 120, "TIA Portal", [{ t: "+ TIA helper" }, { t: tiaOk ? "started" : "on this PC" }])}
         ${wire(230, 136, 260, 136, tiaOk, "")}
-        ${wire(460, 130, 720, 130, plcOk, "Ethernet · S7, read-only")}${plc(720, 84)}`;
+        ${wire(460, 130, 720, 130, plcOk, "Ethernet · S7")}${plc(720, 84)}`;
     } else if (c.tiaMode === "remote") {
       svg = `${box(40, 74, 220, 112, "PLC-Ki", [{ t: location.host, mono: true }, { t: "this PC" }], true)}
         ${box(700, 20, 230, 100, "TIA Portal", [{ t: (c.tiaUrl || "address not set").replace(/^https?:\/\//, ""), mono: true }, { t: "VM or PC with the TIA helper" }])}
         ${wire(260, 110, 700, 70, tiaOk, "TIA helper, port 5090")}
-        ${wire(260, 150, 700, 190, plcOk, "S7, read-only")}${plc(700, 144)}`;
+        ${wire(260, 150, 700, 190, plcOk, "S7")}${plc(700, 144)}`;
     } else {
       svg = `${box(20, 74, 200, 112, "PLC-Ki", [{ t: "on the server", mono: false }, { t: location.host, mono: true }], true)}
         ${box(410, 64, 230, 132, "Your laptop", [{ t: linkStatus && linkStatus.connected ? "PLC-Ki Link · " + (linkStatus.machine || "") : "PLC-Ki Link" }, { t: linkStatus && linkStatus.tia ? "TIA Portal, helper ready" : "TIA Portal" }, { t: "your browser" }])}

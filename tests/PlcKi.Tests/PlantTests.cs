@@ -84,13 +84,14 @@ public class PlantTests : IDisposable
         }
     }
 
-    private async Task<WebApplication> Start(bool local = true)
+    private async Task<WebApplication> Start(bool local = true, bool publicView = false)
     {
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = "Test" });
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
         {
             ["Plant:DataDir"] = _dir,
             ["PlcKi:Model"] = "models/demo-mixing-station.json",
+            ["Plant:PublicView"] = publicView ? "true" : "false",
         });
         builder.WebHost.UseTestServer();
         builder.AddPlant();
@@ -102,6 +103,10 @@ public class PlantTests : IDisposable
         });
         app.UsePlant();
         app.MapGet("/api/status", () => Results.Ok(new { ok = true }));
+        app.MapGet("/api/ask", () => Results.Ok(new { enabled = true }));
+        app.MapPost("/api/ask", () => Results.Ok(new { answer = "spent credit" }));
+        app.MapDelete("/api/ask/{id}", (string id) => Results.NoContent());
+        app.MapPost("/api/watch", () => Results.Ok(new { values = new { } }));
         app.MapPlant();
         await app.StartAsync();
         return app;
@@ -138,6 +143,25 @@ public class PlantTests : IDisposable
         // Deleting the user ends the session at once
         Assert.Equal(HttpStatusCode.NoContent, (await admin.Send(HttpMethod.Delete, "/api/admin/users/ben")).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await op.Send(HttpMethod.Get, "/api/status")).StatusCode);
+    }
+
+    [Fact]
+    public async Task Public_view_shows_the_machine_but_asking_needs_a_login()
+    {
+        await using var app = await Start(publicView: true);
+        var admin = new Client(app.GetTestClient());
+        Assert.True((await admin.Send(HttpMethod.Post, "/api/auth/setup", new { name = "anna", password = AdminPw })).IsSuccessStatusCode);
+
+        var anon = new Client(app.GetTestClient());
+        Assert.Equal(HttpStatusCode.OK, (await anon.Send(HttpMethod.Get, "/api/status")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await anon.Send(HttpMethod.Get, "/api/ask")).StatusCode);          // is Ask on: hides the button
+        Assert.Equal(HttpStatusCode.OK, (await anon.Send(HttpMethod.Post, "/api/watch", new { symbols = Array.Empty<object>() })).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anon.Send(HttpMethod.Post, "/api/ask", new { question = "why?" })).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anon.Send(HttpMethod.Post, "/API/Ask", new { question = "why?" })).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anon.Send(HttpMethod.Delete, "/api/ask/abc")).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anon.Send(HttpMethod.Get, "/api/admin/settings")).StatusCode);
+
+        Assert.Equal(HttpStatusCode.OK, (await admin.Send(HttpMethod.Post, "/api/ask", new { question = "why?" })).StatusCode);
     }
 
     [Fact]

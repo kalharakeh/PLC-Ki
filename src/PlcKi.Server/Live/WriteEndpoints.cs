@@ -49,6 +49,19 @@ public static class WriteEndpoints
             });
         });
 
+        // What this PLC-Ki may change right now, for the top bar of every page. Reads only: it asks the same
+        // questions as a change would (minus the ones about one tag) and changes nothing.
+        //   values: "none" | "plcsim" | "real" (a real PLC on the allow list); startStop: PLCSIM Start/Stop works
+        api.MapGet("/state", async (PlcKiOptions opt, TiaConnection tia, SettingsStore settings, CancellationToken ct) =>
+        {
+            var plc = opt.Plc.Address.Trim();
+            var plcsim = await PlcKi.Server.Hardware.HardwareEndpoints.PlcsimAsync(opt, tia, false, ct);
+            bool sim = plcsim["applies"] is true;
+            string values = !opt.Source.Equals("s7", StringComparison.OrdinalIgnoreCase) || opt.Plc.Via == "link" || plc.Length == 0 ? "none"
+                : sim ? "plcsim" : RealAllowed(settings, plc) ? "real" : "none";
+            return Results.Ok(new { values, startStop = sim && plcsim["found"] is true, plc });
+        });
+
         api.MapPost("", async (WriteRequest req, PlcKiOptions opt, ProgramService program, TiaConnection tia, SettingsStore settings,
             PlantContext ctx, MachineHistory history, PlcWriter writer, HttpContext http, ILoggerFactory lf, CancellationToken ct) =>
         {
@@ -125,14 +138,18 @@ public static class WriteEndpoints
         if (WriteRules.SafetyReason(loaded, symbol) is { } safety) return new(target, safety, address, plcsimWhy, plc);
         if (target == "real")
         {
-            var allowed = (settings.Current().PlcAllowWrites ?? "").Split(new[] { ',', ';', ' ' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-            if (!allowed.Contains(plc, StringComparer.OrdinalIgnoreCase))
+            if (!RealAllowed(settings, plc))
                 return new(target, $"{plc} is a real PLC (or PLC-Ki cannot tell that it is PLCSIM), and it is not on the list of real PLCs whose values may be changed. " +
                     "An administrator can add it under Setup, Connections, More PLC options.", address, plcsimWhy, plc);
             if (WriteRules.RealIoReason(address) is { } io) return new(target, io, address, plcsimWhy, plc);
         }
         return new(target, null, address, plcsimWhy, plc);
     }
+
+    /// <summary>Is this real PLC on Settings' list of real PLCs whose values may be changed? (Read live: no restart needed.)</summary>
+    private static bool RealAllowed(SettingsStore settings, string plc) =>
+        (settings.Current().PlcAllowWrites ?? "").Split(new[] { ',', ';', ' ' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Contains(plc, StringComparer.OrdinalIgnoreCase);
 
     private static string LogFile(PlantContext ctx) => Path.Combine(ctx.DataDir, "value-changes.jsonl");
 

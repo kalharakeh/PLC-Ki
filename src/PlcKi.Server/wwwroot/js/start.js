@@ -166,7 +166,7 @@ const PKStart = (() => {
     }
     return {
       title: "Where is the PLC?",
-      sub: viaLink ? "Your laptop reads the PLC at this address and sends the values to PLC-Ki." : "PLC-Ki reads the PLC over the network, read-only. It never writes values or changes the CPU state.",
+      sub: viaLink ? "Your laptop reads the PLC at this address and sends the values to PLC-Ki." : "PLC-Ki reads the PLC over the network. It changes values on a real PLC only if you allow that later, in Setup.",
       body: `<div class="card stack">
           <div class="grid two">${field("w-address", "PLC address (IP)", w.address, { placeholder: "e.g. 192.168.0.1" })}
             <div class="row" style="align-self:end;margin-bottom:2px">${viaLink ? "" : `<button class="btn b" data-test>Test</button>`}
