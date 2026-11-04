@@ -544,7 +544,8 @@ section.wiz-body .wrap > .card + .card { margin-top: 18px; }
 /* ---------- small screens ---------- */
 @media (max-width: 960px) {
   .split, .gen-grid { grid-template-columns: minmax(0, 1fr); }
-  .blocklist { position: static; max-height: 240px; }
+  .blocklist { position: static; max-height: none; }
+  .split:not(.has-sel) > .blocklist { order: 2; }
   .kpis, .grid.four { grid-template-columns: 1fr 1fr; }
   .steps { grid-template-columns: 1fr 1fr; }
   .grid.three { grid-template-columns: 1fr 1fr; }
@@ -702,6 +703,73 @@ html.ask-off main [data-ask] { display: none; }
 .why-off ul { margin: 8px 0 0; padding-left: 20px; font-size: 14px; line-height: 1.5; }
 .why-off li { overflow-wrap: anywhere; }
 .why-off .linkbtn { margin-left: 4px; font-size: 13px; }
+/* Program page: the call tree on the left, plain words first, the code below */
+.blocklist a { padding-top: 5px; padding-bottom: 5px; }
+.blocklist .pl-t { display: flex; flex-direction: column; min-width: 0; flex: 1; line-height: 1.25; }
+.blocklist .pl-n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.blocklist .pl-d { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.blocklist a.on .pl-d { color: color-mix(in srgb, var(--bg) 70%, transparent); }
+.blocklist .pl-home { gap: 8px; font-weight: 600; color: var(--accent); margin-top: 4px; }
+.blocklist .pl-home svg { width: 16px; height: 16px; flex: none; }
+.blocklist .pl-home.on { background: var(--accent); color: #fff; }
+.blocklist .pl-fold { margin-top: 6px; }
+.blocklist .pl-fold > summary { font-size: 12.5px; color: var(--muted); padding: 10px 10px 4px; cursor: pointer; }
+.pdot { width: 9px; height: 9px; border-radius: 50%; flex: none; background: var(--accent); }
+.pdot.alarm { background: var(--fault); box-shadow: 0 0 0 3px var(--fault-soft); }
+.pdot.blocked { background: var(--warn); box-shadow: 0 0 0 3px var(--warn-soft); }
+.pdot.run { background: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.crumbs { font-size: 13.5px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin: 0 0 -4px; }
+.crumbs i { font-style: normal; opacity: 0.6; }
+.crumbs b { color: var(--ink); font-weight: 600; }
+.pg-card { padding: 24px 26px; }
+.pg-title { margin: 0; font-size: 26px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.2; }
+.pg-h { margin: 0; font-size: 20px; font-weight: 600; letter-spacing: -0.01em; }
+.pg-meta { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; margin-top: 8px; font-size: 13px; color: var(--muted); }
+.pg-meta .mono { color: var(--ink); }
+.pg-lede { margin: 12px 0 0; color: var(--muted); font-size: 15px; line-height: 1.45; max-width: 70ch; }
+.pg-inst { display: inline-flex; gap: 8px; align-items: center; }
+.pg-inst select { width: auto; max-width: 100%; }
+.pg-sec { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--line); }
+.pg-sec > h3 { margin: 0 0 10px; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+.pg-sec .why-off { margin-top: 0; }
+.pg-seq .pg-does { margin: 8px 0 0; font-size: 15px; line-height: 1.45; max-width: 75ch; }
+.pg-seq .pg-wait { margin: 12px 0 6px; font-size: 14px; font-weight: 600; }
+.pg-seq > a.small { display: inline-block; margin-top: 10px; }
+.pg-seqrow + .pg-seqrow { margin-top: 18px; padding-top: 16px; border-top: 1px dashed var(--line); }
+.pg-seq .pg-where { float: right; margin-left: 12px; }
+.pg-where { font-size: 13px; font-weight: 600; white-space: nowrap; flex: none; }
+.pg-rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.pg-rows li { display: flex; gap: 12px; align-items: center; padding: 8px 10px; border-radius: 12px; font-size: 14.5px; }
+.pg-rows li:nth-child(odd) { background: var(--bg-alt); }
+.pg-rows .ico { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); flex: none; }
+.pg-rows .ico svg { width: 17px; height: 17px; }
+.pg-blocked { font-size: 13.5px; color: var(--warn-ink); margin-top: 2px; }
+.pg-sev { font-family: var(--mono); font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--bg); color: var(--muted); border: 1px solid var(--line); flex: none; }
+.pg-sev.on { background: var(--fault); color: #fff; border-color: transparent; }
+.pg-more { margin: 6px 0 0; border: 0; padding: 0; }
+.pg-more > summary { font-size: 14px; }
+.pg-more .pg-rows { margin-top: 8px; }
+.pg-parts { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+.pg-part { display: flex; flex-direction: column; gap: 4px; padding: 14px 16px; border-radius: 16px; border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+  transition: transform 0.25s var(--spring), box-shadow 0.2s var(--ease), border-color 0.2s var(--ease); }
+.pg-part:hover { text-decoration: none; border-color: var(--accent); box-shadow: var(--shadow); transform: translateY(-2px); }
+.pg-part-top { display: flex; gap: 8px; align-items: center; font-size: 12.5px; color: var(--muted); }
+.pg-part-top .pl-n { font-family: var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pg-part-top .pdot { margin-left: auto; }
+.pg-part-t { font-weight: 600; font-size: 15.5px; line-height: 1.3; }
+.pg-part-c { font-size: 13px; color: var(--muted); line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+@media (max-width: 960px) {
+  /* On a phone the list is the way in: once a block is open, the breadcrumb leads back */
+  .split.has-sel .blocklist { display: none; }
+  .pg-card { padding: 18px 16px; }
+  .pg-title { font-size: 22px; }
+}
+@media (max-width: 760px) {
+  .pg-seq .pg-where { float: none; display: block; margin: 0 0 6px; }
+  .pg-rows li { flex-wrap: wrap; }
+  .pg-rows li > div { flex-basis: 60% !important; }
+}
+.pg-title .pdot { display: inline-block; vertical-align: middle; margin: -3px 0 0 10px; }
 /* Block generator: the option that changes a real machine looks different from the safe ones */
 .choice button.danger { border-color: color-mix(in srgb, var(--fault) 45%, var(--line-strong)); }
 .choice button.danger .ico, .choice button.danger b { color: var(--fault-ink); }
