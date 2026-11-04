@@ -288,6 +288,7 @@ static async Task<int> RunAppAsync(string[] appArgs, bool probe, JobService jobs
     app.MapLink();      // /link/... for PLC-Ki Link on the laptop, /api/admin/link for the Connections page
     PlcKi.Server.Hardware.HardwareEndpoints.MapHardware(app);   // /api/hardware, /api/cpu (PLC page), PLCSIM Start/Stop
     app.MapWrites();    // /api/admin/write: change a value (PLCSIM freely, a real PLC only when allowed and confirmed, never safety)
+    PlcKi.Server.Mobile.PhoneEndpoints.MapPhone(app);   // /api/admin/phone-address for the QR labels
     app.MapMemory();    // /api/memory/... machine memory: alarm history and notes (History page)
     app.Lifetime.ApplicationStopped.Register(() => memory.Save());
 
