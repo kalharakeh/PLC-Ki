@@ -1,5 +1,5 @@
-// Code and Logic views: the program from the import (block list, SCL source, decoded LAD/FBD/GRAPH networks)
-// with live values on top. Values are found by symbol: a block's "#member" becomes "<instance>.member", and
+// The Program page: one block at a time from the import (block list, SCL source, decoded LAD/FBD/GRAPH networks),
+// shown as rungs or as text, with live values on top and a plain-words summary of what stops each output. Values are found by symbol: a block's "#member" becomes "<instance>.member", and
 // for multi-instances the call in the parent block tells which global signal is wired to each input.
 "use strict";
 
@@ -188,7 +188,7 @@
       const sym = n.t === "cmp" ? "CMP" : n.neg ? "|/|" : "| |";
       const live = n.t === "leaf" ? resolve(n.op) : null;
       const blocker = power && v === false && !ctx.blocked;
-      if (blocker) ctx.blocked = true;
+      if (blocker) { ctx.blocked = true; if (!ctx.first) ctx.first = { n, live }; }
       const tip = v == null ? `${label}: no live value (not read, or not found in the PLC)` : `${label}${live ? " = " + live.text : ""}: ${v ? "passes" : "does not pass"}`;
       return { html: `<div class="contact ${n.t === "cmp" ? "cmp" : ""} ${v === true ? "on" : v === false ? "off" : "unk"} ${blocker && ctx.coilOff ? "blocker" : ""}" title="${esc(tip)}">
           <span class="sym">${sym}${v == null ? `<span class="q" aria-hidden="true">?</span>` : ""}</span><span class="nm">${esc(label.replace(/^#/, ""))}</span></div>`, out: power && v === true };
@@ -211,7 +211,7 @@
     const anyPass = v === true;
     const sub = { ...ctx, blocked: ctx.blocked || anyPass };
     const branches = n.items.map((x) => drawNode(x, resolve, power, sub));
-    if (!anyPass && sub.blocked) ctx.blocked = true;
+    if (!anyPass && sub.blocked) { ctx.blocked = true; ctx.first = ctx.first || sub.first; }
     return { html: `<div class="par ${power && anyPass ? "on" : ""}">${branches.map((b) => `<div class="ser"><span class="wire ${power ? "on" : ""}"></span>${b.html}<span class="wire ${b.out ? "on" : ""}"></span></div>`).join("")}</div>`, out: power && anyPass };
   }
 
@@ -226,6 +226,8 @@
     const faultCoil = !box && /fault|alarm|error|\berr|warn|notready|not_?ok|trip|dev$/i.test(lhs || "");
     const ctx = { blocked: false, coilOff: coilOn === false && !faultCoil };
     const body = drawNode(tree, resolve, true, ctx);
+    // A plain ( ) output that is off, and the first contact that stops it: for "Why is it off" at the top
+    if (opt.why && !box && !opt.coil && ctx.coilOff && ctx.first) opt.why.push({ coil: lhs, first: ctx.first, net: opt.net });
     const end = box
       ? `<div class="contact ${result ? "on" : result === false ? "off" : ""}"><span class="sym">${esc(box.kind)}</span><span class="nm">${esc(box.name)}${box.pt ? " · " + esc(box.pt) : ""}</span></div>`
       : `<div class="contact coil ${coilOn === true ? "on" : coilOn === false ? "off" : ""}"><span class="sym">${opt.coil ? "(" + opt.coil + ")" : "( )"}</span><span class="nm">${esc(lhs.replace(/^#/, ""))}</span></div>`;
@@ -272,7 +274,7 @@
     return new RegExp("(^|\\bTHEN\\s+)" + sym + "(?![\\w.\\[])\\s*:=").test(line.trim());
   }
 
-  function netHtml(net, resolve, highlight, curStep, wantNet) {
+  function netHtml(net, resolve, highlight, curStep, wantNet, why) {
     const parts = [];
     let plain = [];
     let inCur = false;
@@ -292,42 +294,79 @@
       let r = null;
       if (timer) r = rung(null, timer[2], resolve, { kind: (line.match(/\/\/\s*(TON|TOF|TP)/) || [, "TIMER"])[1], name: timer[1].slice(1), pt: timer[3].replace(/^#/, "") });
       else if (sr) r = rung(sr[2], sr[1], resolve, null, { coil: sr[3] === "TRUE" ? "S" : "R", hl: writes(s, highlight) });
-      else if (assign) r = rung(assign[1], assign[2], resolve, null, { hl: writes(s, highlight) });
+      else if (assign) r = rung(assign[1], assign[2], resolve, null, { hl: writes(s, highlight), why, net: net.no });
       if (r) { flush(); parts.push(r); } else plain.push(line);
     }
     flush();
     const hl = highlight ? net.lines.some((l) => writes(l, highlight)) : wantNet != null && net.no === String(wantNet);
-    return `<div class="rung-card ${hl ? "hl" : ""}" ${hl ? 'id="hl"' : ""}>
+    return `<div class="rung-card ${hl ? "hl" : ""}" ${hl ? 'id="hl"' : ""} data-net="${esc(net.no)}">
       <div class="rung-title">${net.no ? "Network " + esc(net.no) : ""} ${net.lang ? `<span class="tag lang-${esc(net.lang)}">${esc(net.lang)}</span>` : ""}<span class="faint">${esc(net.title)}</span></div>
       ${parts.join("")}</div>`;
   }
 
-  // ---- shared page for Code and Logic ----
-  function program(kind) {
-    let sel = null;        // { name, params, block, instances, inst }
+  // ---- the Program page ----
+  // #/program/<block>[/<instance>[/<local>]][/network-N][/@<symbol>][/as-rungs|/as-text]
+  // The old #/logic/... and #/code/... links still work: they open this page as rungs or as text.
+  const MODE = /^as-(rungs|text)$/;
+  const clean = (x) => String(x || "").replace(/^#/, "");
+
+  /** "Valve_Open is off because EStop_OK is off": the first contact that stops an output, in plain words. */
+  function because(f, resolve, instPath) {
+    const n = f.n;
+    if (n.t === "cmp") {
+      const a = /^-?\d/.test(n.a) ? null : resolve(n.a);
+      return `<b>${esc(clean(n.a))} ${esc(n.op)} ${esc(clean(n.b))}</b> is not true${a ? ` (${esc(clean(n.a))} is ${esc(a.text)})` : ""}`;
+    }
+    const name = clean(n.op);
+    const v = f.live;
+    const txt = v && typeof v.raw !== "boolean" ? ` (${esc(v.text)})` : "";
+    // An input of the block: say which signal is wired to it, so the operator knows what to check
+    const wired = n.op.startsWith("#") && v && v.symbol && instPath && !v.symbol.startsWith(instPath) ? `, wired to <span class="mono">${esc(v.symbol)}</span>` : "";
+    return `<b>${esc(name)}</b> is ${n.neg ? "on" : "off"}${txt}${wired}`;
+  }
+
+  function whyHtml(why, resolve, instPath) {
+    if (!why.length) return "";
+    const MAX = 6;
+    return `<div class="why-off"><div class="why-h">${icon("info")}<b>Why ${why.length === 1 ? "an output is" : why.length + " outputs are"} off right now</b></div>
+      <ul>${why.slice(0, MAX).map((w) => `<li><b>${esc(clean(w.coil))}</b> is off because ${because(w.first, resolve, instPath)}.
+        ${w.net ? `<button type="button" class="linkbtn" data-goto-net="${esc(w.net)}">Network ${esc(w.net)} ›</button>` : ""}</li>`).join("")}</ul>
+      ${why.length > MAX ? `<p class="faint small" style="margin:6px 0 0">And ${why.length - MAX} more: look for the amber contacts in the rungs.</p>` : ""}</div>`;
+  }
+
+  function program() {
+    let sel = null;        // { name, params, block, instances, inst, mode }
     let loading = null;
     let blockQuery = "";   // the search above the block list
-    let find = "";         // Code: find in this block
+    let find = "";         // text: find in this block
     let findAt = 0;
 
+    /** Rungs for LAD/FBD/GRAPH blocks and text for SCL, unless the link or the switch says otherwise. */
+    const autoMode = (b) => (b.logic ? "rungs" : "text");
+    const hrefOf = (name, extra = []) => "#/program/" + [name, ...extra].map(encodeURIComponent).join("/");
+
     async function select(params) {
-      const name = params[0];
       const p = state.program;
       if (!p) return;
-      const first = name || (kind === "logic" ? (p.blocks.find((b) => b.hasLogic) || p.blocks.find((b) => b.hasSource)) : p.blocks.find((b) => b.kind === "OB") || p.blocks[0])?.name;
+      const want = (params.find((x) => MODE.test(x)) || "").replace(/^as-/, "") || null;
+      const rest0 = params.filter((x) => !MODE.test(x));
+      const name = rest0[0];
+      const first = name || (p.blocks.find((b) => b.kind === "OB") || p.blocks.find((b) => b.hasLogic) || p.blocks[0])?.name;
       if (!first) return;
-      if (sel && sel.name === first && sel.params.join("/") === params.join("/")) return;
+      if (sel && sel.params.join("/") === params.join("/")) return;
       loading = first;
       try {
         const b = await block(first);
         const instances = await instancesOf(first);
         // After the block: an instance path and a local output (devices), or "network-N" and "@<symbol>" (alarms)
-        const rest = params.slice(1);
+        const rest = rest0.slice(1);
         const net = (rest.find((x) => /^network-\d+$/.test(x)) || "").slice(8) || null;
         const sym = (rest.find((x) => x.startsWith("@")) || "").slice(1) || null;
         const plain = rest.filter((x) => !/^network-\d+$/.test(x) && !x.startsWith("@"));
         const inst = instances.find((i) => i.path === plain[0]) || instances[0] || null;
-        sel = { name: first, params, block: b, instances, inst, highlight: sym || plain[1] || null, network: net };
+        let mode = want || autoMode(b);
+        if (mode === "rungs" && !b.logic && !b.source) mode = "text";
+        sel = { name: first, params, block: b, instances, inst, highlight: sym || plain[1] || null, network: net, mode };
       } catch (e) {
         sel = { name: first, params, error: e.message };
       }
@@ -336,17 +375,27 @@
       setTimeout(() => { const h = document.getElementById("hl") || document.querySelector(".ln.hl"); if (h) h.scrollIntoView({ block: "center", behavior: "smooth" }); }, 60);
     }
 
+    /** Switch rungs/text in place: the address keeps the choice, so a reload or a shared link shows the same. */
+    function setMode(mode, net) {
+      if (!sel || sel.error) return;
+      sel.mode = mode;
+      if (net != null) sel.network = String(net);
+      sel.params = [...sel.params.filter((x) => !MODE.test(x)), "as-" + mode];
+      PK.setHash("#/program/" + sel.params.map(encodeURIComponent).join("/"));
+      PK.draw();
+    }
+
     function list() {
       const p = state.program;
       const groups = [["OB", "Organization blocks"], ["FB", "Function blocks"], ["FC", "Functions"], ["DB", "Data blocks"]];
       const q = blockQuery.trim().toLowerCase();
-      const ok = (b) => (kind === "code" || b.hasLogic || b.hasSource) && (!q || (b.name + " " + (b.title || "") + " " + (b.number ?? "")).toLowerCase().includes(q));
+      const ok = (b) => !q || (b.name + " " + (b.title || "") + " " + (b.number ?? "")).toLowerCase().includes(q);
       const html = groups.map(([k, label]) => {
         const items = p.blocks.filter((b) => (k === "DB" ? /DB$/.test(b.kind) : b.kind === k) && ok(b));
         if (!items.length) return "";
         return `<div class="grp">${label}</div>` + items.map((b) => {
           const lang = (b.languages && b.languages[0]) || b.language || "";
-          return `<a href="#/${kind}/${encodeURIComponent(b.name)}" class="${sel && sel.name === b.name ? "on" : ""}">${esc(b.name)}${lang && lang !== "DB" ? `<span class="tag lang-${esc(lang)}">${esc(lang)}</span>` : ""}</a>`;
+          return `<a href="${hrefOf(b.name)}" class="${sel && sel.name === b.name ? "on" : ""}">${esc(b.name)}${lang && lang !== "DB" ? `<span class="tag lang-${esc(lang)}">${esc(lang)}</span>` : ""}</a>`;
         }).join("");
       }).join("");
       return `<input type="search" id="blk-q" class="blk-q" placeholder="Find a block" aria-label="Find a block" value="${esc(blockQuery)}">`
@@ -373,59 +422,79 @@
         if (params.join("/") !== (sel ? sel.params.join("/") : "") && loading == null) select(params);
         const p = state.program;
         const head = PK.sec("hero compact", `<div class="eyebrow">${esc(p.project)} · ${esc(p.plc)}${p.cpu ? " · " + esc(p.cpu) : ""}</div>
-          <h1>${kind === "code" ? "Code" : "Logic"}</h1>
-          <p class="sub">${kind === "code" ? "Every block as written, with live values. Click a signal in quotes to see where else it is used." : "Why an output is on, or not: each network as a rung with live values. The amber contact is the first one that stops the output."}</p>`);
+          <h1>Program</h1>
+          <p class="sub">Every block with live values. See it as rungs (why an output is on or off) or as text (the code as written in TIA).</p>`);
         const body = (inner) => head + PK.sec("alt", `<div class="split"><nav class="blocklist">${list()}</nav><div class="stack">${inner}</div></div>`);
         if (!sel) return body(`<div class="card"><p class="muted">Loading…</p></div>`);
         if (sel.error) return body(`<div class="notice red">${icon("warn")}<div>${esc(sel.error)}</div></div>`);
         const b = sel.block;
         const resolve = resolver(sel.inst);
-        const instPick = sel.instances.length > 1 ? `<select id="inst" style="width:auto">${sel.instances.map((i) => `<option ${i === sel.inst ? "selected" : ""}>${esc(i.path)}</option>`).join("")}</select>`
+        const instPick = sel.instances.length > 1 ? `<select id="inst" style="width:auto" aria-label="Instance">${sel.instances.map((i) => `<option ${i === sel.inst ? "selected" : ""}>${esc(i.path)}</option>`).join("")}</select>`
           : sel.inst ? `<span class="pill info">${esc(sel.inst.path)}</span>` : "";
         const lang = (b.languages && b.languages[0]) || b.language || "";
-        const calledBy = (b.calledBy || []).map((n) => `<a href="#/${kind}/${encodeURIComponent(n)}">${esc(n)}</a>`).join(", ");
-        const calls = [...new Set((b.calls || []).map((c) => c.block))].map((n) => `<a href="#/${kind}/${encodeURIComponent(n)}">${esc(n)}</a>`).join(", ");
+        const calledBy = (b.calledBy || []).map((n) => `<a href="${hrefOf(n)}">${esc(n)}</a>`).join(", ");
+        const calls = [...new Set((b.calls || []).map((c) => c.block))].map((n) => `<a href="${hrefOf(n)}">${esc(n)}</a>`).join(", ");
+        const text = b.source || b.logic;
+
+        // The rungs are worked out in both modes: they give the "why is it off" summary at the top
+        const nets = b.logic ? networks(b.logic) : sclNetworks(b.source);
+        const seq = ((state.status && state.status.sequences) || []).find((q) => q.block && PK.blockOf(q.block) === b.name);
+        // The signal is not written in this block (or the decoder wrote it another way): fall back to the network number
+        const hl = sel.highlight && nets.some((n) => n.lines.some((l) => writes(l, sel.highlight))) ? sel.highlight : null;
+        const why = [];
+        const netsHtml = nets.map((n) => netHtml(n, resolve, hl || (sel.highlight && !sel.highlight.startsWith('"') ? sel.highlight : null), seq ? seq.step : null, hl ? null : sel.network, why)).join("");
+
+        const canRungs = nets.length > 0, canText = !!text;
+        const mode = sel.mode === "rungs" && !canRungs ? (canText ? "text" : "rungs") : sel.mode === "text" && !canText ? "rungs" : sel.mode;
+        const switcher = canRungs && canText ? `<div class="segmented" role="group" aria-label="Show the block as">
+            <button type="button" data-mode="rungs" class="${mode === "rungs" ? "on" : ""}" aria-pressed="${mode === "rungs"}">Rungs</button>
+            <button type="button" data-mode="text" class="${mode === "text" ? "on" : ""}" aria-pressed="${mode === "text"}">Text</button></div>` : "";
+
         let bodyHtml;
-        if (kind === "code") {
-          const text = b.source || b.logic;
-          const hits = text && find ? String(text).split(/\r?\n/).filter((l) => l.toLowerCase().includes(find.toLowerCase())).length : 0;
-          bodyHtml = text ? `<div class="findbar"><input type="search" id="code-find" placeholder="Find in this block" aria-label="Find in this block" value="${esc(find)}">
-              <span class="faint small" aria-live="polite">${find ? (hits ? `${hits} line${hits > 1 ? "s" : ""} · Enter for the next` : "Not in this block") : ""}</span></div>` + codeHtml(text, resolve, sel.highlight, find)
-            : `<p class="muted">No code in this block (data only). Its fields are listed below.</p>`;
-        } else {
-          let nets = b.logic ? networks(b.logic) : sclNetworks(b.source);
+        if (mode === "rungs" && canRungs) {
           const legend = `<div class="legend rung-legend"><span><i class="lg on"></i>Passes power</span><span><i class="lg off"></i>Does not pass</span>
             <span><i class="lg unk"></i>No live value</span><span><i class="lg blocker"></i>First one that stops the output</span></div>`;
-          const seq = ((state.status && state.status.sequences) || []).find((q) => q.block && PK.blockOf(q.block) === b.name);
           const now = seq && seq.step != null ? `<p class="small" style="margin:0 0 10px"><span class="now-tag">now</span> ${esc(seq.name)} is in step ${esc(String(seq.step))} “${esc(seq.stepName || "")}”${seq.halted ? ", halted" : ""}.</p>` : "";
-          // The signal is not written in this block (or the decoder wrote it another way): fall back to the network number
-          const hl = sel.highlight && nets.some((n) => n.lines.some((l) => writes(l, sel.highlight))) ? sel.highlight : null;
           const where = sel.highlight && sel.highlight.startsWith('"')
             ? (hl ? `<div class="notice" style="margin-bottom:12px">${icon("info")}<div>The highlighted rungs write <b>${esc(sel.highlight)}</b>: (S) sets it, (R) resets it, ( ) follows the rung. The values are live; amber marks the first contact that stops a rung.</div></div>`
               : `<div class="notice gold" style="margin-bottom:12px">${icon("info")}<div>${esc(sel.highlight)} is not written in this block${sel.network ? `; network ${esc(sel.network)} is highlighted` : ""}.</div></div>`) : "";
-          bodyHtml = nets.length ? where + now + legend + nets.map((n) => netHtml(n, resolve, hl || (sel.highlight && !sel.highlight.startsWith('"') ? sel.highlight : null), seq ? seq.step : null, hl ? null : sel.network)).join("")
-            : `<p class="muted">No boolean logic to draw in this block. <a href="#/code/${encodeURIComponent(b.name)}">Show the code</a>.</p>`;
-        }
+          bodyHtml = where + now + legend + netsHtml
+            + (b.source && !b.logic ? `<p class="faint small" style="margin:12px 0 0">Only the on/off statements of this SCL block are drawn as rungs. <button type="button" class="linkbtn" data-mode="text">Show all of it as text</button>.</p>` : "");
+        } else if (canText) {
+          const hits = find ? String(text).split(/\r?\n/).filter((l) => l.toLowerCase().includes(find.toLowerCase())).length : 0;
+          bodyHtml = `<div class="findbar"><input type="search" id="code-find" placeholder="Find in this block" aria-label="Find in this block" value="${esc(find)}">
+              <span class="faint small" aria-live="polite">${find ? (hits ? `${hits} line${hits > 1 ? "s" : ""} · Enter for the next` : "Not in this block") : ""}</span></div>` + codeHtml(text, resolve, sel.highlight, find)
+            + `<p class="faint small" style="margin:10px 0 0">Click a signal in quotes to see where else it is used.</p>`;
+        } else bodyHtml = `<p class="muted">No code in this block (data only). Its fields are listed below.</p>`;
+
         const iface = (b.interface || []).filter((m) => m.section !== "Temp" && m.section !== "Constant");
         return body(`
             <div class="card">
-              <div class="row"><h2 style="margin:0;font-size:26px">${esc(b.name)}</h2>${lang ? `<span class="tag lang-${esc(lang)}">${esc(lang)}</span>` : ""}<span class="tag">${esc(b.kind)}${b.number != null ? " " + b.number : ""}</span><span class="spacer"></span>${instPick}
-                ${kind === "logic" ? (b.source || b.logic ? `<button type="button" class="btn plain small" data-switch="code">Show the code ›</button>` : "") : (b.logic || b.source ? `<button type="button" class="btn plain small" data-switch="logic">Show the logic ›</button>` : "")}</div>
+              <div class="row"><h2 style="margin:0;font-size:26px">${esc(b.name)}</h2>${lang ? `<span class="tag lang-${esc(lang)}">${esc(lang)}</span>` : ""}<span class="tag">${esc(b.kind)}${b.number != null ? " " + b.number : ""}</span><span class="spacer"></span>${instPick}</div>
               ${b.title || b.comment ? `<p class="muted" style="margin:10px 0 0">${esc([b.title, b.comment].filter(Boolean).join(" · "))}</p>` : ""}
               <div class="row small" style="margin-top:10px;gap:18px">${calledBy ? `<span class="faint">Called by ${calledBy}</span>` : ""}${calls ? `<span class="faint">Calls ${calls}</span>` : ""}
                 ${sel.inst && Object.keys(sel.inst.wires).length ? `<span class="faint">Inputs wired in ${esc(sel.inst.path.split(".")[0])}</span>` : ""}</div>
+              ${whyHtml(why, resolve, sel.inst && sel.inst.path)}
+              ${switcher ? `<div class="row blk-mode">${switcher}<span class="faint small">${mode === "rungs" ? "Each network as a rung: green passes power, amber is what stops the output." : "The code as written in TIA, with the live value after each signal."}</span></div>` : ""}
               <div style="margin-top:14px">${bodyHtml}</div>
             </div>
-            ${window.PKTags ? window.PKTags.blockTagsHtml(b.source || b.logic) : ""}
-            ${iface.length ? `<div class="card"><details class="more" style="border:0;margin:0;padding:0" ${kind === "code" && !b.source && !b.logic ? "open" : ""}><summary>Interface (${iface.length})</summary>
+            ${window.PKTags ? window.PKTags.blockTagsHtml(text) : ""}
+            ${iface.length ? `<div class="card"><details class="more" style="border:0;margin:0;padding:0" ${!text ? "open" : ""}><summary>Interface (${iface.length})</summary>
               <table class="tbl iface" style="margin-top:8px"><tr><th>Name</th><th>Section</th><th>Type</th><th>Now</th><th>Comment</th></tr>
               ${iface.map((m) => { const v = resolve("#" + m.name); return `<tr><td>${esc(m.name)}</td><td class="muted">${esc(m.section)}</td><td class="mono">${esc(m.datatype)}</td><td>${v ? chip(v) : ""}</td><td class="muted">${esc(m.comment || "")}</td></tr>`; }).join("")}
               </table></details></div>` : ""}`);
       },
       after(page) {
-        page.querySelectorAll("[data-switch]").forEach((b) => b.onclick = () => {
-          const rest = sel ? "/" + sel.params.map(encodeURIComponent).join("/") : "";
-          PK.go("#/" + b.dataset.switch + rest);
+        page.querySelectorAll("[data-mode]").forEach((b) => b.onclick = () => setMode(b.dataset.mode));
+        page.querySelectorAll("[data-goto-net]").forEach((b) => b.onclick = () => {
+          const net = b.dataset.gotoNet;
+          if (sel.mode !== "rungs") setMode("rungs");
+          setTimeout(() => {
+            const card = page.querySelector(`.rung-card[data-net="${CSS.escape(net)}"]`);
+            if (!card) return;
+            card.scrollIntoView({ block: "center", behavior: "smooth" });
+            card.animate && card.animate([{ outline: "2px solid var(--accent)" }, { outline: "2px solid transparent" }], { duration: 1600 });
+          }, 60);
         });
         const s = page.querySelector("#inst");
         if (s) s.onchange = () => { sel.inst = sel.instances.find((i) => i.path === s.value); PK.draw(); };
@@ -440,6 +509,12 @@
       },
     };
   }
+
+  /** The old Logic and Code addresses open the Program page as rungs or as text, without an extra history step. */
+  const alias = (mode) => ({
+    mount(el, params) { location.replace("#/program/" + [...params, "as-" + mode].map(encodeURIComponent).join("/")); },
+    render() { return ""; },
+  });
 
   /** Scroll to the next line that matches "Find in this block". */
   function jump(page, at) {
@@ -461,10 +536,11 @@
     if (!box) return;
     box.innerHTML = r.error ? `<p class="muted">${esc(r.error)}</p>` : !r.results.length ? `<p class="muted">Not found in any block.</p>`
       : `<p class="muted small" style="margin:0 0 8px">In ${r.results.length} block${r.results.length > 1 ? "s" : ""}.</p><ul class="list">${r.results.map((x) => `<li style="display:block">
-          <a href="#/code/${encodeURIComponent(x.block)}" data-close><b>${esc(x.block)}</b></a> <span class="faint small">${esc(x.kind)} · ${x.count} line${x.count > 1 ? "s" : ""}</span>
+          <a href="#/program/${encodeURIComponent(x.block)}/as-text" data-close><b>${esc(x.block)}</b></a> <span class="faint small">${esc(x.kind)} · ${x.count} line${x.count > 1 ? "s" : ""}</span>
           ${x.lines.map((l) => `<div class="mono small faint" style="margin-top:4px;overflow-wrap:anywhere">${esc(l.text)}</div>`).join("")}</li>`).join("")}</ul>`;
   }
 
-  PK.view("code", program("code"));
-  PK.view("logic", program("logic"));
+  PK.view("program", program());
+  PK.view("logic", alias("rungs"));
+  PK.view("code", alias("text"));
 })();

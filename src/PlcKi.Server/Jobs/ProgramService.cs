@@ -5,7 +5,7 @@ using PlcKi.Server.Live;
 namespace PlcKi.Server.Jobs;
 
 /// <summary>
-/// The program export the machine model was built from, for the Code and Logic pages:
+/// The program export the machine model was built from, for the Program page:
 /// block list, call tree, SCL sources and decoded LAD/FBD/GRAPH logic. Loaded once, on first use.
 /// </summary>
 public sealed class ProgramService

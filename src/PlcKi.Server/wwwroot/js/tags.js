@@ -13,7 +13,7 @@
   let shown = [];
   let valQuery = "";        // Data blocks: find a value inside the open block
 
-  // ---- live values for symbols outside the machine model, shared with the Code and Logic pages ----
+  // ---- live values for symbols outside the machine model, shared with the Program page ----
   // Each page registers what it shows; one loop asks the server for the current page's symbols about every 1.5 s.
   const W = { values: {}, at: null, connection: null, providers: {} };
   setInterval(async () => {
@@ -100,8 +100,8 @@
       const short = (s) => s.startsWith(`"${dbData.db}".`) ? s.slice(dbData.db.length + 3) : s;
       right = `<div class="card">
         <div class="row"><h2 style="margin:0;font-size:24px">${esc(dbData.db)}</h2><span class="tag">${dbData.number != null ? "DB " + dbData.number : ""}</span>
-          ${dbData.instanceOf ? `<span class="faint small">instance of <a href="#/code/${encodeURIComponent(dbData.instanceOf)}">${esc(dbData.instanceOf)}</a></span>` : ""}
-          <span class="spacer"></span><a class="btn plain small" href="#/code/${encodeURIComponent(dbData.db)}">Show in Code ›</a></div>
+          ${dbData.instanceOf ? `<span class="faint small">instance of <a href="#/program/${encodeURIComponent(dbData.instanceOf)}">${esc(dbData.instanceOf)}</a></span>` : ""}
+          <span class="spacer"></span><a class="btn plain small" href="#/program/${encodeURIComponent(dbData.db)}">Show in the program ›</a></div>
         ${dbData.title || dbData.comment ? `<p class="muted" style="margin:8px 0 0">${esc([dbData.title, dbData.comment].filter(Boolean).join(" · "))}</p>` : ""}
         <div class="row" style="margin-top:10px;gap:12px"><input type="search" id="val-q" placeholder="Find a value" aria-label="Find a value" value="${esc(valQuery)}" style="max-width:300px">
           <span class="faint small">Optimized data blocks have no fixed addresses: values are read by name.</span></div>
@@ -117,7 +117,7 @@
   W.providers.tags = () => shown;
 
   /**
-   * For the Code and Logic pages: the global signals a block uses ("Tag", "DB".member), with the tag table's
+   * For the Program page: the global signals a block uses ("Tag", "DB".member), with the tag table's
    * address and type where it is a PLC tag, and their live values. Returns the card's HTML.
    */
   function blockTagsHtml(text) {
@@ -143,7 +143,7 @@
     const isDb = m && data && data.dbs.some((d) => d.name === m[1]);
     return isDb ? `<a href="#/tags/db/${encodeURIComponent(m[1])}">${esc(sym)}</a>` : esc(sym);
   }
-  W.providers.code = W.providers.logic = () => blockShown;
+  W.providers.program = () => blockShown;
   window.PKTags = { blockTagsHtml };
 
   PK.view("tags", {

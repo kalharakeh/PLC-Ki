@@ -550,7 +550,7 @@ const PK = (() => {
     return /^(FB|FC|OB|DB)$/i.test(name) ? undefined : name || undefined;
   }
 
-  // ---- values by symbol, for live chips in Code and Logic ----
+  // ---- values by symbol, for live chips on the Program page ----
   const norm = (s) => String(s || "").replace(/\s+/g, "").toLowerCase();
   function valueBySymbol() {
     const map = new Map();
@@ -634,7 +634,7 @@ const PK = (() => {
     const blocks = state.program ? new Map(state.program.blocks.map((b) => [b.name, b])) : null;
     const blockLink = (name) => {
       const b = blocks && blocks.get(name);
-      return b ? `<a href="#/${b.hasLogic || b.hasSource ? "logic" : "code"}/${encodeURIComponent(name)}">${esc(name)}</a>` : null;
+      return b ? `<a href="#/program/${encodeURIComponent(name)}">${esc(name)}</a>` : null;
     };
     const inline = (raw) => {
       // Pull out code spans and links first, so their text is not touched by the rest
@@ -794,7 +794,7 @@ const PK = (() => {
       "With several alarms, the first chip is the first-out: the alarm that came first, as PLC-Ki saw them come. Fix that one first; the others often follow from it.",
       "Fix it: work down the list and tap each step when done. The ticks are only on this screen.",
       "Where in the machine: the device behind the alarm and the chain Requested › Interlocks › Output › Feedback. The first red link is why it is not working.",
-      "Where in the software: from the main cycle (OB1) down to the bit that sets the alarm. Show the logic opens that network with live values.",
+      "Where in the software: from the main cycle (OB1) down to the bit that sets the alarm. Show where it is set opens that network as rungs with live values.",
       "Ask about this alarm: Claude looks at the live values, the last minutes and the program, and says why it is on and what to check."]],
     plant: ["Plant", "What the machine is doing now. The top shows the step, what it waits for and the key values; the tabs below hold the rest.", [
       "Overview: Needs attention lists active alarms and blocked or faulted devices first; tap one to go to it. Below it the sequence: the blue step is where it is now, red means halted, ✓ is met, ✗ is missing.",
@@ -809,13 +809,12 @@ const PK = (() => {
     alarms: ["Alarms", "Every alarm the program can raise, active or not, with its meaning, where it is set, likely causes and the fix.", [
       "Search by number, text or device. Active alarms are at the top.",
       "Click an alarm to open its causes and fix. Red tags are faults (they stop the machine), gold tags are warnings."]],
-    logic: ["Logic", "Each network of a block drawn as a rung, with live values.", [
-      "Green passes power, grey does not, a dashed ? has no live value. Read from left to right: the amber contact is the first one that stops the output.",
-      "Pick a block on the left. Coming from an alarm, the network that sets it is marked.",
+    program: ["Program", "Every block of the PLC program with live values, as rungs or as text.", [
+      "Pick a block on the left. At the top, \"Why outputs are off right now\" names each output that is off and the signal that stops it.",
+      "Rungs: each network drawn as a rung. Green passes power, grey does not, a dashed ? has no live value. Read from left to right: the amber contact is the first one that stops the output.",
+      "Text: the code as written in TIA (LAD and GRAPH as readable text with the same meaning), with the live value after each signal. Click a signal in quotes to see where else it is used.",
+      "LAD, FBD and GRAPH blocks open as rungs, SCL blocks as text. Switch with Rungs / Text. Coming from an alarm, the network that sets it is marked.",
       "Values update every two seconds. PLC-Ki only reads: nothing here changes the PLC."]],
-    code: ["Code", "Every block as written in TIA, with the live value after each signal.", [
-      "Pick a block on the left. SCL shows as text; LAD and GRAPH as readable text with the same meaning.",
-      "The chips after a signal are its live value. Values update every two seconds."]],
     tags: ["Tags", "The PLC tag tables with addresses, and every data block's values, live.", [
       "Tag tables: every tag with its address (%I, %Q, %M), type and comment. Search by name, address or comment.",
       "Data blocks: pick one on the left to see all its values. Optimized blocks have no addresses; values are read by name.",

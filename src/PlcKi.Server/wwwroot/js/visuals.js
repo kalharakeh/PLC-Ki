@@ -313,7 +313,7 @@
         title: q && q.step != null ? `Step ${q.step}: ${esc(q.stepName)}` : esc(def.name),
         sub: esc(q ? q.explanation : ""),
         actions: `${q && q.step != null ? `<button class="btn" data-gs-go="${q.step}">Go to step ${q.step} in the chart</button>` : ""}
-          ${blk ? `<a class="btn b" href="#/logic/${encodeURIComponent(blk)}">Show the logic</a>` : ""}
+          ${blk ? `<a class="btn b" href="#/program/${encodeURIComponent(blk)}/as-rungs">Show in the program</a>` : ""}
           <button class="btn b" data-ask="Explain what ${esc(def.name)} does, step by step, and where it is now.">Ask</button>`,
         extra: others.length ? `<div class="seq-others small">Other sequences: ${others.map((d) => `<a href="#/sequence/${encodeURIComponent(d.id)}">${esc(d.name)}</a>`).join(" · ")}</div>` : "",
       })
