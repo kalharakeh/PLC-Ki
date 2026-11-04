@@ -9,5 +9,11 @@
   <ItemGroup>
     <!-- Siemens system and diagnostic messages explained (general knowledge, used by the Ask tools) -->
     <EmbeddedResource Include="..\..\knowledge\siemens-diagnostics.json" LogicalName="PlcKi.Core.Knowledge.siemens-diagnostics.json" />
+    <!-- Fault codes of other devices: FANUC robot alarms, IO-Link events (general knowledge) -->
+    <EmbeddedResource Include="..\..\knowledge\device-faults.json" LogicalName="PlcKi.Core.Knowledge.device-faults.json" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Reads the text of PDF manuals and drawings for the document library (Apache-2.0) -->
+    <PackageReference Include="PdfPig" Version="0.1.16" />
   </ItemGroup>
 </Project>

@@ -1265,6 +1265,7 @@ main#page section.hero .st-kpis { grid-template-columns: repeat(3, minmax(0, 1fr
   .qr-sheet.qr-small { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .qr-sheet.qr-large { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
 /* ---------- machine memory: alarm history and notes (js/memory.js) ---------- */
 .mem-insight { display: flex; gap: 10px; align-items: flex-start; margin: 0; font-size: 17px; font-weight: 500; line-height: 1.4; }
 .mem-insight svg { width: 20px; height: 20px; flex: none; margin-top: 2px; color: var(--accent); }
@@ -1357,6 +1358,40 @@ section.rp { padding-top: 8px; }
   .card, .rp-kpis .k { box-shadow: none !important; backdrop-filter: none !important; break-inside: avoid; }
   details.rp-fix { display: none; }
   .rp-seg { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+
+/* ---------- Documents (manuals, drawings, fault lists) ---------- */
+.doc-search { display: flex; gap: 10px; align-items: center; margin-top: 26px; max-width: 720px; position: relative; }
+.doc-search .ico { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--muted); display: flex; pointer-events: none; }
+.doc-search .ico svg { width: 18px; height: 18px; }
+.doc-search input[type=search] { flex: 1; min-width: 0; padding-left: 40px; min-height: 46px; font-size: 16px; border-radius: 12px; }
+.doc-list { list-style: none; margin: 0; padding: 0; }
+.doc-row { display: flex; gap: 12px; align-items: center; padding: 12px 0; border-top: 1px solid var(--line); }
+.doc-row:first-child { border-top: 0; padding-top: 4px; }
+.doc-row .ico, .doc-hit .ico, .doc-bi { flex: none; width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; background: var(--accent-soft); color: var(--accent); }
+.doc-row .ico svg, .doc-hit .ico svg, .doc-bi svg { width: 19px; height: 19px; }
+.doc-bi { background: var(--ok-soft); color: var(--ok-ink); }
+.doc-row-t { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.doc-hits { padding: 6px 0; }
+.doc-hit { display: flex; gap: 12px; align-items: flex-start; padding: 12px 18px; color: var(--ink); text-decoration: none; border-top: 1px solid var(--line); transition: background 0.2s var(--ease); }
+.doc-hit:first-child { border-top: 0; }
+.doc-hit:hover { background: var(--accent-soft); }
+.doc-hit-t { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.doc-snip { display: block; margin-top: 4px; font-size: 14px; color: var(--muted); line-height: 1.45; }
+.doc-fault { display: flex; flex-direction: column; gap: 10px; align-self: start; }
+.doc-fault h3 { margin: 4px 0 0; font-size: 14px; }
+.doc-fault ol.causes { margin: 0; }
+.doc-fault .tag { font-family: var(--mono); font-size: 12.5px; }
+.doc-details { white-space: pre-line; color: var(--muted); margin: 0; }
+.doc-folders { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 12px; }
+.doc-folders summary { cursor: pointer; color: var(--accent); font-size: 14px; }
+.doc-folders code { font-size: 12.5px; overflow-wrap: anywhere; }
+@media (max-width: 600px) {
+  .doc-search { flex-wrap: wrap; }
+  .doc-search .btn { display: none; }
+  .doc-row { flex-wrap: wrap; }
+  .doc-row > .row { width: 100%; padding-left: 48px; }
+  .doc-hit { padding: 12px 14px; }
 }
 
 /* ---------- Alarm recordings: the seconds before an alarm (js/capture.js) ---------- */

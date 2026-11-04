@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.12">
+  <GVL Name="GVL_IO" Id="{2a2b3c4d-0000-4000-8000-000000000001}">
+    <Declaration><![CDATA[// Field inputs and outputs, linked to the EtherCAT terminals
+{attribute 'qualified_only'}
+VAR_GLOBAL
+	bStartButton AT %I* : BOOL;      // Start push button S1
+	bStopButton AT %I* : BOOL;       // Stop push button S2 (NC)
+	bInletOpen AT %I* : BOOL;        // XV1 open limit switch
+	nLevelRaw AT %I* : INT;          // LT1 level, raw 0..32767
+	bInletValve AT %Q* : BOOL;       // XV1 inlet valve solenoid
+	bPumpRun AT %Q* : BOOL;          // P1 drain pump contactor
+END_VAR
+VAR_GLOBAL CONSTANT
+	cMaxLevel : REAL := 95.0;
+END_VAR
+]]></Declaration>
+  </GVL>
+</TcPlcObject>

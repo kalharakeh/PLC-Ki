@@ -28,6 +28,7 @@ public sealed class MachineTools
     private readonly Dictionary<string, TagDef> _tags;
     private readonly Func<LiveView> _live;
     private readonly AlarmMemory? _memory;
+    private readonly DocumentLibrary? _docs;
     private readonly Func<object>? _devices;
 
     public static readonly JsonSerializerOptions Json = new()
@@ -39,11 +40,12 @@ public sealed class MachineTools
     };
 
     /// <param name="devices">Drive and PROFINET diagnostics (the server's view), or null where there is none.</param>
-    public MachineTools(MachineModel model, Func<LiveView> live, AlarmMemory? memory = null, Func<object>? devices = null)
+    public MachineTools(MachineModel model, Func<LiveView> live, AlarmMemory? memory = null, Func<object>? devices = null, DocumentLibrary? docs = null)
     {
         _memory = memory;
         _devices = devices;
         _model = model;
+        _docs = docs;
         _tags = model.Tags.ToDictionary(t => t.Id, StringComparer.Ordinal);
         _live = live;
     }
@@ -153,6 +155,26 @@ public sealed class MachineTools
                 ("capture", new { type = "string", description = "A capture id from the list" }),
                 ("seconds", new { type = "number", description = "Without alarm/capture: how many of the last seconds to return, up to 60" })),
             Array.Empty<string>()),
+
+        new("lookup_device_fault",
+            "Meaning, cause and fix of a fault or error code shown by a device next to the PLC: drives (SINAMICS F07801), " +
+            "robots (FANUC SRVO-062, KUKA, ABB), IO-Link sensors (0x8C10), valve terminals, leak detectors, barcode readers... " +
+            "Looks in the manuals and fault lists added to PLC-Ki for this machine (with document and page) and in the " +
+            "built-in general knowledge. Give the code as shown; add the device if known.",
+            Props(
+                ("code", new { type = "string", description = "The code or message as shown on the device, e.g. \"F07801\", \"SRVO-062 BZAL\", \"Error 41\"" }),
+                ("device", new { type = "string", description = "Optional: device or maker, e.g. \"G120\", \"Fanuc\", \"Inficon\"" })),
+            new[] { "code" }),
+
+        new("search_documents",
+            "Full-text search in the documents added to PLC-Ki: device manuals, electrical drawings (EPLAN PDF), fault lists, " +
+            "operating instructions. Returns the best pages with a text snippet, the document name and page number. Use it " +
+            "for how a device works or is set up, wiring and terminal questions (\"%I12.3\", \"X2:14\", \"-B23\"), maintenance " +
+            "steps, and when lookup_device_fault finds nothing.",
+            Props(
+                ("query", new { type = "string", description = "Words, codes, tags or terminal names to find" }),
+                ("kind", new { type = "string", description = "Optional: manual, drawing, faults or other" })),
+            new[] { "query" }),
     };
 
     /// <summary>Runs a tool. Never throws: problems come back as {"error": ...} so the assistant can react.</summary>
@@ -174,6 +196,8 @@ public sealed class MachineTools
                 "get_device_diagnostics" => _devices != null ? _devices() : new { note = "No device diagnostics here: PLC-Ki reads them only from a live PLC connection." },
                 "lookup_siemens_diagnostic" => SiemensLookup(Str(input, "query") ?? "", Str(input, "category")),
                 "get_alarm_capture" => AlarmCapture(Str(input, "alarm"), Str(input, "capture"), Num(input, "seconds")),
+                "lookup_device_fault" => DeviceFault(Str(input, "code") ?? "", Str(input, "device")),
+                "search_documents" => SearchDocuments(Str(input, "query") ?? "", Str(input, "kind")),
                 _ => new { error = $"Unknown tool {name}." },
             };
             return JsonSerializer.Serialize(result, Json);
@@ -236,6 +260,35 @@ public sealed class MachineTools
                 ? "Nothing in the Siemens knowledge base matches. Ask for the exact diagnostic buffer text or code, " +
                   "or check the TIA Portal help for that message."
                 : null,
+        };
+    }
+
+    private object DeviceFault(string code, string? device)
+    {
+        if (string.IsNullOrWhiteSpace(code)) return new { error = "Give the fault code or message as shown on the device." };
+        var hits = FaultLookup.Find(_docs, code, device);
+        return new
+        {
+            matches = hits.Select(FaultLookup.ToJson),
+            note = hits.Count == 0
+                ? (_docs == null || _docs.List().Count == 0
+                    ? "No match. No manuals are added to PLC-Ki yet: say the device's manual (fault list) should be added on the Documents page, and what to look for in it."
+                    : "No match in the manuals or the built-in knowledge. Try search_documents with the code or the device name, or ask for the exact text on the device.")
+                : "Say where the answer comes from: the document and page, or 'general knowledge'. Confirm on the device's display.",
+        };
+    }
+
+    private object SearchDocuments(string query, string? kind)
+    {
+        if (string.IsNullOrWhiteSpace(query)) return new { error = "Give words or codes to find." };
+        if (_docs == null || _docs.List().Count == 0)
+            return new { matches = Array.Empty<object>(), note = "No documents are added to PLC-Ki yet (Documents page)." };
+        var hits = _docs.Search(query, 6, DocumentLibrary.Kinds.Contains(kind) ? kind : null);
+        return new
+        {
+            matches = hits.Select(h => new { document = h.Document.File, device = h.Document.Device, kind = h.Document.Kind, page = h.Page, text = h.Snippet }),
+            documents = hits.Count == 0 ? _docs.List().Select(d => d.File + (d.Device != null ? $" ({d.Device})" : "") + (d.State != "ready" ? $" [{d.State}]" : "")).Take(30) : null,
+            note = hits.Count == 0 ? "Nothing found. The list shows the documents there are." : "Name the document and page in the answer.",
         };
     }
 

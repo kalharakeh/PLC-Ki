@@ -270,6 +270,8 @@
             <div class="card"><h3>Likely causes</h3>${a.causes.length ? `<ol class="causes">${a.causes.map((c, i) => `<li><b>${i + 1}</b><span>${esc(c)}</span></li>`).join("")}</ol>` : `<p class="muted">None written yet.</p>`}</div>
           </div>`)
 
+        + (typeof PKDocs !== "undefined" ? PKDocs.alarmSection(a, eqs) : "")
+
         + sec("", `<h2>Where in the machine</h2><p class="sub">${eqs.length ? "The device behind the alarm, and why it is or is not doing its job." : esc(a.location || "No device is linked to this alarm.")}</p>
           ${eqs.length ? `<div class="grid ${eqs.length > 1 ? "two" : ""}">${eqs.map((e) => `<div class="card stack">${eqCard(e, true)}</div>`).join("")}</div>` : ""}`)
 

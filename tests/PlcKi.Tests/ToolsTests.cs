@@ -39,6 +39,8 @@ public class ToolsTests
             ["search_program"] = new { query = "Level" },
             ["lookup_siemens_diagnostic"] = new { query = "IO device failure" },
             ["get_device_diagnostics"] = new { },
+            ["lookup_device_fault"] = new { code = "SRVO-062" },
+            ["search_documents"] = new { query = "terminal X2:14" },
             ["get_alarm_capture"] = new { },
         };
         Assert.Equal(inputs.Keys.OrderBy(k => k), MachineTools.Specs.Select(s => s.Name).OrderBy(k => k));

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.12">
+  <GVL Name="GVL_Alarms" Id="{2a2b3c4d-0000-4000-8000-000000000002}">
+    <Declaration><![CDATA[VAR_GLOBAL
+	aAlarm : ARRAY[1..4] OF BOOL;   // 1 XV1 not open, 2 level high-high, 3 pump fault, 4 fill timeout
+	bAnyFault : BOOL;
+END_VAR
+]]></Declaration>
+  </GVL>
+</TcPlcObject>
