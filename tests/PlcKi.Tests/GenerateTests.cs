@@ -335,7 +335,8 @@ public class DevelopTests
         public int Polls, Drops;
         public bool DropEveryFirstPoll = true;   // as when the download resets the TIA PC's adapter
         public bool ProjectLocked;   // TIA cannot open the project: the import answers without a report
-        public string? StaleReportOf;   // an old helper answers with another version's report
+        public string? StaleReportOf;
+        public string? DownloadError;   // the download fails with this line   // an old helper answers with another version's report
         private int _imports;
         private readonly Dictionary<string, string> _jobs = new();
         private readonly HashSet<string> _polledOnce = new();
@@ -388,7 +389,9 @@ public class DevelopTests
             else if (path == "/download")
             {
                 DownloadBodies.Add(await request.Content!.ReadAsStringAsync(ct));
-                body = "{\"exitCode\":0,\"log\":\"Download: Success\\n\"}";
+                body = DownloadError != null
+                    ? "{\"exitCode\":1,\"log\":" + System.Text.Json.JsonSerializer.Serialize(DownloadError + "\n") + "}"
+                    : "{\"exitCode\":0,\"log\":\"Download: Success\\n\"}";
             }
             if (request.Method == HttpMethod.Post)
             {
@@ -497,6 +500,27 @@ public class DevelopTests
             Assert.Equal(1, code);
             Assert.Single(api.Requests);   // no fix round on a report that belongs to another version
             Assert.DoesNotContain(tia.Uploaded, f => f.EndsWith("import-report.json"));
+        }
+        finally { Directory.Delete(Path.GetDirectoryName(dir)!, true); }
+    }
+
+    [Fact]
+    public async Task A_failed_download_after_a_clean_compile_does_not_go_to_Ki()
+    {
+        var dir = Path.Combine(Directory.CreateTempSubdirectory("plcki-dev-").FullName, "valve");
+        try
+        {
+            var tia = new FakeTiaPc { DownloadError = "'Loading or overloading fail-safe data in Openness is not permitted.'" };
+            var vm = new VmClient("http://tia-pc:5090", "secret-token", tia) { PollInterval = TimeSpan.Zero };
+            var answer = "<file name=\"10_FB_GenValve.scl\">\nFUNCTION_BLOCK \"FB_GenValve\"\nVAR_INPUT\n Open : Bool;\nEND_VAR\nBEGIN\nEND_FUNCTION_BLOCK\n</file>\n<review>ok</review>";
+            var api = new ModelBuilderTests.FakeStreamingApi(answer, answer, answer);
+            var code = await DevelopCommand.RunAsync(["--vm", "http://tia-pc:5090", "--project", @"C:\Users\Software\Documents\Automation\Test\Test.ap20",
+                "--out", dir, "--request", "valve", "--download", "--scl-only"], ModelBuilderTests.Client(api), vm);
+
+            Assert.Equal(1, code);
+            Assert.Equal(2, api.Requests.Count);   // the write and the fix of the compile error; nothing for the download
+            Assert.Equal("POST /download", tia.Calls.Last());
+            Assert.Contains("safety program", DevelopCommand.DownloadHint("Loading or overloading fail-safe data in Openness is not permitted."));
         }
         finally { Directory.Delete(Path.GetDirectoryName(dir)!, true); }
     }

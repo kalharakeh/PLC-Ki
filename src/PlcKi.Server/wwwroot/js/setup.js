@@ -107,6 +107,10 @@ const PKSetup = (() => {
       return { text: "The TIA PC ran out of memory.", todo: "Close programs you don't need on the VM, or give the VM more memory (16 GB works well with TIA and PLCSIM)." };
     if (has(/know-how|protected block/i) && job.state === "problems")
       return { text: "Some blocks are know-how protected.", todo: "PLC-Ki cannot read protected blocks. Remove the protection in a copy of the project if those blocks matter." };
+    if (has(/fail-safe data in Openness/i))
+      return { text: "It compiled, but this PLC has a safety program, and Siemens does not allow downloading it through a tool.", todo: "On the TIA PC: open the project in TIA Portal, select the PLC, Download to device (software, changes only), then close TIA again." };
+    if (has(/API usage limits|usage limit/i))
+      return { text: "Your Claude API account reached its spending limit.", todo: "Raise the limit in the Anthropic Console (Settings, Limits), or wait until the date in the log. Importing again without a request still works." };
     if (has(/PLCSIM|download/i) && has(/fail|error|refused|not reachable/i) && /download|PLCSIM/i.test(job.title || ""))
       return { text: "The download to PLCSIM did not work.", todo: "On the VM: check PLCSIM Advanced runs the virtual PLC (green), and its address is the PLCSIM address in Setup. Then start the job again." };
     if (has(/compil\w*[^\n]*\b[1-9]\d* error/i) || has(/\berrors?: *[1-9]/i))
