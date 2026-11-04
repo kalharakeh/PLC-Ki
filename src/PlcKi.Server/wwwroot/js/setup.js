@@ -155,9 +155,10 @@ const PKSetup = (() => {
     }
     if (job.kind === "develop") {
       // The generator's own markers (##plcki stage ...) say where it is; between them, creep forward a little
-      const [stage, arg] = (job.stage || "generate").split(" ");
+      const [stage, arg] = (job.stage || "connect").split(" ");
       const since = (from, to, est) => Math.min(to, Math.round(from + secs / est * (to - from)));
       const steps = {
+        connect: [3, "Connecting to the TIA PC"],
         generate: [since(3, 40, 240), `${PK.AI} is writing the blocks`],
         fix: [40, `${PK.AI} is fixing what TIA found (round ${arg || 1})`],
         import: [55, `TIA is importing and compiling ${arg || "the blocks"}`],
@@ -166,7 +167,11 @@ const PKSetup = (() => {
         done: [100, "Done"],
       };
       const [pct, phase] = steps[stage] || [10, `${PK.AI} is working`];
-      return { pct, phase, hint: `${PK.AI} writes the blocks, TIA imports and compiles them, and what TIA finds goes back to ${PK.AI} for another round. Usually 3 to 10 minutes.` };
+      const hint = stage === "connect" && secs > 20
+        ? "The TIA helper on the TIA PC has not answered yet. Check that its window is open and not busy with another job; after about 100 s PLC-Ki gives up and says why."
+        : /^Import /.test(job.title || "") ? "TIA imports and compiles the latest version as it is; what TIA finds goes back to " + PK.AI + " for another round."
+        : `${PK.AI} writes the blocks, TIA imports and compiles them, and what TIA finds goes back to ${PK.AI} for another round. Usually 3 to 10 minutes.`;
+      return { pct, phase, hint };
     }
     return null;
   }
