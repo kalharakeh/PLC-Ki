@@ -22,6 +22,8 @@ public static class HardwareEndpoints
     public static WebApplication MapHardware(this WebApplication app)
     {
         app.MapGet("/api/hardware", (HardwareService hw) => Results.Ok(hw.View()));
+        // Drive and PROFINET diagnostics: the CPU's system diagnostics per station/module, and each drive's state (read-only)
+        app.MapGet("/api/diagnostics", (DiagnosticsService diag) => Results.Ok(diag.View()));
 
         app.MapGet("/api/cpu", async (LiveState live, PlcKiOptions opt, HardwareService hw, TiaConnection tia, HttpContext http, CancellationToken ct) =>
         {

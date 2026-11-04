@@ -132,12 +132,15 @@ static async Task<int> RunAppAsync(string[] appArgs, bool probe, JobService jobs
     });
     builder.Services.AddSingleton(new PlcKi.Server.Reports.ReportService(model, plant.DataDir, memory));
     builder.Services.AddSingleton<WatchList>();
+    builder.Services.AddSingleton<DeviceWatch>();
+    builder.Services.AddSingleton<PlcKi.Server.Hardware.DiagnosticsService>();
     builder.Services.AddSingleton<PlcWriter>();
     builder.Services.AddSingleton(opt.Ask);
     builder.Services.AddSingleton(sp =>
     {
         var live = sp.GetRequiredService<LiveState>();
-        return new MachineTools(model, () => new LiveView(live.Status, live.Snapshot, live.History, DateTimeOffset.Now), live.Memory);
+        var diag = sp.GetRequiredService<PlcKi.Server.Hardware.DiagnosticsService>();
+        return new MachineTools(model, () => new LiveView(live.Status, live.Snapshot, live.History, DateTimeOffset.Now), live.Memory, diag.View);
     });
     builder.Services.AddSingleton<AskService>();
     builder.Services.AddSingleton<IPlcSource>(sp => CreateSource(sp.GetRequiredService<ILoggerFactory>().CreateLogger("plc")));
@@ -148,6 +151,8 @@ static async Task<int> RunAppAsync(string[] appArgs, bool probe, JobService jobs
         builder.WebHost.UseUrls("http://localhost:5080");
 
     var app = builder.Build();
+    // Work out the drives once at startup, so the polling loop reads their values before anyone opens a page
+    _ = Task.Run(() => { try { app.Services.GetRequiredService<PlcKi.Server.Hardware.DiagnosticsService>().Drives(); } catch (Exception) { /* shown on the page */ } });
     if (!plant.IsService)
         plant.RestartInProcess = () => { requestRestart(); app.Lifetime.StopApplication(); };
     app.UsePlant();     // login check before any page or API

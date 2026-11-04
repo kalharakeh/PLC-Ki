@@ -14,6 +14,12 @@ public sealed record HwAddress(string Io, int Start, int Bytes)
     private string Prefix => Io == "Input" ? "I" : Io == "Output" ? "Q" : Io;
 }
 
+/// <summary>
+/// A drive telegram (PROFIdrive): its number when the name says it ("Standard telegram 1, PZD-2/2" -> 1) and where
+/// its words sit in the PLC's process image. InStart/OutStart are byte addresses, InWords/OutWords the word counts.
+/// </summary>
+public sealed record HwTelegram(string Name, int? Number, int? InStart, int InWords, int? OutStart, int OutWords);
+
 public sealed class HwModule
 {
     public int? Slot { get; init; }
@@ -31,6 +37,8 @@ public sealed class HwModule
     public List<HwChannel> Channels { get; } = new();
     public List<string> Ips { get; } = new();
     public List<string> Ports { get; } = new();
+    /// <summary>Drive telegrams in this module (a SINAMICS drive's telegram submodule), usually zero or one.</summary>
+    public List<HwTelegram> Telegrams { get; } = new();
 }
 
 public sealed class HwStation
@@ -227,6 +235,7 @@ public sealed class HardwareConfig
                     if (Str(n, "address") is { } ip && ip.Count(ch => ch == '.') == 3 && !m.Ips.Contains(ip)) m.Ips.Add(ip);
         }
         Collect(it, 0);
+        FindTelegrams(it, m.Telegrams, 0);
         foreach (var sub in Items(it))
             if ((Str(sub, "name") ?? "") is { Length: > 0 } pn && Regex.IsMatch(pn, @"^(Port|PROFINET|PROFIBUS|MPI|X\d)", RegexOptions.IgnoreCase))
                 m.Ports.Add(pn);
@@ -262,6 +271,41 @@ public sealed class HardwareConfig
             }
         }
         return m;
+    }
+
+    private static readonly Regex TelegramRx = new(@"telegram\s*(\d{1,3})", RegexOptions.IgnoreCase);
+    private static readonly Regex PzdRx = new(@"PZD[-\s]*(\d{1,2})\s*/\s*(\d{1,2})", RegexOptions.IgnoreCase);
+
+    /// <summary>Items named "... telegram ..." in a drive (the item itself or one below it), with their own addresses.</summary>
+    private static void FindTelegrams(JsonElement e, List<HwTelegram> found, int depth)
+    {
+        var label = string.Join(" ", new[] { Str(e, "typeName"), Str(e, "name") }.Where(x => !string.IsNullOrWhiteSpace(x)));
+        if (label.Contains("telegram", StringComparison.OrdinalIgnoreCase))
+        {
+            int? num = TelegramRx.Match(label) is { Success: true } tm ? int.Parse(tm.Groups[1].Value) : null;
+            // "PZD-2/6": 2 words to the drive, 6 words back
+            var pzd = PzdRx.Match(label);
+            int outWords = pzd.Success ? int.Parse(pzd.Groups[1].Value) : 0, inWords = pzd.Success ? int.Parse(pzd.Groups[2].Value) : 0;
+            if (num is { } n && PlcKi.Core.Diagnostics.Telegrams.Layout(n) is { } lay)
+            {
+                if (inWords == 0) inWords = lay.In.Length;
+                if (outWords == 0) outWords = lay.OutWords;
+            }
+            int? inStart = null, outStart = null;
+            if (e.TryGetProperty("addresses", out var addrs) && addrs.ValueKind == JsonValueKind.Array)
+                foreach (var a in addrs.EnumerateArray())
+                {
+                    if (Int(a, "start") is not { } start || start < 0) continue;
+                    var len = Int(a, "length") ?? 0;
+                    if (Str(a, "io") == "Input") { inStart ??= start; if (inWords == 0) inWords = Bytes(len, 0) / 2; }
+                    else if (Str(a, "io") == "Output") { outStart ??= start; if (outWords == 0) outWords = Bytes(len, 0) / 2; }
+                }
+            var name = Str(e, "typeName") ?? Str(e, "name") ?? "Telegram";
+            found.Add(new HwTelegram(name, num, inStart, inWords, outStart, outWords));
+            return;
+        }
+        if (depth < 4)
+            foreach (var sub in Items(e)) FindTelegrams(sub, found, depth + 1);
     }
 
     /// <summary>
