@@ -215,10 +215,21 @@ namespace TiaImporter
                     foreach (var tag in t.GetProperty("tags").EnumerateArray())
                     {
                         var name = tag.GetProperty("name").GetString();
-                        if (existing.TryGetValue(name, out var old)) old.Delete();   // only reached for tags the package may replace
-                        var created = table.Tags.Create(name, tag.GetProperty("dataType").GetString(), tag.GetProperty("address").GetString());
+                        var dataType = tag.GetProperty("dataType").GetString();
+                        var address = tag.GetProperty("address").GetString();
+                        PlcTag target;
+                        if (existing.TryGetValue(name, out var old))
+                        {
+                            // Only reached for tags the package may change: changed in place, so it stays in its own
+                            // table and every block that uses it follows the new address
+                            _log.WriteLine($"    {name}: {old.LogicalAddress} -> {address}");
+                            if (!string.Equals(old.DataTypeName, dataType, StringComparison.OrdinalIgnoreCase)) old.DataTypeName = dataType;
+                            old.LogicalAddress = address;
+                            target = old;
+                        }
+                        else target = table.Tags.Create(name, dataType, address);
                         if (tag.TryGetProperty("comment", out var c) && c.ValueKind == JsonValueKind.String)
-                            SetComment(created.Comment, c.GetString());
+                            SetComment(target.Comment, c.GetString());
                     }
                 }
             }

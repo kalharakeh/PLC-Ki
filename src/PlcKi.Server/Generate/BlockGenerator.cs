@@ -15,6 +15,8 @@ public sealed class GenerateInput
     public string? ProgramContext { get; init; }
     /// <summary>Existing blocks to edit, as (name, extension, source).</summary>
     public List<(string Name, string Extension, string Text)> Existing { get; init; } = new();
+    /// <summary>Existing PLC tags the user asked to change (address, type, comment).</summary>
+    public List<string> EditTags { get; init; } = new();
     /// <summary>The latest package version, for a change or a fix.</summary>
     public BlockPackage? Previous { get; init; }
     /// <summary>Import refusals and compile messages from TIA for <see cref="Previous"/>.</summary>
@@ -75,7 +77,7 @@ public sealed class BlockGenerator
             var text = await AskAsync(input, draft, problems, result, ct);
             result.LastAnswer = text;
             var package = BlockPackage.Parse(text);
-            problems = PackageCheck.Check(package, input.ExistingNames, input.Replaces, input.Existing.Select(e => e.Name));
+            problems = PackageCheck.Check(package, input.ExistingNames, input.Replaces, input.Existing.Where(e => e.Extension != ".json").Select(e => e.Name).Concat(input.EditTags));
             if (package.Files.Count > 0)
             {
                 result.Package = package;

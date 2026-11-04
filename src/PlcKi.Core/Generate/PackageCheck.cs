@@ -167,9 +167,10 @@ public static class PackageCheck
                     problems.Add($"\"{b.Name}\" ({b.File}) already exists in the PLC program and is not one of the blocks you were asked to change. Use a new name.");
 
         // A block the user asked to change must come back under its exact name, or the import adds a copy nobody calls
+        var made = Names(package);
         foreach (var name in mustChange ?? Enumerable.Empty<string>())
-            if (!blocks.Any(b => b.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))
-                problems.Add($"You were asked to change \"{name}\", but no file holds a block with exactly that name. Answer with the changed block under its existing name \"{name}\" (keep the quotes and every character); do not rename it.");
+            if (!made.Contains(name))
+                problems.Add($"You were asked to change \"{name}\", but no file holds a block or tag with exactly that name. Answer with the changed block or tag under its existing name \"{name}\" (keep the quotes and every character); do not rename it.");
         return problems;
     }
 
