@@ -36,7 +36,12 @@
           // Its own instance DB: "DB_BatchSequence"(Start := ...) in FB_Station
           let o = out.find((x) => x.path === c.instance);
           if (!o) out.push(o = { path: c.instance, wires: {}, caller: null });
-          if (!o.caller) { o.wires = await wiresIn(parent.name, c.instance, null); o.caller = { block: parent.name, path: null, local: c.instance }; }
+          if (!o.caller) {
+            // The caller's own instance turns its "#LT101.Value" into "Station".LT101.Value
+            const pi = (await instancesOf(parent.name, depth + 1))[0] || null;
+            o.wires = await wiresIn(parent.name, c.instance, pi);
+            o.caller = { block: parent.name, path: pi && pi.path, local: c.instance };
+          }
           continue;
         }
         const local = c.instance.replace(/^#/, "");
