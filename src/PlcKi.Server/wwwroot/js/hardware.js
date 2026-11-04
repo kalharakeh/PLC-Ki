@@ -443,7 +443,7 @@
 
   PK.view("hardware", {
     live: true,
-    mount(el, params) { loadHw(); loadCpu(); loadDiag(); stationName = params[0] || null; slotSel = params[1] != null ? params[1] : null; },
+    mount(el, params) { loadHw(); loadCpu(); loadDiag(); stationName = params[0] || null; slotSel = params[1] != null ? params[1] : null; PK.draw(); },
     leave() { watched = []; },
     onJobs(jobs) {
       if (!job) return;
