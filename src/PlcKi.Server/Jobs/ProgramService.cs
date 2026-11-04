@@ -176,6 +176,66 @@ public sealed class ProgramService
         };
     }
 
+    /// <summary>
+    /// The HMI panels in the export, for the Settings tab: every value an operator sets on a screen (where, the text
+    /// next to it, the PLC symbol, its type for live reading), the buttons that set PLC values, and for each model
+    /// setting where it is on the panel (matched by PLC symbol).
+    /// </summary>
+    public object Hmi()
+    {
+        var (export, plc, error) = _loaded.Value;
+        if (export == null || plc == null) return new { available = false, error };
+        if (export.Hmis.Count == 0)
+            return new { available = false, error = (string?)"This program export has no HMI. Export the program again with the current TIA helper (Setup → Program) to read the panel's screens." };
+        var types = new Dictionary<string, (string Symbol, string? Type, string? Comment)>(StringComparer.OrdinalIgnoreCase);
+        foreach (var t in AllTags(plc)) types.TryAdd(ProgramExport.NormalizeSymbol(t.Symbol), (t.Symbol, t.ModelType, t.Comment));
+        var modelIds = _model.Tags.GroupBy(t => ProgramExport.NormalizeSymbol(t.Symbol), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First().Id, StringComparer.OrdinalIgnoreCase);
+        string Where(HmiDevice h, HmiField f)
+        {
+            var screen = h.Screens.FirstOrDefault(s => s.Name == f.Screen);
+            return (screen?.Kind == "Popup" ? "Pop-up " : "Screen ") + f.Screen + (f.Label != null ? " > " + f.Label : "");
+        }
+        object Field(HmiDevice h, HmiField f)
+        {
+            var key = ProgramExport.NormalizeSymbol(f.PlcSymbol!);
+            var known = types.TryGetValue(key, out var x);
+            var screen = h.Screens.FirstOrDefault(s => s.Name == f.Screen);
+            return new
+            {
+                hmi = h.Name, screen = f.Screen, screenNumber = screen?.Number, screenKind = screen?.Kind, folder = screen?.Folder,
+                label = f.Label ?? f.Name, where = Where(h, f), kind = f.Kind, action = f.Action,
+                symbol = known ? x.Symbol : f.PlcSymbol, type = known ? x.Type : null, comment = known ? x.Comment : null,
+                unit = f.Unit, textList = f.TextList, authorization = f.Authorization,
+                modelTag = modelIds.GetValueOrDefault(key),
+            };
+        }
+        var bySetting = new Dictionary<string, string>();
+        foreach (var st in _model.Settings)
+        {
+            var symbol = _model.Tags.FirstOrDefault(t => t.Id == st.Tag)?.Symbol;
+            if (symbol == null) continue;
+            var key = ProgramExport.NormalizeSymbol(symbol);
+            var places = export.Hmis.SelectMany(h => h.OperatorSettings().Where(f => ProgramExport.NormalizeSymbol(f.PlcSymbol!).Equals(key, StringComparison.OrdinalIgnoreCase)).Select(f => Where(h, f)))
+                .Distinct().ToList();
+            if (places.Count > 0) bySetting[st.Tag] = string.Join("; ", places.Take(3));
+        }
+        return new
+        {
+            available = true,
+            panels = export.Hmis.Select(h => new
+            {
+                h.Name, h.Device, h.Type, h.Kind,
+                screens = h.Screens.Count(s => s.Kind != "Template"), tags = h.Tags.Count, textLists = h.TextLists.Count, alarms = h.Alarms.Count,
+                problems = h.Problems.Take(20),
+            }),
+            settings = export.Hmis.SelectMany(h => h.OperatorSettings().Select(f => Field(h, f))),
+            commands = export.Hmis.SelectMany(h => h.OperatorCommands().Select(f => Field(h, f))),
+            alarms = export.Hmis.SelectMany(h => h.Alarms.Select(a => new { hmi = h.Name, a.Id, a.Name, a.Text, a.PlcSymbol, a.Bit, a.AlarmClass, a.InfoText })),
+            bySetting,
+        };
+    }
+
     private static object Member(ExportMember m) => new
     {
         m.Name, m.Section, m.Datatype, m.Comment, m.StartValue,

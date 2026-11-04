@@ -35,7 +35,83 @@ public static class ProgramDigest
         foreach (var t in tags.Take(maxTags))
             sb.AppendLine($"{t.Symbol} : {t.Datatype}" + (t.Comment != null ? $" // {t.Comment}" : ""));
         if (tags.Count > maxTags) sb.AppendLine($"... {tags.Count - maxTags} more left out.");
+        WriteHmi(sb, export, plc);
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// The HMI panels: which values the operator sets on which screen (with the texts next to them), the buttons that
+    /// set PLC values, the text lists that turn PLC numbers into words, and HMI alarms. PLC values use the exact
+    /// symbols of the tag list.
+    /// </summary>
+    public static void WriteHmi(StringBuilder sb, ProgramExport export, ExportPlc plc, int maxChars = 40_000)
+    {
+        if (export.Hmis.Count == 0) return;
+        var symbols = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var t in ProgramExport.Tags(plc)) symbols.TryAdd(ProgramExport.NormalizeSymbol(t.Symbol), t.Symbol);
+        string Sym(string s) => symbols.TryGetValue(ProgramExport.NormalizeSymbol(s), out var x) ? x : s;
+        var start = sb.Length;
+        bool Full() => sb.Length - start > maxChars;
+        foreach (var hmi in export.Hmis)
+        {
+            sb.AppendLine();
+            sb.AppendLine($"## HMI panel {hmi.Name}" + (hmi.Type != null ? $" ({hmi.Type})" : "") + (hmi.Kind == "unified" ? ", WinCC Unified" : ", WinCC Comfort/Advanced"));
+            sb.AppendLine($"{hmi.Screens.Count(s => s.Kind != "Template")} screens, {hmi.Tags.Count} HMI tags, {hmi.TextLists.Count} text lists"
+                          + (hmi.Kind == "classic" ? ". The panel's own alarm list cannot be read from TIA; alarm texts come from the PLC program." : $", {hmi.Alarms.Count} alarms."));
+            string Where(HmiField f)
+            {
+                var screen = hmi.Screens.FirstOrDefault(s => s.Name == f.Screen);
+                return $"screen \"{f.Screen}\"" + (screen?.Number != null ? $" (no. {screen.Number})" : "") + (screen?.Kind == "Template" ? " (template, on every screen)" : "") + (screen?.Kind == "Popup" ? " (pop-up)" : "");
+            }
+            var settings = hmi.OperatorSettings().ToList();
+            if (settings.Count > 0)
+            {
+                sb.AppendLine("Operator settings (values the operator types or switches on the panel): where > label on the screen -> PLC value");
+                foreach (var f in settings)
+                {
+                    if (Full()) { sb.AppendLine("... more left out."); break; }
+                    sb.AppendLine($"- {Where(f)} > \"{f.Label ?? f.Name}\" -> {Sym(f.PlcSymbol!)}" + (f.Unit != null ? $" [{f.Unit}]" : "")
+                                  + (f.Kind != "IOField" ? $" ({f.Kind})" : "") + (f.TextList != null ? $", choices from text list {f.TextList}" : "")
+                                  + (f.Authorization != null ? $", user group {f.Authorization}" : ""));
+                }
+            }
+            var commands = hmi.OperatorCommands().ToList();
+            if (commands.Count > 0 && !Full())
+            {
+                sb.AppendLine("Buttons and switches that change PLC values: where > text -> what it does");
+                foreach (var f in commands.DistinctBy(f => (f.Screen, f.Label, f.PlcSymbol, f.Action)))
+                {
+                    if (Full()) { sb.AppendLine("... more left out."); break; }
+                    sb.AppendLine($"- {Where(f)} > \"{f.Label ?? f.Name}\" -> {f.Action} {Sym(f.PlcSymbol!)}");
+                }
+            }
+            // Values the panel shows as words: the text list says what each number means
+            var shown = hmi.Screens.SelectMany(s => s.Fields).Where(f => f.TextList != null && f.PlcSymbol != null)
+                .GroupBy(f => (f.TextList!, f.PlcSymbol!)).Select(g => g.Key).ToList();
+            var lists = hmi.TextLists.ToDictionary(l => l.Name, StringComparer.OrdinalIgnoreCase);
+            if (lists.Count > 0 && !Full())
+            {
+                sb.AppendLine("Text lists (value = text the operator sees):");
+                var used = shown.Select(x => x.Item1).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                foreach (var l in hmi.TextLists.OrderBy(l => used.Contains(l.Name) ? 0 : 1))
+                {
+                    if (Full()) { sb.AppendLine("... more left out."); break; }
+                    var on = shown.Where(x => x.Item1.Equals(l.Name, StringComparison.OrdinalIgnoreCase)).Select(x => Sym(x.Item2)).Distinct().ToList();
+                    sb.AppendLine($"- {l.Name}" + (on.Count > 0 ? $" (shows {string.Join(", ", on.Take(4))})" : "") + ": "
+                                  + string.Join("; ", l.Entries.Take(60).Select(e => $"{e.Range}={e.Text}")) + (l.Entries.Count > 60 ? "; ..." : ""));
+                }
+            }
+            if (hmi.Alarms.Count > 0 && !Full())
+            {
+                sb.AppendLine("HMI alarms (id, text, trigger):");
+                foreach (var a in hmi.Alarms)
+                {
+                    if (Full()) { sb.AppendLine("... more left out."); break; }
+                    sb.AppendLine($"- {a.Id ?? a.Name}: {a.Text}" + (a.PlcSymbol != null ? $" <- {Sym(a.PlcSymbol)}" + (a.Bit != null ? $" bit {a.Bit}" : "") : a.Tag != null ? $" <- HMI tag {a.Tag}" : "")
+                                  + (a.AlarmClass != null ? $" ({a.AlarmClass})" : ""));
+                }
+            }
+        }
     }
 
     /// <summary>

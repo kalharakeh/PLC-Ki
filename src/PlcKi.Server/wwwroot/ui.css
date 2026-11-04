@@ -1193,6 +1193,10 @@ tr.on td { background: var(--accent-soft); }
 /* Alarm checks and machine settings */
 .checks-list { list-style: none; margin: 0; padding: 0; }
 .setting-bad { color: var(--fault-ink); }
+/* Plant > Settings: the HMI panel's operator settings, grouped by screen */
+.hmi-tbl tr.grp td { padding-top: 16px; border-bottom: 1px solid var(--line-strong); color: var(--steel); }
+.hmi-tbl td.mono { word-break: break-word; }
+@media (max-width: 640px) { .hmi-tbl td.mono { font-size: 11.5px; } }
 
 /* ---------- Stations (#/station): one phone-sized page per station, opened from its QR label ---------- */
 main#page section.hero .st-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); max-width: 520px; }
@@ -1290,4 +1294,62 @@ ul.mem-list.card { padding: 4px 22px; }
   .mem-occ > .btn { align-self: flex-start; }
   .mem-nums { margin-left: 0; }
   ul.mem-list.card { padding: 2px 16px; }
+}
+
+/* Reports: shift report with OEE, fault summary, report settings */
+.rp-tabs { margin-top: 4px; width: fit-content; max-width: 100%; }
+.rp-pick input[type=date] { padding: 8px 12px; border-radius: 12px; border: 1px solid var(--line-strong); background: var(--field); color: var(--ink); font: inherit; font-size: 15px; }
+.rp-tabs a { font-size: 13px; font-weight: 500; padding: 6px 13px; border-radius: 999px; color: var(--muted); text-decoration: none; }
+.rp-tabs a:hover { color: var(--ink); }
+.rp-tabs a.on { background: var(--bg); color: var(--ink); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14); }
+section.rp { padding-top: 8px; }
+.rp-pick select { width: auto; max-width: 240px; }
+.rp-head { margin: 4px 0 18px; }
+.rp-head .eyebrow { margin-bottom: 4px; }
+.rp-kpis { margin-bottom: 22px; }
+.rp-kpis .k { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 16px 18px; box-shadow: var(--shadow); }
+.rp-kpis .k b { font-variant-numeric: tabular-nums; }
+.rp-sub { font-size: 12.5px !important; margin-top: 2px !important; opacity: 0.85; }
+.rp-grid { display: grid; gap: 18px; }
+.rp-grid > .card + .card { margin-top: 0; }
+.rp-two > .card { margin-top: 0; }
+.rp-bar { position: relative; height: 34px; border-radius: 10px; background: var(--bg-alt); overflow: hidden; margin-top: 6px; }
+.rp-seg { position: absolute; top: 0; bottom: 0; }
+.rp-seg.rp-off { background: repeating-linear-gradient(135deg, var(--bg-alt) 0 6px, var(--line) 6px 12px) !important; }
+.rp-ticks { position: relative; height: 18px; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; margin-top: 4px; }
+.rp-ticks > span { position: absolute; top: 0; transform: translateX(-50%); white-space: nowrap; }
+.rp-ticks > span:first-child { transform: none; left: 0; }
+.rp-ticks > .rp-end { right: 0; transform: none; }
+.rp-loss td, .rp-faults td, .rp-shifts td { font-size: 14.5px; }
+.tbl .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.rp-meter { height: 5px; border-radius: 3px; background: var(--bg-alt); margin-top: 6px; overflow: hidden; }
+.rp-meter span { display: block; height: 100%; border-radius: 3px; opacity: 0.8; }
+.rp-loss .sw { margin-right: 8px; }
+.rp-fix { margin-top: 6px; }
+.rp-fix summary { font-size: 13.5px; }
+.rp-rep { color: var(--fault-ink); }
+.rp-oee.ok { color: var(--ok); } .rp-oee.warn { color: var(--warn-ink); } .rp-oee.bad { color: var(--fault); }
+.rp-notes { margin-top: 16px; }
+.rp-shtbl { overflow-x: auto; }
+.rp-shtbl td { padding: 6px 6px; }
+.rp-shtbl input[type=text] { min-width: 90px; }
+.rp-shtbl input[type=number] { width: 80px; }
+.rp-shtbl input[type=time] { min-width: 96px; }
+@media (max-width: 860px) { .rp-two { grid-template-columns: minmax(0, 1fr) !important; } }
+@media (max-width: 600px) {
+  .rp-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .rp-kpis .k { padding: 12px 14px; }
+  .rp-pick .spacer { display: none; }
+  .rp-faults th:nth-child(4), .rp-faults td:nth-child(4) { display: none; }
+  .rp-shifts th:nth-child(3), .rp-shifts td:nth-child(3), .rp-shifts th:nth-child(6), .rp-shifts td:nth-child(6) { display: none; }
+}
+@media print {
+  .sidebar, .topbar, .foot, .banner, .no-print, #dirty-bar, .ask-panel, .toast, .skip { display: none !important; }
+  .app { display: block !important; }
+  body { background: #fff !important; }
+  section.hero.compact { padding-block: 0 8px; }
+  section.hero .sub, section.hero .rp-tabs { display: none; }
+  .card, .rp-kpis .k { box-shadow: none !important; backdrop-filter: none !important; break-inside: avoid; }
+  details.rp-fix { display: none; }
+  .rp-seg { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }

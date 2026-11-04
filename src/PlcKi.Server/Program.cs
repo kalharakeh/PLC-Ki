@@ -122,8 +122,17 @@ static async Task<int> RunAppAsync(string[] appArgs, bool probe, JobService jobs
     builder.Services.AddSingleton(memory);
     builder.Services.AddSingleton(new ModelFile(Resolve(opt.Model)));
     builder.Services.AddSingleton<ModelFixService>();
-    builder.Services.AddSingleton<LiveState>();
+    builder.Services.AddSingleton(sp =>
+    {
+        var live = new LiveState(sp.GetRequiredService<MachineHistory>(), sp.GetRequiredService<LiveModelCheck>(), memory);
+        // Shift, OEE and fault reports: every status goes into the production log (data folder\reports\<machine>)
+        var reports = sp.GetRequiredService<PlcKi.Server.Reports.ReportService>();
+        live.Listeners.Add(reports.Log.Add);
+        return live;
+    });
+    builder.Services.AddSingleton(new PlcKi.Server.Reports.ReportService(model, plant.DataDir, memory));
     builder.Services.AddSingleton<WatchList>();
+    builder.Services.AddSingleton<PlcWriter>();
     builder.Services.AddSingleton(opt.Ask);
     builder.Services.AddSingleton(sp =>
     {
@@ -236,7 +245,7 @@ static async Task<int> RunAppAsync(string[] appArgs, bool probe, JobService jobs
         model = o.Model,
         export = o.Export,
         tiaMode = o.Tia.Mode,
-        readOnly = true,
+        readOnly = false,   // administrators can change values (WriteEndpoints); everything else reads
     }));
 
     // The program behind the model, for the Program page (read-only, from the export file)
@@ -246,6 +255,7 @@ static async Task<int> RunAppAsync(string[] appArgs, bool probe, JobService jobs
         p.Block(name = name.Replace("%2F", "/", StringComparison.OrdinalIgnoreCase)) is { } b ? Results.Ok(b) : Results.NotFound(new { error = $"Block {name} is not in the program export." }));
 
     app.MapGet("/api/program/tags", (string? db, ProgramService p) => Results.Ok(p.Tags(db)));
+    app.MapGet("/api/program/hmi", (ProgramService p) => Results.Ok(p.Hmi()));
 
     // Live values for the Tags page: the page names the symbols it shows; the polling loop reads them next to the
     // model tags while the page keeps asking (read-only, at most WatchList.Max symbols)
@@ -286,9 +296,11 @@ static async Task<int> RunAppAsync(string[] appArgs, bool probe, JobService jobs
     app.MapSetup();     // /api/admin/... jobs, TIA connection, program import, block generator
     app.MapLink();      // /link/... for PLC-Ki Link on the laptop, /api/admin/link for the Connections page
     PlcKi.Server.Hardware.HardwareEndpoints.MapHardware(app);   // /api/hardware, /api/cpu (PLC page), PLCSIM Start/Stop
+    app.MapWrites();    // /api/admin/write: change a value (PLCSIM freely, a real PLC only when allowed and confirmed, never safety)
     PlcKi.Server.Mobile.PhoneEndpoints.MapPhone(app);   // /api/admin/phone-address for the QR labels
     app.MapMemory();    // /api/memory/... machine memory: alarm history and notes (History page)
     app.Lifetime.ApplicationStopped.Register(() => memory.Save());
+    PlcKi.Server.Reports.ReportEndpoints.MapReports(app);   // /api/reports/... shift report, OEE, fault summary
 
     app.Lifetime.ApplicationStarted.Register(() =>
     {
@@ -298,7 +310,7 @@ static async Task<int> RunAppAsync(string[] appArgs, bool probe, JobService jobs
             linkHub.LocalBase = $"http://localhost:{local.Port}";
         Console.WriteLine();
         Console.WriteLine($"PLC-Ki is running. Open {urls} in your browser.");
-        Console.WriteLine($"Model: {model.Name} ({model.Tags.Count} tags). Source: {opt.Source} {(opt.Source != "s7" ? opt.SnapshotFile : opt.Plc.Via == "link" ? opt.Plc.Address + " through PLC-Ki Link" : opt.Plc.Address)}. Read-only.");
+        Console.WriteLine($"Model: {model.Name} ({model.Tags.Count} tags). Source: {opt.Source} {(opt.Source != "s7" ? opt.SnapshotFile : opt.Plc.Via == "link" ? opt.Plc.Address + " through PLC-Ki Link" : opt.Plc.Address)}. Reads only; administrators can change values on PLCSIM (and on real PLCs they allow).");
         var (askOn, askWhy) = app.Services.GetRequiredService<AskService>().Availability();
         Console.WriteLine(askOn ? $"Ask a question: on ({opt.Ask.Model})." : $"Ask a question: off. {askWhy}");
         if (opt.Tia.Mode == "local")

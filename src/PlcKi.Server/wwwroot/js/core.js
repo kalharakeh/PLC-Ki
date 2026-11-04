@@ -48,11 +48,13 @@ const PK = (() => {
     search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/>',
     user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6"/>',
     plus: '<path d="M12 5v14M5 12h14"/>',
+    pen: '<path d="M4 20h4L19 9l-4-4L4 16v4z"/><path d="m14 6 4 4"/>',
     sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
     moon: '<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5Z"/>',
     help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14M12 17.5v.01"/>',
     sound: '<path d="M4 9v6h4l5 4V5L8 9H4Z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/>',
     key: '<circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M17 6l3 3M15 8l2 2"/>',
+    chart: '<path d="M3 20h18"/><path d="M6 16v-5M11 16V6M16 16v-8M21 16v-3"/>',
     logout: '<path d="M15 4h4v16h-4"/><path d="M10 8l-4 4 4 4M6 12h10"/>',
   };
   const icon = (name, cls = "") =>
@@ -130,17 +132,20 @@ const PK = (() => {
     document.querySelectorAll("#nav a").forEach((a) => a.classList.toggle("active", a.dataset.route === navName || (a.dataset.route === "setup" && name.startsWith("setup/") && name !== "setup/generator")));
     // The pages that can change a PLC say so where the rest say "read-only"
     const ro = $("ro-badge");
-    const except = name === "setup/generator" || name === "plc";
+    const canWrite = state.user && state.user.role === "admin" && (name === "tags" || name === "program");
+    const except = name === "setup/generator" || name === "plc" || canWrite;
     if (ro) {
       ro.textContent = except ? "Read-only, except here" : "Read-only";
       ro.classList.toggle("except", except);
       ro.title = name === "setup/generator" ? "The block generator can load blocks into PLCSIM, or into a real PLC after two people confirm. Every other page only reads."
         : name === "plc" ? "Start and Stop here switch the PLCSIM CPU only, after you confirm. A real PLC is never started or stopped."
+        : canWrite ? "Administrators can change a value here with the pen: on PLCSIM, or on a real PLC that is allowed in Setup, after typing a reason and the PLC address. Safety values, real inputs and outputs never. Every change is logged."
         : "PLC-Ki reads from the PLC only: it never writes values or changes the CPU state.";
     }
     $("foot-text").textContent = name === "setup/generator"
       ? "PLC-Ki reads from the PLC only. The one exception is this page: the block generator loads blocks into PLCSIM, or into a real PLC after two people confirm."
       : name === "plc" ? "PLC-Ki reads from the PLC only. The one exception is on this page: Start and Stop switch the PLCSIM CPU, never a real PLC."
+      : canWrite ? "PLC-Ki reads from the PLC. On this page administrators can change a value: on PLCSIM, or on an allowed real PLC after confirming. Safety values never. Every change is logged."
       : "PLC-Ki reads from the PLC only: it never writes values or changes the CPU state.";
     const page = $("page");
     if (current && current.view.leave) current.view.leave();
@@ -831,6 +836,12 @@ const PK = (() => {
       "The picture is drawn from the CPU's order number. Use the keys under the display, or the buttons below it, to page through Overview, Diagnostics, Settings and Modules.",
       "Start and Stop work only when PLC-Ki reads the PLCSIM CPU of the TIA helper, and only for administrators. You confirm first. A real PLC is never started or stopped from PLC-Ki.",
       "ERROR and MAINT come from PLCSIM where it tells them; on a real CPU they are not read and stay dark here."]],
+    reports: ["Reports", "Shift report with OEE, and a fault summary for maintenance, from what PLC-Ki records while it watches the machine.", [
+      "Shift report: OEE and its three parts, a bar of where the time went (running, waiting, down by a fault, no PLC connection), parts made, the biggest losses and the alarms of that shift.",
+      "Fault summary: the alarms with the most down time first, how often they came, likely causes and the fix, and every shift's OEE. Pick today, 7 or 30 days.",
+      "Spreadsheet downloads a CSV for Excel; Print or PDF prints the page.",
+      "PLC-Ki records only while it runs and reads the PLC. Time it was off or without connection is shown and left out of OEE.",
+      "Settings (administrators): shift times, planned stops, the part and reject counters and the ideal cycle time. Without a counter every finished sequence cycle counts as one part."]],
     hardware: ["Hardware", "Every rack and module of the TIA project, with each input and output, its tag and its live value.", [
       "Pick a device at the top (PLC, I/O stations, drives, robots), then tap a module in the rack for its channels.",
       "Each module is drawn from its order number: width, LEDs and channel count as on the real device. Devices from other makers show as a plain box.",
