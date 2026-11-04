@@ -146,8 +146,8 @@
   // ---------- page ----------
   const stageNames = { generate: "Write", import: "Import & compile", download: "Download", watch: "Watch", done: "Done" };
   function timeline(j) {
-    const plan = ["generate", "import"];
     const title = j.title || "";
+    const plan = /^Import /.test(title) ? ["import"] : ["generate", "import"];   // "Import ... again": no writing step
     if (/PLCSIM/.test(title)) plan.push("download", "watch");
     else if (/real PLC/.test(title)) plan.push("download");
     plan.push("done");
