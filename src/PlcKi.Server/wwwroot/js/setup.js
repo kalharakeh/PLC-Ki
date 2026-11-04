@@ -110,7 +110,7 @@ const PKSetup = (() => {
     if (has(/PLCSIM|download/i) && has(/fail|error|refused|not reachable/i) && /download|PLCSIM/i.test(job.title || ""))
       return { text: "The download to PLCSIM did not work.", todo: "On the VM: check PLCSIM Advanced runs the virtual PLC (green), and its address is the PLCSIM address in Setup. Then start the job again." };
     if (has(/compil\w*[^\n]*\b[1-9]\d* error/i) || has(/\berrors?: *[1-9]/i))
-      return { text: "TIA found compile errors.", todo: "Open the log below for the lines TIA complained about. More fixing rounds (More options) let Claude fix them by itself." };
+      return { text: "TIA found compile errors.", todo: "Open the log below for the lines TIA complained about. More fixing rounds (More options) let Ki fix them by itself." };
     const lines = log.split("\n").map((l) => l.replace(/^\s*\|\s?/, "").trim()).filter((l) => l && !l.startsWith(">"));
     const last = lines.reverse().find((l) => /error|fail|cannot|could not|not found|refused|problem/i.test(l)) || lines[0] || "";
     const p = PK.plain(last);
@@ -149,6 +149,21 @@ const PKSetup = (() => {
       const mins = Math.max(3, Math.round(est / 60));
       return { pct, phase, hint: `About ${mins} minutes for a program this size; it can take longer. While Claude writes, the kB count keeps growing.` };
     }
+    if (job.kind === "develop") {
+      // The generator's own markers (##plcki stage ...) say where it is; between them, creep forward a little
+      const [stage, arg] = (job.stage || "generate").split(" ");
+      const since = (from, to, est) => Math.min(to, Math.round(from + secs / est * (to - from)));
+      const steps = {
+        generate: [since(3, 40, 240), `${PK.AI} is writing the blocks`],
+        fix: [40, `${PK.AI} is fixing what TIA found (round ${arg || 1})`],
+        import: [55, `TIA is importing and compiling ${arg || "the blocks"}`],
+        download: [75, `Downloading ${arg || "the blocks"} to ${/real PLC/.test(job.title || "") ? "the real PLC" : "PLCSIM"}`],
+        watch: [85, `Watching the PLC run for ${arg || "a few"} s (read-only)`],
+        done: [100, "Done"],
+      };
+      const [pct, phase] = steps[stage] || [10, `${PK.AI} is working`];
+      return { pct, phase, hint: `${PK.AI} writes the blocks, TIA imports and compiles them, and what TIA finds goes back to ${PK.AI} for another round. Usually 3 to 10 minutes.` };
+    }
     return null;
   }
 
@@ -158,19 +173,21 @@ const PKSetup = (() => {
     const p = jobProgress(job);
     const line = esc(lastLine.replace(/^\s*\|\s?/, "").slice(0, 200));
     if (!p) return `<div class="jobprog"><div class="top"><span class="phase">Working…</span><span class="time">${time}</span></div>
-      <div class="progress indet"><div></div></div><p class="muted small" style="margin:0">${line}</p></div>`;
+      <div class="progress indet"><div></div></div>${line ? `<p class="latest" title="${line}"><span>Latest</span>${line}</p>` : ""}</div>`;
     return `<div class="jobprog"><div class="top"><span class="pct">${p.pct}%</span><span class="phase">${esc(p.phase)}</span><span class="time">${time}</span></div>
       <div class="progress"><div style="width:${p.pct}%"></div></div>
-      <p class="muted small" style="margin:0">${esc(p.hint)}${/blocks \d+\//.test(line) ? "" : ` Latest: ${line}`}</p></div>`;
+      <p class="muted small" style="margin:0">${esc(p.hint)}</p>
+      ${/blocks \d+\//.test(line) || !line ? "" : `<p class="latest" title="${line}"><span>Latest</span>${line}</p>`}</div>`;
   }
 
-  function jobCard(job, extra = "") {
+  /** A job: title, state, progress while it runs, the problem in plain words when it fails, and the log. actions: buttons for a finished job. */
+  function jobCard(job, extra = "", actions = "") {
     const [t, cls] = stateText[job.state] || [job.state, "info"];
     const lines = (job.log || "").split("\n").filter((l) => l.trim() && !l.startsWith("> "));
     const lastLine = lines.slice(-1)[0] || "Starting…";
     return `<div class="card job">
       <div class="row"><b style="font-size:16px">${esc(job.title)}</b><span class="pill ${cls}"><span class="dot"></span>${t}</span><span class="spacer"></span>
-        ${job.state === "running" ? `<button class="btn red-tinted small" data-stop="${esc(job.id)}">${icon("stop")}Stop</button>` : ""}</div>
+        ${job.state === "running" ? `<button class="btn red-tinted small" data-stop="${esc(job.id)}">${icon("stop")}Stop</button>` : actions}</div>
       ${extra}
       ${job.state === "running" ? progressHtml(job, lastLine) : ""}
       ${["failed", "problems", "stopped"].includes(job.state) ? (() => { const p = jobProblem(job); return `<div class="notice ${job.state === "failed" ? "red" : "gold"}" style="margin-top:12px">${icon("warn")}<div><b>${esc(p.text)}</b>${p.todo ? `<br>${esc(p.todo)}` : ""}</div></div>`; })() : ""}
@@ -333,7 +350,7 @@ const PKSetup = (() => {
           { value: "link", label: "My laptop", text: "Through PLC-Ki Link.", icon: "laptop" },
         ])}
         <div>${tiaFields}</div>
-        <div class="row">${tiaMsg}<span class="spacer"></span><button class="btn plain small" data-check-tia>Check again</button></div>
+        <div class="row" style="align-items:center">${tiaMsg}<button class="btn gray small" data-check-tia>Check again</button></div>
         </div>
         ${c.plcVia === "link" || c.tiaMode === "link" ? "" : saveRow}`)
       + (c.plcVia === "link" || c.tiaMode === "link" ? linkHtml(c) : "");
@@ -643,7 +660,7 @@ const PKSetup = (() => {
             ${sw("publicView", s.publicView, "Viewing without login", "For a screen on the line. Setup still needs an administrator.")}
             <label class="field" style="max-width:200px">Port<input id="port" type="number" value="${s.port}">${runNote("port")}</label></div>
         </div>
-        <div class="actions" style="margin-top:24px"><button class="btn big" data-save-settings>Save</button></div>`)
+        <div class="actions" style="margin-top:24px"><button class="btn big" data-save-settings>Save</button><span class="muted small">Saves Machine, Assistant and Access. Logins below save on their own.</span></div>`)
         + PK.sec("", `<h2>Logins</h2><p class="sub">Operators see every machine page. Administrators also see Setup.</p>
           <ul class="list">${(users || []).map((u) => `<li><span class="ico">${icon("user")}</span>
             <span style="flex:1"><b style="font-weight:600">${esc(u.name)}</b>${state.user && u.name === state.user.name ? " (you)" : ""}<div class="faint">${u.role === "admin" ? "Administrator" : "Operator"}</div></span>

@@ -169,6 +169,40 @@ END_FUNCTION_BLOCK
     }
 
     [Fact]
+    public void Summary_says_what_a_version_made_and_changed()
+    {
+        var v1 = BlockPackage.Parse(Answer());
+        var first = PackageSummary.Compare(null, v1);
+        Assert.Equal("new", Assert.Single(first.Blocks).Change);
+        Assert.Contains(first.Text, t => t.StartsWith("Wrote function block FB_GenValve (SCL)"));
+        Assert.Contains("2 new tags: XV201_Open (%Q4.0), PT201_Raw (%IW80).", first.Text);
+
+        // v2: one line of the valve changed, one tag moved, one tag gone, one new tag and a new FC
+        const string tags2 = """
+{"tables":[{"name":"Valves","tags":[
+  {"name":"XV201_Open","dataType":"Bool","address":"%Q4.1","comment":"Solenoid XV201"},
+  {"name":"XV201_Fault","dataType":"Bool","address":"%I4.2","comment":"Fault"}]}]}
+""";
+        var v2 = BlockPackage.Parse(Answer(valve: Valve.Replace("#Out := #Open;", "#Out := #Open AND NOT #Fault;\n\t#Busy := #Open;"), tags: tags2));
+        v2.Files.Add(new PackageFile("20_FC_Scale.scl", "FUNCTION \"FC_Scale\" : Void\nBEGIN\nEND_FUNCTION\n"));
+        var s = PackageSummary.Compare(v1, v2);
+
+        var valve = s.Blocks.Single(b => b.Name == "FB_GenValve");
+        Assert.Equal(("changed", 2, 1), (valve.Change, valve.LinesAdded, valve.LinesRemoved));
+        Assert.Equal("new", s.Blocks.Single(b => b.Name == "FC_Scale").Change);
+        Assert.Contains("Changed function block FB_GenValve (SCL): 2 lines added, 1 removed.", s.Text);
+        Assert.Contains("Added function FC_Scale (SCL): 3 lines.", s.Text);
+        Assert.Contains("Added 1 tag: XV201_Fault (%I4.2).", s.Text);
+        Assert.Contains("Removed 1 tag: PT201_Raw (%IW80).", s.Text);
+        Assert.Contains("Changed 1 tag: XV201_Open (address %Q4.0 to %Q4.1).", s.Text);
+
+        // the same package again: nothing changed
+        Assert.Equal(new[] { "Unchanged: FB_GenValve, FC_Scale." }, PackageSummary.Compare(v2, v2).Text);
+        Assert.Equal((0, 0), PackageSummary.Diff(new() { "a", "b" }, new() { "a", "b" }));
+        Assert.Equal((1, 1), PackageSummary.Diff(new() { "a", "b", "c" }, new() { "a", "x", "c" }));
+    }
+
+    [Fact]
     public void Reads_existing_blocks_from_an_export_for_editing()
     {
         var got = ExportSources.Read(ExportFile, null, new[] { "FB_Valve", "Station", "Nope" });

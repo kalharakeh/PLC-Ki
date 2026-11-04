@@ -1,16 +1,16 @@
-// Block generator (administrators): say what you need, Claude writes the blocks, the TIA PC imports and compiles them,
+// Block generator (administrators): say what you need, Ki (PLC-Ki's block writer, on Claude) writes the blocks, the TIA PC imports and compiles them,
 // optionally downloads to PLCSIM and watches them run. A real-PLC download needs two people-confirmations: the version
 // typed here, and the PLC address typed in the TiaImporter window on the TIA PC.
 "use strict";
 
 (() => {
-  const { esc, icon, api, state, toast } = PK;
+  const { esc, icon, api, state, toast, AI } = PK;
 
   const g = {
     packages: null, projects: null, projectsError: null, tia: null, settings: null,
     open: null, detail: null, file: null, tab: "versions",   // the package picked on the left, and which part of it shows
     form: { name: "", request: "", project: "", plc: "", edit: "", useContext: true, sclOnly: false, download: "none", plcAddress: "", watch: 30, rounds: 3, effort: "high" },
-    job: null, unfollow: null, sheet: null, sheetFor: null,
+    job: null, jobHidden: null, unfollow: null, sheet: null, sheetFor: null,
   };
 
   const stateCls = (st) => /error/i.test(st || "") ? "bad" : /warn/i.test(st || "") ? "warn" : "ok";
@@ -47,7 +47,7 @@
     PK.draw();
     showWork();
   }
-  /** On a narrow screen the list sits above the work area: bring the work area into view (after draw() restores the scroll). */
+  /** On a narrow screen the work area comes first: bring it into view (after draw() restores the scroll). */
   function showWork() {
     if (innerWidth > 1000) return;
     setTimeout(() => { const el = document.querySelector("[data-work]"); if (el) window.scrollTo({ top: el.getBoundingClientRect().top + scrollY - 70, behavior: "instant" }); }, 0);
@@ -73,6 +73,7 @@
   function followJob(job) {
     if (g.unfollow) g.unfollow();
     g.job = job;
+    g.jobHidden = null;
     g.unfollow = PKSetup.follow(job, (j) => {
       waitingSheets(j);
       PK.draw();
@@ -102,9 +103,9 @@
     const pkg = j.outputs && j.outputs.package;
     g.sheet = PK.sheet(`<span class="eyebrow" style="color:var(--fault)">Real PLC · step 1 of 2</span>
       <h2>Did you review ${esc(version)}?</h2>
-      <p class="muted" style="margin:0">It compiles in TIA. Before it goes to a real PLC, read what Claude wrote and look at the blocks in TIA Portal.
+      <p class="muted" style="margin:0">It compiles in TIA. Before it goes to a real PLC, read what ${AI} wrote and look at the blocks in TIA Portal.
         Then type <b>${esc(version)}</b> to go on. Anything else stops here and nothing is downloaded.</p>
-      <details class="more"><summary>What Claude wrote (REVIEW.md)</summary><div class="md" data-review>Loading…</div></details>
+      <details class="more"><summary>${AI}'s notes (REVIEW.md)</summary><div class="md" data-review>Loading…</div></details>
       <input id="cv-text" autocomplete="off" spellcheck="false" placeholder="Type ${esc(version)}" style="font-family:var(--mono);font-size:18px">
       <div class="row end"><button class="btn gray" data-no>Stop, don't download</button><button class="btn red" data-yes disabled>Download to the real PLC</button></div>`, { dismiss: false });
     const el = g.sheet.el, input = el.querySelector("#cv-text"), yes = el.querySelector("[data-yes]");
@@ -200,13 +201,13 @@
     const steps = [
       gstep(1, change ? "What should change?" : "What do you need?",
         `<textarea id="g-request" rows="4" aria-label="${change ? "What should change" : "What do you need"}" placeholder="${change ? "For example: add a dry-run stop when the tank level is below 10 %." : "For example: an FB for a pump with start/stop, run feedback, a 5 s feedback alarm and run hours."}">${esc(f.request)}</textarea>
-         <span class="hint">${change ? "Claude changes the latest version and saves it as the next one. Leave it empty to import the latest version again." : "Plain words are fine. Name signals and times if you know them."}</span>`),
+         <span class="hint">${change ? `${AI} changes the latest version and saves it as the next one. Leave it empty to import the latest version again.` : "Plain words are fine. Name signals and times if you know them."}</span>`),
       gstep(2, "Where should it go?",
         `<div class="grid ${change ? "" : "two"}">
           ${change ? "" : `<label class="field">Package name<input id="g-name" value="${esc(f.name)}" placeholder="${esc(suggested)}" autocomplete="off" spellcheck="false"><span class="hint">Optional. Empty: <b data-suggest>${esc(suggested)}</b>, made from your words.</span></label>`}
           <label class="field">TIA project${projectField}</label>
         </div>
-        <div class="row" style="margin-top:12px"><div style="flex:1"><b style="font-weight:600">Fit into the current program</b><div class="muted small">Claude sees the imported program: its types, tags and blocks.${g.settings && g.settings.export ? "" : " (No program imported yet.)"}</div></div>
+        <div class="row" style="margin-top:12px"><div style="flex:1"><b style="font-weight:600">Fit into the current program</b><div class="muted small">${AI} sees the imported program: its types, tags and blocks.${g.settings && g.settings.export ? "" : " (No program imported yet.)"}</div></div>
           <label class="switch"><input type="checkbox" id="g-useContext" ${f.useContext ? "checked" : ""}><span></span></label></div>`),
       gstep(3, "After it compiles", choice("dl", f.download, [
         { value: "none", icon: "tia", label: "Stop in TIA", text: "Import and compile only. You download yourself." },
@@ -220,8 +221,8 @@
         <div class="grid two">
           <label class="field">PLC in the project<input id="g-plc" value="${esc(f.plc)}" placeholder="Empty: the only PLC"></label>
           <label class="field">Change existing blocks<input id="g-edit" value="${esc(f.edit)}" placeholder="FB_Mixer, FC_Valves"><span class="hint">Only these may be overwritten. Needs "Fit into the current program".</span></label>
-          <label class="field">Fixing rounds<input id="g-rounds" type="number" min="0" max="6" value="${f.rounds}"><span class="hint">How often Claude fixes compile or run problems on its own.</span></label>
-          <label class="field">How hard Claude thinks<select id="g-effort">${["low", "medium", "high", "max"].map((x) => `<option ${f.effort === x ? "selected" : ""}>${x}</option>`).join("")}</select></label>
+          <label class="field">Fixing rounds<input id="g-rounds" type="number" min="0" max="6" value="${f.rounds}"><span class="hint">How often ${AI} fixes compile or run problems on its own.</span></label>
+          <label class="field">How hard ${AI} thinks<select id="g-effort">${["low", "medium", "high", "max"].map((x) => `<option ${f.effort === x ? "selected" : ""}>${x}</option>`).join("")}</select></label>
         </div>
         <div class="row"><div style="flex:1"><b style="font-weight:600">SCL only</b><div class="muted small">No LAD or GRAPH, only SCL blocks.</div></div>
           <label class="switch"><input type="checkbox" id="g-sclOnly" ${f.sclOnly ? "checked" : ""}><span></span></label></div>
@@ -231,13 +232,15 @@
     </div>`;
   }
 
+  const running = (name) => !!(g.job && g.job.state === "running" && g.job.outputs && g.job.outputs.package === name);
+
   /** Left: start something new, or pick a package made before. */
   function listHtml() {
     const pk = g.packages;
     const items = !pk ? `<li class="muted small">Loading…</li>`
       : !pk.length ? `<li class="muted small gen-empty">Nothing generated yet. What you start appears here.</li>`
       : pk.map((p) => `<li><button type="button" class="gen-item ${g.open === p.name ? "on" : ""}" data-open="${esc(p.name)}" aria-pressed="${g.open === p.name}">
-          <span class="gi-top"><b>${esc(p.name)}</b>${p.state ? `<span class="pill ${stateCls(p.state)}">${esc(p.state)}</span>` : ""}</span>
+          <span class="gi-top"><b>${esc(p.name)}</b>${running(p.name) ? `<span class="pill info"><span class="dot"></span>Running</span>` : p.state ? `<span class="pill ${stateCls(p.state)}">${esc(p.state)}</span>` : ""}</span>
           <span class="gi-req">${esc(p.request || "")}</span>
           <span class="gi-meta">${esc(p.latest || "")}${p.versions > 1 ? ` · ${p.versions} versions` : ""}${p.time ? " · " + esc(PK.date(p.time)) : ""}</span>
         </button></li>`).join("");
@@ -261,6 +264,37 @@
       ${r.runtime.length ? `<div class="notice gold" style="margin-top:10px">${icon("warn")}<div><b>While it ran in PLCSIM</b><ul class="small" style="margin:6px 0 0">${r.runtime.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div></div>` : ""}`;
   }
 
+  /** "What Ki did": the blocks and tags a version made, changed or removed, in plain sentences, plus TIA's verdict. */
+  function summaryHtml(v, title, withTia) {
+    const s = v && v.summary;
+    if (!s || !s.lines || !s.lines.length) return "";
+    const r = v.report;
+    const tia = withTia && r ? [`TIA: ${r.compileState || "not compiled"}, ${r.errorCount} error${r.errorCount === 1 ? "" : "s"}, ${r.warningCount} warning${r.warningCount === 1 ? "" : "s"}.`,
+      r.download ? `Download: ${r.download}.` : "", r.runtime && r.runtime.length ? `While it ran: ${r.runtime.length} problem${r.runtime.length === 1 ? "" : "s"} (see ${v.folder} below).` : ""].filter(Boolean) : [];
+    return `<div class="gen-sum"><span class="eyebrow">${esc(title)}</span>
+      <ul>${s.lines.map((l) => `<li data-k="${esc(l.kind)}">${esc(l.text)}</li>`).join("")}${tia.map((t) => `<li data-k="tia">${esc(t)}</li>`).join("")}</ul></div>`;
+  }
+
+  /** The job card: while it runs, and after it ends until hidden (older than a day: hidden by itself). */
+  function jobHtml() {
+    const j = g.job;
+    if (!j || g.jobHidden === j.id) return "";
+    if (j.state !== "running" && j.ended && Date.now() - new Date(j.ended).getTime() > 24 * 3600e3) return "";
+    const pkg = j.outputs && j.outputs.package;
+    const label = j.state === "running" ? "Running now" : "Last job";
+    const open = pkg && pkg !== g.open ? `<button type="button" class="btn plain small" data-open="${esc(pkg)}">Open ${esc(pkg)}</button>` : "";
+    return `<div class="gen-job"><span class="eyebrow">${label}</span>${PKSetup.jobCard(j, timeline(j) + jobSummary(j),
+      `${open}<button type="button" class="btn gray small" data-hidejob>Hide</button>`)}</div>`;
+  }
+
+  /** The finished job's version: "What Ki did in v002", shown in the job card. */
+  function jobSummary(j) {
+    if (!j || j.state === "running" || !g.detail || !j.outputs || g.detail.name !== j.outputs.package) return "";
+    const made = [...(j.log || "").matchAll(/Wrote (v\d{3})/g)].map((m) => m[1]).pop();
+    const v = made && g.detail.versions.find((x) => x.folder === made);
+    return v ? `<div style="margin-top:14px">${summaryHtml(v, `What ${AI} did in ${v.folder}`, true)}</div>` : "";
+  }
+
   /** The versions of the picked package, newest first. */
   function versionsHtml(d) {
     const kindText = { new: "First version", change: "Changed on request", fix: "Fixed after TIA's report" };
@@ -269,22 +303,26 @@
           ${v.report ? `<span class="pill ${v.report.errorCount || v.report.fileErrors.length ? "bad" : stateCls(v.report.compileState)}" style="margin-left:8px">${esc(v.report.compileState || "?")}</span>` : ""}</summary>
         <div class="grid two" style="margin-top:14px;align-items:start">
           <div class="stack">
+            ${summaryHtml(v, `What ${AI} did`)}
             ${v.request ? `<div><span class="eyebrow">Asked for</span><p style="margin:4px 0 0">${esc(v.request)}</p></div>` : ""}
             <div><span class="eyebrow">In TIA</span><div style="margin-top:6px">${reportHtml(v.report)}</div></div>
             ${v.problems && v.problems.length ? `<div class="notice gold">${icon("warn")}<div><b>The offline check still found</b><ul class="small" style="margin:6px 0 0">${v.problems.map((p) => `<li>${esc(p)}</li>`).join("")}</ul></div></div>` : ""}
             <div><span class="eyebrow">Files</span><div class="row" style="margin-top:6px">${v.files.map((f) => `<button class="tag ${g.file && g.file.version === v.folder && g.file.file === f ? "on" : ""}" data-file="${esc(f)}" data-ver="${esc(v.folder)}">${esc(f)}${v.added.includes(f) ? " · new" : v.changed.includes(f) ? " · changed" : ""}</button>`).join("")}</div></div>
             ${v.replaces && v.replaces.length ? `<p class="faint small" style="margin:0">May overwrite: ${esc(v.replaces.join(", "))}</p>` : ""}
           </div>
-          <div>${v.review ? `<span class="eyebrow">Claude's notes</span><div class="md" style="margin-top:6px">${PK.md(v.review)}</div>` : ""}</div>
+          <div>${v.review ? `<span class="eyebrow">${AI}'s notes</span><div class="md" style="margin-top:6px">${PK.md(v.review)}</div>` : ""}</div>
         </div>
         ${g.file && g.file.version === v.folder ? `<div class="code" style="margin-top:14px;max-height:480px;overflow:auto"><pre style="margin:0;padding:14px 16px">${esc(g.file.text)}</pre></div>` : ""}
       </details>`).join("")}</div>`;
   }
 
-  /** Right: the form for new blocks, or the picked package with its versions and "Change it". */
+  /** Right: the job (while it runs), then the form for new blocks, or the picked package with its versions and "Change it". */
   function workHtml() {
+    return jobHtml() + packageHtml();
+  }
+  function packageHtml() {
     if (!g.open) return `<div class="gen-head"><div><span class="eyebrow">New package</span><h2>New blocks</h2>
-        <p class="muted small" style="margin:0">Say what you need. Claude writes the blocks, TIA Portal imports and compiles them, and, if you choose, PLCSIM runs them.</p></div></div>${formHtml()}`;
+        <p class="muted small" style="margin:0">Say what you need. ${AI} writes the blocks, TIA Portal imports and compiles them, and, if you choose, PLCSIM runs them.</p></div></div>${formHtml()}`;
     const d = g.detail;
     const p = (g.packages || []).find((x) => x.name === g.open) || {};
     const meta = d ? [`${d.versions.length} version${d.versions.length === 1 ? "" : "s"}`, d.plc ? "PLC " + d.plc : "", d.context ? "fitted into " + d.context.split(/[\\/]/).pop() : ""].filter(Boolean).join(" · ") : "Loading…";
@@ -327,9 +365,8 @@
           <span class="pill ${t && t.realAllowed && t.realAllowed.length ? "warn" : ""}">Real PLCs allowed: ${t && t.realAllowed ? t.realAllowed.length : "none"}</span></div>`;
       const tiaNote = t && !t.ok ? `<div class="notice gold" style="margin-top:12px">${icon("info")}<div style="flex:1"><b>TIA Portal is not reachable.</b> ${esc(t.message || "")}</div><a class="btn gold small" href="#/setup/connections">Connections</a></div>` : "";
       return PK.sec("hero compact", `<h1>Block generator</h1>
-          <p class="sub">Claude writes PLC blocks from plain words, TIA Portal compiles them, and problems go back to Claude until it is clean. Nothing reaches a real PLC without two people confirming.</p>
+          <p class="sub">${AI}, PLC-Ki's block writer, turns plain words into PLC blocks. TIA Portal compiles them, and problems go back to ${AI} until it is clean. Nothing reaches a real PLC without two people confirming.</p>
           ${chips}${tiaNote}`)
-        + (g.job ? PK.sec("tight", `<span class="eyebrow">Latest job</span>${PKSetup.jobCard(g.job, timeline(g.job))}`) : "")
         + PK.sec("", `<div class="gen-layout">${listHtml()}<div class="gen-work" data-work>${workHtml()}</div></div>`);
     },
     after(page) {
@@ -350,6 +387,7 @@
       const req = v("request"), sug = page.querySelector("[data-suggest]"), nm = v("name");
       if (req && sug) PK.on(req, "input", () => { const n = nameFrom(req.value); sug.textContent = n; if (nm) nm.placeholder = n; });
       page.querySelectorAll("[data-file]").forEach((b) => b.onclick = (e) => { e.preventDefault(); showFile(b.dataset.ver, b.dataset.file); });
+      page.querySelectorAll("[data-hidejob]").forEach((b) => b.onclick = () => { g.jobHidden = g.job && g.job.id; PK.draw(); });
       const reopen = page.querySelector("[data-reopen]");
       if (reopen) reopen.onclick = () => { g.sheetFor = null; waitingSheets(g.job); };
       const run = page.querySelector("[data-run]");
@@ -366,7 +404,7 @@
           g.open = name; f.name = name; g.tab = "versions";
           followJob(job);
           PK.draw();
-          window.scrollTo({ top: 0, behavior: "smooth" });
+          setTimeout(() => { const el = document.querySelector(".gen-job"); if (el) window.scrollTo({ top: el.getBoundingClientRect().top + scrollY - 70, behavior: "smooth" }); }, 0);
         } catch (e) { toast(e.message, "error"); }
       };
     },

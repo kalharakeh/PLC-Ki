@@ -3,6 +3,8 @@
 "use strict";
 
 const PK = (() => {
+  /** The assistant's name in PLC-Ki (it runs on Claude): "Ki is writing the blocks…". */
+  const AI = "Ki";
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
@@ -475,7 +477,9 @@ const PK = (() => {
         const pill = $("job-pill");
         pill.classList.toggle("hidden", !run);
         if (run) {
-          pill.innerHTML = `<span class="dot"></span>${esc(run.waiting ? "Needs you: " + run.title : run.title)}`;
+          const text = run.waiting ? "Needs you: " + run.title : run.title;
+          pill.innerHTML = `<span class="dot"></span><span class="jp-t">${esc(text)}</span><span class="jp-s">${run.waiting ? "Needs you" : "Job"}</span>`;
+          pill.title = text;
           pill.className = "pill " + (run.waiting ? "bad" : "info");
           pill.style.cursor = "pointer";
           pill.onclick = () => go(run.kind === "develop" ? "#/setup/generator" : "#/setup/program");
@@ -793,9 +797,11 @@ const PK = (() => {
     "setup/program": ["Program", "Teaches PLC-Ki a machine from its TIA program.", [
       "1. Drop the TIA archive (.zap20). 2. TIA exports it on the TIA PC (needs the TIA helper). 3. Claude builds the model: a few minutes, about a dollar. 4. Check the numbers and press Use this program.",
       "Import again when the program in the PLC changes, so the explanations match."]],
-    "setup/generator": ["Block generator", "Say what you need; Claude writes the blocks, TIA imports and compiles them, PLCSIM runs them.", [
+    "setup/generator": ["Block generator", "Say what you need; Ki, PLC-Ki's block writer, writes the blocks, TIA imports and compiles them, PLCSIM runs them.", [
       "New blocks: say what you need, pick the TIA project and press Generate. The package name is made from your words if you leave it empty.",
-      "Made before: pick a package on the left to see its versions, Claude's notes and the files. \"Change it\" makes the next version (v002, v003 …); older versions stay.",
+      "Made before: pick a package on the left to see its versions, what Ki changed, Ki's notes and the files. \"Change it\" makes the next version (v002, v003 …); older versions stay.",
+      "When a job ends, \"What Ki did\" lists the blocks and tags it made, changed or removed against the version before.",
+      "Ki runs on Claude, with the API key from Settings.",
       "Use a copy of the TIA project, not the plant's master.",
       "A real PLC needs two confirmations: you type the version here, and someone types the PLC address in the TIA helper window. The CPU must be in STOP."]],
     "setup/settings": ["Settings", "The machine model, the Claude key, who may open PLC-Ki, and logins.", [
@@ -881,6 +887,6 @@ const PK = (() => {
     pollJobs();
   }
 
-  return { dirty: setDirty, get isDirty() { return !!dirty; }, plain, connInfo, connSheet, helpSheet, screenSheet, passwordSheet, setHash, cmd, sec, hero, on, $, esc, icon, fillIcons, kindIcon, api, state, view, go, draw, route, toast, sheet, confirmSheet, cond, md, ago, clock, date, when,
+  return { AI, dirty: setDirty, get isDirty() { return !!dirty; }, plain, connInfo, connSheet, helpSheet, screenSheet, passwordSheet, setHash, cmd, sec, hero, on, $, esc, icon, fillIcons, kindIcon, api, state, view, go, draw, route, toast, sheet, confirmSheet, cond, md, ago, clock, date, when,
     loadProgram, blockOf, valueBySymbol, norm, start, get current() { return current; } };
 })();

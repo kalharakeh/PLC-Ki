@@ -71,7 +71,7 @@ public sealed class BlockGenerator
         for (int attempt = 1; attempt <= 1 + MaxRepairs; attempt++)
         {
             result.Attempts = attempt;
-            _log(attempt == 1 ? "Claude is writing the blocks..." : $"Correcting {problems.Count} problem(s), round {attempt - 1}...");
+            _log(attempt == 1 ? "Ki is writing the blocks..." : $"Correcting {problems.Count} problem(s), round {attempt - 1}...");
             var text = await AskAsync(input, draft, problems, result, ct);
             result.LastAnswer = text;
             var package = BlockPackage.Parse(text);
@@ -163,7 +163,7 @@ public sealed class BlockGenerator
         if (stop != null && stop.Contains("refusal", StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Claude declined to write these blocks.");
         if (stop != null && stop.Contains("max_tokens", StringComparison.OrdinalIgnoreCase))
-            _log("  The answer hit the length limit and is cut off. Ask for fewer or smaller blocks per request, or choose a lower 'How hard Claude thinks'.");
+            _log("  The answer hit the length limit and is cut off. Ask for fewer or smaller blocks per request, or choose a lower 'How hard Ki thinks'.");
         return text.ToString();
     }
 }

@@ -180,15 +180,20 @@ public static class SetupEndpoints
             return Results.Ok(new
             {
                 name, h.Plc, h.Context,
-                versions = h.Versions.AsEnumerable().Reverse().Select(v =>
+                versions = h.Versions.Select((v, i) => (v, prev: i > 0 ? h.Versions[i - 1].Folder : null)).Reverse().Select(x =>
                 {
+                    var v = x.v;
                     var vdir = Path.Combine(dir, v.Folder);
+                    PackageSummary? summary = null;
+                    try { if (Directory.Exists(vdir)) summary = PackageSummary.Compare(x.prev != null ? Path.Combine(dir, x.prev) : null, vdir); }
+                    catch (IOException) { /* a folder being written: no summary this time */ }
                     var review = Path.Combine(vdir, BlockPackage.ReviewFile);
                     return new
                     {
                         v.Folder, v.Version, v.Time, v.Kind, v.Request, v.Files, v.Added, v.Changed, v.Removed, v.Problems, v.Replaces,
                         review = File.Exists(review) ? File.ReadAllText(review) : null,
                         report = ReportOf(dir, v.Folder),
+                        summary,
                     };
                 }),
             });
