@@ -1,6 +1,6 @@
 // Tags page: the PLC tag tables (name, address, type, comment) and every data block's values, all with live
 // values. The page tells the server which symbols it shows (POST /api/watch); the polling loop reads them next to
-// the model tags while the page is open. Read-only, like everything in PLC-Ki.
+// the model tags while the page is open. Administrators can change a value (write.js); everyone else only reads.
 "use strict";
 
 (() => {
@@ -53,6 +53,11 @@
 
   const match = (q, ...xs) => !q || xs.some((x) => String(x || "").toLowerCase().includes(q));
 
+  /** The live value plus, for administrators, the button that changes it. */
+  const now = (t) => `<span class="row" style="gap:4px;flex-wrap:nowrap">${live(t)}${window.PKWrite ? PKWrite.button(t) : ""}</span>`;
+  /** The value shown for a symbol, as the change sheet's "now". */
+  const current = (sym) => { const v = W.values[sym]; if (!v || v.error) return null; return v.value === "True" ? true : v.value === "False" ? false : v.value; };
+
   function live(t) {
     const v = W.values[t.symbol];
     if (!v) return `<span class="faint">…</span>`;
@@ -76,7 +81,7 @@
       if (!take.length) return "";
       return `<div class="card"><h3 style="margin:0 0 6px">${esc(tb.name)} <span class="faint small">${tags.length} tag${tags.length > 1 ? "s" : ""}</span></h3>
         <table class="tbl tags-tbl"><tr><th>Name</th><th>Address</th><th>Type</th><th>Now</th><th>Comment</th></tr>
-        ${take.map((t) => `<tr><td class="mono">${esc(t.name)}</td><td class="mono">${esc(t.address || "")}</td><td class="mono muted">${esc(t.datatype)}</td><td>${live(t)}</td><td class="muted">${esc(t.comment || "")}</td></tr>`).join("")}
+        ${take.map((t) => `<tr><td class="mono">${esc(t.name)}</td><td class="mono">${esc(t.address || "")}</td><td class="mono muted">${esc(t.datatype)}</td><td>${now(t)}</td><td class="muted">${esc(t.comment || "")}</td></tr>`).join("")}
         </table></div>`;
     }).join("");
     return (html || `<div class="card"><p class="muted" style="margin:0">No tag matches “${esc(query)}”.</p></div>`)
@@ -106,7 +111,7 @@
         <div class="row" style="margin-top:10px;gap:12px"><input type="search" id="val-q" placeholder="Find a value" aria-label="Find a value" value="${esc(valQuery)}" style="max-width:300px">
           <span class="faint small">Optimized data blocks have no fixed addresses: values are read by name.</span></div>
         <table class="tbl tags-tbl" style="margin-top:10px"><tr><th>Value</th><th>Type</th><th>Now</th><th>Comment</th></tr>
-        ${take.map((t) => `<tr><td class="mono">${esc(short(t.symbol))}</td><td class="mono muted">${esc(t.datatype)}</td><td>${live(t)}</td><td class="muted">${esc(t.comment || "")}</td></tr>`).join("")}
+        ${take.map((t) => `<tr><td class="mono">${esc(short(t.symbol))}</td><td class="mono muted">${esc(t.datatype)}</td><td>${now(t)}</td><td class="muted">${esc(t.comment || "")}</td></tr>`).join("")}
         </table>
         ${vals.length > take.length ? `<p class="faint small">Showing the first ${take.length} of ${vals.length} values.</p>` : ""}
         ${!vals.length ? `<p class="muted">No readable values in this data block.</p>` : ""}</div>`;
@@ -133,7 +138,7 @@
     if (!rows.length) return "";
     return `<div class="card"><details class="more" style="border:0;margin:0;padding:0" open><summary>Tags in this block (${rows.length})</summary>
       <table class="tbl tags-tbl" style="margin-top:8px"><tr><th>Tag</th><th>Address</th><th>Type</th><th>Now</th><th>Comment</th></tr>
-      ${rows.map((t) => `<tr><td class="mono">${dbLink(t.symbol)}</td><td class="mono">${esc(t.address || "")}</td><td class="mono muted">${esc(t.datatype || "")}</td><td>${live(t)}</td><td class="muted">${esc(t.comment || "")}</td></tr>`).join("")}
+      ${rows.map((t) => `<tr><td class="mono">${dbLink(t.symbol)}</td><td class="mono">${esc(t.address || "")}</td><td class="mono muted">${esc(t.datatype || "")}</td><td>${now(t)}</td><td class="muted">${esc(t.comment || "")}</td></tr>`).join("")}
       </table></details></div>`;
   }
   let blockShown = [];
@@ -146,7 +151,7 @@
   W.providers.program = () => blockShown;
   /** Other pages (Plant > Settings) show live values of symbols outside the model the same way. */
   const watch = (page, provider) => { W.providers[page] = provider; };
-  window.PKTags = { blockTagsHtml, watch, live };
+  window.PKTags = { blockTagsHtml, watch, live, wire: (root) => window.PKWrite && PKWrite.wire(root, current) };
 
   PK.view("tags", {
     live: false,
@@ -158,7 +163,8 @@
     render(params) {
       if (params[0] === "db" && params[1] && params[1] !== db) { tab = "dbs"; query = ""; openDb(params[1]); }
       const head = PK.hero({ cls: "hero compact", title: "Tags and data blocks, live.",
-        sub: "Every tag of the PLC tag tables with its address, and every value of the data blocks, read live from the PLC. Read-only." });
+        sub: "Every tag of the PLC tag tables with its address, and every value of the data blocks, read live from the PLC."
+          + (PK.state.user && PK.state.user.role === "admin" ? " Change a value with the pen: freely on PLCSIM, only when allowed and confirmed on a real PLC, never safety values." : "") });
       if (dataError) return head + PK.sec("", `<div class="notice gold">${icon("warn")}<div>${esc(dataError)}</div></div>`);
       if (!data) return head + PK.sec("", `<p class="muted">Loading…</p>`);
       const q = query.trim().toLowerCase();
@@ -171,9 +177,10 @@
             <button type="button" data-tab="dbs" class="${tab === "dbs" ? "on" : ""}">Data blocks · ${data.dbs.length}</button></div>
           <input type="search" id="tag-q" placeholder="${tab === "tables" ? "Find a tag, address or comment" : "Find a data block"}" aria-label="Find" value="${esc(query)}" style="max-width:340px">
           <span class="spacer"></span><span class="faint small">${W.at ? "Read " + PK.clock(W.at) : ""}</span></div>`;
-      return head + PK.sec("", status + bar + (tab === "tables" ? tablesHtml(q) : dbsHtml(q)));
+      return head + PK.sec("", status + bar + (tab === "tables" ? tablesHtml(q) : dbsHtml(q)) + (window.PKWrite ? PKWrite.logHtml() : ""));
     },
     after(page) {
+      if (window.PKWrite) PKWrite.wire(page, current);
       page.querySelectorAll("[data-tab]").forEach((b) => b.onclick = () => { tab = b.dataset.tab; query = ""; PK.draw(); });
       const q = page.querySelector("#tag-q");
       if (q) q.oninput = () => { query = q.value; PK.draw(); };

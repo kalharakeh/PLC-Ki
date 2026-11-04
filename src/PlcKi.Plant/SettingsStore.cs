@@ -36,6 +36,8 @@ public sealed class PlantSettings
     public string TiaImporterPath { get; set; } = "";
     public string TiaPlcsimIp { get; set; } = "";
     public string TiaAllowReal { get; set; } = "";
+    /// <summary>Real PLCs (addresses, comma-separated) whose values an administrator may change from PLC-Ki. Empty = none. Takes effect without a restart.</summary>
+    public string PlcAllowWrites { get; set; } = "";
     public string TiaProject { get; set; } = "";
     /// <summary>New token for TiaImporter serve. Null or empty keeps the saved one.</summary>
     public string? TiaToken { get; set; }
@@ -108,6 +110,7 @@ public sealed class SettingsStore
             TiaImporterPath = c["PlcKi:Tia:ImporterPath"] ?? "",
             TiaPlcsimIp = c["PlcKi:Tia:PlcsimIp"] ?? "",
             TiaAllowReal = c["PlcKi:Tia:AllowReal"] ?? "",
+            PlcAllowWrites = c["PlcKi:Plc:AllowWrites"] ?? "",
             TiaProject = c["PlcKi:Tia:Project"] ?? "",
             // Settings saved before this flag existed were saved by someone who set PLC-Ki up
             SetupChosen = c.GetValue("Plant:SetupChosen", File.Exists(_ctx.SettingsFile)),
@@ -204,6 +207,7 @@ public sealed class SettingsStore
             plc["Username"] = s.Username.Trim();
             plc["PollMs"] = s.PollMs;
             plc["TimeoutMs"] = s.TimeoutMs;
+            plc["AllowWrites"] = s.PlcAllowWrites?.Trim() ?? "";
             plc.Remove("Password");                 // never in plain text: see PlantSecrets
             ask["Enabled"] = s.AskEnabled;
             ask["Effort"] = s.AskEffort;
