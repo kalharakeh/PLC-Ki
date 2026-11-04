@@ -13,6 +13,7 @@ const PK = (() => {
     list: '<path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1.2"/><circle cx="4.5" cy="12" r="1.2"/><circle cx="4.5" cy="18" r="1.2"/>',
     rung: '<path d="M3 4v16M21 4v16M3 12h4M17 12h4"/><path d="M8 8v8M11 8v8M15 9a3 3 0 0 1 0 6"/><path d="M11 12h2"/>',
     code: '<path d="m8 7-5 5 5 5M16 7l5 5-5 5M14 4l-4 16"/>',
+    table: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M3 15h18M9 10v10"/>',
     link: '<path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1"/><path d="M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1"/>',
     import: '<path d="M12 3v12M7 10l5 5 5-5"/><path d="M4 17v3h16v-3"/>',
     spark: '<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6"/>',
@@ -783,6 +784,10 @@ const PK = (() => {
     code: ["Code", "Every block as written in TIA, with the live value after each signal.", [
       "Pick a block on the left. SCL shows as text; LAD and GRAPH as readable text with the same meaning.",
       "The chips after a signal are its live value. Values update every two seconds."]],
+    tags: ["Tags", "The PLC tag tables with addresses, and every data block's values, live.", [
+      "Tag tables: every tag with its address (%I, %Q, %M), type and comment. Search by name, address or comment.",
+      "Data blocks: pick one on the left to see all its values. Optimized blocks have no addresses; values are read by name.",
+      "Up to 300 rows are read live at a time, about once a second. PLC-Ki only reads: nothing here changes the PLC."]],
     "setup/start": ["Get started", "Sets PLC-Ki up one question at a time. You can come back here any time.", [
       "Each step is saved when you press Continue. Skip what you don't need now: TIA Portal is only needed to import a program or build blocks.",
       "At the end, Apply restarts PLC-Ki with the new settings (a few seconds)."]],

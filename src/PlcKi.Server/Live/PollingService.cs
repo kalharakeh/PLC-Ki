@@ -24,6 +24,47 @@ public sealed class LiveState
 }
 
 /// <summary>
+/// Extra symbols the Tags page is showing, read by the polling loop next to the model tags. A symbol stays on the
+/// list while a page keeps asking for it (it drops off 15 s after the last ask), and at most 300 are read.
+/// </summary>
+public sealed class WatchList
+{
+    public const int Max = 300;
+    private readonly object _lock = new();
+    private readonly Dictionary<string, (TagDef Def, DateTime Asked)> _wanted = new();
+    private Dictionary<string, (object? Value, string? Error)> _values = new();
+    public DateTimeOffset? Time { get; private set; }
+
+    public void Ask(IEnumerable<TagDef> defs)
+    {
+        lock (_lock)
+            foreach (var d in defs.Take(Max))
+                _wanted[d.Symbol] = (d, DateTime.UtcNow);
+    }
+
+    public List<TagDef> Current()
+    {
+        lock (_lock)
+        {
+            foreach (var k in _wanted.Where(w => DateTime.UtcNow - w.Value.Asked > TimeSpan.FromSeconds(15)).Select(w => w.Key).ToList())
+                _wanted.Remove(k);
+            return _wanted.Values.OrderByDescending(w => w.Asked).Take(Max).Select(w => w.Def).ToList();
+        }
+    }
+
+    public void Publish(Dictionary<string, (object? Value, string? Error)> values, DateTimeOffset time)
+    {
+        lock (_lock) { _values = values; Time = time; }
+    }
+
+    public Dictionary<string, (object? Value, string? Error)> Values(IEnumerable<string> symbols)
+    {
+        lock (_lock)
+            return symbols.Distinct().ToDictionary(s => s, s => _values.TryGetValue(s, out var v) ? v : ((object?)null, (string?)null));
+    }
+}
+
+/// <summary>
 /// Owns the PLC connection. Connects, reads every model tag once per poll interval,
 /// and reconnects with a growing delay (2 s up to 30 s) when the link drops.
 /// The driver is synchronous, so the loop runs on its own thread.
@@ -35,9 +76,11 @@ public sealed class PollingService : BackgroundService
     private readonly LiveState _state;
     private readonly PlcKiOptions _opt;
     private readonly ILogger<PollingService> _log;
+    private readonly WatchList _watch;
 
-    public PollingService(IPlcSource source, StatusEngine engine, LiveState state, PlcKiOptions opt, ILogger<PollingService> log)
+    public PollingService(IPlcSource source, StatusEngine engine, LiveState state, PlcKiOptions opt, ILogger<PollingService> log, WatchList watch)
     {
+        _watch = watch;
         _source = source;
         _engine = engine;
         _state = state;
@@ -103,6 +146,12 @@ public sealed class PollingService : BackgroundService
                 }
                 last = snap;
                 lastGood = snap.Time;
+                var extra = _watch.Current();
+                if (extra.Count > 0)
+                {
+                    try { _watch.Publish(_source.ReadSymbols(extra), snap.Time); }
+                    catch (Exception ex) { _log.LogDebug(ex, "Reading the watched tags failed."); }
+                }
                 Publish(snap, _source.Kind == "snapshot" ? "snapshot" : "connected", null, lastGood, missing);
             }
             catch (Exception ex)

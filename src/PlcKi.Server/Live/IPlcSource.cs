@@ -22,6 +22,13 @@ public interface IPlcSource : IDisposable
     /// <summary>Reads all tags once. Throws when the connection is lost.</summary>
     Snapshot Read();
 
+    /// <summary>
+    /// Reads extra symbols someone is looking at (the Tags page), outside the model: symbol -> (value, error).
+    /// Sources that cannot look up arbitrary symbols say so per symbol.
+    /// </summary>
+    Dictionary<string, (object? Value, string? Error)> ReadSymbols(IReadOnlyList<TagDef> symbols) =>
+        symbols.ToDictionary(s => s.Symbol, s => ((object?)null, (string?)"Live values for tags outside the machine model need a direct PLC connection."));
+
     void Disconnect();
 }
 

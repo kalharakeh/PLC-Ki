@@ -106,6 +106,7 @@ static async Task<int> RunAppAsync(string[] appArgs, bool probe, JobService jobs
     builder.Services.AddSingleton(new StatusEngine(model));
     builder.Services.AddSingleton(new MachineHistory(TimeSpan.FromMinutes(Math.Clamp(opt.HistoryMinutes, 1, 240))));
     builder.Services.AddSingleton<LiveState>();
+    builder.Services.AddSingleton<WatchList>();
     builder.Services.AddSingleton(opt.Ask);
     builder.Services.AddSingleton(sp =>
     {
@@ -224,6 +225,24 @@ static async Task<int> RunAppAsync(string[] appArgs, bool probe, JobService jobs
     app.MapGet("/api/program/blocks/{name}", (string name, ProgramService p) =>
         p.Block(name = name.Replace("%2F", "/", StringComparison.OrdinalIgnoreCase)) is { } b ? Results.Ok(b) : Results.NotFound(new { error = $"Block {name} is not in the program export." }));
 
+    app.MapGet("/api/program/tags", (string? db, ProgramService p) => Results.Ok(p.Tags(db)));
+
+    // Live values for the Tags page: the page names the symbols it shows; the polling loop reads them next to the
+    // model tags while the page keeps asking (read-only, at most WatchList.Max symbols)
+    app.MapPost("/api/watch", (WatchRequest req, WatchList watch, LiveState live) =>
+    {
+        var defs = (req.Symbols ?? new()).Where(s => !string.IsNullOrWhiteSpace(s.Symbol)).Take(WatchList.Max)
+            .Select(s => new TagDef { Id = s.Symbol!, Symbol = s.Symbol!, Type = string.IsNullOrEmpty(s.Type) ? "Text" : s.Type! }).ToList();
+        watch.Ask(defs);
+        var values = watch.Values(defs.Select(d => d.Symbol));
+        return Results.Ok(new
+        {
+            time = watch.Time,
+            connection = live.Status?.Connection.State,
+            values = values.ToDictionary(v => v.Key, v => new { value = v.Value.Value, error = v.Value.Error }),
+        });
+    });
+
     app.MapGet("/api/program/search", (string? q, ProgramService p) => Results.Ok(p.Search(q ?? "")));
 
     app.MapPlant();     // /api/auth/... and /api/admin/... (settings, users)
@@ -252,3 +271,7 @@ static async Task<int> RunAppAsync(string[] appArgs, bool probe, JobService jobs
     await app.RunAsync();
     return 0;
 }
+
+/// <summary>POST /api/watch: the symbols a page shows, with their model type (Bool, Int, DInt, Real, Time) when known.</summary>
+public sealed record WatchRequest(List<WatchSymbol>? Symbols);
+public sealed record WatchSymbol(string? Symbol, string? Type);
