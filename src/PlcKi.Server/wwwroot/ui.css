@@ -1292,6 +1292,8 @@ ul.mem-list.card { padding: 4px 22px; }
   .mem-occ > .btn { align-self: flex-start; }
   .mem-nums { margin-left: 0; }
   ul.mem-list.card { padding: 2px 16px; }
+}
+
 /* ---------- Documents (manuals, drawings, fault lists) ---------- */
 .doc-search { display: flex; gap: 10px; align-items: center; margin-top: 26px; max-width: 720px; position: relative; }
 .doc-search .ico { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--muted); display: flex; pointer-events: none; }

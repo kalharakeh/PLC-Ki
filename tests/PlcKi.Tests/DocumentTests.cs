@@ -164,7 +164,7 @@ public class DocumentTests : IDisposable
     {
         var lib = await Library(("shared", "G120 list manual.pdf", Pdf(ListManual()), null, "SINAMICS G120"));
         var model = TestData.Model;
-        var tools = new MachineTools(model, () => new LiveView(null, null, new MachineHistory(TimeSpan.FromMinutes(5)), DateTimeOffset.Now), lib);
+        var tools = new MachineTools(model, () => new LiveView(null, null, new MachineHistory(TimeSpan.FromMinutes(5)), DateTimeOffset.Now), docs: lib);
 
         var fault = JsonDocument.Parse(tools.Run("lookup_device_fault", JsonDocument.Parse("""{"code":"F07801","device":"G120"}""").RootElement)).RootElement;
         var first = fault.GetProperty("matches")[0];
