@@ -217,10 +217,10 @@ public sealed class StatusEngine
         }
 
         string explanation;
-        if (requested == true && commanded == false)
-            explanation = blocking.Count > 0
-                ? $"{e.Name} is requested by the program but blocked by: " + string.Join("; ", blocking.Select(DescribeCondition)) + "."
-                : $"{e.Name} is requested by the program but its output is off.";
+        if (requested == true && commanded == false && blocking.Count > 0)
+            explanation = $"{e.Name} is requested by the program but blocked by: " + string.Join("; ", blocking.Select(DescribeCondition)) + ".";
+        else if (requested == true && commanded == false)
+            explanation = $"{e.Name}: {state}. Its output is off now, but every interlock is met.";
         else if (requested == false && commanded != true)
             explanation = haltedSequences.Count > 0
                 ? $"{e.Name}: {state}. Not requested now: {JoinAnd(haltedSequences.ToList())} {(haltedSequences.Count == 1 ? "is" : "are")} halted, which switches the step outputs off."
@@ -228,12 +228,11 @@ public sealed class StatusEngine
         else
             explanation = $"{e.Name}: {state}.";
 
-        // Requested but the output stays off: say what it needs, from the interlocks that are not met
-        string? blockedBy = null;
-        if (requested == true && commanded == false)
-            blockedBy = blocking.Count > 0
-                ? "needs " + JoinAnd(blocking.Select(NeedText).ToList())
-                : "the program asks for it, but its output stays off and no interlock in the model explains why";
+        // Blocked: requested, output off, and an interlock is missing. With every interlock met the output is off
+        // for another reason (a pulsed start bit, a held job number or setpoint), so it is not shown as blocked.
+        string? blockedBy = requested == true && commanded == false && blocking.Count > 0
+            ? "needs " + JoinAnd(blocking.Select(NeedText).ToList())
+            : null;
 
         var values = e.Values.Select(v => View(v, get)).ToList();
         return new EquipmentStatus(e.Id, e.Name, e.Kind, e.Location, state, level, requested, commanded, permits, blocking, values, explanation, blockedBy);

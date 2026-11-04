@@ -65,6 +65,7 @@ Sequences
 Devices
 - One entry per field device the program drives: valves, motors, drives, pumps, heaters, conveyors, cylinders.
 - request: what the program asks for (sequence or manual output into the device block). command: the output to the field.
+- request must be TRUE only while the program wants the device on or moving, and FALSE when that wish is over. Never use a value that keeps its last setting: a job number, recipe or setpoint written in a step (a GRAPH N action "#x := value" holds its value after the step ends) stays non-zero after the job is done. For a handshake device (robot, drive or station that gets a job number and a start pulse), request is the condition of the step that sends the job (or the start bit itself, then leave out command), and the job number goes into states and values.
 - permits: every interlock between request and output, as programmed (one AND term each), with the reason it exists when the comment or name says so.
 - states: first match wins, last one "TRUE". level is ok (running/open as wanted), warn (moving, starting, not confirmed), fault, info or idle. A state text says what the device does ("requested but off"); do not list possible causes in it, the app shows the blocking permit by itself. Put the live values that matter into running states with {placeholders}: "running at {M201_Speed} (setpoint {M201_SpeedSP})", "heating ({Temp}, target {TempSP})".
 
