@@ -8,9 +8,10 @@ namespace TiaImporter
     {
         private const string Usage = @"TiaImporter - TIA Portal V20 Openness helper for the PLC troubleshooter
 
-  TiaImporter export --archive <project.zap20> --out <folder>
-      Opens the archive without showing TIA, exports every PLC program to <folder>,
-      and writes <folder>\manifest.json. The archive itself is never changed.
+  TiaImporter export --archive <project.zap20> --out <folder> [--hardware-only]
+      Opens the archive without showing TIA, exports every PLC program and the hardware configuration
+      (hardware.json) to <folder>, and writes <folder>\manifest.json. The archive itself is never changed.
+      --hardware-only skips the blocks: much quicker, for the PLC-Ki Hardware page.
 
   TiaImporter setup-demo --project <project.ap20> --demo <plc-demo folder> [--plc <PLC name>]
       Loads the demo program (SCL sources and XML blocks) into an existing project
@@ -74,7 +75,8 @@ Only download and serve talk to a PLC.";
                         var archive = Arg("--archive");
                         var outDir = Arg("--out");
                         if (archive == null || outDir == null) { Console.WriteLine(Usage); return 2; }
-                        return new Exporter(Console.Out).Run(new FileInfo(Path.GetFullPath(archive)), new DirectoryInfo(Path.GetFullPath(outDir)));
+                        return new Exporter(Console.Out).Run(new FileInfo(Path.GetFullPath(archive)), new DirectoryInfo(Path.GetFullPath(outDir)),
+                            Array.IndexOf(args, "--hardware-only") >= 0);
                     }
                 case "setup-demo":
                     {

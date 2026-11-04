@@ -29,8 +29,17 @@ public interface IPlcSource : IDisposable
     Dictionary<string, (object? Value, string? Error)> ReadSymbols(IReadOnlyList<TagDef> symbols) =>
         symbols.ToDictionary(s => s.Symbol, s => ((object?)null, (string?)"Live values for tags outside the machine model need a direct PLC connection."));
 
+    /// <summary>
+    /// The CPU's operating mode (RUN, STOP ...) and mode switch, read-only, for the PLC page. Sources that cannot
+    /// tell return null. Called every few seconds from the polling loop, after Read.
+    /// </summary>
+    CpuReading? ReadCpu() => null;
+
     void Disconnect();
 }
+
+/// <summary>What the CPU says about itself: State = Run, Stop, Startup, Halt, Defective, Unknown; Switch = RUN/STOP when it has one.</summary>
+public sealed record CpuReading(string State, string? Switch, DateTimeOffset Time, string? Error = null);
 
 public sealed class PlcKiOptions
 {

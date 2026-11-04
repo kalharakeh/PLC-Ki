@@ -24,7 +24,8 @@ namespace TiaImporter
 
         public Exporter(TextWriter log) { _log = log; }
 
-        public int Run(FileInfo archive, DirectoryInfo outDir)
+        /// <param name="hardwareOnly">only hardware.json (and the manifest): quick, for the PLC-Ki Hardware page</param>
+        public int Run(FileInfo archive, DirectoryInfo outDir, bool hardwareOnly = false)
         {
             if (!archive.Exists) throw new FileNotFoundException("Archive not found", archive.FullName);
             if (outDir.Exists && outDir.EnumerateFileSystemInfos().Any())
@@ -55,7 +56,7 @@ namespace TiaImporter
                         {
                             _log.WriteLine($"PLC {plc.DeviceName} / {plc.CpuName} ({plc.TypeIdentifier})");
                             var plcDir = outDir.CreateSubdirectory(Safe(plc.Software.Name));
-                            var counts = ExportPlc(plc.Software, plcDir);
+                            var counts = hardwareOnly ? new Dictionary<string, int>() : ExportPlc(plc.Software, plcDir);
                             plcList.Add(new Dictionary<string, object>
                             {
                                 ["name"] = plc.Software.Name,
@@ -67,6 +68,10 @@ namespace TiaImporter
                                 ["counts"] = counts,
                             });
                         }
+                        // The racks, modules, addresses and channels, for the PLC-Ki Hardware and PLC pages
+                        _log.WriteLine("Exporting the hardware configuration...");
+                        try { HardwareExport.Write(project, Path.Combine(outDir.FullName, "hardware.json"), _log); }
+                        catch (Exception ex) { Problem("hardware", project.Name, ex); }
                     }
                     finally
                     {

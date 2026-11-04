@@ -103,6 +103,7 @@ static async Task<int> RunAppAsync(string[] appArgs, bool probe, JobService jobs
     builder.Services.AddSingleton(linkHub);
     builder.Services.AddSingleton<TiaConnection>();
     builder.Services.AddSingleton(sp => new ProgramService(opt, model, Resolve));
+    builder.Services.AddSingleton(sp => new PlcKi.Server.Hardware.HardwareService(opt, sp.GetRequiredService<ProgramService>(), Resolve));
     builder.Services.AddSingleton(new StatusEngine(model));
     builder.Services.AddSingleton(new MachineHistory(TimeSpan.FromMinutes(Math.Clamp(opt.HistoryMinutes, 1, 240))));
     builder.Services.AddSingleton<LiveState>();
@@ -248,6 +249,7 @@ static async Task<int> RunAppAsync(string[] appArgs, bool probe, JobService jobs
     app.MapPlant();     // /api/auth/... and /api/admin/... (settings, users)
     app.MapSetup();     // /api/admin/... jobs, TIA connection, program import, block generator
     app.MapLink();      // /link/... for PLC-Ki Link on the laptop, /api/admin/link for the Connections page
+    PlcKi.Server.Hardware.HardwareEndpoints.MapHardware(app);   // /api/hardware, /api/cpu (PLC page), PLCSIM Start/Stop
 
     app.Lifetime.ApplicationStarted.Register(() =>
     {

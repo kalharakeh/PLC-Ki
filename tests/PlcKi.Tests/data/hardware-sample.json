@@ -1,0 +1,1211 @@
+{
+ "format": "plcki-hardware-1",
+ "project": "HeliumLeakTest sample layout (made up for tests)",
+ "exportedAt": "2026-11-04T09:00:00Z",
+ "devices": [
+  {
+   "name": "PLC_1",
+   "typeIdentifier": "System:Device.S71500",
+   "typeName": "S71500/ET200MP station",
+   "items": [
+    {
+     "name": "Rail_0",
+     "typeIdentifier": "System:Rack.S71500",
+     "position": 0,
+     "items": [
+      {
+       "name": "PS 60W 120/230VAC/DC_1",
+       "typeIdentifier": "OrderNumber:6ES7 507-0RA00-0AB0/V1.1",
+       "position": 0,
+       "orderNumber": "6ES7 507-0RA00-0AB0",
+       "firmware": "V1.1",
+       "typeName": "PS 60W 120/230VAC/DC"
+      },
+      {
+       "name": "PLC_1",
+       "typeIdentifier": "OrderNumber:6ES7 515-2FM02-0AB0/V2.8",
+       "position": 1,
+       "orderNumber": "6ES7 515-2FM02-0AB0",
+       "firmware": "V2.8",
+       "typeName": "CPU 1515F-2 PN",
+       "items": [
+        {
+         "name": "PROFINET interface_1",
+         "typeIdentifier": "",
+         "nodes": [
+          {
+           "name": "PROFINET interface_1",
+           "type": "Ethernet",
+           "address": "192.168.5.110",
+           "pnName": "plc_1",
+           "subnet": "PN/IE_1"
+          }
+         ],
+         "controlsIoSystem": "PROFINET IO-System (100)",
+         "items": [
+          {
+           "name": "Port_1"
+          },
+          {
+           "name": "Port_2"
+          }
+         ]
+        },
+        {
+         "name": "PROFINET interface_2",
+         "typeIdentifier": "",
+         "nodes": [
+          {
+           "name": "PROFINET interface_1",
+           "type": "Ethernet",
+           "address": "192.168.10.12",
+           "pnName": "plc_1b",
+           "subnet": "PN/IE_1"
+          }
+         ],
+         "items": [
+          {
+           "name": "Port_1"
+          }
+         ]
+        }
+       ],
+       "classification": "CPU"
+      },
+      {
+       "name": "DI 32x24VDC HF_1",
+       "typeIdentifier": "OrderNumber:6ES7 521-1BL00-0AB0/V2.2",
+       "position": 2,
+       "orderNumber": "6ES7 521-1BL00-0AB0",
+       "firmware": "V2.2",
+       "typeName": "DI 32x24VDC HF",
+       "addresses": [
+        {
+         "io": "Input",
+         "start": 0,
+         "length": 32
+        }
+       ],
+       "channels": [
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 0
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 1
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 2
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 3
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 4
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 5
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 6
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 7
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 8
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 9
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 10
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 11
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 12
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 13
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 14
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 15
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 16
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 17
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 18
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 19
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 20
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 21
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 22
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 23
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 24
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 25
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 26
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 27
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 28
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 29
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 30
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 31
+        }
+       ]
+      },
+      {
+       "name": "DI 32x24VDC HF_2",
+       "typeIdentifier": "OrderNumber:6ES7 521-1BL00-0AB0/V2.2",
+       "position": 3,
+       "orderNumber": "6ES7 521-1BL00-0AB0",
+       "firmware": "V2.2",
+       "typeName": "DI 32x24VDC HF",
+       "addresses": [
+        {
+         "io": "Input",
+         "start": 4,
+         "length": 32
+        }
+       ],
+       "channels": [
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 0
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 1
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 2
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 3
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 4
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 5
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 6
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 7
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 8
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 9
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 10
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 11
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 12
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 13
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 14
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 15
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 16
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 17
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 18
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 19
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 20
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 21
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 22
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 23
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 24
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 25
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 26
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 27
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 28
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 29
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 30
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 31
+        }
+       ]
+      },
+      {
+       "name": "DQ 32x24VDC/0.5A HF_1",
+       "typeIdentifier": "OrderNumber:6ES7 522-1BL01-0AB0/V1.1",
+       "position": 4,
+       "orderNumber": "6ES7 522-1BL01-0AB0",
+       "firmware": "V1.1",
+       "typeName": "DQ 32x24VDC/0.5A HF",
+       "addresses": [
+        {
+         "io": "Output",
+         "start": 0,
+         "length": 32
+        }
+       ],
+       "channels": [
+        {
+         "type": "Digital",
+         "io": "Output",
+         "number": 0
+        },
+        {
+         "type": "Digital",
+         "io": "Output",
+         "number": 1
+        },
+        {
+         "type": "Digital",
+         "io": "Output",
+         "number": 2
+        },
+        {
+         "type": "Digital",
+         "io": "Output",
+         "number": 3
+        },
+        {
+         "type": "Digital",
+         "io": "Output",
+         "number": 4
+        },
+        {
+         "type": "Digital",
+         "io": "Output",
+         "number": 5
+        },
+        {
+         "type": "Digital",
+         "io": "Output",
+         "number": 6
+        },
+        {
+         "type": "Digital",
+         "io": "Output",
+         "number": 7
+        },
+        {
+         "type": "Digital",
+         "io": "Output",
+         "number": 8
+        },
+        {
+         "type": "Digital",
+         "io": "Output",
+         "number": 9
+        },
+        {
+         "type": "Digital",
+         "io": "Output",
+         "number": 10
+        },
+        {
+         "type": "Digital",
+         "io": "Output",
+         "number": 11
+        },
+        {
+         "type": "Digital",
+         "io": "Output",
+         "number": 12
+        },
+        {
+         "type": "Digital",
+         "io": "Output",
+         "number": 13
+        },
+        {
+         "type": "Digital",
+         "io": "Output",
+         "number": 14
+        },
+        {
+         "type": "Digital",
+         "io": "Output",
+         "number": 15
+        },
+        {
+         "type": "Digital",
+         "io": "Output",
+         "number": 16
+        },
+        {
+         "type": "Digital",
+         "io": "Output",
+         "number": 17
+        },
+        {
+         "type": "Digital",
+         "io": "Output",
+         "number": 18
+        },
+        {
+         "type": "Digital",
+         "io": "Output",
+         "number": 19
+        },
+        {
+         "type": "Digital",
+         "io": "Output",
+         "number": 20
+        },
+        {
+         "type": "Digital",
+         "io": "Output",
+         "number": 21
+        },
+        {
+         "type": "Digital",
+         "io": "Output",
+         "number": 22
+        },
+        {
+         "type": "Digital",
+         "io": "Output",
+         "number": 23
+        },
+        {
+         "type": "Digital",
+         "io": "Output",
+         "number": 24
+        },
+        {
+         "type": "Digital",
+         "io": "Output",
+         "number": 25
+        },
+        {
+         "type": "Digital",
+         "io": "Output",
+         "number": 26
+        },
+        {
+         "type": "Digital",
+         "io": "Output",
+         "number": 27
+        },
+        {
+         "type": "Digital",
+         "io": "Output",
+         "number": 28
+        },
+        {
+         "type": "Digital",
+         "io": "Output",
+         "number": 29
+        },
+        {
+         "type": "Digital",
+         "io": "Output",
+         "number": 30
+        },
+        {
+         "type": "Digital",
+         "io": "Output",
+         "number": 31
+        }
+       ]
+      },
+      {
+       "name": "F-DI 16x24VDC_1",
+       "typeIdentifier": "OrderNumber:6ES7 526-1BH00-0AB0/V2.2",
+       "position": 5,
+       "orderNumber": "6ES7 526-1BH00-0AB0",
+       "firmware": "V2.2",
+       "typeName": "F-DI 16x24VDC",
+       "addresses": [
+        {
+         "io": "Input",
+         "start": 10,
+         "length": 6
+        },
+        {
+         "io": "Output",
+         "start": 10,
+         "length": 4
+        }
+       ],
+       "channels": [
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 0
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 1
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 2
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 3
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 4
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 5
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 6
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 7
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 8
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 9
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 10
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 11
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 12
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 13
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 14
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 15
+        }
+       ]
+      },
+      {
+       "name": "F-DQ 8x24VDC/2A PPM_1",
+       "typeIdentifier": "OrderNumber:6ES7 526-2BF00-0AB0/V2.1",
+       "position": 6,
+       "orderNumber": "6ES7 526-2BF00-0AB0",
+       "firmware": "V2.1",
+       "typeName": "F-DQ 8x24VDC/2A PPM",
+       "addresses": [
+        {
+         "io": "Input",
+         "start": 16,
+         "length": 5
+        },
+        {
+         "io": "Output",
+         "start": 16,
+         "length": 5
+        }
+       ],
+       "channels": [
+        {
+         "type": "Digital",
+         "io": "Output",
+         "number": 0
+        },
+        {
+         "type": "Digital",
+         "io": "Output",
+         "number": 1
+        },
+        {
+         "type": "Digital",
+         "io": "Output",
+         "number": 2
+        },
+        {
+         "type": "Digital",
+         "io": "Output",
+         "number": 3
+        },
+        {
+         "type": "Digital",
+         "io": "Output",
+         "number": 4
+        },
+        {
+         "type": "Digital",
+         "io": "Output",
+         "number": 5
+        },
+        {
+         "type": "Digital",
+         "io": "Output",
+         "number": 6
+        },
+        {
+         "type": "Digital",
+         "io": "Output",
+         "number": 7
+        }
+       ]
+      },
+      {
+       "name": "AI 8xU/I/RTD/TC ST_1",
+       "typeIdentifier": "OrderNumber:6ES7 531-7KF00-0AB0/V2.2",
+       "position": 7,
+       "orderNumber": "6ES7 531-7KF00-0AB0",
+       "firmware": "V2.2",
+       "typeName": "AI 8xU/I/RTD/TC ST",
+       "addresses": [
+        {
+         "io": "Input",
+         "start": 256,
+         "length": 16
+        }
+       ],
+       "channels": [
+        {
+         "type": "Analog",
+         "io": "Input",
+         "number": 0
+        },
+        {
+         "type": "Analog",
+         "io": "Input",
+         "number": 1
+        },
+        {
+         "type": "Analog",
+         "io": "Input",
+         "number": 2
+        },
+        {
+         "type": "Analog",
+         "io": "Input",
+         "number": 3
+        },
+        {
+         "type": "Analog",
+         "io": "Input",
+         "number": 4
+        },
+        {
+         "type": "Analog",
+         "io": "Input",
+         "number": 5
+        },
+        {
+         "type": "Analog",
+         "io": "Input",
+         "number": 6
+        },
+        {
+         "type": "Analog",
+         "io": "Input",
+         "number": 7
+        }
+       ]
+      },
+      {
+       "name": "AQ 4xU/I ST_1",
+       "typeIdentifier": "OrderNumber:6ES7 532-5HD00-0AB0/V2.2",
+       "position": 8,
+       "orderNumber": "6ES7 532-5HD00-0AB0",
+       "firmware": "V2.2",
+       "typeName": "AQ 4xU/I ST",
+       "addresses": [
+        {
+         "io": "Output",
+         "start": 256,
+         "length": 8
+        }
+       ],
+       "channels": [
+        {
+         "type": "Analog",
+         "io": "Output",
+         "number": 0
+        },
+        {
+         "type": "Analog",
+         "io": "Output",
+         "number": 1
+        },
+        {
+         "type": "Analog",
+         "io": "Output",
+         "number": 2
+        },
+        {
+         "type": "Analog",
+         "io": "Output",
+         "number": 3
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "ET200SP_Leak",
+   "typeIdentifier": "System:Device.ET200SP",
+   "items": [
+    {
+     "name": "Rack_0",
+     "typeIdentifier": "System:Rack.ET200SP",
+     "items": [
+      {
+       "name": "IM 155-6 PN ST",
+       "typeIdentifier": "OrderNumber:6ES7 155-6AU01-0BN0/V4.2",
+       "position": 0,
+       "orderNumber": "6ES7 155-6AU01-0BN0",
+       "firmware": "V4.2",
+       "typeName": "IM 155-6 PN ST",
+       "items": [
+        {
+         "name": "PROFINET interface_1",
+         "typeIdentifier": "",
+         "nodes": [
+          {
+           "name": "PROFINET interface_1",
+           "type": "Ethernet",
+           "address": "192.168.5.120",
+           "pnName": "et200sp-leak",
+           "subnet": "PN/IE_1"
+          }
+         ],
+         "ioSystem": "PROFINET IO-System (100)"
+        }
+       ]
+      },
+      {
+       "name": "DI 8x24VDC ST_1",
+       "typeIdentifier": "OrderNumber:6ES7 131-6BF01-0BA0/V2.0",
+       "position": 1,
+       "orderNumber": "6ES7 131-6BF01-0BA0",
+       "firmware": "V2.0",
+       "typeName": "DI 8x24VDC ST",
+       "addresses": [
+        {
+         "io": "Input",
+         "start": 20,
+         "length": 1
+        }
+       ],
+       "channels": [
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 0
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 1
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 2
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 3
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 4
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 5
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 6
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 7
+        }
+       ]
+      },
+      {
+       "name": "DI 8x24VDC ST_2",
+       "typeIdentifier": "OrderNumber:6ES7 131-6BF01-0BA0/V2.0",
+       "position": 2,
+       "orderNumber": "6ES7 131-6BF01-0BA0",
+       "firmware": "V2.0",
+       "typeName": "DI 8x24VDC ST",
+       "addresses": [
+        {
+         "io": "Input",
+         "start": 21,
+         "length": 1
+        }
+       ],
+       "channels": [
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 0
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 1
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 2
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 3
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 4
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 5
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 6
+        },
+        {
+         "type": "Digital",
+         "io": "Input",
+         "number": 7
+        }
+       ]
+      },
+      {
+       "name": "DQ 8x24VDC/0.5A ST_1",
+       "typeIdentifier": "OrderNumber:6ES7 132-6BF01-0BA0/V2.0",
+       "position": 3,
+       "orderNumber": "6ES7 132-6BF01-0BA0",
+       "firmware": "V2.0",
+       "typeName": "DQ 8x24VDC/0.5A ST",
+       "addresses": [
+        {
+         "io": "Output",
+         "start": 20,
+         "length": 1
+        }
+       ],
+       "channels": [
+        {
+         "type": "Digital",
+         "io": "Output",
+         "number": 0
+        },
+        {
+         "type": "Digital",
+         "io": "Output",
+         "number": 1
+        },
+        {
+         "type": "Digital",
+         "io": "Output",
+         "number": 2
+        },
+        {
+         "type": "Digital",
+         "io": "Output",
+         "number": 3
+        },
+        {
+         "type": "Digital",
+         "io": "Output",
+         "number": 4
+        },
+        {
+         "type": "Digital",
+         "io": "Output",
+         "number": 5
+        },
+        {
+         "type": "Digital",
+         "io": "Output",
+         "number": 6
+        },
+        {
+         "type": "Digital",
+         "io": "Output",
+         "number": 7
+        }
+       ]
+      },
+      {
+       "name": "AI 4xI 2-/4-wire ST_1",
+       "typeIdentifier": "OrderNumber:6ES7 134-6HD01-0BA1/V2.0",
+       "position": 4,
+       "orderNumber": "6ES7 134-6HD01-0BA1",
+       "firmware": "V2.0",
+       "typeName": "AI 4xI 2-/4-wire ST",
+       "addresses": [
+        {
+         "io": "Input",
+         "start": 272,
+         "length": 8
+        }
+       ],
+       "channels": [
+        {
+         "type": "Analog",
+         "io": "Input",
+         "number": 0
+        },
+        {
+         "type": "Analog",
+         "io": "Input",
+         "number": 1
+        },
+        {
+         "type": "Analog",
+         "io": "Input",
+         "number": 2
+        },
+        {
+         "type": "Analog",
+         "io": "Input",
+         "number": 3
+        }
+       ]
+      },
+      {
+       "name": "Server module_1",
+       "typeIdentifier": "OrderNumber:6ES7 193-6PA00-0AA0/V1.1",
+       "position": 5,
+       "orderNumber": "6ES7 193-6PA00-0AA0",
+       "firmware": "V1.1",
+       "typeName": "Server module"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "Robot",
+   "typeIdentifier": "GSD:GSDML-V2.35-FanucR-30iBPlus.XML/DAP",
+   "typeName": "Fanuc R-30iB Plus",
+   "items": [
+    {
+     "name": "Robot",
+     "typeIdentifier": "GSD:GSDML-V2.35-FanucR-30iBPlus.XML/DAP",
+     "position": 0,
+     "orderNumber": "R-30iB Plus",
+     "typeName": "Fanuc R-30iB Plus",
+     "items": [
+      {
+       "name": "PROFINET interface_1",
+       "typeIdentifier": "",
+       "nodes": [
+        {
+         "name": "PROFINET interface_1",
+         "type": "Ethernet",
+         "address": "192.168.5.130",
+         "pnName": "robot",
+         "subnet": "PN/IE_1"
+        }
+       ],
+       "ioSystem": "PROFINET IO-System (100)"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "LeakDetector",
+   "typeIdentifier": "GSD:GSDML-V2.35-InficonLDS3000.XML/DAP",
+   "typeName": "Inficon LDS3000",
+   "items": [
+    {
+     "name": "LeakDetector",
+     "typeIdentifier": "GSD:GSDML-V2.35-InficonLDS3000.XML/DAP",
+     "position": 0,
+     "orderNumber": "LDS3000",
+     "typeName": "Inficon LDS3000",
+     "items": [
+      {
+       "name": "PROFINET interface_1",
+       "typeIdentifier": "",
+       "nodes": [
+        {
+         "name": "PROFINET interface_1",
+         "type": "Ethernet",
+         "address": "192.168.5.140",
+         "pnName": "lds3000",
+         "subnet": "PN/IE_1"
+        }
+       ],
+       "ioSystem": "PROFINET IO-System (100)"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "G120_Conveyor",
+   "typeIdentifier": "GSD:GSDML-V2.35-SINAMICSG120CU250S-2PN.XML/DAP",
+   "typeName": "SINAMICS G120 CU250S-2 PN",
+   "items": [
+    {
+     "name": "G120_Conveyor",
+     "typeIdentifier": "GSD:GSDML-V2.35-SINAMICSG120CU250S-2PN.XML/DAP",
+     "position": 0,
+     "orderNumber": "6SL3246-0BA22-1FA0",
+     "typeName": "SINAMICS G120 CU250S-2 PN",
+     "items": [
+      {
+       "name": "PROFINET interface_1",
+       "typeIdentifier": "",
+       "nodes": [
+        {
+         "name": "PROFINET interface_1",
+         "type": "Ethernet",
+         "address": "192.168.5.150",
+         "pnName": "g120-conveyor",
+         "subnet": "PN/IE_1"
+        }
+       ],
+       "ioSystem": "PROFINET IO-System (100)"
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

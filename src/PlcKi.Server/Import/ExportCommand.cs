@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using System.Text.RegularExpressions;
 using PlcKi.Core.Import;
 using PlcKi.Server.Generate;
@@ -17,6 +18,7 @@ Usage: PlcKi.Server export --tia <http://tia-pc:5090> --archive <project.zap20> 
   --token <secret>  the token serve was started with (or set PLCKI_VM_TOKEN)
   --archive <file>  the TIA Portal archive, on this PC
   --out <file>      where to save the export zip
+  --hardware-only yes   only the hardware configuration: --out is then the hardware.json to write (much quicker)
 """;
 
     public static async Task<int> RunAsync(string[] args, VmClient? vm = null, CancellationToken ct = default)
@@ -47,7 +49,9 @@ Usage: PlcKi.Server export --tia <http://tia-pc:5090> --archive <project.zap20> 
             Console.WriteLine($"Sending {Path.GetFileName(archive)} ({new FileInfo(archive).Length / 1024 / 1024.0:0.0} MB)...");
             await vm.UploadArchiveAsync(archive, name + ext, ct);
             Console.WriteLine("TIA opens the archive in the background and exports every PLC program. This takes a few minutes.");
-            var result = await vm.ExportAsync(name + ext, ct);
+            var hardwareOnly = o.TryGetValue("hardware-only", out var h) && h is "yes" or "true";
+            if (hardwareOnly) Console.WriteLine("Only the hardware configuration this time: racks, modules, addresses and channels.");
+            var result = await vm.ExportAsync(name + ext, ct, hardwareOnly);
             if (result.ExitCode != 0)
             {
                 Console.Error.WriteLine("The export on the TIA PC failed (see the log above).");
@@ -55,6 +59,27 @@ Usage: PlcKi.Server export --tia <http://tia-pc:5090> --archive <project.zap20> 
             }
             var outFile = Path.GetFullPath(o["out"]);
             Directory.CreateDirectory(Path.GetDirectoryName(outFile)!);
+            if (hardwareOnly)
+            {
+                var tmp = outFile + ".zip.part";
+                try
+                {
+                    await vm.DownloadExportAsync(name, tmp, ct);
+                    using (var zip = ZipFile.OpenRead(tmp))
+                    {
+                        var entry = zip.Entries.Where(e => e.Name.Equals("hardware.json", StringComparison.OrdinalIgnoreCase)).OrderBy(e => e.FullName.Length).FirstOrDefault()
+                                    ?? throw new IOException("The TIA PC sent no hardware.json. Update the TIA helper (Update-TIA-helper on the TIA PC).");
+                        entry.ExtractToFile(outFile, overwrite: true);
+                    }
+                }
+                finally { try { File.Delete(tmp); } catch { /* temp file */ } }
+                var hw = PlcKi.Core.Hardware.HardwareConfig.Load(File.ReadAllText(outFile));
+                Console.WriteLine();
+                Console.WriteLine($"Hardware saved: {outFile}");
+                foreach (var st in hw.Stations)
+                    Console.WriteLine($"  {st.Name}: {st.Modules.Count} module(s){(st.Ips.Count > 0 ? ", " + string.Join(", ", st.Ips) : "")}");
+                return 0;
+            }
             await vm.DownloadExportAsync(name, outFile, ct);
             var export = ProgramExport.Load(outFile);
             Console.WriteLine();

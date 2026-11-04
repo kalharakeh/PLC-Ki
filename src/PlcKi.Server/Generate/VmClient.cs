@@ -77,7 +77,29 @@ public sealed class VmClient
     }
 
     /// <summary>Exports the uploaded archive's PLC programs on the TIA PC (TIA opens it in the background).</summary>
-    public Task<VmResult> ExportAsync(string archive, CancellationToken ct) => PostAsync("export", new { archive }, ct);
+    public Task<VmResult> ExportAsync(string archive, CancellationToken ct, bool hardwareOnly = false) => PostAsync("export", new { archive, hardwareOnly }, ct);
+
+    /// <summary>RUN/STOP (and LEDs) of the PLCSIM CPU the TIA helper downloads to, as JSON.</summary>
+    public async Task<string> PlcsimStateAsync(CancellationToken ct)
+    {
+        using var resp = await _http.GetAsync("cpu", ct);
+        var text = await resp.Content.ReadAsStringAsync(ct);
+        if (!resp.IsSuccessStatusCode) throw new InvalidOperationException($"TIA PC answered {(int)resp.StatusCode}: {Error(text)}");
+        return text;
+    }
+
+    /// <summary>
+    /// Asks the TIA helper to put its PLCSIM CPU in RUN or STOP. The helper refuses any address but its own PLCSIM
+    /// address, and its PLCSIM API cannot reach a real PLC. Returns the new state as JSON.
+    /// </summary>
+    public async Task<string> SwitchPlcsimAsync(string mode, string ip, CancellationToken ct)
+    {
+        using var content = new StringContent(JsonSerializer.Serialize(new { mode, ip }), Encoding.UTF8, "application/json");
+        using var resp = await _http.PostAsync("cpu", content, ct);
+        var text = await resp.Content.ReadAsStringAsync(ct);
+        if (!resp.IsSuccessStatusCode) throw new InvalidOperationException(Error(text));
+        return text;
+    }
 
     /// <summary>Fetches a finished export as a zip file.</summary>
     public async Task DownloadExportAsync(string name, string toFile, CancellationToken ct)

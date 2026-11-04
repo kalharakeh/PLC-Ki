@@ -38,6 +38,9 @@ public sealed class ProgramService
         }
     }
 
+    /// <summary>The loaded export and the PLC the model is about (for the Hardware page's tag names).</summary>
+    public (ProgramExport? Export, ExportPlc? Plc, string? Error) Loaded => _loaded.Value;
+
     public object Overview()
     {
         var (export, plc, error) = _loaded.Value;
