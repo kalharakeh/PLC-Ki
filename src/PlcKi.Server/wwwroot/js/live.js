@@ -114,16 +114,21 @@
   }
 
   function eqCard(e, full) {
+    const look = PK.devLook(e);
+    const lvl = look.alarms.length ? look.lvl : e.level;      // an alarm on the device colours it; else its own state
     const permOk = e.permits.every((p) => p.met !== false);
     const chain = `<div class="chain">
       <span class="lnk ${e.requested === true ? "" : "off"}">Requested ${e.requested === true ? "yes" : e.requested === false ? "no" : "?"}</span><i>›</i>
       <span class="lnk ${permOk ? "" : "no"}">Interlocks ${permOk ? "OK" : "blocking"}</span><i>›</i>
       <span class="lnk ${e.commanded === true ? "" : "off"}">Output ${e.commanded === true ? "on" : e.commanded === false ? "off" : "?"}</span><i>›</i>
-      <span class="lnk ${e.level === "ok" ? "" : e.level === "idle" ? "off" : "no"}">${esc(e.state)}</span></div>`;
+      <span class="lnk ${lvl === "ok" ? "" : lvl === "idle" ? "off" : "no"}">${esc(e.state)}</span></div>`;
+    // An alarm on this device: name it and open it
+    const alarms = look.alarms.map((a) => `<a class="eq-alarm ${a.severity === "WARNING" ? "w" : ""}" href="#/alarms/${encodeURIComponent(a.id)}">${icon("bell")}<span><b>${a.severity === "WARNING" ? "Warning" : "Alarm"} ${esc(a.id)}:</b> ${esc(a.text)}</span><span class="chev">›</span></a>`).join("");
     const vals = e.values.length ? `<div class="kv">${e.values.map((v) => `<span>${esc(v.label)}</span><span class="val">${esc(v.text)}</span>`).join("")}</div>` : "";
     return `<div class="eq-top"><span class="ico">${icon(PK.kindIcon(e.kind))}</span>
         <div style="flex:1"><div class="eq-name">${esc(e.name)}</div><div class="eq-id">${esc(e.id)}${e.kind ? " · " + esc(e.kind) : ""}</div></div>
-        <span class="lv lv-${esc(e.level)}">${esc(e.state)}</span></div>
+        <span class="lv lv-${esc(lvl)}">${esc(look.alarms.length ? (lvl === "fault" ? "fault" : "warning") : e.state)}</span></div>
+      ${alarms}
       ${chain}
       ${e.blockedBy ? `<div class="eq-why">${icon("warn")}<span>${esc(e.blockedBy.charAt(0).toUpperCase() + e.blockedBy.slice(1))}</span></div>` : ""}
       ${vals}
@@ -306,7 +311,7 @@
   // One short header (the step, what it waits for, the key values), then four tabs so the page stays one screen:
   // Overview (what needs attention, the sequence, the machine at a glance), Devices (list and the picked one),
   // Values over time, and Data exchange. The tab is in the address: #/plant/devices/M201, #/plant/values.
-  const PLANT_TABS = [["overview", "Overview"], ["devices", "Devices"], ["values", "Values over time"], ["settings", "Settings"], ["exchange", "Data exchange"]];
+  const PLANT_TABS = [["overview", "Overview"], ["devices", "Devices"], ["stations", "Stations"], ["values", "Values over time"], ["settings", "Settings"], ["exchange", "Data exchange"]];
   // The HMI panel's operator settings and buttons (from the program export), loaded once for the Settings tab
   const H = { data: null, error: null, loading: false, q: "", shown: [] };
   async function loadHmi() {
@@ -355,8 +360,13 @@
       </div>`;
   }
 
-  const problemOf = (e) => !!e.blockedBy || (e.level !== "ok" && e.level !== "idle");
-  const rank = (e) => (e.level === "fault" || e.level === "bad" ? 0 : e.blockedBy ? 1 : e.level === "warn" ? 2 : 3);
+  // A device needs attention when its own state is bad or blocked, or when an active alarm is about it (PK.devLook)
+  const problemOf = (e) => { const l = PK.devLook(e).lvl; return l !== "ok" && l !== "idle"; };
+  const rank = (e) => ({ fault: 0, blocked: 1, warn: 2 })[PK.devLook(e).lvl] ?? 3;
+  /** The pill for a device in a list: blocked shows amber, an alarm shows its id. */
+  const devPill = (e) => { const l = PK.devLook(e); return `<span class="lv lv-${esc(l.lvl === "blocked" ? "warn" : l.lvl)}">${esc(l.word)}</span>`; };
+  /** The stations of the machine, when stations.js has loaded. */
+  const stationsNow = (s) => (typeof PKStations !== "undefined" ? PKStations.list(s) : { stations: [], machineAlarms: [] });
 
   PK.view("plant", {
     live: true,
@@ -371,6 +381,8 @@
       const main = s.sequences[0];
       const [stText, stCls] = main ? seqState(main) : ["", ""];
       const attention = s.equipment.filter(problemOf).sort((x, y) => rank(x) - rank(y));
+      const stationList = stationsNow(s);
+      const ask0 = attention[0] && PK.devLook(attention[0]).alarms[0];
       const waitsFor = main ? main.next.flatMap((n) => n.conditions).filter((c) => c.met === false).map((c) => c.text) : [];
       const badSettings = (s.settings || []).filter((x) => x.valid === false);
       const counts = { devices: attention.length, exchange: s.exchange.length, settings: badSettings.length };
@@ -379,10 +391,10 @@
         eyebrow: main ? `<span class="pill ${stCls}"><span class="dot"></span>${stText}</span>${main.timeInStep ? `<span class="faint">for ${esc(main.timeInStep)}</span>` : ""}<span class="faint">· ${esc(main.name)}</span>` : "",
         title: main ? `Step ${main.step ?? "?"}: ${esc(main.stepName)}` : esc(s.machine),
         sub: main ? (main.halted ? esc("Halted: " + (main.haltReasons.join("; ") || "the outputs are off.")) : waitsFor.length ? esc("Waiting for: " + waitsFor.join("; ")) : esc(main.does || "")) : esc(s.summary[0] || ""),
-        actions: `<button class="btn" data-ask="${attention.length ? `Why is ${esc(attention[0].name)} ${esc(attention[0].blockedBy ? "blocked" : attention[0].state)}, and what do I check?` : "What is the machine doing right now?"}">Ask about it</button>${s.activeAlarms.length ? `<a class="btn b" href="#/alarm">${s.activeAlarms.length} active alarm${s.activeAlarms.length > 1 ? "s" : ""}</a>` : ""}`,
+        actions: `<button class="btn" data-ask="${ask0 ? `Why is alarm ${esc(ask0.id)} on for ${esc(attention[0].name)}, and what do I check?` : attention.length ? `Why is ${esc(attention[0].name)} ${esc(attention[0].blockedBy ? "blocked" : attention[0].state)}, and what do I check?` : "What is the machine doing right now?"}">Ask about it</button>${s.activeAlarms.length ? `<a class="btn b" href="#/alarm">${s.activeAlarms.length} active alarm${s.activeAlarms.length > 1 ? "s" : ""}</a>` : ""}`,
         extra: (s.overview.length ? `<div class="kpis plant-kpis">${s.overview.slice(0, 8).map((v) => `<div class="k"><b>${esc(v.text)}</b><span>${esc(v.label)}</span></div>`).join("")}</div>` : "")
-          + `<nav class="ptabs" aria-label="Plant">${PLANT_TABS.filter(([k]) => (k !== "exchange" || s.exchange.length) && (k !== "settings" || (s.settings || []).length || (H.data && H.data.settings.length))).map(([k, l]) =>
-            `<a href="#/plant${k === "overview" ? "" : "/" + k}" class="${k === tab ? "on" : ""}" ${k === tab ? 'aria-current="page"' : ""}>${l}${(k === "devices" || k === "settings") && counts[k] ? ` <span class="count warn">${counts[k]}</span>` : ""}</a>`).join("")}<a href="#/station">Stations</a></nav>`,
+          + `<nav class="ptabs" aria-label="Plant">${PLANT_TABS.filter(([k]) => (k !== "exchange" || s.exchange.length) && (k !== "settings" || (s.settings || []).length || (H.data && H.data.settings.length)) && (k !== "stations" || stationList.stations.length > 1)).map(([k, l]) =>
+            `<a href="#/plant${k === "overview" ? "" : "/" + k}" class="${k === tab ? "on" : ""}" ${k === tab ? 'aria-current="page"' : ""}>${l}${(k === "devices" || k === "settings") && counts[k] ? ` <span class="count warn">${counts[k]}</span>` : ""}</a>`).join("")}</nav>`,
       });
 
       loadHmi();
@@ -394,13 +406,15 @@
               <span class="ico">${icon("bell")}</span>
               <span class="nd-t"><b>${esc(x.id)} · ${esc(x.text)}</b><span>${esc(x.condition || x.location || "")}</span></span>
               <span class="lv lv-${x.severity === "WARNING" ? "warn" : "fault"}">${esc(x.severity === "WARNING" ? "warning" : "fault")}</span><span class="chev">›</span></a></li>`).join("");
-        const nNeeds = attention.length + s.activeAlarms.length + badSettings.length;
+        // A device whose problem is an alarm already listed above is not listed again; a blocked one still is
+        const devRows = attention.filter((e) => e.blockedBy || !PK.devLook(e).alarms.length);
+        const nNeeds = devRows.length + s.activeAlarms.length + badSettings.length;
         const settingRows = badSettings.map((x) => `<li><a href="#/plant/settings">
               <span class="ico">${icon("gear")}</span>
               <span class="nd-t"><b>Setting ${esc(x.label)} is ${esc(x.value)}</b><span>${esc(x.problem || "the machine cannot work with this value")}</span></span>
               <span class="lv lv-warn">setting</span><span class="chev">›</span></a></li>`).join("");
         const needs = nNeeds
-          ? `<ul class="needs">${alarmRows}${settingRows}${attention.map((e) => `<li><a href="#/plant/devices/${encodeURIComponent(e.id)}">
+          ? `<ul class="needs">${alarmRows}${settingRows}${devRows.map((e) => `<li><a href="#/plant/devices/${encodeURIComponent(e.id)}">
               <span class="ico">${icon(PK.kindIcon(e.kind))}</span>
               <span class="nd-t"><b>${esc(e.name)}</b><span>${esc(e.blockedBy ? (/^needs /.test(e.blockedBy) ? "Blocked: it " + e.blockedBy : "Blocked: " + e.blockedBy) : e.explanation || e.state)}</span></span>
               <span class="lv lv-${esc(e.blockedBy ? "warn" : e.level)}">${esc(e.blockedBy ? "blocked" : e.state)}</span><span class="chev">›</span></a></li>`).join("")}</ul>`
@@ -437,10 +451,13 @@
               <button type="button" class="${eqOnlyProblems ? "on" : ""}" data-eqf="problems" aria-pressed="${eqOnlyProblems}">Needs attention ${attention.length}</button></div></div>`;
         const list = shown.length ? `<ul class="devlist">${shown.map((e) => `<li><button type="button" class="${sel && e.id === sel.id ? "on" : ""}" data-pick="${esc(e.id)}" aria-pressed="${!!sel && e.id === sel.id}">
             <span class="ico">${icon(PK.kindIcon(e.kind))}</span><span class="dv-t"><b>${esc(e.name)}</b><span>${esc(e.id)}</span></span>
-            <span class="lv lv-${esc(e.blockedBy ? "warn" : e.level)}">${esc(e.blockedBy ? "blocked" : e.state)}</span></button></li>`).join("")}</ul>`
+            ${devPill(e)}</button></li>`).join("")}</ul>`
           : `<div class="nomatch">${eqOnlyProblems && !q ? `${icon("check")}<b>Every device is fine.</b>` : `${icon("search")}<b>No device matches.</b>`}<button class="btn b small" data-eq-reset>Show all devices</button></div>`;
         body = sec("", `<div class="dev-cols"><div class="stack">${tools}${list}</div>
-            <div data-dev>${sel ? `<div class="card stack eq-open">${eqCard(sel, true)}<div class="actions"><button class="btn small" data-ask="Why is ${esc(sel.id)} ${esc(sel.state)}?">Ask why</button></div></div>` : ""}</div></div>`);
+            <div data-dev>${sel ? `<div class="card stack eq-open">${eqCard(sel, true)}<div class="actions"><button class="btn small" data-ask="${PK.devLook(sel).alarms[0] ? `Why is alarm ${esc(PK.devLook(sel).alarms[0].id)} on for ${esc(sel.id)}?` : `Why is ${esc(sel.id)} ${esc(sel.state)}?`}">Ask why</button></div></div>` : ""}</div></div>`);
+      } else if (tab === "stations") {
+        // The stations inside Plant; each card opens that station's phone page (the one its QR label opens)
+        body = sec("", PKStations.grid(stationList.stations, stationList.machineAlarms));
       } else if (tab === "values") {
         body = sec("", V ? V.trends() : `<p class="muted">Charts are not available.</p>`);
       } else if (tab === "settings") {

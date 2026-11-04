@@ -64,9 +64,9 @@ const PKStations = (() => {
     const machineAlarms = [];
     for (const a of s.activeAlarms) {
       const hits = new Set();
-      const text = a.text + " " + (a.location || "");
+      // The station of the device the alarm is about (the same rule as the Plant page, PK.deviceAlarms)
       for (const st of map.values()) {
-        if (st.equipment.some((e) => new RegExp("\\b" + e.id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b").test(text))) hits.add(st);
+        if (st.equipment.some((e) => PK.deviceAlarms(e, s).includes(a))) hits.add(st);
       }
       if (!hits.size) keysOf(a.location).forEach((k) => { if (map.has(k)) hits.add(map.get(k)); });
       if (!hits.size && map.size === 1) hits.add([...map.values()][0]);
@@ -82,7 +82,8 @@ const PKStations = (() => {
   const pill = (level, word) => `<span class="pill ${level === "fault" ? "bad" : level}"><span class="dot"></span>${esc(word)}</span>`;
 
   function devRow(e, open) {
-    const lvl = e.blockedBy ? "warn" : e.level;
+    const look = PK.devLook(e);
+    const lvl = look.lvl === "blocked" ? "warn" : look.lvl;
     const sym = window.PKVis ? window.PKVis.symbolFor(e.kind, e.id) : icon(PK.kindIcon(e.kind));
     const body = `<div class="st-dev-b">
         ${e.blockedBy ? `<p class="st-why">${icon("warn")}<span>${esc(e.blockedBy.charAt(0).toUpperCase() + e.blockedBy.slice(1))}</span></p>` : ""}
@@ -92,7 +93,7 @@ const PKStations = (() => {
         <div class="row"><a class="btn b small" href="#/plant/devices/${encodeURIComponent(e.id)}">Open on the Plant page</a></div></div>`;
     return `<details class="st-dev lv-${esc(lvl)}" data-dev="${esc(e.id)}" ${open ? "open" : ""}>
       <summary><span class="pm-sym">${sym}</span><span class="st-dev-n"><b>${esc(e.name)}</b><small>${esc(e.id)}${e.kind ? " · " + esc(e.kind) : ""}</small></span>
-        <span class="lv lv-${esc(lvl)}">${esc(e.blockedBy ? "blocked" : e.state)}</span></summary>${body}</details>`;
+        <span class="lv lv-${esc(lvl)}">${esc(look.word)}</span></summary>${body}</details>`;
   }
 
   function alarmCard(a) {
@@ -130,7 +131,7 @@ const PKStations = (() => {
         + sec("", overviewGrid(stations));
     }
     const dev = device && st.equipment.find((e) => e.id === device);
-    const problems = st.equipment.filter((e) => e.blockedBy || (e.level !== "ok" && e.level !== "idle"));
+    const problems = st.equipment.filter((e) => { const l = PK.devLook(e, s).lvl; return l !== "ok" && l !== "idle"; });
     const rest = st.equipment.filter((e) => !problems.includes(e));
     const first = st.alarms[0];
     const sub = first ? first.text : problems.length ? `${problems[0].name}: ${problems[0].blockedBy || problems[0].state}.`
@@ -183,7 +184,7 @@ const PKStations = (() => {
       const admin = state.user && state.user.role === "admin";
       return hero({ eyebrow: `<span class="faint">${esc(s.machine || "")}</span>`, title: "Stations", sub: "Each station on one page, made for a phone. Scan the QR label on the machine to jump straight to it.",
         actions: admin ? `<a class="btn b" href="#/setup/qr">Print QR labels</a>` : "" })
-        + sec("", (machineAlarms.length ? `<div class="notice gold" style="margin-bottom:18px">${icon("warn")}<div>${machineAlarms.length} alarm${machineAlarms.length > 1 ? "s" : ""} not tied to one station. <a href="#/alarm">See them</a></div></div>` : "") + overviewGrid(stations));
+        + sec("", grid(stations, machineAlarms));
     },
     after(page) {
       if (window.PKLive) window.PKLive.bindAsk(page);
@@ -301,5 +302,8 @@ const PKStations = (() => {
     },
   });
 
-  return { list, keyOf, href };
+  /** The station cards, with a note for alarms not tied to one station (also the Plant › Stations tab). */
+  const grid = (stations, machineAlarms = []) => (machineAlarms.length ? `<div class="notice gold" style="margin-bottom:18px">${icon("warn")}<div>${machineAlarms.length} alarm${machineAlarms.length > 1 ? "s" : ""} not tied to one station. <a href="#/alarm">See them</a></div></div>` : "") + overviewGrid(stations);
+
+  return { list, keyOf, href, grid };
 })();
