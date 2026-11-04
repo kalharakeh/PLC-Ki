@@ -182,6 +182,7 @@
 
   /** A signal in the code: a button that answers what sets it. A block or its instance DB ("FB_Valve", "DB_BatchSequence") links to that block. */
   function opHtml(op) {
+    if (plainDraw) return esc(op);
     const bare = /^"([^"]+)"$/.exec(op);
     const b = bare && ((state.program && state.program.blocks) || []).find((x) => x.name === bare[1]);
     if (b && !/DB$/.test(b.kind)) return `<a class="op" href="${hrefOf(b.name)}">${esc(op)}</a>`;
@@ -202,6 +203,7 @@
 
   // ---- LAD-style rungs from boolean statements ----
   const isSignal = (x) => !!x && /^(#|")/.test(x);
+  let plainDraw = false;    // true while drawing for another page (rungFor): no buttons, as nothing there answers them
   function tokenize(expr) {
     const re = /\s*(\(|\)|AND\b|OR\b|XOR\b|NOT\b|<>|>=|<=|=|<|>|"[^"]+"(?:\.(?:[A-Za-z_]\w*|"[^"]+")|\[\d+\])*|#?[A-Za-z_][\w.]*(?:\[\d+\])?|T#\w+|-?\d+(?:\.\d+)?)/gy;
     const toks = [];
@@ -256,7 +258,7 @@
       if (blocker) { ctx.blocked = true; if (!ctx.first) ctx.first = { n, live }; }
       const tip = v == null ? `${label}: no live value (not read, or not found in the PLC)` : `${label}${live ? " = " + live.text : ""}: ${v ? "passes" : "does not pass"}`;
       // A click asks what sets it; a comparison asks about its first signal
-      const src = n.t === "cmp" ? [n.a, n.b].find(isSignal) : n.op;
+      const src = plainDraw ? null : n.t === "cmp" ? [n.a, n.b].find(isSignal) : n.op;
       const attrs = src ? `data-src="${esc(src)}" aria-label="${esc(tip)}. What sets ${esc(clean(src))}?"` : "";
       return { html: `<${src ? 'button type="button"' : "div"} class="contact ${n.t === "cmp" ? "cmp" : ""} ${v === true ? "on" : v === false ? "off" : "unk"} ${blocker && ctx.coilOff ? "blocker" : ""}" title="${esc(tip)}" ${attrs}>
           <span class="sym">${sym}${v == null ? `<span class="q" aria-hidden="true">?</span>` : ""}</span><span class="nm">${esc(label.replace(/^#/, ""))}</span></${src ? "button" : "div"}>`, out: power && v === true };
@@ -298,6 +300,7 @@
     if (opt.why && !box && !opt.coil && ctx.coilOff && ctx.first) opt.why.push({ coil: lhs, first: ctx.first, net: opt.net });
     const end = box
       ? `<div class="contact ${result ? "on" : result === false ? "off" : ""}"><span class="sym">${esc(box.kind)}</span><span class="nm">${esc(box.name)}${box.pt ? " · " + esc(box.pt) : ""}</span></div>`
+      : plainDraw ? `<div class="contact coil ${coilOn === true ? "on" : coilOn === false ? "off" : ""}" title="${esc(clean(lhs))}${coil ? " = " + esc(coil.text) : ""}"><span class="sym">${opt.coil ? "(" + opt.coil + ")" : "( )"}</span><span class="nm">${esc(lhs.replace(/^#/, ""))}</span></div>`
       : `<button type="button" class="contact coil ${coilOn === true ? "on" : coilOn === false ? "off" : ""}" data-src="${esc(lhs)}" data-coil
           title="${esc(clean(lhs))}${coil ? " = " + esc(coil.text) : ""}" aria-label="Output ${esc(clean(lhs))}${coil ? ", " + esc(coil.text) : ""}. Where is it used?"><span class="sym">${opt.coil ? "(" + opt.coil + ")" : "( )"}</span><span class="nm">${esc(lhs.replace(/^#/, ""))}</span></button>`;
     return `<div class="rung ${opt.hl ? "hl" : ""}"><span class="rail"></span><span class="wire on"></span>${body.html}<span class="wire ${body.out ? "on" : ""}"></span>${end}<span class="wire ${body.out ? "on" : ""}"></span><span class="rail"></span></div>`;
@@ -1127,6 +1130,32 @@
     } else parts.push(`<p class="muted">An output of ${esc(b.name)}: the block that calls it reads it.</p>`);
     return parts.join("");
   }
+
+  /**
+   * One network of a block, drawn as on the Program page, for another page (the Active alarm page shows the rung that
+   * sets the alarm). spec: { block, instance, output, network, want }
+   * - instance: '"Station".XV101' (default: the block's first instance)
+   * - output: the signal the network writes ("FaultNotOpen", "#FaultNotOpen" or '"DB".x'), else network: its number
+   * - want: a Map, optional: filled with the symbols the model does not read (symbol -> type), to ask /api/watch for them
+   * resolve, optional: operand -> { raw, text, symbol, label } or null, e.g. values at alarm time; default: live values.
+   * Returns the HTML (contacts are not clickable there), or "" when the block or the network is not found.
+   */
+  async function rungFor(spec, resolve) {
+    const { block: name, instance, output, network, want } = spec || {};
+    if (!name || !state.program) return "";
+    const b = await loadBlock(name);
+    if (!b) return "";
+    const insts = await instancesOf(name);
+    const inst = insts.find((i) => i.path === instance) || insts[0] || null;
+    const nets = b.logic ? networks(b.logic) : sclNetworks(b.source);
+    const op = output ? (/^[#"]/.test(output) ? output : "#" + output) : null;
+    const net = (op && nets.find((n) => n.lines.some((l) => writes(l, op)))) || (network != null && nets.find((n) => n.no === String(network)));
+    if (!net) return "";
+    plainDraw = true;
+    try { return netHtml(net, resolve || resolver(inst, b, want), op, null, null, []); }
+    finally { plainDraw = false; }
+  }
+  window.PKProgram = { rungFor };
 
   PK.view("program", program());
   PK.view("logic", alias("rungs"));
