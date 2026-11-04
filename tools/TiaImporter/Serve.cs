@@ -258,7 +258,12 @@ namespace TiaImporter
                         {
                             var started = DateTime.UtcNow.AddSeconds(-2);
                             code = new BlockImport(tee).Run(project, dir, plc, Str(body, "version"), Bool(body, "replace"), Bool(body, "keepOnError"));
-                            var reportFile = dir.Exists ? dir.GetFiles("import-report.json", SearchOption.AllDirectories).OrderByDescending(f => f.LastWriteTimeUtc).FirstOrDefault() : null;
+                            // The report of the version asked for; reports sent along by the PC carry the PC's clock, so "newest" is not enough
+                            var version = Str(body, "version");
+                            var reportFile = version != null && PackageName.IsMatch(version)
+                                ? new FileInfo(Path.Combine(dir.FullName, version, "import-report.json"))
+                                : dir.Exists ? dir.GetFiles("import-report.json", SearchOption.AllDirectories).OrderByDescending(f => f.LastWriteTimeUtc).FirstOrDefault() : null;
+                            if (reportFile != null && !reportFile.Exists) reportFile = null;
                             if (reportFile != null && reportFile.LastWriteTimeUtc >= started) report = File.ReadAllText(reportFile.FullName);   // only a report this job wrote
                         }
                         else if (Bool(body, "real"))

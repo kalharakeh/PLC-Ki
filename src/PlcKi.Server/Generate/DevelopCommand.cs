@@ -121,6 +121,14 @@ Usage: PlcKi.Server develop --vm <http://tia-pc:5090> --project <project .ap20 o
                                   "(leave the request empty to import the latest version again).");
                 return 1;
             }
+            if (report.Version.Length > 0 && !string.Equals(report.Version, version.Folder, StringComparison.OrdinalIgnoreCase))
+            {
+                // An old TIA helper can pick up the report of another version: never send that to Ki as this version's result
+                Console.WriteLine();
+                Console.WriteLine($"The TIA PC answered with the report of {report.Version}, not {version.Folder}, so PLC-Ki cannot tell how {version.Folder} compiled. " +
+                                  "Look at the TIA helper window for the real result. Update the TIA helper (Update-TIA-helper) and start the job again.");
+                return 1;
+            }
             report.Save(reportPath);
 
             if (report.Compiled && o.ContainsKey("download"))
