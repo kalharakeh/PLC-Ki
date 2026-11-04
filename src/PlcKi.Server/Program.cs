@@ -122,7 +122,15 @@ static async Task<int> RunAppAsync(string[] appArgs, bool probe, JobService jobs
     builder.Services.AddSingleton(memory);
     builder.Services.AddSingleton(new ModelFile(Resolve(opt.Model)));
     builder.Services.AddSingleton<ModelFixService>();
-    builder.Services.AddSingleton<LiveState>();
+    builder.Services.AddSingleton(sp =>
+    {
+        var live = new LiveState(sp.GetRequiredService<MachineHistory>(), sp.GetRequiredService<LiveModelCheck>(), memory);
+        // Shift, OEE and fault reports: every status goes into the production log (data folder\reports\<machine>)
+        var reports = sp.GetRequiredService<PlcKi.Server.Reports.ReportService>();
+        live.Listeners.Add(reports.Log.Add);
+        return live;
+    });
+    builder.Services.AddSingleton(new PlcKi.Server.Reports.ReportService(model, plant.DataDir, memory));
     builder.Services.AddSingleton<WatchList>();
     builder.Services.AddSingleton<PlcWriter>();
     builder.Services.AddSingleton(opt.Ask);
@@ -292,6 +300,7 @@ static async Task<int> RunAppAsync(string[] appArgs, bool probe, JobService jobs
     PlcKi.Server.Mobile.PhoneEndpoints.MapPhone(app);   // /api/admin/phone-address for the QR labels
     app.MapMemory();    // /api/memory/... machine memory: alarm history and notes (History page)
     app.Lifetime.ApplicationStopped.Register(() => memory.Save());
+    PlcKi.Server.Reports.ReportEndpoints.MapReports(app);   // /api/reports/... shift report, OEE, fault summary
 
     app.Lifetime.ApplicationStarted.Register(() =>
     {
