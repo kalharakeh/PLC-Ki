@@ -43,6 +43,12 @@ const PK = (() => {
     shield: '<path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6l-8-3Z"/>',
     search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/>',
     user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6"/>',
+    sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+    moon: '<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5Z"/>',
+    help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14M12 17.5v.01"/>',
+    sound: '<path d="M4 9v6h4l5 4V5L8 9H4Z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/>',
+    key: '<circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M17 6l3 3M15 8l2 2"/>',
+    logout: '<path d="M15 4h4v16h-4"/><path d="M10 8l-4 4 4 4M6 12h10"/>',
   };
   const icon = (name, cls = "") =>
     `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[name] || P.device}</svg>`;
@@ -71,8 +77,9 @@ const PK = (() => {
   const views = {};
   let current = null;       // { name, view, params }
   let lastHtml = "";
-  // Page building blocks in the house style: full-width sections with a centred column
-  const sec = (cls, html) => `<section class="${cls}"><div class="wrap">${html}</div></section>`;
+  // Page building blocks: sections with a centred column on one calm background. The old "alt" and "dark"
+  // band colours are dropped here, so every page reads as one work surface with cards (UX review 2).
+  const sec = (cls, html) => `<section class="${cls.replace(/\b(alt|dark)\b/g, "").replace(/\s+/g, " ").trim()}"><div class="wrap">${html}</div></section>`;
   const hero = ({ eyebrow = "", title, sub = "", actions = "", cls = "hero", extra = "", extra0 = "" }) =>
     sec(cls, `${eyebrow ? `<div class="eyebrow">${eyebrow}</div>` : ""}<h1>${title}</h1>${sub ? `<p class="sub">${sub}</p>` : ""}${extra0}${actions ? `<div class="actions">${actions}</div>` : ""}${extra}`);
 
@@ -116,6 +123,12 @@ const PK = (() => {
     const v = views[name] || views.alarm;
     document.querySelectorAll("#nav a").forEach((a) => a.classList.toggle("active", a.dataset.route === name || (a.dataset.route === "setup" && name.startsWith("setup/") && name !== "setup/generator")));
     // The one page that can load blocks into a PLC says so where the rest say "read-only"
+    const ro = $("ro-badge");
+    if (ro) {
+      ro.textContent = name === "setup/generator" ? "Read-only, except here" : "Read-only";
+      ro.classList.toggle("except", name === "setup/generator");
+      ro.title = name === "setup/generator" ? "The block generator can load blocks into PLCSIM, or into a real PLC after two people confirm. Every other page only reads." : "PLC-Ki reads from the PLC only: it never writes values or changes the CPU state.";
+    }
     $("foot-text").textContent = name === "setup/generator"
       ? "PLC-Ki reads from the PLC only. The one exception is this page: the block generator loads blocks into PLCSIM, or into a real PLC after two people confirm."
       : "PLC-Ki reads from the PLC only: it never writes values or changes the CPU state.";
@@ -227,7 +240,7 @@ const PK = (() => {
     else {
       const map = {
         connected: ["Live|" + c.address, "ok"],
-        snapshot: ["Test values|" + c.address.split(/[\\/]/).pop(), "info"],
+        snapshot: ["Test values|" + c.address.split(/[\\/]/).pop(), "warn"],
         connecting: ["Connecting|" + c.address, "warn"],
         disconnected: ["Not connected|" + c.address, "bad"],
         waiting: ["Waiting for Link|", "warn"],
@@ -236,17 +249,33 @@ const PK = (() => {
       [text, cls] = map[c.state] || [c.state, "warn"];
     }
     pill.className = "pill " + cls;
-    pill.title = "What does this mean?";
     const [main, extra] = String(text).split("|");
-    pill.innerHTML = `<span class="dot"></span><span>${esc(main)}</span>${extra ? `<span class="pill-extra">· ${esc(extra)}</span>` : ""}`;
+    // Short in the bar; the address or test file is in the tooltip (a long file name wrapped into the menu)
+    pill.title = (extra ? main + ": " + extra + ". " : "") + "What does this mean?";
+    const html = `<span class="dot"></span><span>${esc(main)}</span>`;
+    if (pill.innerHTML !== html) pill.innerHTML = html;
     const alarms = (state.status && state.status.activeAlarms) || [];
-    const b = $("nav-alarm-badge");
-    b.textContent = alarms.length;
-    b.classList.toggle("hidden", alarms.length === 0);
-    b.classList.toggle("gold", alarms.length > 0 && alarms.every((a) => a.severity === "WARNING"));
-    if (state.status) $("machine").textContent = state.status.machine;
+    for (const id of ["nav-alarm-badge", "nav-alarms-badge"]) {
+      const b = $(id);
+      if (!b) continue;
+      b.textContent = alarms.length;
+      b.classList.toggle("hidden", alarms.length === 0);
+      b.classList.toggle("warn", alarms.length > 0 && alarms.every((a) => a.severity === "WARNING"));
+    }
+    if (state.status && $("machine").textContent !== state.status.machine) $("machine").textContent = state.status.machine;
+    machineLine();
     renderBanner(stale);
     setTitle();
+  }
+
+  /** Under the machine name in the top bar: the CPU and the program it was read from, as far as known. */
+  function machineLine() {
+    const i = state.info || {}, p = state.program || {};
+    const plc = p.cpu ? p.cpu : i.plc && i.plc.address ? "PLC " + i.plc.address : "";
+    const prog = p.archive || p.project || (i.model ? String(i.model).split(/[\\/]/).pop() : "");
+    const t = [plc, prog && "program " + prog].filter(Boolean).join(" · ");
+    const el = $("machine-sub");
+    if (el && el.textContent !== t) { el.textContent = t; el.title = t; }
   }
 
   /** Says loudly when the values on the page are not live: PLC-Ki not answering, PLC not read, or test values. */
@@ -258,6 +287,7 @@ const PK = (() => {
       text = `No connection to the PLC. Values are from the last good read at ${clock(c.lastGoodRead)}.`; kind = "frozen";
     }
     else if (c && c.state === "snapshot") { text = "Test values from a file, not the real machine."; kind = "test"; }
+    document.documentElement.classList.toggle("test-values", kind === "test");
     const b = $("banner");
     if (!b) return;
     if (b.textContent !== text) b.innerHTML = text ? `<span class="dot"></span><span>${esc(text)}</span>` : "";
@@ -355,6 +385,25 @@ const PK = (() => {
     };
   }
 
+  // ---- Light or dark: follows this PC unless chosen here (a bright wall screen may want dark) ----
+  const sysDark = window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : { matches: false, addEventListener() {} };
+  const themeChoice = () => document.documentElement.dataset.theme || "auto";
+  const darkNow = () => themeChoice() === "dark" || (themeChoice() === "auto" && sysDark.matches);
+  function setTheme(t) {
+    if (t === "auto") delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = t;
+    try { t === "auto" ? localStorage.removeItem("plcki.theme") : localStorage.setItem("plcki.theme", t); } catch { /* private window */ }
+    showTheme();
+  }
+  function showTheme() {
+    const b = $("theme-btn");
+    if (!b) return;
+    const dark = darkNow();
+    b.innerHTML = icon(dark ? "sun" : "moon");
+    b.title = dark ? "Switch to a light screen" : "Switch to a dark screen";
+    b.setAttribute("aria-label", b.title);
+  }
+  if (sysDark.addEventListener) sysDark.addEventListener("change", showTheme);
+
   function screenSheet() {
     const secure = window.isSecureContext;
     const canNotify = secure && "Notification" in window;
@@ -368,6 +417,9 @@ const PK = (() => {
         ${row("sound", "Beep when a new alarm comes", "A short tone: three beeps for a fault, one for a warning. Leave this page open in a tab.", true, "")}
         ${row("notify", "Show a notice when a new alarm comes", "A message from the browser, also when PLC-Ki is in a background tab.", canNotify, notHere)}
         ${row("awake", "Keep this screen on", "For a screen on the line: the display does not go dark while this page is open.", canWake, notHere)}
+        <div class="opt-row" style="cursor:default"><span style="flex:1"><b>Screen colours</b><br><span class="muted small">Dark suits a wall screen in a bright hall.</span></span>
+          <div class="segmented" role="group" aria-label="Screen colours">${[["auto", "Like this PC"], ["light", "Light"], ["dark", "Dark"]].map(([k, l]) =>
+            `<button type="button" data-theme-set="${k}" class="${themeChoice() === k ? "on" : ""}" aria-pressed="${themeChoice() === k}">${l}</button>`).join("")}</div></div>
       </div>
       <div class="row end"><button class="btn plain" type="button" data-test-beep>Test the beep</button><button class="btn" data-close>Done</button></div>`);
     s.el.addEventListener("change", async (e) => {
@@ -382,6 +434,10 @@ const PK = (() => {
       if (key === "sound" && box.checked) beep(false);
     });
     s.el.querySelector("[data-test-beep]").onclick = () => beep(true);
+    s.el.querySelectorAll("[data-theme-set]").forEach((b) => b.onclick = () => {
+      setTheme(b.dataset.themeSet);
+      s.el.querySelectorAll("[data-theme-set]").forEach((x) => { x.classList.toggle("on", x === b); x.setAttribute("aria-pressed", x === b); });
+    });
   }
 
   async function pollStatus() {
@@ -765,18 +821,26 @@ const PK = (() => {
     } catch { /* public view */ }
     const admin = state.user && state.user.role === "admin";
     document.querySelectorAll(".admin-only").forEach((el) => el.classList.toggle("hidden", !admin));
-    $("who").textContent = state.user ? state.user.name + (admin ? " · administrator" : " · operator") : "Not logged in";
-    $("logout").textContent = state.user ? "Log out" : "Log in";
-    $("logout").onclick = async () => {
-      if (state.user) await fetch("/api/auth/logout", { method: "POST" });
-      location.href = "/login.html";
+    const who = state.user ? state.user.name + (admin ? " · administrator" : " · operator") : "Not logged in";
+    document.querySelectorAll(".who").forEach((el) => { el.textContent = who; });
+    document.querySelectorAll(".act-logout").forEach((el) => { el.textContent = state.user ? "Log out" : "Log in"; });
+    const acts = {
+      logout: async () => { if (state.user) await fetch("/api/auth/logout", { method: "POST" }); location.href = "/login.html"; },
+      screen: () => screenSheet(),
+      pw: () => passwordSheet(),
     };
+    document.querySelectorAll("[data-act]").forEach((b) => {
+      b.onclick = acts[b.dataset.act];
+      if (b.dataset.act === "pw") b.classList.toggle("hidden", !state.user);
+    });
+    $("theme-btn").onclick = () => setTheme(darkNow() ? "light" : "dark");
+    showTheme();
+    const tick = () => { const c = $("clock"); if (c) c.textContent = clock(Date.now()); };
+    tick(); setInterval(tick, 1000);
     try { state.model = await api("GET", "/api/model"); } catch { /* shown on pages */ }
-    try { state.info = await api("GET", "/api/info"); $("machine").textContent = state.info.machine; } catch { /* */ }
+    try { state.info = await api("GET", "/api/info"); $("machine").textContent = state.info.machine; machineLine(); } catch { /* */ }
+    loadProgram().then(machineLine);   // the top bar names the CPU and the program file
     $("help-open").onclick = helpSheet;
-    $("screen-open").onclick = screenSheet;
-    $("pw-open").onclick = () => passwordSheet();
-    $("pw-open").classList.toggle("hidden", !state.user);
     if (screenOpt.awake) keepAwake(true);
     $("conn").setAttribute("role", "button");
     $("conn").tabIndex = 0;

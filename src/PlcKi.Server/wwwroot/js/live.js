@@ -374,8 +374,8 @@
         </li>`;
       }).join("");
       return hero({
-        title: "Every alarm, explained.",
-        sub: "Each alarm the program can raise, with its meaning, where it is set, the likely causes and the fix.",
+        title: "Alarms",
+        sub: "Every alarm the program can raise: what it means, where it is set, the likely causes and the fix.",
         extra: `<div class="kpis" style="margin-top:12px">${[["active", s.activeAlarms.length, "active now", s.activeAlarms.length ? "bad" : "ok"], ["all", m.alarms.length, "alarms in the program", ""],
             ["faults", faults, "faults (stop the machine)", ""], ["warnings", m.alarms.length - faults, "warnings", ""]]
             .map(([k, n, l, c]) => `<button type="button" class="k kbtn ${c} ${alarmKind === k ? "on" : ""}" data-akind="${k}" aria-pressed="${alarmKind === k}" aria-label="Show ${esc(l)}: ${n}"><b>${n}</b><span>${esc(l)}</span></button>`).join("")}</div>`,

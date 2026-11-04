@@ -5,30 +5,46 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>PLC-Ki</title>
   <link rel="stylesheet" href="ui.css">
+  <script>try { var t = localStorage.getItem("plcki.theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch (e) { /* private window */ }</script>
 </head>
 <body>
   <a class="skip" href="#page">Skip to content</a>
-  <header class="nav" id="topnav">
-    <span class="brand">PLC-Ki<small id="machine">connecting…</small></span>
+  <div class="app">
+  <aside class="sidebar" id="rail">
+    <a class="rail-brand" href="#/alarm" aria-label="PLC-Ki, Active alarm"><span class="logo" aria-hidden="true">PK</span><span class="rail-name">PLC-Ki</span></a>
     <nav class="links" id="nav" aria-label="Main">
-      <a href="#/alarm" data-route="alarm"><span class="ti" data-icon="bell"></span><span class="tl"><span class="tl-long">Active alarm</span><span class="tl-short">Alarm</span></span> <span class="count hidden" id="nav-alarm-badge"></span></a>
-      <a href="#/plant" data-route="plant"><span class="ti" data-icon="plant"></span><span class="tl">Plant</span></a>
-      <a href="#/alarms" data-route="alarms"><span class="ti" data-icon="list"></span><span class="tl">Alarms</span></a>
-      <a href="#/logic" data-route="logic"><span class="ti" data-icon="rung"></span><span class="tl">Logic</span></a>
-      <a href="#/code" data-route="code"><span class="ti" data-icon="code"></span><span class="tl">Code</span></a>
-      <a href="#/setup/generator" data-route="setup/generator" class="admin-only nav-gen"><span class="ti" data-icon="spark"></span><span class="tl">Generator</span></a>
-      <a href="#/setup/connections" data-route="setup" class="admin-only"><span class="ti" data-icon="gear"></span><span class="tl">Setup</span></a>
+      <a href="#/alarm" data-route="alarm" title="Active alarm"><span class="ti" data-icon="bell"></span><span class="tl"><span class="tl-long">Active alarm</span><span class="tl-short">Alarm</span></span> <span class="count hidden" id="nav-alarm-badge"></span></a>
+      <a href="#/plant" data-route="plant" title="Plant"><span class="ti" data-icon="plant"></span><span class="tl">Plant</span></a>
+      <a href="#/alarms" data-route="alarms" title="Alarms"><span class="ti" data-icon="list"></span><span class="tl">Alarms</span> <span class="count hidden" id="nav-alarms-badge"></span></a>
+      <a href="#/logic" data-route="logic" title="Logic"><span class="ti" data-icon="rung"></span><span class="tl">Logic</span></a>
+      <a href="#/code" data-route="code" title="Code"><span class="ti" data-icon="code"></span><span class="tl">Code</span></a>
+      <a href="#/setup/generator" data-route="setup/generator" class="admin-only nav-gen" title="Block generator"><span class="ti" data-icon="spark"></span><span class="tl">Generator</span></a>
+      <a href="#/setup/connections" data-route="setup" class="admin-only" title="Setup"><span class="ti" data-icon="gear"></span><span class="tl">Setup</span></a>
     </nav>
+    <div class="rail-foot">
+      <span class="rail-who"><span class="ti" data-icon="user"></span><span class="tl who"></span></span>
+      <button class="rail-btn" type="button" data-act="screen" title="Alarm sound and screen"><span class="ti" data-icon="sound"></span><span class="tl">Sound and screen</span></button>
+      <button class="rail-btn" type="button" data-act="pw" title="Change my password"><span class="ti" data-icon="key"></span><span class="tl">Change my password</span></button>
+      <button class="rail-btn" type="button" data-act="logout" title="Log out"><span class="ti" data-icon="logout"></span><span class="tl act-logout">Log out</span></button>
+    </div>
+  </aside>
+  <header class="nav topbar" id="topnav">
+    <span class="brand"><span class="brand-m"><b id="machine">connecting…</b><small id="machine-sub"></small></span></span>
     <div class="right">
       <span class="pill" id="conn"><span class="dot"></span><span>connecting</span></span>
       <span class="pill info hidden" id="job-pill"></span>
-      <button class="btn plain small" id="help-open" type="button" aria-label="Help for this page">Help</button>
-      <button class="btn small" id="ask-open" type="button">Ask</button>
+      <span class="ro" id="ro-badge" title="PLC-Ki reads from the PLC only: it never writes values or changes the CPU state.">Read-only</span>
+      <span class="clock" id="clock" aria-hidden="true"></span>
+      <button class="tb-btn" id="theme-btn" type="button" aria-label="Dark or light screen" title="Dark or light screen"><span class="ti" data-icon="moon"></span></button>
+      <button class="tb-btn" id="help-open" type="button" aria-label="Help for this page" title="Help for this page (key ?)"><span class="ti" data-icon="help"></span><span class="tb-t">Help</span><kbd>?</kbd></button>
+      <button class="btn small" id="ask-open" type="button" title="Ask about the machine (key /)">Ask<kbd>/</kbd></button>
     </div>
   </header>
   <div class="banner hidden" id="banner" role="status" aria-live="polite"></div>
   <main id="page" tabindex="-1"></main>
-  <footer class="foot"><span id="foot-text">PLC-Ki reads from the PLC only: it never writes values or changes the CPU state.</span> <span id="who"></span> · <button class="linkbtn" id="screen-open" type="button">Alarm sound and screen</button> · <button class="linkbtn" id="pw-open" type="button">Change my password</button> · <button class="linkbtn" id="logout" type="button">Log out</button></footer>
+  <footer class="foot"><span id="foot-text">PLC-Ki reads from the PLC only: it never writes values or changes the CPU state.</span>
+    <span class="foot-acct"><span class="who"></span> · <button class="linkbtn" type="button" data-act="screen">Alarm sound and screen</button> · <button class="linkbtn" type="button" data-act="pw">Change my password</button> · <button class="linkbtn act-logout" type="button" data-act="logout">Log out</button></span></footer>
+  </div>
 
   <div class="scrim" id="scrim"></div>
   <aside class="ask-panel" id="ask" aria-label="Ask about the machine">

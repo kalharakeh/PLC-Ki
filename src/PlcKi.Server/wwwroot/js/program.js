@@ -355,8 +355,8 @@
         if (params.join("/") !== (sel ? sel.params.join("/") : "") && loading == null) select(params);
         const p = state.program;
         const head = PK.sec("hero compact", `<div class="eyebrow">${esc(p.project)} · ${esc(p.plc)}${p.cpu ? " · " + esc(p.cpu) : ""}</div>
-          <h1>${kind === "code" ? "The program, live." : "Why an output is on, or not."}</h1>
-          <p class="sub">${kind === "code" ? "Every block as written, with the live value after each signal. Click a signal in quotes to see where else it is used." : "Each network drawn as a rung with live values. Read from left to right: the amber contact is the first one that stops the output."}</p>`);
+          <h1>${kind === "code" ? "Code" : "Logic"}</h1>
+          <p class="sub">${kind === "code" ? "Every block as written, with live values. Click a signal in quotes to see where else it is used." : "Why an output is on, or not: each network as a rung with live values. The amber contact is the first one that stops the output."}</p>`);
         const body = (inner) => head + PK.sec("alt", `<div class="split"><nav class="blocklist">${list()}</nav><div class="stack">${inner}</div></div>`);
         if (!sel) return body(`<div class="card"><p class="muted">Loading…</p></div>`);
         if (sel.error) return body(`<div class="notice red">${icon("warn")}<div>${esc(sel.error)}</div></div>`);

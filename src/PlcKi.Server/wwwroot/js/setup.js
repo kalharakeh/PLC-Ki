@@ -292,9 +292,9 @@ const PKSetup = (() => {
          ${tiaStatus.ok ? `<span class="faint small">PLCSIM downloads: ${tiaStatus.plcsimIp ? esc(tiaStatus.plcsimIp) : "off"} · real PLC downloads: ${tiaStatus.realAllowed ? "allowed (confirmed at the TIA PC)" : "off"}</span>` : ""}`;
 
     return PK.sec("hero compact", `${setupNav("connections")}
-        <h1>Where everything is.</h1>
-        <p class="sub">PLC-Ki needs the PLC for live values and TIA Portal for importing programs and the block generator. Pick the setup that matches yours.
-          New here? <a href="#/setup/start">Get started</a> walks you through it one step at a time.</p>
+        <h1>Connections</h1>
+        <p class="sub">Where PLC-Ki finds the PLC (live values) and TIA Portal (imports and the block generator). Pick the setup that matches yours.
+          New here? <a href="#/setup/start">Get started</a> walks you through it.</p>
         ${restartBar()}
         ${choice("preset", preset, Object.entries(presets).map(([k, p]) => ({ value: k, label: p.title, text: p.text, icon: p.icon, })))}
         <div style="margin-top:22px">${diagram(c)}</div>`)
@@ -536,8 +536,8 @@ const PKSetup = (() => {
 
     const step = (n, title, text, body) => `<div class="step ${stepCls(n)}"><div class="n">${stepCls(n) === "done" ? "✓" : n}</div><h3>${title}</h3><p style="margin-bottom:14px">${text}</p>${body}</div>`;
     return PK.sec("hero compact", `${setupNav("program")}
-        <h1>Teach PLC-Ki a machine.</h1>
-        <p class="sub">Give it the program. It reads every block, and Claude writes the plain-English model of steps, devices, alarms, causes and fixes, once.</p>
+        <h1>Import a program</h1>
+        <p class="sub">Give PLC-Ki the TIA archive. It reads every block, and Claude writes the plain-English model of steps, devices, alarms, causes and fixes, once.</p>
         ${restartBar()}
         <div class="kpis" style="margin-top:30px"><div class="k"><b>${esc(state.info ? state.info.machine : "")}</b><span>watched now</span></div>
           <div class="k"><b>${state.model ? state.model.alarms.length : "–"}</b><span>alarms explained</span></div>
@@ -629,7 +629,7 @@ const PKSetup = (() => {
       const s = settings;
       const keyText = { settings: "A key is saved here.", environment: "A key is already set on this PC (outside PLC-Ki). A key entered here replaces it.", none: "No key yet: the Ask box stays off until you add one." }[info.apiKey];
       const sw = (id, on, title, text) => `<div class="row"><div style="flex:1"><b style="font-weight:600">${title}</b><div class="muted small">${text}</div></div><label class="switch"><input type="checkbox" id="${id}" ${on ? "checked" : ""}><span></span></label></div>`;
-      return PK.sec("hero compact", `${setupNav("settings")}<h1>Settings.</h1><p class="sub">The machine model, the assistant, and who can open PLC-Ki from where.</p>${restartBar()}`)
+      return PK.sec("hero compact", `${setupNav("settings")}<h1>Settings</h1><p class="sub">The machine model, the assistant, and who can open PLC-Ki from where.</p>${restartBar()}`)
         + PK.sec("alt", `<div class="grid two" data-settings-form>
           <div class="card stack"><h3>Machine</h3>
             <label class="field">Machine model<select id="model">${(lists.models || []).map((f) => `<option value="${esc(f.path)}" ${f.path === s.model ? "selected" : ""}>${esc(f.label)}${f.uploaded ? " (imported)" : ""}</option>`).join("")}</select><span class="hint">New models come from the Program page. Its program export is picked with it.</span>${runNote("model")}</label>

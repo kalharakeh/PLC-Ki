@@ -270,8 +270,8 @@
       const t = g.tia;
       const tiaNote = t && !t.ok ? `<div class="notice gold" style="margin-top:22px">${icon("info")}<div style="flex:1"><b>TIA Portal is not reachable.</b> ${esc(t.message || "")}</div><a class="btn gold small" href="#/setup/connections">Connections</a></div>` : "";
       const pk = g.packages || [];
-      return PK.sec("hero compact", `${PKSetup.setupNav("generator")}<span class="eyebrow">Block generator</span><h1>Say what you need. Get blocks that compile.</h1>
-          <p class="sub">Claude writes the blocks, TIA Portal imports and compiles them, and PLCSIM runs them. Problems go back to Claude until it is clean.
+      return PK.sec("hero compact", `${PKSetup.setupNav("generator")}<h1>Block generator</h1>
+          <p class="sub">Say what you need. Claude writes the blocks, TIA Portal imports and compiles them, and PLCSIM runs them; problems go back to Claude until it is clean.
           Nothing reaches a real PLC without two people confirming.</p>
           <div class="kpis" style="margin-top:28px">
             <div class="k"><b>${pk.length}</b><span>packages</span></div>
