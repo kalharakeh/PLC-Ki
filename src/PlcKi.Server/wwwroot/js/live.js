@@ -68,7 +68,7 @@
     const def = state.model && (state.model.alarms || []).find((x) => x.id === a.id);
     const tag = def && def.tag && (state.model.tags || []).find((t) => t.id === def.tag);
     const symbol = tag && tag.symbol && tag.symbol.startsWith('"') ? tag.symbol : null;
-    const href = "#/logic/" + [block, network ? "network-" + network : null, symbol ? "@" + symbol : null].filter(Boolean).map(encodeURIComponent).join("/");
+    const href = "#/program/" + [block, network ? "network-" + network : null, symbol ? "@" + symbol : null, "as-rungs"].filter(Boolean).map(encodeURIComponent).join("/");
     return { block, network, symbol, href };
   }
 
@@ -110,8 +110,7 @@
     const prog = state.program && state.program.blocks.find((b) => b.name === loc.block);
     if (!prog) return "";
     const rest = [loc.block, loc.instance, loc.output].filter(Boolean).map(encodeURIComponent).join("/");
-    return (prog.hasLogic || prog.hasSource ? `<a class="btn white" href="#/logic/${rest}">Show the logic</a>` : "") +
-      `<a class="btn b" href="#/code/${rest}">Show the code</a>`;
+    return `<a class="btn white" href="#/program/${rest}">Show in the program</a>`;
   }
 
   function eqCard(e, full) {
@@ -132,10 +131,10 @@
       ${full && e.explanation && !e.blockedBy ? `<p class="muted small" style="margin:0">${esc(e.explanation)}</p>` : ""}
       ${full ? logicLink(e) : `<span class="eq-more" aria-hidden="true">Details ›</span>`}`;
   }
-  /** "Show the logic" for a device: its block and instance from the model's location ("FB_VFD, instance "Station".M201"). */
+  /** "Show in the program" for a device: its block and instance from the model's location ("FB_VFD, instance "Station".M201"). */
   function logicLink(e) {
     const l = parseLoc(e.location);
-    return l.block ? `<div><a class="btn b small" href="#/logic/${[l.block, l.instance].filter(Boolean).map(encodeURIComponent).join("/")}">Show the logic</a></div>` : "";
+    return l.block ? `<div><a class="btn b small" href="#/program/${[l.block, l.instance].filter(Boolean).map(encodeURIComponent).join("/")}">Show in the program</a></div>` : "";
   }
 
   /** The steps of a sequence. A short one shows every step as a pill (they wrap). A long one (GRAPH chains
@@ -254,7 +253,7 @@
         + sec("dark", `<h2>Where in the software</h2><p class="sub">Where the program sets this alarm, from the main cycle down to the bit.</p>
           ${where.block ? `<div class="path">${(path || [{ block: where.block }]).map((p) => `<span>${esc(p.block)}${p.instance ? " " + esc(p.instance) : ""}</span>`).join("<i>›</i>")}${where.network ? `<i>›</i><span>Network ${esc(where.network)}</span>` : ""}${where.symbol ? `<i>›</i><span>${esc(where.symbol)}</span>` : ""}</div>` : ""}
           <p class="muted small" style="margin:14px 0 22px">${esc(a.location || "")}</p>
-          <div class="actions">${where.block ? `<a class="btn white" href="${esc(where.href)}">Show the logic</a><a class="btn b" href="${esc(where.href.replace("#/logic/", "#/code/"))}">Show the code</a>` : links(loc)}</div>`)
+          <div class="actions">${where.block ? `<a class="btn white" href="${esc(where.href)}">Show where it is set</a>` : links(loc)}</div>`)
 
         + sec("alt", `<h2>What is going on</h2>
           <div class="grid two"><div>${s.summary.map((l) => `<p class="sub" style="margin-bottom:12px">${esc(l)}</p>`).join("")}</div>

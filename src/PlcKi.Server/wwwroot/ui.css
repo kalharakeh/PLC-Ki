@@ -314,7 +314,7 @@ section:not(.dark) .path span { border-color: var(--line-strong); }
 .legend { display: flex; gap: 8px 16px; flex-wrap: wrap; font-size: 13px; color: var(--muted); margin-top: 12px; }
 .sw { display: inline-block; width: 12px; height: 10px; border-radius: 3px; vertical-align: middle; margin-right: 6px; }
 
-/* ---------- Code and Logic ---------- */
+/* ---------- Program page ---------- */
 .split { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 24px; align-items: start; }
 .blocklist { position: sticky; top: 74px; max-height: calc(100vh - 96px); overflow-y: auto; font-size: 14.5px; }
 .blocklist .grp { font-size: 12.5px; color: var(--muted); padding: 14px 10px 4px; }
@@ -354,7 +354,7 @@ section:not(.dark) .path span { border-color: var(--line-strong); }
 .contact.blocker .sym { border-color: var(--warn); color: var(--warn-ink); background: var(--warn-soft); border-width: 2px; }
 .contact .nm { font-family: var(--mono); font-size: 11px; color: var(--muted); max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .contact.blocker .nm { color: var(--warn-ink); font-weight: 700; }
-.contact.blocker .nm::after { content: " ← stops the output"; }
+.contact.blocker .nm::after { content: "↑ stops the output"; display: block; font-weight: 600; }
 .rung-legend { margin: 0 0 12px; }
 .rung-legend span { display: inline-flex; gap: 6px; align-items: center; }
 .lg { width: 18px; height: 12px; border-radius: 4px; border: 1.5px solid var(--line-strong); background: var(--bg-alt); display: inline-block; }
@@ -630,7 +630,8 @@ html.frozen main#page:not(:has(.offline-page)) { filter: grayscale(1); opacity: 
 .guide-bar .bar { grid-column: 1 / -1; margin: 0; }
 section.guide-sec { padding-block: 28px; }
 @media (max-width: 600px) { .guide-bar { grid-template-columns: minmax(0, 1fr); } }
-.contact.blocker .nm { max-width: none; overflow: visible; }
+.contact.blocker { max-width: 200px; }
+.contact.blocker .nm { max-width: 196px; overflow: visible; white-space: normal; overflow-wrap: anywhere; text-align: center; }
 
 /* ---------- layout (UX review B) ---------- */
 .stack > *, .card { min-width: 0; }
@@ -683,7 +684,7 @@ html.ask-off main [data-ask] { display: none; }
 .ev-kind:empty { display: none; }
 .eq-more { font-size: 13px; font-weight: 600; color: var(--accent); justify-self: end; margin-top: -4px; }
 .eq.sel .eq-more { visibility: hidden; }
-/* Logic and Code pages */
+/* Program page (rungs and text) */
 .blk-q { margin: 4px 0 6px; font-size: 14px; padding: 8px 12px; border-radius: 999px; }
 .contact.cmp .nm { max-width: 220px; white-space: normal; overflow: visible; overflow-wrap: anywhere; text-align: center; }
 .stmt.graph .gl { display: block; padding: 0 8px; border-radius: 6px; }
@@ -694,6 +695,13 @@ html.ask-off main [data-ask] { display: none; }
 .code .ln.found { background: color-mix(in srgb, var(--warn-soft) 80%, transparent); }
 .code .op { cursor: pointer; text-decoration: underline dotted; text-decoration-color: var(--line-strong); text-underline-offset: 3px; }
 .code .op:hover { text-decoration-color: var(--accent); color: var(--accent); }
+.blk-mode { margin-top: 16px; gap: 8px 14px; align-items: center; flex-wrap: wrap; }
+.why-off { margin-top: 14px; padding: 12px 16px; border-radius: 14px; background: var(--warn-soft); border: 1px solid color-mix(in srgb, var(--warn) 30%, transparent); }
+.why-off .why-h { display: flex; gap: 8px; align-items: center; font-size: 15px; }
+.why-off .why-h svg { width: 18px; height: 18px; flex: none; color: var(--warn); }
+.why-off ul { margin: 8px 0 0; padding-left: 20px; font-size: 14px; line-height: 1.5; }
+.why-off li { overflow-wrap: anywhere; }
+.why-off .linkbtn { margin-left: 4px; font-size: 13px; }
 /* Block generator: the option that changes a real machine looks different from the safe ones */
 .choice button.danger { border-color: color-mix(in srgb, var(--fault) 45%, var(--line-strong)); }
 .choice button.danger .ico, .choice button.danger b { color: var(--fault-ink); }

@@ -52,7 +52,7 @@ public sealed class PlcKiOptions
     public AskOptions Ask { get; set; } = new();
     /// <summary>How many minutes of tag values to keep in memory for "what happened" questions.</summary>
     public double HistoryMinutes { get; set; } = 15;
-    /// <summary>The program export (TiaImporter export, zip or folder) the model was built from: Code and Logic pages.</summary>
+    /// <summary>The program export (TiaImporter export, zip or folder) the model was built from: Program page.</summary>
     public string Export { get; set; } = "";
     public TiaOptions Tia { get; set; } = new();
 }
