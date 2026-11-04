@@ -1172,3 +1172,7 @@ tr.on td { background: var(--accent-soft); }
   .plc-kpis { gap: 14px; }
 }
 @media (prefers-reduced-motion: reduce) { .pkd-flash, .plc-mode-big .dot { animation: none !important; } .pkd-mod { transition: none; } }
+.hw-ch-bar { gap: 10px 12px; margin-top: 16px; flex-wrap: wrap; }
+.hw-ch-bar input[type="search"] { flex: 1 1 240px; max-width: 360px; }
+.hw-ch { margin-top: 10px; }
+.hw-ch td, .hw-ch th { padding-top: 5px; padding-bottom: 5px; }

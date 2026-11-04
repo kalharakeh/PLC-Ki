@@ -268,9 +268,7 @@
     if (st.pnName && (m.kind === "cpu" || m.kind === "im" || st.kind === "other")) fields.push(["PROFINET name", st.pnName]);
     const chans = m.channels || [];
     const tagged = chans.filter((c) => c.tag).length;
-    const table = chans.length ? `<table class="tbl hw-ch" style="margin-top:12px"><tr><th>Ch</th><th>Address</th><th>Tag</th><th>Now</th><th>Comment</th></tr>
-      ${chans.map((c) => `<tr><td class="mono">${c.io === "Output" ? "Q" : "I"}${c.n}</td><td class="mono">${esc(c.address)}</td>
-        <td class="mono">${c.tag ? `<a href="#/tags">${esc(c.tag)}</a>` : `<span class="faint">—</span>`}</td><td>${channelValue(c)}</td><td class="muted">${esc(c.comment || "")}</td></tr>`).join("")}</table>`
+    const table = chans.length || chQuery ? channelList(m, st, chans, tagged)
       : `<p class="muted" style="margin:12px 0 0">${m.kind === "cpu" ? "The CPU itself has no I/O channels." : m.kind === "ps" || m.kind === "pm" ? "A power supply has no I/O channels." : "No I/O channels known for this module."}</p>`;
     return `<div class="card hw-detail">
       <div class="row" style="gap:10px;align-items:baseline;flex-wrap:wrap"><h2 style="margin:0;font-size:24px">${esc(m.title || m.name)}</h2>
@@ -279,6 +277,44 @@
       ${m.name && m.name !== m.title ? `<p class="muted" style="margin:4px 0 0">${esc(m.name)}${m.comment ? " · " + esc(m.comment) : ""}</p>` : m.comment ? `<p class="muted" style="margin:4px 0 0">${esc(m.comment)}</p>` : ""}
       <div class="hw-fields">${fields.map(([a, b]) => `<div><span>${esc(a)}</span><b>${esc(b)}</b></div>`).join("")}</div>
       ${table}</div>`;
+  }
+
+  // ---- the channel list: short by default (tagged channels, 16 rows), a filter, and a search over the whole rack ----
+  const CH_ROWS = 16;
+  let chFilter = null, chQuery = "", chAll = false, chFor = "";
+  const isOn = (c) => { const v = values[c.symbol]; return !!(v && v.value === true); };
+
+  function channelList(m, st, chans, tagged) {
+    const key = st.name + "/" + m.slot;
+    if (key !== chFor) { chFor = key; chAll = false; chFilter = null; }
+    const filter = chFilter || (tagged > 0 && tagged < chans.length ? "tagged" : "all");
+    const q = chQuery.trim().toLowerCase();
+    const digital = chans.some((c) => c.type === "digital" && c.symbol);
+    const onCount = chans.filter((c) => c.type === "digital" && isOn(c)).length;
+    let rows, scope;
+    if (q) {
+      // Search: every channel of every module in this rack
+      rows = st.modules.flatMap((mm) => (mm.channels || []).map((c) => ({ ...c, mod: mm })))
+        .filter((c) => [c.address, c.tag, c.comment, c.mod.title, c.mod.name].some((x) => String(x || "").toLowerCase().includes(q)));
+      scope = `${rows.length} match${rows.length === 1 ? "" : "es"} in ${esc(st.name)}`;
+    } else {
+      rows = chans.filter((c) => filter === "tagged" ? !!c.tag : filter === "on" ? c.type === "digital" && isOn(c) : true).map((c) => ({ ...c, mod: m }));
+      scope = "";
+    }
+    const shown = chAll ? rows : rows.slice(0, CH_ROWS);
+    const seg = (id, label) => `<button type="button" data-chf="${id}" class="${!q && filter === id ? "on" : ""}">${label}</button>`;
+    const bar = `<div class="row hw-ch-bar">
+      <div class="segmented" role="group" aria-label="Show channels">${seg("tagged", `With a tag · ${tagged}`)}${digital ? seg("on", `On now · ${onCount}`) : ""}${seg("all", `All · ${chans.length}`)}</div>
+      <input type="search" id="ch-q" placeholder="Find a tag, address or comment in this rack" aria-label="Find a channel" value="${esc(chQuery)}">
+      ${scope ? `<span class="faint small">${scope}</span>` : ""}</div>`;
+    const modCol = !!q;
+    const table = rows.length ? `<table class="tbl hw-ch"><tr><th>Ch</th>${modCol ? "<th>Module</th>" : ""}<th>Address</th><th>Tag</th><th>Now</th><th>Comment</th></tr>
+      ${shown.map((c) => `<tr><td class="mono">${c.io === "Output" ? "Q" : "I"}${c.n}</td>${modCol ? `<td><a href="#/hardware/${encodeURIComponent(st.name)}/${encodeURIComponent(c.mod.slot ?? "")}" data-goslot="${esc(c.mod.slot ?? "")}">${esc(c.mod.slot ?? "")} · ${esc(c.mod.title || c.mod.name)}</a></td>` : ""}<td class="mono">${esc(c.address)}</td>
+        <td class="mono">${c.tag ? `<a href="#/tags">${esc(c.tag)}</a>` : `<span class="faint">—</span>`}</td><td>${channelValue(c)}</td><td class="muted">${esc(c.comment || "")}</td></tr>`).join("")}</table>`
+      : `<p class="muted" style="margin:10px 0 0">${q ? "No channel matches." : filter === "on" ? "No input or output of this module is on right now." : "No channel of this module has a tag."}</p>`;
+    const more = rows.length > shown.length ? `<button type="button" class="btn plain small" data-chall>Show all ${rows.length}</button>`
+      : chAll && rows.length > CH_ROWS ? `<button type="button" class="btn plain small" data-chall>Show fewer</button>` : "";
+    return bar + table + more;
   }
 
   function networkCard() {
@@ -344,6 +380,11 @@
     },
     after(el) {
       el.querySelectorAll("[data-read]").forEach((b) => PK.on(b, "click", readHardware));
+      el.querySelectorAll("[data-chf]").forEach((b) => PK.on(b, "click", () => { chFilter = b.dataset.chf; chQuery = ""; chAll = false; PK.draw(); }));
+      el.querySelectorAll("[data-chall]").forEach((b) => PK.on(b, "click", () => { chAll = !chAll; PK.draw(); }));
+      el.querySelectorAll("[data-goslot]").forEach((a) => PK.on(a, "click", () => { chQuery = ""; }));
+      const cq = el.querySelector("#ch-q");
+      if (cq) PK.on(cq, "input", () => { chQuery = cq.value; chAll = false; PK.draw(); });
       el.querySelectorAll(".pkd-mod").forEach((g) => {
         const pick = () => {
           const st = hw.stations.find((s) => s.name === stationName);
