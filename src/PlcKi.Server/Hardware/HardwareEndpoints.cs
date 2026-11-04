@@ -107,7 +107,7 @@ public static class HardwareEndpoints
     /// Is the PLC PLC-Ki reads the PLCSIM CPU of the TIA helper, and what state is it in?
     /// {applies, why, found, state, leds, name, error, plcsimIp}
     /// </summary>
-    private static async Task<Dictionary<string, object?>> PlcsimAsync(PlcKiOptions opt, TiaConnection tia, bool fresh, CancellationToken ct)
+    internal static async Task<Dictionary<string, object?>> PlcsimAsync(PlcKiOptions opt, TiaConnection tia, bool fresh, CancellationToken ct)
     {
         lock (CacheLock)
             if (!fresh && _plcsim is { } c && DateTime.UtcNow - c.At < TimeSpan.FromSeconds(3)) return c.State;

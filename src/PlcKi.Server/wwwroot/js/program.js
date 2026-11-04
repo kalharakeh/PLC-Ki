@@ -485,6 +485,7 @@
               </table></details></div>` : ""}`);
       },
       after(page) {
+        if (window.PKTags && PKTags.wire) PKTags.wire(page);
         page.querySelectorAll("[data-mode]").forEach((b) => b.onclick = () => setMode(b.dataset.mode));
         page.querySelectorAll("[data-goto-net]").forEach((b) => b.onclick = () => {
           const net = b.dataset.gotoNet;

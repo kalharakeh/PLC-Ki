@@ -14,9 +14,15 @@ You can also just ask, for example *"Why is the agitator stopped?"* or *"What ha
 Claude answers from the live values, the last minutes of history and the program model, and names the device,
 step, alarm and program location it is based on, so you can check it in TIA Portal.
 
-> **Read-only.** The app never writes to a PLC. There is no write code path, not even a disabled one.
-> The only exception is in the separate TIA tool for the block generator: `tools/TiaImporter` can download
-> generated code to **PLCSIM Advanced** for testing, and to a real PLC only with guards: the address must be listed
+> **Reads; changes only with guards.** The live link reads the PLC and never starts, stops or traces the CPU.
+> Administrators can change a single value from the Tags and Program pages (`src/PlcKi.Server/Live/WriteEndpoints.cs`):
+> freely on the **PLCSIM** CPU of the TIA helper; on a **real PLC** only when its address is on the Settings allow-list,
+> with a reason and the PLC address typed again, and never inputs or outputs. Values of the **safety program**
+> (F-blocks, their data, and tags the safety program uses) are never changed, also not on PLCSIM. If PLC-Ki cannot tell
+> that the PLC is PLCSIM, it treats it as real. Every change and every refused attempt is logged (`value-changes.jsonl`
+> in the data folder) and shows in the events. Only `PlcWriter` may call the driver's write functions, on its own short
+> connection; `tests/PlcKi.Tests/ReadOnlyTests.cs` checks the compiled app for that.
+> The block generator's TIA tool can download generated code to **PLCSIM Advanced** for testing, and to a real PLC only with guards: the address must be listed
 > on the TIA PC, a person there types it to confirm, the CPU must already be in STOP and stays in STOP, software only,
 > never inside the automatic fix loop, and every attempt is logged. See `docs/block-generator.md`.
 

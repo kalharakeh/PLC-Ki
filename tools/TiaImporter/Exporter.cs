@@ -118,6 +118,12 @@ namespace TiaImporter
                     _log.WriteLine("Exporting the hardware configuration...");
                     try { HardwareExport.Write(project, Path.Combine(outDir.FullName, "hardware.json"), _log); }
                     catch (Exception ex) { Problem("hardware", project.Name, ex); }
+                    // The HMI panels (screens, operator fields, HMI tags, text lists), for PLC-Ki's settings and texts
+                    if (!hardwareOnly)
+                    {
+                        try { manifest["hmis"] = HmiExport.Write(project, outDir, _log, Problem); }
+                        catch (Exception ex) { Problem("hmi", project.Name, ex); }
+                    }
                 }
                 finally
                 {
