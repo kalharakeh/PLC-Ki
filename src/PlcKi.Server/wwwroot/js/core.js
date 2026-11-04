@@ -126,7 +126,8 @@ const PK = (() => {
     shownHash = location.hash;
     const { name, params } = parseRoute();
     const v = views[name] || views.alarm;
-    document.querySelectorAll("#nav a").forEach((a) => a.classList.toggle("active", a.dataset.route === name || (a.dataset.route === "setup" && name.startsWith("setup/") && name !== "setup/generator")));
+    const navName = v.nav || name;   // a page can light another menu item (Stations lights Plant)
+    document.querySelectorAll("#nav a").forEach((a) => a.classList.toggle("active", a.dataset.route === navName || (a.dataset.route === "setup" && name.startsWith("setup/") && name !== "setup/generator")));
     // The pages that can change a PLC say so where the rest say "read-only"
     const ro = $("ro-badge");
     const except = name === "setup/generator" || name === "plc";
@@ -852,6 +853,15 @@ const PK = (() => {
       "Ki runs on Claude, with the API key from Settings.",
       "Use a copy of the TIA project, not the plant's master.",
       "A real PLC needs two confirmations: you type the version here, and someone types the PLC address in the TIA helper window. The CPU must be in STOP."]],
+    station: ["Stations", "One page per station, made for a phone: is it OK, its alarms with the fix, its sequence step and its devices.", [
+      "Scan the QR label on the machine to open its station here. Administrators print the labels in Setup › QR labels.",
+      "The stations come from the program: each device and sequence belongs to the station (instance) named in its location. An alarm belongs to the station of its device.",
+      "Tap a device for its values and interlocks. Open the alarm for the full fix list and where it is set in the program.",
+      "Values update every second. PLC-Ki only reads: nothing here changes the machine."]],
+    "setup/qr": ["QR labels", "Print a QR label per station or device. A phone that scans it opens that station's live page.", [
+      "Pick the address phones use: the PC's address on the plant network, not localhost. Open it on a phone once to check it works.",
+      "Phones only reach PLC-Ki when Settings › Other computers may open PLC-Ki is on.",
+      "Print on sticker paper or laminate the labels. They keep working after a new program import as long as the station keeps its name."]],
     "setup/settings": ["Settings", "The machine model, the Claude key, who may open PLC-Ki, and logins.", [
       "Operators see every machine page; administrators also see Setup.",
       "Other computers may open PLC-Ki: off means only this PC."]],
