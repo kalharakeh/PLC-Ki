@@ -1,3 +1,4 @@
+using PlcKi.Core.Memory;
 using PlcKi.Core.Model;
 using PlcKi.Core.Status;
 
@@ -9,11 +10,15 @@ public sealed class LiveState
     private volatile MachineStatus? _status;
     private volatile Snapshot? _snapshot;
 
-    public LiveState(MachineHistory history, LiveModelCheck check)
+    public LiveState(MachineHistory history, LiveModelCheck check, AlarmMemory? memory = null)
     {
         History = history;
         Check = check;
+        Memory = memory ?? new AlarmMemory(null);
     }
+
+    /// <summary>Every alarm occurrence with its context and the technicians' notes, kept on disk (machine memory).</summary>
+    public AlarmMemory Memory { get; }
 
     /// <summary>What the live machine did that the model does not explain (Setup > Program).</summary>
     public LiveModelCheck Check { get; }
@@ -30,6 +35,7 @@ public sealed class LiveState
         _status = status;
         History.Add(snap, status);
         Check.Add(status);
+        Memory.Observe(status);
     }
 }
 
