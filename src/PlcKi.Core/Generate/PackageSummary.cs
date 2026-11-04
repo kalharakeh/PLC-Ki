@@ -106,8 +106,11 @@ public sealed class PackageSummary
             });
         }
         var same = Blocks.Where(b => b.Change == "same").Select(b => b.Name).ToList();
-        if (same.Count > 0) Add("same", $"Unchanged: {string.Join(", ", same)}.");
-        if (Lines.Count == 0) Add("same", first ? "No blocks or tags in this version." : "Nothing changed against the version before.");
+        if (!first && Lines.Count == 0)
+            Add("same", "No changes to the code: every block and tag is the same as in the version before." +
+                        (same.Count > 0 ? $" ({string.Join(", ", same)})" : ""));
+        else if (same.Count > 0) Add("same", $"Unchanged: {string.Join(", ", same)}.");
+        if (Lines.Count == 0) Add("same", "No blocks or tags in this version.");
     }
 
     private void Add(string kind, string text) => Lines.Add(new SummaryLine(kind, text));

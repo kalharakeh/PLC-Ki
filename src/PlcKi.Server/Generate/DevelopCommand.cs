@@ -108,7 +108,19 @@ Usage: PlcKi.Server develop --vm <http://tia-pc:5090> --project <project .ap20 o
             var import = await vm.ImportAsync(package, o["project"], plc, version.Folder, ct);
             var report = import.ReportJson != null ? System.Text.Json.JsonSerializer.Deserialize<ImportReport>(import.ReportJson) ?? new() : new ImportReport();
             if (import.ReportJson == null)
-                report.FileErrors.Add(new ReportFileError { File = "(import)", Error = LastLine(import.Log) });
+            {
+                // TIA did not get as far as the blocks (project open elsewhere, locked, not found): not a problem
+                // in the code, so it does not go back to Ki. Say what to do and stop.
+                var why = LastLine(import.Log);
+                report.FileErrors.Add(new ReportFileError { File = "(import)", Error = why });
+                report.Save(reportPath);
+                Console.WriteLine();
+                Console.WriteLine($"TIA could not open the project for {version.Folder}, so nothing was imported: {why}");
+                Console.WriteLine(ImportReport.ImportHint(why));
+                Console.WriteLine("This is not a problem in the blocks, so it does not go back to Ki. Fix it, then start the job again " +
+                                  "(leave the request empty to import the latest version again).");
+                return 1;
+            }
             report.Save(reportPath);
 
             if (report.Compiled && o.ContainsKey("download"))

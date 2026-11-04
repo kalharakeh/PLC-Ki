@@ -197,7 +197,7 @@ END_FUNCTION_BLOCK
         Assert.Contains("Changed 1 tag: XV201_Open (address %Q4.0 to %Q4.1).", s.Text);
 
         // the same package again: nothing changed
-        Assert.Equal(new[] { "Unchanged: FB_GenValve, FC_Scale." }, PackageSummary.Compare(v2, v2).Text);
+        Assert.Equal(new[] { "No changes to the code: every block and tag is the same as in the version before. (FB_GenValve, FC_Scale)" }, PackageSummary.Compare(v2, v2).Text);
         Assert.Equal((0, 0), PackageSummary.Diff(new() { "a", "b" }, new() { "a", "b" }));
         Assert.Equal((1, 1), PackageSummary.Diff(new() { "a", "b", "c" }, new() { "a", "x", "c" }));
     }
@@ -291,6 +291,7 @@ public class DevelopTests
         public int Imports => _imports;
         public int Polls, Drops;
         public bool DropEveryFirstPoll = true;   // as when the download resets the TIA PC's adapter
+        public bool ProjectLocked;   // TIA cannot open the project: the import answers without a report
         private int _imports;
         private readonly Dictionary<string, string> _jobs = new();
         private readonly HashSet<string> _polledOnce = new();
@@ -323,7 +324,9 @@ public class DevelopTests
                 var req = System.Text.Json.JsonDocument.Parse(await request.Content!.ReadAsStringAsync(ct)).RootElement;
                 Assert.Equal(@"C:\Users\Software\Documents\Automation\Test\Test.ap20", req.GetProperty("project").GetString());
                 var version = req.GetProperty("version").GetString();
-                body = ++_imports == 1
+                body = ProjectLocked
+                    ? "{\"exitCode\":2,\"log\":\"Opening the project...\\nThe project/library C:\\\\Test.ap20 cannot be accessed. It has already been opened by user Software on computer TIA-PC.\\n\"}"
+                    : ++_imports == 1
                     ? "{\"exitCode\":3,\"log\":\"Compile: Error\\n\",\"report\":{\"version\":\"" + version + "\",\"saved\":false,\"compileState\":\"Error\",\"errorCount\":1,\"warningCount\":0,\"fileErrors\":[],\"messages\":[{\"state\":\"Error\",\"path\":\"FB_GenValve\",\"description\":\"Tag XV201_Open not defined\"}]}}"
                     : "{\"exitCode\":0,\"log\":\"Compile: Success\\n\",\"report\":{\"version\":\"" + version + "\",\"saved\":true,\"compileState\":\"Success\",\"errorCount\":0,\"warningCount\":0,\"fileErrors\":[],\"messages\":[]}}";
             }
@@ -369,6 +372,30 @@ public class DevelopTests
             Assert.True(report.Clean);
             Assert.Equal("OK", report.Download);
             Assert.Equal("fix", PackageHistory.Load(dir).Latest!.Kind);
+        }
+        finally { Directory.Delete(Path.GetDirectoryName(dir)!, true); }
+    }
+
+    [Fact]
+    public async Task A_locked_project_stops_without_a_fix_round()
+    {
+        var dir = Path.Combine(Directory.CreateTempSubdirectory("plcki-dev-").FullName, "valve");
+        try
+        {
+            var tia = new FakeTiaPc { ProjectLocked = true };
+            var vm = new VmClient("http://tia-pc:5090", "secret-token", tia) { PollInterval = TimeSpan.Zero };
+            var answer = "<file name=\"10_FB_GenValve.scl\">\nFUNCTION_BLOCK \"FB_GenValve\"\nVAR_INPUT\n Open : Bool;\nEND_VAR\nBEGIN\nEND_FUNCTION_BLOCK\n</file>\n<review>ok</review>";
+            var api = new ModelBuilderTests.FakeStreamingApi(answer, answer);
+            var code = await DevelopCommand.RunAsync(["--vm", "http://tia-pc:5090", "--project", @"C:\Users\Software\Documents\Automation\Test\Test.ap20",
+                "--out", dir, "--request", "valve", "--scl-only"], ModelBuilderTests.Client(api), vm);
+
+            Assert.Equal(1, code);
+            Assert.Single(api.Requests);   // only the first writing round: a locked project is not a code problem
+            Assert.Equal(new[] { "GET /status", "PUT /packages/valve", "POST /import" }, tia.Calls);
+            var report = ImportReport.Load(Path.Combine(dir, "v001", "import-report.json"));
+            Assert.Contains("already been opened", Assert.Single(report.FileErrors).Error);
+            Assert.Contains("open in TIA Portal", ImportReport.ImportHint(report.FileErrors[0].Error));
+            Assert.Equal("v001", PackageHistory.Load(dir).Latest!.Folder);
         }
         finally { Directory.Delete(Path.GetDirectoryName(dir)!, true); }
     }

@@ -48,6 +48,14 @@ public sealed class ImportReport
 
     public bool Clean => Compiled && Runtime.Count == 0;
 
+    /// <summary>What to do when TIA could not open the project at all (no blocks were looked at), in plain words.</summary>
+    public static string ImportHint(string error) =>
+        System.Text.RegularExpressions.Regex.IsMatch(error, @"already been opened|cannot be accessed|is locked|in use", System.Text.RegularExpressions.RegexOptions.IgnoreCase)
+            ? "The TIA project is open in TIA Portal (or still locked after a crash). Close it in TIA Portal on the TIA PC, or wait 2 minutes after a crash, then import again."
+        : System.Text.RegularExpressions.Regex.IsMatch(error, @"not found|does not exist|could not find", System.Text.RegularExpressions.RegexOptions.IgnoreCase)
+            ? "The TIA project was not found on the TIA PC. Check the project path, then import again."
+        : "Check that TIA Portal and the TIA helper run on the TIA PC and the project opens there, then import again.";
+
     /// <summary>The report as problems for Claude: refused files, compile errors, then warnings.</summary>
     public List<string> AsProblems(bool withWarnings = true)
     {
