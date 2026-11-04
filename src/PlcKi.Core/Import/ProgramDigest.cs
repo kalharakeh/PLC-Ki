@@ -35,6 +35,46 @@ public static class ProgramDigest
         return sb.ToString();
     }
 
+    /// <summary>
+    /// Only the part of the program that one model entry is about: the blocks named in <paramref name="words"/> or
+    /// whose code uses them most (block names, DB names, member names), up to about <paramref name="maxChars"/>,
+    /// and the readable tags that contain one of the words.
+    /// </summary>
+    public static string Focused(ProgramExport export, ExportPlc plc, IReadOnlyCollection<string> words, int maxChars = 120_000)
+    {
+        var keys = words.Where(w => w.Length >= 3).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var sb = new StringBuilder();
+        sb.AppendLine($"Project: {export.Project}, PLC: {plc.Name}" + (plc.Cpu != null ? $", {plc.Cpu}" : ""));
+        sb.AppendLine("Only the blocks that matter for this entry are listed.");
+        sb.AppendLine();
+        int Score(ExportBlock b)
+        {
+            var text = (b.SclSource ?? b.DecodedLogic ?? "") + " " + string.Join(" ", b.Interface.Select(m => m.Name));
+            var score = keys.Count(k => b.Name.Equals(k, StringComparison.OrdinalIgnoreCase)) * 1000;
+            foreach (var k in keys)
+            {
+                int i = 0, n = 0;
+                while ((i = text.IndexOf(k, i, StringComparison.OrdinalIgnoreCase)) >= 0 && n < 50) { n++; i += k.Length; }
+                score += n;
+            }
+            return score;
+        }
+        var ranked = plc.Blocks.Where(b => b.Kind is "OB" or "FB" or "FC" or "GlobalDB")
+            .Select(b => (Block: b, Score: Score(b))).Where(x => x.Score > 0).OrderByDescending(x => x.Score).ToList();
+        foreach (var (b, _) in ranked)
+        {
+            var one = new StringBuilder();
+            WriteBlock(one, b);
+            if (sb.Length + one.Length > maxChars && sb.Length > 1000) continue;
+            sb.Append(one);
+        }
+        var tags = ProgramExport.Tags(plc).Where(t => t.ModelType != null && keys.Any(k => t.Symbol.Contains(k, StringComparison.OrdinalIgnoreCase))).Take(600).ToList();
+        sb.AppendLine($"## Readable tags that match ({tags.Count}). Use these symbols exactly as written.");
+        foreach (var t in tags)
+            sb.AppendLine($"{t.Symbol} : {t.Datatype}" + (t.Comment != null ? $" // {t.Comment}" : ""));
+        return sb.ToString();
+    }
+
     private static void WriteCalls(StringBuilder sb, ExportPlc plc, ExportBlock b, string indent, int depth, HashSet<string> seen)
     {
         sb.AppendLine($"{indent}{b.Kind} {b.Name}" + (b.Number != null ? $" (no. {b.Number})" : "") + (b.Language != null ? $", {b.Language}" : ""));

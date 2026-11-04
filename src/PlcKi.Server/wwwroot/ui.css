@@ -1184,3 +1184,12 @@ tr.on td { background: var(--accent-soft); }
 .hw-ch-bar input[type="search"] { flex: 1 1 240px; max-width: 360px; }
 .hw-ch { margin-top: 10px; }
 .hw-ch td, .hw-ch th { padding-top: 5px; padding-bottom: 5px; }
+
+/* Model check (Setup > Program) */
+.mc-list { margin: 0; }
+.mc-item { display: flex; gap: 12px; align-items: flex-start; }
+.mc-item .pill { flex: none; margin-top: 2px; }
+.mc-item .btn { flex: none; }
+/* Alarm checks and machine settings */
+.checks-list { list-style: none; margin: 0; padding: 0; }
+.setting-bad { color: var(--fault-ink); }

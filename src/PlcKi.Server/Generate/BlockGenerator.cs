@@ -91,9 +91,13 @@ public sealed class BlockGenerator
         return result;
     }
 
+    private static BetaCacheControlEphemeral HourCache() => new() { Ttl = Ttl.Ttl1h };
+
     private async Task<string> AskAsync(GenerateInput input, string? draft, List<string> problems, GenerateResult result, CancellationToken ct)
     {
-        // Fixed part first and cached: standard, references and program context are the same in every round
+        // Fixed part first and cached for an hour: standard, references and program context are the same in every round,
+        // and a TIA import + compile + download between two rounds often takes longer than the default 5 minutes
+        // (a later change request on the same package within the hour reads it from the cache too)
         var fixedPart = new StringBuilder();
         fixedPart.Append("<standard>\n").Append(input.Standard.Trim()).Append("\n</standard>\n\n");
         fixedPart.Append(GeneratePrompt.References(input.XmlReferences));
@@ -101,7 +105,7 @@ public sealed class BlockGenerator
             fixedPart.Append("<program>\nThe PLC program the new blocks go into:\n").Append(input.ProgramContext).Append("\n</program>\n");
         var content = new List<BetaContentBlockParam>
         {
-            new BetaTextBlockParam { Text = fixedPart.ToString(), CacheControl = new BetaCacheControlEphemeral() },
+            new BetaTextBlockParam { Text = fixedPart.ToString(), CacheControl = HourCache() },
         };
 
         var task = new StringBuilder();
@@ -132,7 +136,7 @@ public sealed class BlockGenerator
         {
             Model = _model,
             MaxTokens = MaxTokens,
-            System = new List<BetaTextBlockParam> { new() { Text = GeneratePrompt.System, CacheControl = new BetaCacheControlEphemeral() } },
+            System = new List<BetaTextBlockParam> { new() { Text = GeneratePrompt.System, CacheControl = HourCache() } },
             Messages = [new BetaUserMessageParam { Content = content }],
             OutputConfig = new BetaOutputConfig { Effort = _effort },
             Betas = [FallbackBeta],

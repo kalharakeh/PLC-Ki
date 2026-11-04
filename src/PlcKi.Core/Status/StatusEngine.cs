@@ -32,7 +32,9 @@ public sealed record EquipmentStatus(
 /// <param name="Since">When PLC-Ki first saw the alarm on (server time).</param>
 /// <param name="AtStart">The alarm was already on at the first read, so when it really came is not known.</param>
 public sealed record AlarmStatus(string Id, string Severity, string Text, string? Location, string? Condition, List<string> Causes, List<string> Fix,
-    DateTimeOffset? Since = null, bool AtStart = false);
+    DateTimeOffset? Since = null, bool AtStart = false, List<ConditionStatus>? Checks = null, bool ChecksAtAlarm = false);
+/// <param name="Valid">FALSE when the value keeps the machine from working (see Problem); null when the model has no rule.</param>
+public sealed record SettingStatus(string Id, string Label, string Value, string? Text, bool? Valid, string? Problem);
 public sealed record ExchangeStatus(string Partner, string Direction, string Label, string Value, string? Text);
 
 public sealed record MachineStatus(
@@ -40,7 +42,7 @@ public sealed record MachineStatus(
     List<string> Summary, List<ValueView> Overview,
     List<SequenceStatus> Sequences, List<EquipmentStatus> Equipment,
     List<AlarmStatus> ActiveAlarms, List<ExchangeStatus> Exchange,
-    Dictionary<string, string> TagErrors);
+    Dictionary<string, string> TagErrors, List<SettingStatus>? Settings = null);
 
 /// <summary>
 /// Turns a snapshot of tag values into a plain-English picture of the machine,
@@ -54,6 +56,10 @@ public sealed class StatusEngine
     // When each active alarm came, so the page can show the first-out first. Kept while the alarm stays on.
     private readonly Dictionary<string, (DateTimeOffset Since, bool AtStart)> _alarmSince = new(StringComparer.Ordinal);
     private bool _hadValues;
+    // The values of the last read before each alarm came, for its checks: by the time someone looks, the machine has
+    // often moved on (the robot went home), so the values now would not show what failed
+    private readonly Dictionary<string, Dictionary<string, object?>> _alarmValues = new(StringComparer.Ordinal);
+    private Dictionary<string, object?>? _prevValues;
 
     public StatusEngine(MachineModel model)
     {
@@ -84,7 +90,13 @@ public sealed class StatusEngine
             .Select(x => new AlarmStatus(x.Def.Id, x.Def.Severity, Fill(x.Def.Text, Get), x.Def.Location,
                 x.Def.Condition != null ? Fill(x.Def.Condition, Get) : null,
                 x.Def.Causes.Select(c => Fill(c, Get)).ToList(), x.Def.Fix.Select(f => Fill(f, Get)).ToList(),
-                x.When.Since, x.When.AtStart))
+                x.When.Since, x.When.AtStart, ChecksOf(x.Def, x.When.AtStart, snap, out var atAlarm), atAlarm))
+            .ToList();
+        if (hasValues) _prevValues = new Dictionary<string, object?>(snap.Values, StringComparer.Ordinal);
+        var settings = _model.Settings.Select(st => new SettingStatus(st.Tag, Label(st.Tag), Fmt(st.Tag, Get),
+                st.Text != null ? Fill(st.Text, Get) : null,
+                st.Valid != null && hasValues ? EvalBool(st.Valid, Get) : null,
+                st.Problem != null ? Fill(st.Problem, Get) : null))
             .ToList();
         var exchange = _model.Exchange
             .Select(x => new ExchangeStatus(x.Partner, x.Direction, Label(x.Tag), Fmt(x.Tag, Get), x.Text))
@@ -111,8 +123,10 @@ public sealed class StatusEngine
                 if (faults > 0) head += faults == alarms.Count ? "" : $" ({faults} fault{(faults == 1 ? "" : "s")})";
                 summary.Add($"{head}: " + string.Join("; ", alarms.Select(a => $"{a.Id} {a.Text}")) + ".");
             }
-            var blocked = equipment.Where(e => e.Requested == true && e.Commanded == false).ToList();
+            var blocked = equipment.Where(e => e.BlockedBy != null).ToList();
             foreach (var e in blocked) summary.Add(e.Explanation);
+            foreach (var st in settings.Where(st => st.Valid == false))
+                summary.Add($"Setting {st.Label} is {st.Value}: " + (st.Problem ?? "the machine cannot work with this value") + ".");
             var active = equipment.Where(e => e.Commanded == true && e.Level is "ok" or "warn").Select(e => $"{e.Name}: {e.State}").ToList();
             if (active.Count > 0) summary.Add("Active now: " + string.Join("; ", active) + ".");
         }
@@ -120,7 +134,25 @@ public sealed class StatusEngine
             summary.Add($"{snap.Errors.Count} tag(s) could not be read, see the tag list.");
 
         return new MachineStatus(snap.Time, _model.Name, connection, summary, overview, sequences, equipment, alarms, exchange,
-            new Dictionary<string, string>(snap.Errors));
+            new Dictionary<string, string>(snap.Errors), settings);
+    }
+
+    /// <summary>An alarm's checks, on the values of the read before it came (kept while it stays on). An alarm that was
+    /// already on at the first read has no such values: then the values now.</summary>
+    private List<ConditionStatus> ChecksOf(AlarmDef a, bool atStart, Snapshot snap, out bool atAlarm)
+    {
+        atAlarm = false;
+        if (a.Checks.Count == 0) return new();
+        Dictionary<string, object?>? values;
+        lock (_alarmValues)
+        {
+            foreach (var id in _alarmValues.Keys.Where(k => !_alarmSince.ContainsKey(k)).ToList()) _alarmValues.Remove(id);
+            if (!_alarmValues.TryGetValue(a.Id, out values) && !atStart && _prevValues != null)
+                _alarmValues[a.Id] = values = _prevValues;
+        }
+        if (values == null) return a.Checks.Select(c => EvaluateCondition(c, id => snap.Values.TryGetValue(id, out var v) ? v : null)).ToList();
+        atAlarm = true;
+        return a.Checks.Select(c => EvaluateCondition(c, id => values.TryGetValue(id, out var v) ? v : null)).ToList();
     }
 
     /// <summary>Remembers when each alarm came on. Only reads with values count: before the first one nothing is known.</summary>

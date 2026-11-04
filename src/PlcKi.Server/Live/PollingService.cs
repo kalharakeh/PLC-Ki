@@ -9,7 +9,14 @@ public sealed class LiveState
     private volatile MachineStatus? _status;
     private volatile Snapshot? _snapshot;
 
-    public LiveState(MachineHistory history) => History = history;
+    public LiveState(MachineHistory history, LiveModelCheck check)
+    {
+        History = history;
+        Check = check;
+    }
+
+    /// <summary>What the live machine did that the model does not explain (Setup > Program).</summary>
+    public LiveModelCheck Check { get; }
 
     public MachineStatus? Status => _status;
     /// <summary>The CPU's mode as last read (null when the source cannot tell or never could).</summary>
@@ -22,6 +29,7 @@ public sealed class LiveState
         _snapshot = snap;
         _status = status;
         History.Add(snap, status);
+        Check.Add(status);
     }
 }
 

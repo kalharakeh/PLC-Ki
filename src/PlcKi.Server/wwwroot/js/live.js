@@ -129,7 +129,7 @@
       ${vals}
       ${full && e.permits.length ? `<div><h3 style="margin-top:6px">Interlocks</h3><ul class="conds">${e.permits.map(cond).join("")}</ul></div>` : ""}
       ${full && e.explanation && !e.blockedBy ? `<p class="muted small" style="margin:0">${esc(e.explanation)}</p>` : ""}
-      ${full ? logicLink(e) : `<span class="eq-more" aria-hidden="true">Details ›</span>`}`;
+      ${full ? `<div class="row">${logicLink(e)}${modelFix("equipment:" + e.id)}</div>` : `<span class="eq-more" aria-hidden="true">Details ›</span>`}`;
   }
   /** "Show in the program" for a device: its block and instance from the model's location ("FB_VFD, instance "Station".M201"). */
   function logicLink(e) {
@@ -163,6 +163,17 @@
   }
   /** The way to the full step chart and step timeline of a sequence. */
   const chartLink = (seq) => `<div><a class="btn b small" href="#/sequence/${encodeURIComponent(seq.id)}">Step chart and timeline ›</a></div>`;
+  /** Settings (HMI values) the model says keep the machine from working, e.g. a 0 % tolerance. */
+  function settingsNotice(s) {
+    const bad = (s.settings || []).filter((x) => x.valid === false);
+    if (!bad.length) return "";
+    return `<div class="notice gold" style="margin-top:18px">${icon("warn")}<div><b>${bad.length === 1 ? "A machine setting stops it from working" : bad.length + " machine settings stop it from working"}</b>
+      ${bad.map((x) => `<br>${esc(x.label)} is <b>${esc(x.value)}</b>: ${esc(x.problem || "the machine cannot work with this value")}.`).join("")}
+      <br><span class="small">Set it on the HMI (or in the recipe). <a href="#/plant/settings">All settings</a></span></div></div>`;
+  }
+  /** "This is wrong" for administrators: correct the model entry with Ki (Setup > Program has the live check). */
+  const modelFix = (target) => state.user && state.user.role === "admin" && typeof PKModel !== "undefined"
+    ? `<button type="button" class="btn gray small" data-modelfix="${esc(target)}">This is wrong</button>` : "";
   /** Opening the full step list shows the current step in the middle of it, not step 1. */
   function bindSteps(page) {
     page.querySelectorAll("details.allsteps").forEach((d) => d.ontoggle = () => {
@@ -180,6 +191,7 @@
     if (typeof PKStart !== "undefined") PKStart.bindCard(page);
     page.querySelectorAll("[data-conn-help]").forEach((b) => b.onclick = PK.connSheet);
     page.querySelectorAll("[data-ask]").forEach((b) => b.onclick = () => window.PKAsk && window.PKAsk.open(b.dataset.ask));
+    page.querySelectorAll("[data-modelfix]").forEach((b) => b.onclick = () => PKModel.fixSheet(b.dataset.modelfix));
   }
 
   // ---------- Active alarm ----------
@@ -202,7 +214,7 @@
           sub: esc(n ? blockedLine(blocked[0]) : (seq ? seq.explanation : s.summary[0] || "")),
           actions: n ? `<button class="btn" data-ask="Why is ${esc(blocked[0].name)} blocked, and what do I check?">Ask why</button><a class="btn b" href="#/plant">See the plant</a>`
             : `<a class="btn" href="#/plant">See the plant</a><button class="btn b" data-ask="What is the machine doing right now?">Ask</button>`,
-        })
+        }) + (settingsNotice(s) ? sec("", settingsNotice(s)) : "")
         + (n ? sec("alt", `<h2>Blocked now</h2><p class="sub">The program asks for ${n === 1 ? "this device" : "these devices"}, but ${n === 1 ? "its" : "their"} output stays off.</p>
             <div class="grid ${n > 1 ? "two" : ""}">${blocked.map((e) => `<div class="card stack">${eqCard(e, true)}</div>`).join("")}</div>`) : "")
         + (seq ? sec(n ? "" : "alt", `<h2>${esc(seq.name)}</h2>${n ? `<p class="sub">${esc(seq.explanation)}</p>` : ""}${stepStrip(seq)}${chartLink(seq)}
@@ -220,6 +232,8 @@
       const loc = parseLoc(a.location);
       const where = alarmWhere(a);
       const path = callPath(where.block || loc.block);
+      const checks = a.checks || [];
+      const failed = checks.filter((c) => c.met === false);
 
       const chips = alarms.length > 1 ? `<div class="alarm-chips">${alarms.map((x, i) =>
         `<button class="alarm-chip ${x.severity === "WARNING" ? "warning" : ""} ${x.id === a.id ? "sel" : ""}" data-alarm="${esc(x.id)}">
@@ -237,10 +251,14 @@
           <div class="eyebrow"><span class="pill ${warn ? "warn" : "bad"}"><span class="dot"></span>${esc(a.severity)} · ${esc(a.id)}</span></div>
           <h1>${esc(a.text)}</h1>
           ${a.condition ? `<p class="sub">${esc(a.condition)}</p>` : ""}
+          ${failed.length ? `<p class="sub"><b>Failed check:</b> ${failed.map((c) => esc(c.text) + (c.values && c.values.length ? ` (now ${c.values.map((v) => esc(v.label) + " " + esc(v.text)).join(", ")})` : "")).join("; ")}</p>` : ""}
+          ${settingsNotice(s)}
           <div class="actions"><button class="btn" data-ask="Why is alarm ${esc(a.id)} on, and how do I fix it?">Ask about this alarm</button>
             ${where.block ? `<a class="btn b" href="${esc(where.href)}">Show where it is set</a>` : ""}</div>
           <div class="kpis" style="margin-top:34px">${kpis.map(([v, l, c]) => `<div class="k ${c || ""}"><b>${esc(v)}</b><span>${esc(l)}</span></div>`).join("")}</div>`)
 
+        + (checks.length ? sec("", `<h2>What the program checks</h2><p class="sub">The comparisons behind this alarm, ${a.checksAtAlarm ? "with the values from the last read before it came" : "with the values now"}. ✗ is the one that failed.</p>
+            <div class="card"><ul class="conds">${checks.map(cond).join("")}</ul></div>`) : "")
         + sec("alt", `<h2>Fix it</h2><p class="sub">Work down the list. Tap a step when it is done. The ticks are only on this screen.</p>
           <div class="grid two">
             <div class="card">${a.fix.length ? `<ol class="fix">${a.fix.map((f, i) => `<li class="${done.has(i) ? "done" : ""}"><button type="button" class="fix-b" data-fix="${i}" aria-pressed="${done.has(i)}">${esc(f)}</button></li>`).join("")}</ol>` : `<p class="muted">No fix written for this alarm yet. Ask about it.</p>`}</div>
@@ -253,7 +271,7 @@
         + sec("dark", `<h2>Where in the software</h2><p class="sub">Where the program sets this alarm, from the main cycle down to the bit.</p>
           ${where.block ? `<div class="path">${(path || [{ block: where.block }]).map((p) => `<span>${esc(p.block)}${p.instance ? " " + esc(p.instance) : ""}</span>`).join("<i>›</i>")}${where.network ? `<i>›</i><span>Network ${esc(where.network)}</span>` : ""}${where.symbol ? `<i>›</i><span>${esc(where.symbol)}</span>` : ""}</div>` : ""}
           <p class="muted small" style="margin:14px 0 22px">${esc(a.location || "")}</p>
-          <div class="actions">${where.block ? `<a class="btn white" href="${esc(where.href)}">Show where it is set</a>` : links(loc)}</div>`)
+          <div class="actions">${where.block ? `<a class="btn white" href="${esc(where.href)}">Show where it is set</a>` : links(loc)}${modelFix("alarm:" + a.id)}</div>`)
 
         + sec("alt", `<h2>What is going on</h2>
           <div class="grid two"><div>${s.summary.map((l) => `<p class="sub" style="margin-bottom:12px">${esc(l)}</p>`).join("")}</div>
@@ -279,7 +297,7 @@
   // One short header (the step, what it waits for, the key values), then four tabs so the page stays one screen:
   // Overview (what needs attention, the sequence, the machine at a glance), Devices (list and the picked one),
   // Values over time, and Data exchange. The tab is in the address: #/plant/devices/M201, #/plant/values.
-  const PLANT_TABS = [["overview", "Overview"], ["devices", "Devices"], ["values", "Values over time"], ["exchange", "Data exchange"]];
+  const PLANT_TABS = [["overview", "Overview"], ["devices", "Devices"], ["values", "Values over time"], ["settings", "Settings"], ["exchange", "Data exchange"]];
   const problemOf = (e) => !!e.blockedBy || (e.level !== "ok" && e.level !== "idle");
   const rank = (e) => (e.level === "fault" || e.level === "bad" ? 0 : e.blockedBy ? 1 : e.level === "warn" ? 2 : 3);
 
@@ -297,7 +315,8 @@
       const [stText, stCls] = main ? seqState(main) : ["", ""];
       const attention = s.equipment.filter(problemOf).sort((x, y) => rank(x) - rank(y));
       const waitsFor = main ? main.next.flatMap((n) => n.conditions).filter((c) => c.met === false).map((c) => c.text) : [];
-      const counts = { devices: attention.length, exchange: s.exchange.length };
+      const badSettings = (s.settings || []).filter((x) => x.valid === false);
+      const counts = { devices: attention.length, exchange: s.exchange.length, settings: badSettings.length };
 
       const head = hero({
         eyebrow: main ? `<span class="pill ${stCls}"><span class="dot"></span>${stText}</span>${main.timeInStep ? `<span class="faint">for ${esc(main.timeInStep)}</span>` : ""}<span class="faint">· ${esc(main.name)}</span>` : "",
@@ -305,8 +324,8 @@
         sub: main ? (main.halted ? esc("Halted: " + (main.haltReasons.join("; ") || "the outputs are off.")) : waitsFor.length ? esc("Waiting for: " + waitsFor.join("; ")) : esc(main.does || "")) : esc(s.summary[0] || ""),
         actions: `<button class="btn" data-ask="${attention.length ? `Why is ${esc(attention[0].name)} ${esc(attention[0].blockedBy ? "blocked" : attention[0].state)}, and what do I check?` : "What is the machine doing right now?"}">Ask about it</button>${s.activeAlarms.length ? `<a class="btn b" href="#/alarm">${s.activeAlarms.length} active alarm${s.activeAlarms.length > 1 ? "s" : ""}</a>` : ""}`,
         extra: (s.overview.length ? `<div class="kpis plant-kpis">${s.overview.slice(0, 8).map((v) => `<div class="k"><b>${esc(v.text)}</b><span>${esc(v.label)}</span></div>`).join("")}</div>` : "")
-          + `<nav class="ptabs" aria-label="Plant">${PLANT_TABS.filter(([k]) => k !== "exchange" || s.exchange.length).map(([k, l]) =>
-            `<a href="#/plant${k === "overview" ? "" : "/" + k}" class="${k === tab ? "on" : ""}" ${k === tab ? 'aria-current="page"' : ""}>${l}${k === "devices" && counts.devices ? ` <span class="count warn">${counts.devices}</span>` : ""}</a>`).join("")}</nav>`,
+          + `<nav class="ptabs" aria-label="Plant">${PLANT_TABS.filter(([k]) => (k !== "exchange" || s.exchange.length) && (k !== "settings" || (s.settings || []).length)).map(([k, l]) =>
+            `<a href="#/plant${k === "overview" ? "" : "/" + k}" class="${k === tab ? "on" : ""}" ${k === tab ? 'aria-current="page"' : ""}>${l}${(k === "devices" || k === "settings") && counts[k] ? ` <span class="count warn">${counts[k]}</span>` : ""}</a>`).join("")}</nav>`,
       });
 
       let body = "";
@@ -315,9 +334,13 @@
               <span class="ico">${icon("bell")}</span>
               <span class="nd-t"><b>${esc(x.id)} · ${esc(x.text)}</b><span>${esc(x.condition || x.location || "")}</span></span>
               <span class="lv lv-${x.severity === "WARNING" ? "warn" : "fault"}">${esc(x.severity === "WARNING" ? "warning" : "fault")}</span><span class="chev">›</span></a></li>`).join("");
-        const nNeeds = attention.length + s.activeAlarms.length;
+        const nNeeds = attention.length + s.activeAlarms.length + badSettings.length;
+        const settingRows = badSettings.map((x) => `<li><a href="#/plant/settings">
+              <span class="ico">${icon("gear")}</span>
+              <span class="nd-t"><b>Setting ${esc(x.label)} is ${esc(x.value)}</b><span>${esc(x.problem || "the machine cannot work with this value")}</span></span>
+              <span class="lv lv-warn">setting</span><span class="chev">›</span></a></li>`).join("");
         const needs = nNeeds
-          ? `<ul class="needs">${alarmRows}${attention.map((e) => `<li><a href="#/plant/devices/${encodeURIComponent(e.id)}">
+          ? `<ul class="needs">${alarmRows}${settingRows}${attention.map((e) => `<li><a href="#/plant/devices/${encodeURIComponent(e.id)}">
               <span class="ico">${icon(PK.kindIcon(e.kind))}</span>
               <span class="nd-t"><b>${esc(e.name)}</b><span>${esc(e.blockedBy ? (/^needs /.test(e.blockedBy) ? "Blocked: it " + e.blockedBy : "Blocked: " + e.blockedBy) : e.explanation || e.state)}</span></span>
               <span class="lv lv-${esc(e.blockedBy ? "warn" : e.level)}">${esc(e.blockedBy ? "blocked" : e.state)}</span><span class="chev">›</span></a></li>`).join("")}</ul>`
@@ -360,6 +383,13 @@
             <div data-dev>${sel ? `<div class="card stack eq-open">${eqCard(sel, true)}<div class="actions"><button class="btn small" data-ask="Why is ${esc(sel.id)} ${esc(sel.state)}?">Ask why</button></div></div>` : ""}</div></div>`);
       } else if (tab === "values") {
         body = sec("", V ? V.trends() : `<p class="muted">Charts are not available.</p>`);
+      } else if (tab === "settings") {
+        body = sec("", `<p class="sub">Values an operator or engineer sets on the HMI or in the recipe that the machine needs. ✗ means the machine cannot work with the value it has now.</p>
+          <div class="card"><table class="tbl"><tr><th></th><th>Setting</th><th>Value</th><th>What it does</th></tr>
+            ${(s.settings || []).map((x) => `<tr><td>${x.valid === false ? `<span class="mark no" aria-label="not OK">✗</span>` : x.valid === true ? `<span class="mark yes" aria-label="OK">✓</span>` : ""}</td>
+              <td><b>${esc(x.label)}</b></td><td class="val ${x.valid === false ? "setting-bad" : ""}">${esc(x.value)}</td>
+              <td class="muted">${esc(x.text || "")}${x.valid === false && x.problem ? `<br><span class="setting-bad">${esc(x.problem)}</span>` : ""}</td></tr>`).join("")}
+          </table></div>`);
       } else {
         body = sec("", `<div class="card"><table class="tbl xchg"><tr><th>With</th><th>Signal</th><th>Value</th><th>Meaning</th></tr>
             ${s.exchange.map((x) => `<tr><td class="with"><b title="${x.direction === "in" ? "from" : "to"} ${esc(x.partner)}">${x.direction === "in" ? "← from" : "→ to"} ${esc(x.partner)}</b></td>

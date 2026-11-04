@@ -36,7 +36,10 @@ You get the program as text: the call structure, every block with its interface 
                 "location": "FB_Valve, instance \"Station\".XV1 (output FaultNotOpen), latched in FB_AlarmHandler",
                 "condition": "Open command on for 10 s without the open limit switch",
                 "causes": [ "No compressed air", "Limit switch misaligned or broken" ],
-                "fix": [ "Check the air supply at the valve", "Check the open limit switch", "Press Reset" ] } ],
+                "fix": [ "Check the air supply at the valve", "Check the open limit switch", "Press Reset" ],
+                "checks": [ { "expr": "XV1_ZSO OR NOT XV1_OpenCmd", "text": "Open limit switch reached when opened" } ] } ],
+  "settings": [ { "tag": "CalTolerance", "text": "Allowed deviation of the calibration check", "valid": "CalTolerance > 0",
+                  "problem": "the calibration check can never pass with 0 %" } ],
   "exchange": [ { "tag": "MES_StartRequest", "partner": "MES", "direction": "in", "text": "MES asks for a new batch" } ]
 }
 
@@ -75,6 +78,12 @@ Alarms
 - location: the block, instance and output where the condition is made, and where it is latched.
 - condition: when the program raises it, in plain words, with the delay and limits from the code.
 - causes: 2 to 4 likely causes at the machine, most likely first. fix: concrete steps a technician takes, ending with every step the program needs to run again (for example "Press Reset, then Start to continue the batch" when the sequence waits for Start after a fault). Never suggest bridging, forcing or bypassing a safety function, E-stop, guard or interlock.
+
+- checks: the comparisons behind the alarm that can be read live, each written so that TRUE means fine (a value inside its window, a feedback that arrived). Follow the logic back to the readable values: when the alarm comes from a step timeout because "leak rate within limits" never became TRUE, the checks are "LeakRate >= CalMin" and "LeakRate <= CalMax" with the limits as tags, not the timeout. Text with the values as {placeholders}: "Leak rate {LeakRate} at least {CalMin}". Leave checks out when nothing readable explains the alarm.
+
+Settings
+- Values an operator or engineer sets that the machine needs: HMI parameters, tolerances, delays, enable switches, recipe limits (often retained members of an HMI or recipe DB). Add each one that a sequence, check or alarm depends on as a tag and a settings entry.
+- valid: TRUE when the value lets the machine work, from how the code uses it (a tolerance of 0 makes a window empty, a delay of 0 or a disabled enable skips a step on purpose). problem: what goes wrong otherwise, as a lower-case clause. Leave valid out when every value works.
 
 Data exchange
 - Signals to and from other systems (MES, SCADA, other PLCs, line partners): direction "in" when received, "out" when sent, and what each one means.
