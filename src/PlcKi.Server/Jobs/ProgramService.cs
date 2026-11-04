@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using PlcKi.Core.Import;
 using PlcKi.Core.Model;
 using PlcKi.Server.Live;
@@ -108,7 +109,26 @@ public sealed class ProgramService
         };
     }
 
-    /// <summary>Where a signal is used: blocks whose source or decoded logic mention it, with the first lines (read-only text search).</summary>
+    /// <summary>
+    /// Does this line write <paramref name="symbol"/>: "x := ..." or a set/reset "IF ... THEN x := TRUE; END_IF;"?
+    /// Same rule as writes() on the Program page. A call parameter ("In := x,") does not count.
+    /// </summary>
+    public static bool Writes(string line, string symbol)
+    {
+        if (string.IsNullOrWhiteSpace(symbol)) return false;
+        symbol = symbol.Trim();
+        // A bare name ("FaultNotOpen", "A02_XV101_NotOpen") also matches a local (#FaultNotOpen) or the last part of a
+        // path ("DB_Alarms".A02_XV101_NotOpen)
+        var bare = !symbol.StartsWith('"') && !symbol.StartsWith('#');
+        var before = bare ? @"(?:(?:""[^""]+""|#?\w+)\.)*[#""]?" : "";
+        var after = bare ? @"""?" : "";
+        return Regex.IsMatch(line.Trim(), @"(^|\bTHEN\s+)" + before + Regex.Escape(symbol) + after + @"(?![\w.\[])\s*:=(?!.*,\s*$)", RegexOptions.IgnoreCase);
+    }
+
+    /// <summary>
+    /// Where a signal is used: blocks whose source or decoded logic mention it, with the first lines (read-only text search).
+    /// Each line says whether it writes the signal; lines that write it are always included, so "where is it set" can be found.
+    /// </summary>
     public object Search(string query, int maxBlocks = 60)
     {
         var (_, plc, error) = _loaded.Value;
@@ -123,11 +143,13 @@ public sealed class ProgramService
             var lines = text.Split('\n')
                 .Select((l, i) => (No: i + 1, Text: l.TrimEnd('\r')))
                 .Where(x => x.Text.Contains(q, StringComparison.OrdinalIgnoreCase))
+                .Select(x => (x.No, x.Text, Writes: Writes(x.Text, q)))
                 .ToList();
+            var shown = lines.Where((x, i) => i < 4 || x.Writes);
             results.Add(new
             {
                 block = b.Name, kind = b.Kind, language = b.Language, count = lines.Count,
-                lines = lines.Take(4).Select(x => new { no = x.No, text = x.Text.Trim().Length > 160 ? x.Text.Trim()[..157] + "..." : x.Text.Trim() }),
+                lines = shown.Select(x => new { no = x.No, text = x.Text.Trim().Length > 160 ? x.Text.Trim()[..157] + "..." : x.Text.Trim(), writes = x.Writes }),
             });
             if (results.Count >= maxBlocks) break;
         }
