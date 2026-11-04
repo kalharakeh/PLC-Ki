@@ -169,8 +169,55 @@ public sealed class S7CommPlusSource : IPlcSource
         return snap;
     }
 
+    /// <summary>Lookups for the Tags page, kept while connected: symbol -> tag, or why it cannot be read.</summary>
+    private readonly Dictionary<string, (PlcTag? Tag, string? Error)> _extra = new();
+    private const int MaxLookupsPerRead = 30;
+
+    public Dictionary<string, (object? Value, string? Error)> ReadSymbols(IReadOnlyList<TagDef> symbols)
+    {
+        var result = new Dictionary<string, (object?, string?)>();
+        var client = _client;
+        if (client == null) { foreach (var s in symbols) result[s.Symbol] = (null, "Not connected to the PLC."); return result; }
+
+        var readable = new List<(TagDef Def, PlcTag Tag)>();
+        int lookups = 0;
+        foreach (var def in symbols)
+        {
+            if (!_extra.TryGetValue(def.Symbol, out var found))
+            {
+                // Each lookup is a round trip (a failed one can even cost a new login): a few per poll, so the
+                // model tags keep their pace; the rest follow in the next polls
+                if (++lookups > MaxLookupsPerRead) continue;
+                try { found = (client.GetTagBySymbolAsync(def.Symbol).GetAwaiter().GetResult(), null); }
+                catch (Exception ex) { found = (null, "Not found on the PLC: " + Describe(ex)); }
+                _extra[def.Symbol] = found;
+            }
+            if (found.Tag != null) readable.Add((def, found.Tag)); else result[def.Symbol] = (null, found.Error);
+        }
+        if (readable.Count == 0) return result;
+
+        var read = client.ReadAsync(readable.Select(r => r.Tag).ToList()).GetAwaiter().GetResult();
+        for (int i = 0; i < readable.Count; i++)
+        {
+            var (def, tag) = readable[i];
+            var item = i < read.Items.Count ? read.Items[i] : default;
+            if (!item.IsSuccess || (tag.Quality & PlcTagQC.TAG_QUALITY_MASK) != PlcTagQC.TAG_QUALITY_GOOD)
+            {
+                result[def.Symbol] = (null, $"read error 0x{item.ItemError:X}");
+                continue;
+            }
+            object? raw = tag.GetType().GetProperty("Value")?.GetValue(tag);
+            object? value;
+            try { value = def.Type is "Bool" or "Real" or "DInt" or "Int" or "Time" ? TagValue.Normalize(def, raw) : raw?.ToString(); }
+            catch { value = raw?.ToString(); }
+            result[def.Symbol] = (value, null);
+        }
+        return result;
+    }
+
     public void Disconnect()
     {
+        _extra.Clear();
         var c = _client;
         _client = null;
         if (c == null) return;

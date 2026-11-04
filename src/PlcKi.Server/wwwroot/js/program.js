@@ -415,6 +415,7 @@
                 ${sel.inst && Object.keys(sel.inst.wires).length ? `<span class="faint">Inputs wired in ${esc(sel.inst.path.split(".")[0])}</span>` : ""}</div>
               <div style="margin-top:14px">${bodyHtml}</div>
             </div>
+            ${window.PKTags ? window.PKTags.blockTagsHtml(b.source || b.logic) : ""}
             ${iface.length ? `<div class="card"><details class="more" style="border:0;margin:0;padding:0" ${kind === "code" && !b.source && !b.logic ? "open" : ""}><summary>Interface (${iface.length})</summary>
               <table class="tbl iface" style="margin-top:8px"><tr><th>Name</th><th>Section</th><th>Type</th><th>Now</th><th>Comment</th></tr>
               ${iface.map((m) => { const v = resolve("#" + m.name); return `<tr><td>${esc(m.name)}</td><td class="muted">${esc(m.section)}</td><td class="mono">${esc(m.datatype)}</td><td>${v ? chip(v) : ""}</td><td class="muted">${esc(m.comment || "")}</td></tr>`; }).join("")}

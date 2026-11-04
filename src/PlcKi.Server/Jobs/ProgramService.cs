@@ -105,6 +105,42 @@ public sealed class ProgramService
         return new { available = true, error = (string?)null, results };
     }
 
+    private List<ExportTag>? _allTags;
+    private List<ExportTag> AllTags(ExportPlc plc) => _allTags ??= ProgramExport.Tags(plc);
+
+    /// <summary>
+    /// The Tags page: PLC tag tables (name, address, type, comment) and the data blocks with how many values each
+    /// holds. With <paramref name="db"/>, the readable values of that data block, with their full symbols.
+    /// </summary>
+    public object Tags(string? db)
+    {
+        var (_, plc, error) = _loaded.Value;
+        if (plc == null) return new { available = false, error };
+        if (!string.IsNullOrEmpty(db))
+        {
+            var b = plc.Blocks.FirstOrDefault(x => x.Name == db && x.Kind is "GlobalDB" or "InstanceDB");
+            if (b == null) return new { available = false, error = $"Data block {db} is not in the program export." };
+            return new
+            {
+                available = true, db = b.Name, b.Number, b.Kind, b.InstanceOf, b.Title, b.Comment,
+                values = AllTags(plc).Where(t => t.Source == b.Name)
+                    .Select(t => new { symbol = t.Symbol, datatype = t.Datatype, type = t.ModelType, comment = t.Comment }),
+            };
+        }
+        var perDb = AllTags(plc).GroupBy(t => t.Source).ToDictionary(g => g.Key, g => g.Count());
+        return new
+        {
+            available = true,
+            tables = plc.PlcTags.GroupBy(t => t.Table).OrderBy(g => g.Key).Select(g => new
+            {
+                name = g.Key,
+                tags = g.Select(t => new { t.Name, symbol = $"\"{t.Name}\"", t.Address, datatype = t.Datatype, type = ProgramExport.ModelType(t.Datatype), t.Comment }),
+            }),
+            dbs = plc.Blocks.Where(b => b.Kind is "GlobalDB" or "InstanceDB").OrderBy(b => b.Number ?? int.MaxValue).ThenBy(b => b.Name)
+                .Select(b => new { b.Name, b.Number, b.Kind, b.InstanceOf, b.Title, count = perDb.GetValueOrDefault(b.Name) }),
+        };
+    }
+
     private static object Member(ExportMember m) => new
     {
         m.Name, m.Section, m.Datatype, m.Comment, m.StartValue,
