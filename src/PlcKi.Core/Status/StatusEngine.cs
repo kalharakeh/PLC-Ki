@@ -42,12 +42,7 @@ public sealed record MachineStatus(
     List<string> Summary, List<ValueView> Overview,
     List<SequenceStatus> Sequences, List<EquipmentStatus> Equipment,
     List<AlarmStatus> ActiveAlarms, List<ExchangeStatus> Exchange,
-    Dictionary<string, string> TagErrors, List<SettingStatus>? Settings = null)
-{
-    /// <summary>The raw values of this read, by tag id, for the live model check (not sent to the pages).</summary>
-    [System.Text.Json.Serialization.JsonIgnore]
-    public IReadOnlyDictionary<string, object?>? Raw { get; init; }
-}
+    Dictionary<string, string> TagErrors, List<SettingStatus>? Settings = null);
 
 /// <summary>
 /// Turns a snapshot of tag values into a plain-English picture of the machine,
@@ -139,7 +134,7 @@ public sealed class StatusEngine
             summary.Add($"{snap.Errors.Count} tag(s) could not be read, see the tag list.");
 
         return new MachineStatus(snap.Time, _model.Name, connection, summary, overview, sequences, equipment, alarms, exchange,
-            new Dictionary<string, string>(snap.Errors), settings) { Raw = new Dictionary<string, object?>(snap.Values) };
+            new Dictionary<string, string>(snap.Errors), settings);
     }
 
     /// <summary>An alarm's checks, on the values of the read before it came (kept while it stays on). An alarm that was
