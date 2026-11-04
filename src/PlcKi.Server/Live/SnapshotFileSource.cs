@@ -72,6 +72,53 @@ public sealed class SnapshotFileSource : IPlcSource
         catch (Exception) { return null; }
     }
 
+    /// <summary>Symbols outside the model (drive values, the Tags page) come from the same file, by full symbol.</summary>
+    public Dictionary<string, (object? Value, string? Error)> ReadSymbols(IReadOnlyList<TagDef> symbols)
+    {
+        var result = new Dictionary<string, (object?, string?)>();
+        try
+        {
+            using var doc = JsonDocument.Parse(File.ReadAllText(_path), new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true });
+            foreach (var s in symbols)
+            {
+                if (!doc.RootElement.TryGetProperty(s.Symbol, out var v)) { result[s.Symbol] = (null, "Not in the test file."); continue; }
+                object? raw = v.ValueKind switch
+                {
+                    JsonValueKind.True => true, JsonValueKind.False => false,
+                    JsonValueKind.Number => v.GetDouble(), JsonValueKind.String => v.GetString(), _ => null,
+                };
+                result[s.Symbol] = (raw, null);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or JsonException) { foreach (var s in symbols) result[s.Symbol] = (null, ex.Message); }
+        return result;
+    }
+
+    /// <summary>
+    /// Test files may hold CPU alarms (system diagnostics) too:
+    ///   "$cpuAlarms": [ { "text": "IO device failure", "info": "...", "extra": ["G120_Conveyor"], "domain": 1 } ]
+    /// </summary>
+    public IReadOnlyList<PlcKi.Core.Diagnostics.CpuAlarm>? ReadCpuAlarms()
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(File.ReadAllText(_path), new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true });
+            if (!doc.RootElement.TryGetProperty("$cpuAlarms", out var arr) || arr.ValueKind != JsonValueKind.Array) return null;
+            var list = new List<PlcKi.Core.Diagnostics.CpuAlarm>();
+            ulong n = 0;
+            foreach (var a in arr.EnumerateArray())
+            {
+                string? S(string k) => a.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+                var extra = a.TryGetProperty("extra", out var ex) && ex.ValueKind == JsonValueKind.Array
+                    ? ex.EnumerateArray().Where(x => x.ValueKind == JsonValueKind.String).Select(x => x.GetString()!).ToList() : new List<string>();
+                var domain = a.TryGetProperty("domain", out var d) && d.TryGetInt32(out var di) ? di : 1;
+                list.Add(new PlcKi.Core.Diagnostics.CpuAlarm(++n, S("text") ?? "CPU alarm", S("info"), extra, S("class"), domain, 0, DateTimeOffset.Now, null));
+            }
+            return list;
+        }
+        catch (Exception) { return null; }
+    }
+
     public void Disconnect() => _connected = false;
     public void Dispose() => Disconnect();
 }
