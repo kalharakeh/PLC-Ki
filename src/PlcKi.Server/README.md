@@ -115,6 +115,9 @@ dotnet run --project src\PlcKi.Server -- --PlcKi:Source=snapshot --PlcKi:Snapsho
 Snapshot files are plain JSON (`"Level": 15.0`, `"StepTime": "T#20S"`). The app reads the file again every second,
 so you can edit values and watch the page change.
 
+Ready-made files in `models/snapshots/`: `step10-xv101-not-open` (one alarm, A02), `step30-agitator-blocked`,
+`step30-mix-heat`, `step50-drain`, and `step30-estop-and-drive` (two alarms: A01 emergency stop, then A08 drive not ready).
+
 ## Ask about the machine
 
 The box under the summary answers questions such as *"Why is the agitator not running?"*,
