@@ -48,6 +48,8 @@ public sealed class ExportBlock
     public string? SclSource { get; set; }
     /// <summary>LAD, FBD and GRAPH logic decoded into SCL-like text (null for SCL blocks and blocks without networks).</summary>
     public string? DecodedLogic { get; set; }
+    /// <summary>For a GRAPH block: every step change its connections allow (from step, to step), branches and jumps followed.</summary>
+    public List<(int From, int To)> GraphTransitions { get; } = new();
     /// <summary>Path of the XML file inside the export, for later decoding of LAD/GRAPH networks.</summary>
     public string File { get; init; } = "";
 }
@@ -212,7 +214,12 @@ public sealed class ProgramExport
             var lang = cu.Element("AttributeList")?.Element("ProgrammingLanguage")?.Value;
             if (lang != null) block.NetworkLanguages.Add(lang);
             if (block.Language == "SCL") continue;   // the SCL source covers pure SCL blocks
-            try { DecodeNetwork(cu, lang, networkNo, logic); }
+            try
+            {
+                DecodeNetwork(cu, lang, networkNo, logic);
+                if (cu.Element("AttributeList")?.Element("NetworkSource")?.Elements().FirstOrDefault(e => e.Name.LocalName == "Graph") is { } g)
+                    block.GraphTransitions.AddRange(NetworkDecoder.GraphTransitions(g));
+            }
             catch (Exception ex) { logic.AppendLine($"// Network {networkNo}: could not decode ({ex.Message})"); }
         }
         if (logic.Length > 0) block.DecodedLogic = logic.ToString().TrimEnd();

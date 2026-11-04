@@ -60,7 +60,7 @@ public sealed class LiveModelCheck
             foreach (var (id, why) in s.TagErrors)
                 Note("tag", "tag:" + id, "wrong", $"Tag {id} cannot be read", why, now);
 
-            foreach (var q in s.Sequences) CheckSequence(q, now);
+            foreach (var q in s.Sequences) CheckSequence(q, s, now);
             foreach (var e in s.Equipment) CheckDevice(e, now);
             foreach (var st in s.Settings ?? new())
                 if (st.Valid == false)
@@ -70,7 +70,31 @@ public sealed class LiveModelCheck
         }
     }
 
-    private void CheckSequence(SequenceStatus q, DateTimeOffset now)
+    /// <summary>How many steps a move may skip (each shorter than one read) before it counts as unexplained.</summary>
+    public int MaxSkippedSteps { get; set; } = 3;
+
+    private static bool Reachable(SequenceDef def, int from, int to, int maxBetween)
+    {
+        var next = def.Steps.ToDictionary(x => x.No, x => x.Next.Select(n => n.To).ToList());
+        var level = new HashSet<int> { from };
+        var seen = new HashSet<int> { from };
+        for (int hop = 0; hop <= maxBetween; hop++)
+        {
+            var nl = new HashSet<int>();
+            foreach (var n in level)
+                foreach (var t in next.GetValueOrDefault(n) ?? new())
+                {
+                    if (t == to) return true;
+                    if (seen.Add(t)) nl.Add(t);
+                }
+            level = nl;
+        }
+        return false;
+    }
+
+    private static bool Same(object? a, object? b) => a is double x && b is double y ? Math.Abs(x - y) < 1e-9 : Equals(a, b);
+
+    private void CheckSequence(SequenceStatus q, MachineStatus s, DateTimeOffset now)
     {
         var def = _model.Sequences.FirstOrDefault(d => d.Id == q.Id);
         if (def == null) return;
@@ -86,18 +110,21 @@ public sealed class LiveModelCheck
         {
             _stepChanges++;
             var from = def.Steps.FirstOrDefault(x => x.No == a);
-            if (from != null && def.Steps.Any(x => x.No == b) && !from.Next.Any(t => t.To == b))
+            var direct = from != null && from.Next.Any(t => t.To == b);
+            // A move the model explains through steps in between (a short step lasted less than one read) is fine
+            if (from != null && def.Steps.Any(x => x.No == b) && !direct && !Reachable(def, a, b, MaxSkippedSteps))
                 Note("transition", "sequence:" + q.Id, "wrong", $"{q.Name}: step {a} went to step {b}",
-                    $"The model has no transition from step {a} \"{from.Name}\" to step {b}.", now);
-            // The conditions the model had for this move in the last read before it: any that looked not met is suspect
-            if (_prev != null)
+                    $"The model has no transition from step {a} \"{from.Name}\" to step {b}, not even through other steps.", now);
+            // The conditions the model had for this move in the last read before it: any that looked not met, while
+            // nothing it reads changed since, is suspect. If a value changed, the moment it was met fell between two reads.
+            if (_prev != null && direct && s.Raw != null)
             {
                 var pq = _prev.Sequences.FirstOrDefault(x => x.Id == q.Id);
                 var tr = pq?.Next.FirstOrDefault(n => n.To == b);
                 if (tr != null)
-                    foreach (var c in tr.Conditions.Where(c => c.Met == false))
-                        Note("transition", "sequence:" + q.Id, "check", $"{q.Name}: moved from step {a} to {b} while \"{c.Text}\" looked not met",
-                            "Values are read about once a second, so a short pulse can be missed. If this comes back, the condition in the model is probably wrong.", now,
+                    foreach (var c in tr.Conditions.Where(c => c.Met == false && c.Values.Count > 0 && c.Values.All(v => Same(v.Raw, s.Raw.GetValueOrDefault(v.Id)))))
+                        Note("transition", "sequence:" + q.Id, "check", $"{q.Name}: moved from step {a} to {b} while \"{c.Text}\" was not met",
+                            "The values in this condition were the same before and after the move, so the program must use a different condition here.", now,
                             minCount: 2);
             }
             _ready.Remove(q.Id);
