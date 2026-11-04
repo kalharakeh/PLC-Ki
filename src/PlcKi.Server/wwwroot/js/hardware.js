@@ -191,7 +191,12 @@
       let s = `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${f * 0.3}" fill="#0b1016"/>`;
       s += `<rect x="${x}" y="${y}" width="${w}" height="${f * 1.7}" fill="${bar}"/>`;
       s += `<text x="${x + pad}" y="${y + f * 1.2}" font-size="${f}" font-weight="700" fill="#fff">${esc(mode.text)}</text>`;
-      s += `<text x="${x + w - pad}" y="${y + f * 1.2}" font-size="${f * 0.85}" fill="#fff" text-anchor="end">${esc((c && c.station) || "PLC")}</text>`;
+      // The station name takes what the mode word leaves free; a longer name is cut with an ellipsis
+      const room = w - pad * 3 - String(mode.text).length * f * 0.68, sf = f * 0.85;
+      const maxCh = Math.max(0, Math.floor(room / (sf * 0.58)));
+      let name = String((c && c.station) || "PLC");
+      if (name.length > maxCh) name = maxCh > 1 ? name.slice(0, maxCh - 1).trimEnd() + "…" : "";
+      s += `<text x="${x + w - pad}" y="${y + f * 1.2}" font-size="${sf}" fill="#fff" text-anchor="end">${esc(name)}</text>`;
       const rows = [];
       const cp = (c && c.cpu) || {};
       if (page === 0) {

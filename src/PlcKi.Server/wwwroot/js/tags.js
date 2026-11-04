@@ -8,6 +8,7 @@
   const MAX_ROWS = 300;     // rows drawn (and read live) at once; the search narrows the rest
   let data = null, dataError = null, loading = false;
   let tab = "tables";       // "tables" | "dbs"
+  let tabChosen = false;    // false until the first draw with data picks the starting tab
   let query = "";
   let db = null, dbData = null, dbError = null;   // the data block open on the right
   let shown = [];
@@ -27,7 +28,7 @@
     } catch { /* next time */ }
   }, 1500);
 
-  window.addEventListener("pk:program-changed", () => { data = null; dataError = null; db = null; dbData = null; dbError = null; });
+  window.addEventListener("pk:program-changed", () => { data = null; dataError = null; tabChosen = false; db = null; dbData = null; dbError = null; });
 
   async function load() {
     if (data || loading) return;
@@ -84,14 +85,15 @@
         ${take.map((t) => `<tr><td class="mono">${esc(t.name)}</td><td class="mono">${esc(t.address || "")}</td><td class="mono muted">${esc(t.datatype)}</td><td>${now(t)}</td><td class="muted">${esc(t.comment || "")}</td></tr>`).join("")}
         </table></div>`;
     }).join("");
-    return (html || `<div class="card"><p class="muted" style="margin:0">No tag matches “${esc(query)}”.</p></div>`)
+    const none = query.trim() ? `No tag matches “${esc(query)}”.` : "This program export has no PLC tag tables.";
+    return (html || `<div class="card"><p class="muted" style="margin:0">${none}</p></div>`)
       + (more ? `<p class="faint small">${more} more tag${more > 1 ? "s" : ""} not shown. Search to narrow the list.</p>` : "");
   }
 
   function dbsHtml(q) {
     const list = data.dbs.filter((d) => match(q, d.name, d.title, d.instanceOf, d.number));
     const nav = list.map((d) => `<a href="#/tags/db/${encodeURIComponent(d.name)}" class="${d.name === db ? "on" : ""}">${esc(d.name)}<span class="tag">${d.number != null ? "DB" + d.number : ""}</span></a>`).join("")
-      || `<p class="faint small" style="padding:8px 10px">No data block matches.</p>`;
+      || `<p class="faint small" style="padding:8px 10px">${q ? "No data block matches." : "This program export has no data blocks."}</p>`;
     let right;
     shown = [];
     if (!db) right = `<div class="card"><p class="muted" style="margin:0">Pick a data block on the left to see its values live.</p></div>`;
@@ -171,6 +173,8 @@
       if (!data) return head + PK.sec("", `<p class="muted">Loading…</p>`);
       const q = query.trim().toLowerCase();
       const nTags = data.tables.reduce((n, t) => n + t.tags.length, 0);
+      // First time the data is shown: open the first tab that has something in it
+      if (!tabChosen) { tabChosen = true; if (!nTags && data.dbs.length) tab = "dbs"; }
       const status = W.connection && W.connection !== "connected"
         ? `<div class="notice gold" style="margin-bottom:14px">${icon("warn")}<div>${W.connection === "snapshot" ? "PLC-Ki runs on test values, so tags outside the machine model show no value." : "PLC-Ki is not reading the PLC right now, so there are no live values."}</div></div>` : "";
       const bar = `<div class="row" style="gap:12px;margin-bottom:16px;flex-wrap:wrap">
@@ -183,7 +187,7 @@
     },
     after(page) {
       if (window.PKWrite) PKWrite.wire(page, current);
-      page.querySelectorAll("[data-tab]").forEach((b) => b.onclick = () => { tab = b.dataset.tab; query = ""; PK.draw(); });
+      page.querySelectorAll("[data-tab]").forEach((b) => b.onclick = () => { tabChosen = true; tab = b.dataset.tab; query = ""; PK.draw(); });
       const q = page.querySelector("#tag-q");
       if (q) q.oninput = () => { query = q.value; PK.draw(); };
       const vq = page.querySelector("#val-q");

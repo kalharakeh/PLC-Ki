@@ -236,6 +236,8 @@ details.more[open] > summary::before { transform: rotate(90deg); }
 .empty .big-ico svg { width: 32px; height: 32px; }
 
 /* icons: plain line icons in the text colour, no coloured tiles */
+/* Default size for every icon from PK.icon(): one text line. Zero specificity, so any container rule below wins. */
+:where(svg.pk-i) { width: 1em; height: 1em; vertical-align: -0.15em; flex: none; }
 .ico { display: inline-grid; place-items: center; flex: none; width: 22px; height: 22px; color: var(--muted); }
 .ico svg { width: 20px; height: 20px; }
 
