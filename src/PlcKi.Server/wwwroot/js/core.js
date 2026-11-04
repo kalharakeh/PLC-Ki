@@ -799,7 +799,8 @@ const PK = (() => {
       "Fix it: work down the list and tap each step when done. The ticks are only on this screen.",
       "Where in the machine: the device behind the alarm and the chain Requested › Interlocks › Output › Feedback. The first red link is why it is not working.",
       "Where in the software: from the main cycle (OB1) down to the bit that sets the alarm. Show where it is set opens that network as rungs with live values.",
-      "Ask about this alarm: Claude looks at the live values, the last minutes and the program, and says why it is on and what to check."]],
+      "This alarm before: how often it came, how long it stayed, and the cause and fix technicians noted last time. When you have found the cause, tap Note cause and fix so the next person sees it.",
+      "Ask about this alarm: Claude looks at the live values, the last minutes, the machine memory and the program, and says why it is on and what to check."]],
     plant: ["Plant", "What the machine is doing now. The top shows the step, what it waits for and the key values; the tabs below hold the rest.", [
       "Overview: Needs attention lists active alarms and blocked or faulted devices first; tap one to go to it. Below it the sequence: the blue step is where it is now, red means halted, ✓ is met, ✗ is missing.",
       "The machine at a glance: every device as a symbol. Green runs, grey is off, a dashed amber edge means the program asks for it but an interlock blocks it, red is a fault. Tap one to open it on Devices.",
@@ -813,6 +814,11 @@ const PK = (() => {
     alarms: ["Alarms", "Every alarm the program can raise, active or not, with its meaning, where it is set, likely causes and the fix.", [
       "Search by number, text or device. Active alarms are at the top.",
       "Click an alarm to open its causes and fix. Red tags are faults (they stop the machine), gold tags are warnings."]],
+    history: ["Alarm history", "The machine memory: every alarm PLC-Ki saw on this machine, with what it was doing then and what the technicians found and did.", [
+      "Happens most: the alarms that came most often in the chosen window, with how long they were on in total. Tap one for its own history.",
+      "What fixed it? After an alarm goes, write down the cause and the fix in one line. The next time it comes, the Active alarm page and Ask show it first: \"last time it was a dirty sensor\".",
+      "Waiting for a note: alarms of the last 12 hours that nobody wrote anything for yet.",
+      "Download for Excel: the log as a file for the maintenance team. The history is kept on this PC in the PLC-Ki data folder and survives restarts."]],
     program: ["Program", "Every block of the PLC program with live values, as rungs or as text.", [
       "Pick a block on the left. At the top, \"Why outputs are off right now\" names each output that is off and the signal that stops it.",
       "Rungs: each network drawn as a rung. Green passes power, grey does not, a dashed ? has no live value. Read from left to right: the amber contact is the first one that stops the output.",
