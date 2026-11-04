@@ -44,7 +44,7 @@ public sealed record MachineStatus(
     List<AlarmStatus> ActiveAlarms, List<ExchangeStatus> Exchange,
     Dictionary<string, string> TagErrors, List<SettingStatus>? Settings = null)
 {
-    /// <summary>The raw values of this read, by tag id, for the live model check (not sent to the pages).</summary>
+    /// <summary>The raw values of this read, by tag id, for machine memory (not sent to the pages).</summary>
     [System.Text.Json.Serialization.JsonIgnore]
     public IReadOnlyDictionary<string, object?>? Raw { get; init; }
 }

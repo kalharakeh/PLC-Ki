@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using PlcKi.Core.Knowledge;
+using PlcKi.Core.Memory;
 using PlcKi.Core.Model;
 using PlcKi.Core.Status;
 
@@ -23,6 +24,7 @@ public sealed class MachineTools
     private readonly MachineModel _model;
     private readonly Dictionary<string, TagDef> _tags;
     private readonly Func<LiveView> _live;
+    private readonly AlarmMemory? _memory;
     private readonly Func<object>? _devices;
 
     public static readonly JsonSerializerOptions Json = new()
@@ -34,8 +36,9 @@ public sealed class MachineTools
     };
 
     /// <param name="devices">Drive and PROFINET diagnostics (the server's view), or null where there is none.</param>
-    public MachineTools(MachineModel model, Func<LiveView> live, Func<object>? devices = null)
+    public MachineTools(MachineModel model, Func<LiveView> live, AlarmMemory? memory = null, Func<object>? devices = null)
     {
+        _memory = memory;
         _devices = devices;
         _model = model;
         _tags = model.Tags.ToDictionary(t => t.Id, StringComparer.Ordinal);
@@ -98,6 +101,17 @@ public sealed class MachineTools
             Props(("id", new { type = "string", description = "Alarm id (e.g. \"A07\") or words from its text" })),
             new[] { "id" }),
 
+        new("get_alarm_history",
+            "The machine memory: every time an alarm was on (kept on disk for months, across restarts), with when it came " +
+            "and went, how long it lasted, the step and failed checks at the time, and the cause and fix the technicians " +
+            "noted. For one alarm: counts (7 and 30 days), average duration, downtime, the noted causes ranked, the step it " +
+            "usually comes in, and the latest occurrences. Without an id: the alarms that happened most in the window. " +
+            "Use it for any active alarm (\"did this happen before, what fixed it?\") and for \"what goes wrong most?\".",
+            Props(
+                ("id", new { type = "string", description = "Alarm id (e.g. \"A07\"); leave out for the most frequent alarms" }),
+                ("days", new { type = "number", description = "How far back, default 30" })),
+            Array.Empty<string>()),
+
         new("search_program",
             "Search everything in the machine model (tags, steps, conditions, devices, interlocks, alarms, data exchange) " +
             "for a word or tag. Use it to find where something is used, e.g. which steps or interlocks depend on a sensor.",
@@ -140,6 +154,7 @@ public sealed class MachineTools
                 "get_sequence" => Sequence(Str(input, "id")),
                 "get_equipment" => Equipment(Str(input, "id") ?? ""),
                 "get_alarm" => Alarm(Str(input, "id") ?? ""),
+                "get_alarm_history" => AlarmHistory(Str(input, "id"), Num(input, "days") ?? 30),
                 "search_program" => Search(Str(input, "query") ?? ""),
                 "get_device_diagnostics" => _devices != null ? _devices() : new { note = "No device diagnostics here: PLC-Ki reads them only from a live PLC connection." },
                 "lookup_siemens_diagnostic" => SiemensLookup(Str(input, "query") ?? "", Str(input, "category")),
@@ -350,6 +365,60 @@ public sealed class MachineTools
             alarmTag = TagRef(a.Tag),
             activeNow = raw is bool b ? b : (bool?)null,
             readError = v.Snapshot?.Errors.GetValueOrDefault(a.Tag),
+            machineMemory = _memory?.Summary(a.Id, v.Now).Insight,
+        };
+    }
+
+    private object AlarmHistory(string? id, double days)
+    {
+        if (_memory == null) return new { error = "The machine memory is not available here." };
+        var now = _live().Now;
+        days = Math.Clamp(days, 1, 3650);
+        var from = now.AddDays(-days);
+        static object Occ(AlarmOccurrence o) => new
+        {
+            o.AlarmId,
+            came = o.Came.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss"),
+            went = o.Went?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss"),
+            stillOn = o.Went == null ? true : (bool?)null,
+            duration = o.Duration is { } d ? AlarmMemory.Span(d) : null,
+            note = o.AtStart ? "already on when PLC-Ki started watching" : o.EndUnknown ? "went while PLC-Ki was not watching" : null,
+            repeats = o.Repeats > 0 ? o.Repeats : (int?)null,
+            steps = o.Steps.Count > 0 ? o.Steps : null,
+            failedChecks = o.Checks.Count > 0 ? o.Checks : null,
+            devices = o.Devices.Count > 0 ? o.Devices : null,
+            alsoActive = o.AlsoActive.Count > 0 ? o.AlsoActive : null,
+            technicianNote = o.Note is { } n ? new { n.Cause, n.Fix, n.Text, by = n.By, at = n.At.ToLocalTime().ToString("yyyy-MM-dd HH:mm") } : null,
+        };
+
+        if (string.IsNullOrWhiteSpace(id))
+        {
+            var top = _memory.Top(from, now, 15);
+            return new
+            {
+                window = $"last {days:0.#} days",
+                recorded = _memory.Count,
+                mostFrequent = top.Select(r => new { r.AlarmId, r.Text, r.Severity, r.Count, downtime = AlarmMemory.Span(r.Downtime), last = r.Last.ToLocalTime().ToString("yyyy-MM-dd HH:mm"), r.Noted, r.TopCause }),
+                note = top.Count == 0 ? "No alarm was recorded in this window." : null,
+            };
+        }
+        var a = _model.Alarms.FirstOrDefault(x => Same(x.Id, id)) ?? _model.Alarms.FirstOrDefault(x => Matches(id, x.Id, x.Text, x.Tag));
+        var alarmId = a?.Id ?? id.Trim();
+        var h = _memory.Summary(alarmId, now);
+        return new
+        {
+            alarm = alarmId,
+            text = a?.Text,
+            insight = h.Insight,
+            total = h.Total,
+            last7Days = h.Last7Days,
+            last30Days = h.Last30Days,
+            firstSeen = h.FirstSeen?.ToLocalTime().ToString("yyyy-MM-dd HH:mm"),
+            averageDuration = h.AverageDuration is { } ad ? AlarmMemory.Span(ad) : null,
+            downtime30Days = AlarmMemory.Span(h.Downtime30Days),
+            notedCauses = h.Causes.Select(c => new { c.Cause, c.Count, c.LastFix, last = c.Last.ToLocalTime().ToString("yyyy-MM-dd") }),
+            usualStep = h.UsualStep,
+            occurrences = _memory.Occurrences(from, now, alarmId, 10).Select(Occ),
         };
     }
 

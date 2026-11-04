@@ -236,6 +236,9 @@ public sealed class AskService
         {
             sb.AppendLine($"PLC link: {st.Connection.State}" + (st.Connection.Error is { Length: > 0 } e ? $" ({e})" : ""));
             foreach (var line in st.Summary) sb.AppendLine(line);
+            // What the machine memory knows about the alarms that are on: what fixed them before
+            foreach (var a in st.ActiveAlarms.Take(5))
+                sb.AppendLine($"Machine memory, {a.Id}: {_live.Memory.Summary(a.Id, DateTimeOffset.Now).Insight}");
         }
         sb.AppendLine("</live_summary>");
         sb.AppendLine();

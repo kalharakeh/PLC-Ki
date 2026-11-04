@@ -12,7 +12,9 @@ public class ToolsTests
         var snap = TestData.Snapshot(snapshot);
         var status = TestData.Evaluate(snap);
         history.Add(snap, status);
-        return (new MachineTools(TestData.Model, () => new LiveView(status, snap, history, DateTimeOffset.Now)), history);
+        var memory = new PlcKi.Core.Memory.AlarmMemory(null);
+        memory.Observe(status);
+        return (new MachineTools(TestData.Model, () => new LiveView(status, snap, history, DateTimeOffset.Now), memory), history);
     }
 
     private static JsonElement Call(MachineTools tools, string name, object? input = null) =>
@@ -31,6 +33,7 @@ public class ToolsTests
             ["get_sequence"] = new { },
             ["get_equipment"] = new { id = "M201" },
             ["get_alarm"] = new { id = "A02" },
+            ["get_alarm_history"] = new { id = "A02" },
             ["search_program"] = new { query = "Level" },
             ["lookup_siemens_diagnostic"] = new { query = "IO device failure" },
             ["get_device_diagnostics"] = new { },
