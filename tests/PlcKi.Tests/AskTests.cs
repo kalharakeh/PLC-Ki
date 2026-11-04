@@ -49,7 +49,7 @@ public class AskTests
     private static (AskService Ask, FakeApi Api) Make(params string[] responses)
     {
         var history = new MachineHistory();
-        var live = new LiveState(history);
+        var live = new LiveState(history, new LiveModelCheck(TestData.Model));
         var snap = TestData.Snapshot("step10-xv101-not-open");
         live.Publish(snap, TestData.Evaluate(snap));
         var tools = new MachineTools(TestData.Model, () => new LiveView(live.Status, live.Snapshot, history, DateTimeOffset.Now));
@@ -153,7 +153,7 @@ public class AskTests
     {
         if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY"))) return;
         var history = new MachineHistory();
-        var live = new LiveState(history);
+        var live = new LiveState(history, new LiveModelCheck(TestData.Model));
         var tools = new MachineTools(TestData.Model, () => new LiveView(null, null, history, DateTimeOffset.Now));
         var ask = new AskService(new AskOptions(), tools, live, NullLogger<AskService>.Instance);
         var (enabled, reason) = ask.Availability();

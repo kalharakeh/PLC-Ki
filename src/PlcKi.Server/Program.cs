@@ -114,6 +114,9 @@ static async Task<int> RunAppAsync(string[] appArgs, bool probe, JobService jobs
     builder.Services.AddSingleton(sp => new PlcKi.Server.Hardware.HardwareService(opt, sp.GetRequiredService<ProgramService>(), Resolve));
     builder.Services.AddSingleton(new StatusEngine(model));
     builder.Services.AddSingleton(new MachineHistory(TimeSpan.FromMinutes(Math.Clamp(opt.HistoryMinutes, 1, 240))));
+    builder.Services.AddSingleton(new LiveModelCheck(model));
+    builder.Services.AddSingleton(new ModelFile(Resolve(opt.Model)));
+    builder.Services.AddSingleton<ModelFixService>();
     builder.Services.AddSingleton<LiveState>();
     builder.Services.AddSingleton<WatchList>();
     builder.Services.AddSingleton(opt.Ask);
@@ -181,6 +184,9 @@ static async Task<int> RunAppAsync(string[] appArgs, bool probe, JobService jobs
             .Select(e => new { time = e.Time, kind = e.Kind, text = e.Text });
         return Results.Ok(list);
     });
+
+    // How well the model fits the live machine: what the machine did that the model does not explain (read-only)
+    app.MapGet("/api/model-check", (LiveModelCheck check) => Results.Ok(check.Report()));
 
     // Values over time for the charts, from the same in-memory history (read-only). tags= is a comma list of tag ids.
     app.MapGet("/api/trend", (MachineHistory history, MachineModel m, double? minutes, string? tags) =>
@@ -254,6 +260,23 @@ static async Task<int> RunAppAsync(string[] appArgs, bool probe, JobService jobs
 
     app.MapGet("/api/program/search", (string? q, ProgramService p) => Results.Ok(p.Search(q ?? "")));
 
+    // Correct one model entry (Setup > Program > model check): read it, let Ki propose a fix, save it. Admins only.
+    app.MapGet("/api/admin/model/entry", (string? target, ModelFixService fix) => ModelFixCall(() => fix.Get(target)));
+    app.MapPost("/api/admin/model/entry/ask", async (ModelEntryRequest req, ModelFixService fix, CancellationToken ct) =>
+    {
+        try { return Results.Ok(await fix.AskAsync(req, ct)); }
+        catch (ModelFixException ex) { return Results.Json(new { error = ex.Message }, statusCode: ex.Status); }
+    });
+    app.MapPost("/api/admin/model/entry", (ModelEntryRequest req, ModelFixService fix, LiveModelCheck check) => ModelFixCall(() =>
+    {
+        var r = fix.Save(req.Target, req.Json, req.NewTags is { Length: > 2 } nt ? System.Text.Json.Nodes.JsonNode.Parse(nt) as System.Text.Json.Nodes.JsonArray : null);
+        check.Reset();
+        return r;
+    }));
+    // "Make a simulator" on the Block generator page: the request, made from the model and the program (nothing runs yet)
+    app.MapGet("/api/admin/generator/simulator", (MachineModel m, ProgramService p) => Results.Ok(SimulatorRequest.Build(m, p.Loaded.Plc)));
+    app.MapPost("/api/admin/model/check/reset", (LiveModelCheck check) => { check.Reset(); return Results.NoContent(); });
+
     app.MapPlant();     // /api/auth/... and /api/admin/... (settings, users)
     app.MapSetup();     // /api/admin/... jobs, TIA connection, program import, block generator
     app.MapLink();      // /link/... for PLC-Ki Link on the laptop, /api/admin/link for the Connections page
@@ -280,6 +303,12 @@ static async Task<int> RunAppAsync(string[] appArgs, bool probe, JobService jobs
 
     await app.RunAsync();
     return 0;
+}
+
+static IResult ModelFixCall(Func<object> f)
+{
+    try { return Results.Ok(f()); }
+    catch (ModelFixException ex) { return Results.Json(new { error = ex.Message }, statusCode: ex.Status); }
 }
 
 /// <summary>POST /api/watch: the symbols a page shows, with their model type (Bool, Int, DInt, Real, Time) when known.</summary>

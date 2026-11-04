@@ -609,7 +609,7 @@ const PKSetup = (() => {
           <div class="k"><b>${state.model ? state.model.alarms.length : "–"}</b><span>alarms explained</span></div>
           <div class="k"><b>${state.model ? state.model.equipment.length : "–"}</b><span>devices</span></div>
           <div class="k"><b style="font-size:16px;font-weight:600;word-break:break-all">${esc((cur.export || "none").split(/[\\/]/).pop())}</b><span>program file</span></div></div>`)
-      + PK.sec("alt", `${refreshHtml()}<div class="steps col">
+      + PK.sec("alt", `${PKModel.html()}${refreshHtml()}<div class="steps col">
         ${step(1, "Choose the program", "A TIA archive (.zap20), or a program export (.zip) made earlier.", `
           <div class="dropzone" id="drop">${icon("import", "")}<div style="font-weight:600;margin-top:6px">Drop the file here, or click to choose it</div>
             <input type="file" id="file" accept=".zap20,.zap19,.zap18,.zap17,.zap16,.zip" class="hidden"></div>
@@ -634,14 +634,16 @@ const PKSetup = (() => {
     async mount() {
       await refreshFiles().catch((e) => toast(e.message, "error"));
       loadRefresh();
+      PKModel.start();
       const run = (state.jobs || []).find((j) => j.state === "running" && ["export", "import", "refresh"].includes(j.kind));
       if (run && !imp.job) startJob(run);
       PK.draw();
     },
-    leave() { if (imp.unfollow) { imp.unfollow(); imp.unfollow = null; } },
+    leave() { PKModel.stop(); if (imp.unfollow) { imp.unfollow(); imp.unfollow = null; } },
     render() { return imp.files ? programHtml() : PK.hero({ title: "Loading…" }); },
     after(page) {
       bindRestart(page);
+      PKModel.bind(page);
       bindJob(page);
       const drop = page.querySelector("#drop"), file = page.querySelector("#file");
       drop.onclick = () => file.click();

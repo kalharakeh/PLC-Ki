@@ -252,6 +252,7 @@
         </button></li>`).join("");
     return `<nav class="gen-list" aria-label="Packages">
       <button type="button" class="gen-new ${g.open ? "" : "on"}" data-new aria-pressed="${!g.open}">${icon("plus")}<span>New blocks</span></button>
+      <button type="button" class="gen-new" data-sim title="Fills in a request for a simulator made from this machine's model, so the program runs in PLCSIM by itself">${icon("vm")}<span>Machine simulator</span></button>
       <div class="gen-list-h">Made before</div>
       <ul>${items}</ul>
     </nav>`;
@@ -409,6 +410,18 @@
       page.querySelectorAll("[data-open]").forEach((b) => b.onclick = () => { read(); openPackage(b.dataset.open); });
       const nw = page.querySelector("[data-new]");
       if (nw) nw.onclick = () => { read(); newPackage(); };
+      const sim = page.querySelector("[data-sim]");
+      if (sim) sim.onclick = async () => {
+        read();
+        try {
+          const r = await api("GET", "/api/admin/generator/simulator");
+          newPackage();
+          Object.assign(f, { name: r.name, request: r.request, edit: r.edit || "", useContext: true, download: "plcsim", watch: 60 });
+          PK.draw();
+          toast(r.note);
+          setTimeout(() => { const el = document.querySelector("#g-request"); if (el) { el.rows = 14; el.focus(); } }, 0);
+        } catch (e) { toast(e.message, "error"); }
+      };
       page.querySelectorAll("[data-tab]").forEach((b) => b.onclick = () => { read(); g.tab = b.dataset.tab; PK.draw(); });
       const req = v("request"), sug = page.querySelector("[data-suggest]"), nm = v("name");
       if (req && sug) PK.on(req, "input", () => { const n = nameFrom(req.value); sug.textContent = n; if (nm) nm.placeholder = n; });

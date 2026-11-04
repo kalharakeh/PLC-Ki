@@ -24,6 +24,8 @@ public sealed class MachineModel
     public List<EquipmentDef> Equipment { get; set; } = new();
     public List<AlarmDef> Alarms { get; set; } = new();
     public List<ExchangeDef> Exchange { get; set; } = new();
+    /// <summary>Values an operator or engineer sets (HMI parameters, recipe limits) that the machine needs to run.</summary>
+    public List<SettingDef> Settings { get; set; } = new();
 
     public static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -111,6 +113,13 @@ public sealed class MachineModel
         {
             CheckTag(a.Tag, $"alarm {a.Id}");
             foreach (var t in new[] { a.Text, a.Condition }.Concat(a.Causes).Concat(a.Fix)) CheckText(t, $"alarm {a.Id}");
+            foreach (var c in a.Checks) { CheckExpr(c.Expr, $"alarm {a.Id} check"); CheckText(c.Text, $"alarm {a.Id} check"); }
+        }
+        foreach (var st in Settings)
+        {
+            CheckTag(st.Tag, "setting");
+            CheckExpr(st.Valid, $"setting {st.Tag}");
+            CheckText(st.Problem, $"setting {st.Tag}");
         }
         foreach (var x in Exchange) CheckTag(x.Tag, "exchange");
 
@@ -219,6 +228,21 @@ public sealed class AlarmDef
     public string? Condition { get; set; }
     public List<string> Causes { get; set; } = new();
     public List<string> Fix { get; set; } = new();
+    /// <summary>The comparisons behind the alarm, each written so that "met" means fine (leak rate inside the window).
+    /// The alarm page shows them with live values, so the one that failed stands out.</summary>
+    public List<CondDef> Checks { get; set; } = new();
+}
+
+public sealed class SettingDef
+{
+    /// <summary>Tag id of the value (usually a retained HMI or recipe value).</summary>
+    public string Tag { get; set; } = "";
+    /// <summary>What it is for, in plain words.</summary>
+    public string? Text { get; set; }
+    /// <summary>Expression that is TRUE when the value lets the machine work, e.g. "CalTolerance > 0".</summary>
+    public string? Valid { get; set; }
+    /// <summary>What goes wrong when Valid is FALSE, e.g. "The calibration check can never pass".</summary>
+    public string? Problem { get; set; }
 }
 
 public sealed class ExchangeDef
