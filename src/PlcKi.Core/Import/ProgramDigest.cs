@@ -12,18 +12,21 @@ public static class ProgramDigest
     {
         var sb = new StringBuilder();
         sb.AppendLine($"Project: {export.Project}" + (export.Archive != null ? $" (archive {export.Archive})" : ""));
-        sb.AppendLine($"PLC: {plc.Name}" + (plc.Cpu != null ? $", {plc.Cpu}" : "") + (plc.IpAddresses.Count > 0 ? $", IP {string.Join(" / ", plc.IpAddresses)}" : ""));
+        sb.AppendLine($"PLC: {plc.Name}" + (plc.Cpu != null ? $", {plc.Cpu}" : "") + (plc.IpAddresses.Count > 0 ? $", IP {string.Join(" / ", plc.IpAddresses)}" : "")
+                      + (plc.AmsNetId != null ? $", AMS Net ID {plc.AmsNetId}" : ""));
+        sb.AppendLine($"Brand: {PlcBrands.Describe(plc.Brand)}");
+        if (BrandNotes(plc.Brand) is { } notes) sb.AppendLine(notes);
         var problems = export.Problems.Concat(plc.Problems).ToList();
         if (problems.Count > 0) sb.AppendLine("Export problems: " + string.Join("; ", problems));
         sb.AppendLine();
 
         sb.AppendLine("## Call structure");
-        foreach (var ob in plc.Blocks.Where(b => b.Kind == "OB").OrderBy(b => b.Number))
+        foreach (var ob in plc.Blocks.Where(b => b.Kind is "OB" or "Task").OrderBy(b => b.Number).ThenBy(b => b.Name, StringComparer.Ordinal))
             WriteCalls(sb, plc, ob, "", 0, new HashSet<string>());
         sb.AppendLine();
 
         sb.AppendLine("## Blocks");
-        var order = new[] { "OB", "FB", "FC", "GlobalDB", "InstanceDB", "ArrayDB", "UDT" };
+        var order = new[] { "OB", "Task", "PRG", "FB", "FC", "GlobalDB", "GVL", "InstanceDB", "ArrayDB", "UDT", "ENUM" };
         foreach (var b in plc.Blocks.Concat(plc.Types).OrderBy(b => Array.IndexOf(order, b.Kind)).ThenBy(b => b.Name, StringComparer.Ordinal))
             WriteBlock(sb, b);
 
@@ -135,7 +138,7 @@ public static class ProgramDigest
             }
             return score;
         }
-        var ranked = plc.Blocks.Where(b => b.Kind is "OB" or "FB" or "FC" or "GlobalDB")
+        var ranked = plc.Blocks.Where(b => b.Kind is "OB" or "FB" or "FC" or "GlobalDB" or "PRG" or "GVL")
             .Select(b => (Block: b, Score: Score(b))).Where(x => x.Score > 0).OrderByDescending(x => x.Score).ToList();
         foreach (var (b, _) in ranked)
         {
@@ -158,7 +161,7 @@ public static class ProgramDigest
         var calls = b.Calls.ToList();
         // Multi-instances declared in the interface are calls too, also when the call itself is in LAD/GRAPH
         foreach (var m in b.Interface.Where(m => m.Section is "Static" && m.UserType != null && plc.Block(m.UserType!)?.Kind == "FB"))
-            if (!calls.Any(c => c.Instance == "#" + m.Name))
+            if (!calls.Any(c => c.Instance == "#" + m.Name || c.Instance == m.Name))
                 calls.Add(new ExportCall("FB", m.UserType!, "#" + m.Name));
         foreach (var c in calls.DistinctBy(c => (c.Block, c.Instance)))
         {
@@ -177,7 +180,7 @@ public static class ProgramDigest
         sb.Append($"### {b.Kind} {b.Name}");
         if (b.Number != null) sb.Append($" (no. {b.Number})");
         if (b.Language != null && b.Kind is not ("GlobalDB" or "InstanceDB")) sb.Append($", {b.Language}");
-        if (b.InstanceOf != null) sb.Append($", instance of {b.InstanceOf}");
+        if (b.InstanceOf != null) sb.Append(b.Kind == "InstanceDB" ? $", instance of {b.InstanceOf}" : $", extends {b.InstanceOf}");
         sb.AppendLine();
         if (b.Title != null) sb.AppendLine($"Title: {b.Title}");
         if (b.Comment != null) sb.AppendLine($"Comment: {b.Comment}");
@@ -190,11 +193,11 @@ public static class ProgramDigest
         }
         if (b.Interface.Count > 0)
         {
-            sb.AppendLine(b.Kind is "GlobalDB" or "UDT" ? "Members:" : "Interface:");
-            foreach (var m in b.Interface) WriteMember(sb, m, "  ", b.Kind is not ("GlobalDB" or "UDT"));
+            sb.AppendLine(b.Kind is "GlobalDB" or "UDT" or "GVL" ? "Members:" : b.Kind == "ENUM" ? "Values:" : "Interface:");
+            foreach (var m in b.Interface) WriteMember(sb, m, "  ", b.Kind is not ("GlobalDB" or "UDT" or "GVL" or "ENUM"));
         }
         var langs = b.NetworkLanguages.Distinct().ToList();
-        if (b.SclSource != null)
+        if (!string.IsNullOrWhiteSpace(b.SclSource))
         {
             sb.AppendLine("Source:");
             sb.AppendLine(Body(b.SclSource));
@@ -204,14 +207,14 @@ public static class ProgramDigest
             sb.AppendLine($"Logic (decoded from {string.Join(", ", langs)} networks into SCL-like text):");
             sb.AppendLine(b.DecodedLogic.Replace("\r\n", "\n").Trim());
         }
-        else if (langs.Count > 0 && b.Kind is "OB" or "FB" or "FC")
+        else if (langs.Count > 0 && b.Kind is "OB" or "FB" or "FC" or "PRG")
             sb.AppendLine($"Networks: {string.Join(", ", langs)} (logic not included yet; use the interface comments and how the block is called).");
         sb.AppendLine();
     }
 
     private static void WriteMember(StringBuilder sb, ExportMember m, string indent, bool showSection)
     {
-        var line = $"{indent}{(showSection ? m.Section + " " : "")}{m.Name} : {m.Datatype}";
+        var line = $"{indent}{(showSection ? m.Section + " " : "")}{m.Name}" + (m.Address != null ? $" AT {m.Address}" : "") + (m.Datatype.Length > 0 ? $" : {m.Datatype}" : "");
         if (m.StartValue != null) line += $" := {m.StartValue}";
         if (m.Comment != null) line += $" // {m.Comment}";
         sb.AppendLine(line);
@@ -220,6 +223,22 @@ public static class ProgramDigest
         if (m.Members.Count > 0 && m.UserType == null && !m.Datatype.StartsWith("G7_", StringComparison.Ordinal))
             foreach (var c in m.Members) WriteMember(sb, c, indent + "  ", false);
     }
+
+    /// <summary>What Claude needs to know to read a program of this brand; null for Siemens (the import prompt's default).</summary>
+    public static string? BrandNotes(string brand) => brand switch
+    {
+        PlcBrands.Beckhoff => """
+            Notes for this brand:
+            - The program is IEC 61131-3 Structured Text, read it like SCL. Tasks call PROGRAMs; there are no OBs or data blocks.
+              PROGRAM (PRG) variables and global variable lists (GVL) hold the data; function block instances live inside them.
+            - Symbols are TwinCAT ADS paths without quotes: MAIN.fbPump.bRunning, GVL_IO.bStartButton, MAIN.aValves[2].bOpen.
+            - "AT %I*" / "AT %Q*" variables are linked to EtherCAT terminals in the TwinCAT I/O tree: they are the field inputs and outputs.
+            - Only Structured Text is included as source. SFC, LD, FBD and CFC bodies are named by language but not decoded yet:
+              use the interface comments and how the block is called for those.
+            - Enum values are read as their integer number; the enum lists each name with its number.
+            """,
+        _ => null,
+    };
 
     /// <summary>The SCL source without the interface part, which is already listed above.</summary>
     private static string Body(string scl)

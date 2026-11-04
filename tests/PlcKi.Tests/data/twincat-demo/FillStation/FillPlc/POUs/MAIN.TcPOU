@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.12">
+  <POU Name="MAIN" Id="{3a2b3c4d-0000-4000-8000-000000000004}" SpecialFunc="None">
+    <Declaration><![CDATA[PROGRAM MAIN
+VAR
+	eState : E_FillState;          // fill sequence step
+	fLevel : REAL;                 // tank level LT1 in %
+	stRecipe : ST_Recipe;
+	fbInlet : FB_Valve;            // XV1 inlet valve
+	fbDrain : FB_Pump;             // P1 drain pump
+	tonStep : TON;                 // time in step
+	(* "Stop" pressed: wait for Start *)
+	bPaused : BOOL;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[// level from the analog input
+fLevel := F_Scale(nRaw := GVL_IO.nLevelRaw, fMax := 100.0);
+
+IF NOT GVL_IO.bStopButton THEN
+	bPaused := TRUE;
+ELSIF GVL_IO.bStartButton THEN
+	bPaused := FALSE;
+END_IF
+
+CASE eState OF
+	E_FillState.Idle:
+		IF GVL_IO.bStartButton AND NOT GVL_Alarms.bAnyFault THEN
+			eState := E_FillState.Filling;
+		END_IF
+	E_FillState.Filling:
+		IF fLevel >= stRecipe.fLevelSetpoint THEN
+			eState := E_FillState.Settling;
+		END_IF
+	E_FillState.Settling:
+		IF tonStep.Q THEN
+			eState := E_FillState.Draining;
+		END_IF
+	E_FillState.Draining:
+		IF fLevel < 2.0 THEN
+			eState := E_FillState.Idle;
+		END_IF
+END_CASE
+tonStep(IN := eState = E_FillState.Settling, PT := stRecipe.tSettle);
+
+fbInlet(bOpenReq := eState = E_FillState.Filling AND NOT bPaused,
+        bPermit := fLevel < GVL_IO.cMaxLevel,
+        bOpenFb := GVL_IO.bInletOpen);
+GVL_IO.bInletValve := fbInlet.bOpenCmd;
+
+fbDrain(bRunReq := eState = E_FillState.Draining);
+GVL_IO.bPumpRun := fbDrain.bRunCmd;
+
+GVL_Alarms.aAlarm[1] := fbInlet.bFaultNotOpen;
+GVL_Alarms.bAnyFault := GVL_Alarms.aAlarm[1] OR GVL_Alarms.aAlarm[2] OR GVL_Alarms.aAlarm[3];]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

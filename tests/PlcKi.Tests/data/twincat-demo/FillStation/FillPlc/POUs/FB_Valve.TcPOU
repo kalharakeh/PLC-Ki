@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.12">
+  <POU Name="FB_Valve" Id="{3a2b3c4d-0000-4000-8000-000000000001}" SpecialFunc="None">
+    <Declaration><![CDATA[// On/off valve with open feedback and travel monitoring
+FUNCTION_BLOCK FB_Valve
+VAR_INPUT
+	bOpenReq : BOOL;          // program wants the valve open
+	bPermit : BOOL;           // interlocks OK
+	bOpenFb : BOOL;           // open limit switch
+	tTravel : TIME := T#10S;  // max travel time
+END_VAR
+VAR_OUTPUT
+	bOpenCmd : BOOL;          // solenoid output
+	bFaultNotOpen : BOOL;     // did not open within tTravel
+END_VAR
+VAR
+	tonTravel : TON;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[bOpenCmd := bOpenReq AND bPermit;
+tonTravel(IN := bOpenCmd AND NOT bOpenFb, PT := tTravel);
+IF tonTravel.Q THEN
+	bFaultNotOpen := TRUE;
+END_IF]]></ST>
+    </Implementation>
+    <Method Name="Reset" Id="{3a2b3c4d-0000-4000-8000-0000000000a1}">
+      <Declaration><![CDATA[METHOD Reset : BOOL
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[bFaultNotOpen := FALSE;]]></ST>
+      </Implementation>
+    </Method>
+  </POU>
+</TcPlcObject>

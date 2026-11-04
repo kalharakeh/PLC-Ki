@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <Name>FillPlc</Name>
+    <ProgramVersion>3.1.4026.12</ProgramVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="DUTs\E_FillState.TcDUT"><SubType>Code</SubType></Compile>
+    <Compile Include="DUTs\ST_Recipe.TcDUT"><SubType>Code</SubType></Compile>
+    <Compile Include="GVLs\GVL_IO.TcGVL"><SubType>Code</SubType></Compile>
+    <Compile Include="GVLs\GVL_Alarms.TcGVL"><SubType>Code</SubType></Compile>
+    <Compile Include="POUs\FB_Valve.TcPOU"><SubType>Code</SubType></Compile>
+    <Compile Include="POUs\FB_Device.TcPOU"><SubType>Code</SubType></Compile>
+    <Compile Include="POUs\FB_Pump.TcPOU"><SubType>Code</SubType></Compile>
+    <Compile Include="POUs\F_Scale.TcPOU"><SubType>Code</SubType></Compile>
+    <Compile Include="POUs\MAIN.TcPOU"><SubType>Code</SubType></Compile>
+    <Compile Include="PlcTask.TcTTO"><SubType>Code</SubType></Compile>
+  </ItemGroup>
+</Project>

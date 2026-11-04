@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.12">
+  <POU Name="FB_Pump" Id="{3a2b3c4d-0000-4000-8000-000000000002}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_Pump EXTENDS FB_Device
+VAR_INPUT
+	bRunReq : BOOL;   // program wants the pump running
+END_VAR
+VAR_OUTPUT
+	bRunCmd : BOOL;   // contactor output
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[bRunCmd := bRunReq AND NOT bFault;]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>

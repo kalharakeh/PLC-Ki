@@ -15,10 +15,14 @@ public sealed class ExportMember
     public string Datatype { get; init; } = "";
     public string? Comment { get; set; }
     public string? StartValue { get; init; }
+    /// <summary>Fixed I/O address when the program gives one (IEC "AT %IX0.0" / "AT %I*").</summary>
+    public string? Address { get; init; }
+    /// <summary>Set by readers whose type names carry no quotes (IEC): the block or type this member is an instance of.</summary>
+    public string? TypeRef { get; set; }
     public List<ExportMember> Members { get; } = new();
 
     /// <summary>The block or data type name if the type is a user type ("FB_Valve" -> FB_Valve), else null.</summary>
-    public string? UserType => Datatype.Length > 2 && Datatype[0] == '"' && Datatype[^1] == '"' ? Datatype[1..^1] : null;
+    public string? UserType => TypeRef ?? (Datatype.Length > 2 && Datatype[0] == '"' && Datatype[^1] == '"' ? Datatype[1..^1] : null);
 }
 
 /// <summary>A call found in a block's code: which block, and which instance (for FBs).</summary>
@@ -28,7 +32,10 @@ public sealed record ExportCall(string BlockType, string Block, string? Instance
 public sealed class ExportBlock
 {
     public string Name { get; init; } = "";
-    /// <summary>OB, FB, FC, GlobalDB, InstanceDB, ArrayDB, UDT.</summary>
+    /// <summary>
+    /// Siemens: OB, FB, FC, GlobalDB, InstanceDB, ArrayDB, UDT.
+    /// IEC 61131-3 (Beckhoff, CODESYS): Task, PRG (program), FB, FC (function), GVL (global variable list), UDT (struct), ENUM.
+    /// </summary>
     public string Kind { get; init; } = "";
     public int? Number { get; init; }
     public string? Language { get; init; }
@@ -64,9 +71,13 @@ public sealed record ExportPlcTag(string Name, string Datatype, string? Address,
 public sealed class ExportPlc
 {
     public string Name { get; init; } = "";
+    /// <summary>Which brand's program this is (<see cref="PlcBrands"/>): decides how symbols are written and read live.</summary>
+    public string Brand { get; init; } = PlcBrands.Siemens;
     public string? Device { get; init; }
     public string? Cpu { get; init; }
     public List<string> IpAddresses { get; init; } = new();
+    /// <summary>Beckhoff: the AMS Net ID of the target the project was built for (live data goes through ADS to it).</summary>
+    public string? AmsNetId { get; init; }
     public List<ExportBlock> Blocks { get; } = new();
     public List<ExportBlock> Types { get; } = new();
     public List<ExportPlcTag> PlcTags { get; } = new();
@@ -85,10 +96,10 @@ public sealed class ExportPlc
 /// </summary>
 public sealed class ProgramExport
 {
-    public string Project { get; private set; } = "";
-    public string? Archive { get; private set; }
+    public string Project { get; internal set; } = "";
+    public string? Archive { get; internal set; }
     /// <summary>When TIA wrote the export (UTC), from manifest.json.</summary>
-    public DateTimeOffset? ExportedAt { get; private set; }
+    public DateTimeOffset? ExportedAt { get; internal set; }
     public List<ExportPlc> Plcs { get; } = new();
     /// <summary>The HMI panels of the project (screens, operator fields, HMI tags, text lists), when the export has them.</summary>
     public List<HmiDevice> Hmis { get; } = new();
@@ -96,10 +107,14 @@ public sealed class ProgramExport
 
     private static readonly XNamespace Ns = "http://www.siemens.com/automation/Openness/SW/Interface/v5";
 
-    /// <summary>Loads an export folder, a zip of it, or a folder that contains the export folder.</summary>
+    /// <summary>
+    /// Loads a program: a TiaImporter export (folder, zip of it, or a folder that contains it) or a
+    /// Beckhoff TwinCAT 3 project (folder, zip or .tnzip archive). <see cref="ProgramReaders"/> picks the reader.
+    /// </summary>
     public static ProgramExport Load(string path)
     {
-        if (File.Exists(path) && path.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+        if (File.Exists(path) && (path.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".tnzip", StringComparison.OrdinalIgnoreCase)
+                                  || path.EndsWith(".zip.part", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".tnzip.part", StringComparison.OrdinalIgnoreCase)))
         {
             var dir = Path.Combine(Path.GetTempPath(), "plcki-export-" + Guid.NewGuid().ToString("N")[..8]);
             ZipFile.ExtractToDirectory(path, dir);
@@ -107,6 +122,15 @@ public sealed class ProgramExport
             finally { try { Directory.Delete(dir, true); } catch { /* temp folder, ignore */ } }
         }
         if (!Directory.Exists(path)) throw new FileNotFoundException($"Export not found: {path}");
+        return ProgramReaders.Read(path);
+    }
+
+    /// <summary>The Siemens reader: a folder that holds (somewhere below it) the manifest.json TiaImporter wrote.</summary>
+    internal static bool IsTiaExport(string path) =>
+        Directory.EnumerateFiles(path, "manifest.json", SearchOption.AllDirectories).Any();
+
+    internal static ProgramExport LoadTiaExport(string path)
+    {
         var manifest = Directory.GetFiles(path, "manifest.json", SearchOption.AllDirectories).OrderBy(p => p.Length).FirstOrDefault()
                        ?? throw new FileNotFoundException($"No manifest.json in {path}. Is this a TiaImporter export?");
         return LoadFolder(Path.GetDirectoryName(manifest)!);
@@ -387,6 +411,7 @@ public sealed class ProgramExport
     /// </summary>
     public static List<ExportTag> Tags(ExportPlc plc)
     {
+        if (plc.Brand != PlcBrands.Siemens) return TwinCatProject.Tags(plc);
         var tags = new List<ExportTag>();
         foreach (var b in plc.Blocks.Where(b => b.Kind is "GlobalDB" or "InstanceDB"))
             foreach (var m in b.Interface.Where(m => m.Section is not ("Temp" or "Constant")))

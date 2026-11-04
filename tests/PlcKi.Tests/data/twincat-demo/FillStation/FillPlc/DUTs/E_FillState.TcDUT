@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.12">
+  <DUT Name="E_FillState" Id="{1a2b3c4d-0000-4000-8000-000000000001}">
+    <Declaration><![CDATA[// Steps of the fill sequence
+{attribute 'qualified_only'}
+{attribute 'strict'}
+TYPE E_FillState :
+(
+	Idle := 0,        // waiting for Start
+	Filling := 10,    // inlet valve open
+	Settling := 20,
+	Draining := 30,
+	Fault := 99
+) INT;
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>
