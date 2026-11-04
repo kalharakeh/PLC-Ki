@@ -4,19 +4,27 @@ using System.Reflection.PortableExecutable;
 using Xunit;
 
 /// <summary>
-/// PLC-Ki must never write to a PLC or change its state. The driver package has such functions behind a
-/// WriteEnabled gate, so this test reads the compiled server (without running it) and fails if the app
-/// calls any of them or touches the gate.
+/// PLC-Ki reads the PLC; it never starts, stops or traces it. Changing a value is allowed in one place only:
+/// PlcWriter, which WriteEndpoints calls after its checks (admin, safety program, PLCSIM or a confirmed real PLC).
+/// This test reads the compiled server (without running it) and fails if CPU-control or trace functions are
+/// used anywhere, or if any code other than PlcWriter opens the driver's write gate or calls a write function.
 /// </summary>
 public class ReadOnlyTests
 {
+    /// <summary>Never, anywhere.</summary>
     private static readonly HashSet<string> Forbidden = new(StringComparer.Ordinal)
     {
-        "set_WriteEnabled",
-        "WriteAsync", "WriteValues", "WriteTags", "SetPlcOperatingState",
-        "StartCpuAsync", "StopCpuAsync",
-        "OpenTisTraceAsync", "ActivateTraceAsync", "DeactivateTraceAsync", "DeleteTraceAsync",
+        "SetPlcOperatingState", "StartCpuAsync", "StopCpuAsync",
+        "OpenTisTraceAsync", "ActivateTraceAsync", "DeactivateTraceAsync", "DeleteTraceAsync", "DeleteStoredTraceMeasurementAsync",
     };
+
+    /// <summary>Only from PlcWriter (plus any driver member whose name starts with Write).</summary>
+    private static readonly HashSet<string> WriteOnly = new(StringComparer.Ordinal)
+    {
+        "set_WriteEnabled", "WriteAsync", "WriteValues", "WriteTags",
+    };
+
+    private const string Writer = "PlcKi.Server.Live.PlcWriter";
 
     private static string ServerDll()
     {
@@ -28,11 +36,8 @@ public class ReadOnlyTests
     }
 
     /// <summary>Every method or field the server uses from other assemblies, with the assembly it comes from.</summary>
-    private static List<(string Name, string Assembly)> MemberReferences(string path)
+    private static Dictionary<MemberReferenceHandle, (string Name, string Assembly)> MemberReferences(MetadataReader md)
     {
-        using var stream = File.OpenRead(path);
-        using var pe = new PEReader(stream);
-        var md = pe.GetMetadataReader();
 
         string AssemblyOf(EntityHandle h)
         {
@@ -60,21 +65,84 @@ public class ReadOnlyTests
             }
         }
 
-        return md.MemberReferences.Select(h => md.GetMemberReference(h))
-            .Select(r => (md.GetString(r.Name), AssemblyOf(r.Parent))).Distinct().ToList();
+        return md.MemberReferences.ToDictionary(h => h, h =>
+        {
+            var r = md.GetMemberReference(h);
+            return (md.GetString(r.Name), AssemblyOf(r.Parent));
+        });
+    }
+
+    /// <summary>For every method of the server: its type (outer type for compiler-made nested types) and the members it calls.</summary>
+    private static List<(string Type, string Method, string Member, string Assembly)> Calls(string path)
+    {
+        using var stream = File.OpenRead(path);
+        using var pe = new PEReader(stream);
+        var md = pe.GetMetadataReader();
+        var refs = MemberReferences(md);
+        // IL operand sizes from the runtime's own opcode table
+        var opcodes = typeof(System.Reflection.Emit.OpCodes).GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
+            .Select(f => (System.Reflection.Emit.OpCode)f.GetValue(null)!).ToDictionary(o => (ushort)o.Value, o => o);
+        string Outer(TypeDefinitionHandle h)
+        {
+            var t = md.GetTypeDefinition(h);
+            var outer = t.GetDeclaringType();
+            if (!outer.IsNil) return Outer(outer);
+            var ns = md.GetString(t.Namespace);
+            return (ns.Length > 0 ? ns + "." : "") + md.GetString(t.Name);
+        }
+        var list = new List<(string, string, string, string)>();
+        foreach (var th in md.TypeDefinitions)
+        {
+            var type = Outer(th);
+            foreach (var mh in md.GetTypeDefinition(th).GetMethods())
+            {
+                var m = md.GetMethodDefinition(mh);
+                if (m.RelativeVirtualAddress == 0) continue;
+                var il = pe.GetMethodBody(m.RelativeVirtualAddress).GetILBytes()!;
+                for (int i = 0; i < il.Length;)
+                {
+                    ushort code = il[i];
+                    if (code == 0xFE) { code = (ushort)(0xFE00 | il[i + 1]); i += 2; } else i += 1;
+                    var op = opcodes[code];
+                    int size = op.OperandType switch
+                    {
+                        System.Reflection.Emit.OperandType.InlineNone => 0,
+                        System.Reflection.Emit.OperandType.ShortInlineBrTarget or System.Reflection.Emit.OperandType.ShortInlineI or System.Reflection.Emit.OperandType.ShortInlineVar => 1,
+                        System.Reflection.Emit.OperandType.InlineVar => 2,
+                        System.Reflection.Emit.OperandType.InlineI8 or System.Reflection.Emit.OperandType.InlineR => 8,
+                        System.Reflection.Emit.OperandType.InlineSwitch => 4 + 4 * BitConverter.ToInt32(il, i),
+                        _ => 4,
+                    };
+                    if (op.OperandType is System.Reflection.Emit.OperandType.InlineMethod or System.Reflection.Emit.OperandType.InlineTok or System.Reflection.Emit.OperandType.InlineField)
+                    {
+                        var token = BitConverter.ToInt32(il, i);
+                        var handle = MetadataTokens.EntityHandle(token);
+                        if (handle.Kind == HandleKind.MethodSpecification) handle = md.GetMethodSpecification((MethodSpecificationHandle)handle).Method;
+                        if (handle.Kind == HandleKind.MemberReference && refs.TryGetValue((MemberReferenceHandle)handle, out var r))
+                            list.Add((type, md.GetString(m.Name), r.Name, r.Assembly));
+                    }
+                    i += size;
+                }
+            }
+        }
+        return list;
     }
 
     [Fact]
-    public void Server_calls_no_write_or_cpu_control_functions()
+    public void Server_never_controls_the_cpu_and_writes_only_from_PlcWriter()
     {
         var path = ServerDll();
         Assert.True(File.Exists(path), $"Build the server first: {path}");
-        var refs = MemberReferences(path);
-        var driver = refs.Where(r => r.Assembly.Contains("S7CommPlus", StringComparison.OrdinalIgnoreCase)).ToList();
-        Assert.Contains(driver, r => r.Name == "ReadAsync");   // sanity: we are looking at the right code and assembly
-        // Named write and CPU-control functions are banned from any assembly; from the driver, anything that starts with Write
-        var bad = refs.Where(r => Forbidden.Contains(r.Name)).Concat(driver.Where(r => r.Name.StartsWith("Write", StringComparison.Ordinal)))
-            .Select(r => $"{r.Assembly}: {r.Name}").Distinct().ToList();
-        Assert.Empty(bad);
+        var calls = Calls(path);
+        bool Driver(string asm) => asm.Contains("S7CommPlus", StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(calls, c => Driver(c.Assembly) && c.Member == "ReadAsync");   // sanity: we are looking at the right code and assembly
+        Assert.Contains(calls, c => c.Type == Writer && Driver(c.Assembly) && c.Member == "WriteAsync");   // and the IL scan finds calls
+
+        var cpu = calls.Where(c => Forbidden.Contains(c.Member)).Select(c => $"{c.Type}.{c.Method}: {c.Member}").Distinct().ToList();
+        Assert.Empty(cpu);
+
+        var writes = calls.Where(c => WriteOnly.Contains(c.Member) || (Driver(c.Assembly) && c.Member.StartsWith("Write", StringComparison.Ordinal)))
+            .Where(c => c.Type != Writer).Select(c => $"{c.Type}.{c.Method}: {c.Member} ({c.Assembly})").Distinct().ToList();
+        Assert.Empty(writes);
     }
 }

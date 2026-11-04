@@ -34,7 +34,14 @@ per PLC:
 <out>\<PLC>\Types\...xml       PLC data types
 <out>\<PLC>\Tags\...xml        tag tables
 <out>\<PLC>\SclSource\*.scl    readable source of SCL blocks
+<out>\hardware.json            racks, modules, addresses, channels
+<out>\HMI\<panel>\...          each HMI panel: Tags, Screens, Popups, Templates, TextLists (SimaticML, folders kept)
 ```
+
+The HMI part (WinCC Comfort/Advanced, e.g. TP1200 Comfort) is what PLC-Ki uses for the operator's words: the input
+fields on each screen with the text next to them and the PLC value behind them, the buttons that set PLC bits, and
+the text lists. Siemens Openness gives no access to the alarms of a Comfort/Advanced panel, so those alarm texts
+still come from the PLC program. For WinCC Unified panels the helper also reads the HMI alarms (`unified.json`).
 
 ## The TIA helper for PLC-Ki, without typing commands
 

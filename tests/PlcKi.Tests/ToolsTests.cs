@@ -36,6 +36,7 @@ public class ToolsTests
             ["get_alarm_history"] = new { id = "A02" },
             ["search_program"] = new { query = "Level" },
             ["lookup_siemens_diagnostic"] = new { query = "IO device failure" },
+            ["get_device_diagnostics"] = new { },
             ["lookup_device_fault"] = new { code = "SRVO-062" },
             ["search_documents"] = new { query = "terminal X2:14" },
         };

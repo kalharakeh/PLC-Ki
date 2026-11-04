@@ -26,6 +26,7 @@ public sealed class MachineTools
     private readonly Func<LiveView> _live;
     private readonly AlarmMemory? _memory;
     private readonly DocumentLibrary? _docs;
+    private readonly Func<object>? _devices;
 
     public static readonly JsonSerializerOptions Json = new()
     {
@@ -35,9 +36,11 @@ public sealed class MachineTools
         Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
 
-    public MachineTools(MachineModel model, Func<LiveView> live, AlarmMemory? memory = null, DocumentLibrary? docs = null)
+    /// <param name="devices">Drive and PROFINET diagnostics (the server's view), or null where there is none.</param>
+    public MachineTools(MachineModel model, Func<LiveView> live, AlarmMemory? memory = null, Func<object>? devices = null, DocumentLibrary? docs = null)
     {
         _memory = memory;
+        _devices = devices;
         _model = model;
         _docs = docs;
         _tags = model.Tags.ToDictionary(t => t.Id, StringComparer.Ordinal);
@@ -117,6 +120,15 @@ public sealed class MachineTools
             Props(("query", new { type = "string", description = "Word, tag id or symbol to look for" })),
             new[] { "query" }),
 
+        new("get_device_diagnostics",
+            "Live hardware diagnostics read from the PLC itself (not the machine's own alarms): the CPU's system " +
+            "diagnostics (PROFINET device or station failure, module and channel faults such as wire break or short " +
+            "circuit, maintenance demands, drive faults reported over PROFINET) tied to the station, module and slot " +
+            "where possible, and every drive with its state (running, ready, fault, switching on inhibited), fault and " +
+            "warning numbers (F07900, A07910), status word bits and speed. Use it for questions about a device that is " +
+            "missing or red, a drive that does not run, or what the CPU's ERROR LED is about.",
+            Props(), Array.Empty<string>()),
+
         new("lookup_siemens_diagnostic",
             "General Siemens knowledge (not from this machine's program) about S7-1500/S7-1200 system and diagnostic " +
             "messages: CPU diagnostic buffer events and STOP reasons, error OBs (OB80, OB82, OB83, OB86, OB121, OB122), " +
@@ -166,6 +178,7 @@ public sealed class MachineTools
                 "get_alarm" => Alarm(Str(input, "id") ?? ""),
                 "get_alarm_history" => AlarmHistory(Str(input, "id"), Num(input, "days") ?? 30),
                 "search_program" => Search(Str(input, "query") ?? ""),
+                "get_device_diagnostics" => _devices != null ? _devices() : new { note = "No device diagnostics here: PLC-Ki reads them only from a live PLC connection." },
                 "lookup_siemens_diagnostic" => SiemensLookup(Str(input, "query") ?? "", Str(input, "category")),
                 "lookup_device_fault" => DeviceFault(Str(input, "code") ?? "", Str(input, "device")),
                 "search_documents" => SearchDocuments(Str(input, "query") ?? "", Str(input, "kind")),

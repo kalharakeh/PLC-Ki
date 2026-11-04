@@ -243,6 +243,8 @@ public sealed class SettingDef
     public string? Valid { get; set; }
     /// <summary>What goes wrong when Valid is FALSE, e.g. "The calibration check can never pass".</summary>
     public string? Problem { get; set; }
+    /// <summary>Where the operator changes it on the HMI panel, e.g. "Screen Parameters > Calibration tolerance".</summary>
+    public string? Hmi { get; set; }
 }
 
 public sealed class ExchangeDef

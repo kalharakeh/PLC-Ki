@@ -22,6 +22,8 @@ public static class HardwareEndpoints
     public static WebApplication MapHardware(this WebApplication app)
     {
         app.MapGet("/api/hardware", (HardwareService hw) => Results.Ok(hw.View()));
+        // Drive and PROFINET diagnostics: the CPU's system diagnostics per station/module, and each drive's state (read-only)
+        app.MapGet("/api/diagnostics", (DiagnosticsService diag) => Results.Ok(diag.View()));
 
         app.MapGet("/api/cpu", async (LiveState live, PlcKiOptions opt, HardwareService hw, TiaConnection tia, HttpContext http, CancellationToken ct) =>
         {
@@ -105,7 +107,7 @@ public static class HardwareEndpoints
     /// Is the PLC PLC-Ki reads the PLCSIM CPU of the TIA helper, and what state is it in?
     /// {applies, why, found, state, leds, name, error, plcsimIp}
     /// </summary>
-    private static async Task<Dictionary<string, object?>> PlcsimAsync(PlcKiOptions opt, TiaConnection tia, bool fresh, CancellationToken ct)
+    internal static async Task<Dictionary<string, object?>> PlcsimAsync(PlcKiOptions opt, TiaConnection tia, bool fresh, CancellationToken ct)
     {
         lock (CacheLock)
             if (!fresh && _plcsim is { } c && DateTime.UtcNow - c.At < TimeSpan.FromSeconds(3)) return c.State;
