@@ -939,8 +939,9 @@ main#page section.hero .k span { margin-top: 2px; }
   .sidebar .links { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 0; }
   .sidebar .links a { flex-direction: column; justify-content: center; gap: 2px; min-height: 0; padding: 6px 2px; border-radius: 10px; font-size: 10.5px; }
   .sidebar .links a.active { box-shadow: none; }
-  .sidebar .links a.hidden, .sidebar .links a.nav-gen { display: none; }
-  .sidebar .links a.nav-gen + a { margin-top: 0; }
+  .sidebar .links a.hidden { display: none; }
+  .sidebar .links a.nav-gen { margin-top: 0; }
+  .sidebar .links a.nav-gen::before { content: none; }
   .sidebar .ti { width: 24px; height: 24px; }
   .sidebar .ti svg { width: 22px; height: 22px; }
   .sidebar .tl { flex: none; max-width: 100%; text-align: center; }
@@ -1020,3 +1021,5 @@ html.test-values .topbar { border-bottom: 3px solid var(--warn); }
   .gen-head .segmented { width: 100%; }
   .gen-head .segmented button { flex: 1; }
 }
+/* phone: a notice's button goes under its text instead of sticking out of the card */
+@media (max-width: 600px) { .notice { flex-wrap: wrap; } .notice > .btn { margin-left: 32px; } }

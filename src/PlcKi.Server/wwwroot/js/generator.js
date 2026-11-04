@@ -326,7 +326,7 @@
           <span class="pill">PLCSIM ${t && t.plcsimIp ? esc(t.plcsimIp) : "not set"}</span>
           <span class="pill ${t && t.realAllowed && t.realAllowed.length ? "warn" : ""}">Real PLCs allowed: ${t && t.realAllowed ? t.realAllowed.length : "none"}</span></div>`;
       const tiaNote = t && !t.ok ? `<div class="notice gold" style="margin-top:12px">${icon("info")}<div style="flex:1"><b>TIA Portal is not reachable.</b> ${esc(t.message || "")}</div><a class="btn gold small" href="#/setup/connections">Connections</a></div>` : "";
-      return PK.sec("hero compact", `${PKSetup.setupNav("generator")}<h1>Block generator</h1>
+      return PK.sec("hero compact", `<h1>Block generator</h1>
           <p class="sub">Claude writes PLC blocks from plain words, TIA Portal compiles them, and problems go back to Claude until it is clean. Nothing reaches a real PLC without two people confirming.</p>
           ${chips}${tiaNote}`)
         + (g.job ? PK.sec("tight", `<span class="eyebrow">Latest job</span>${PKSetup.jobCard(g.job, timeline(g.job))}`) : "")
