@@ -47,7 +47,14 @@ public sealed class VmClient
         var zip = Path.Combine(Path.GetTempPath(), $"plcki-{name}-{Guid.NewGuid():N}.zip");
         try
         {
-            ZipFile.CreateFromDirectory(packageDir, zip, CompressionLevel.Optimal, includeBaseDirectory: false);
+            // Without the import reports: they are the TIA PC's own answers, and a copy sent back with this PC's clock
+            // could look newer than the report the next import writes.
+            using (var archive = ZipFile.Open(zip, ZipArchiveMode.Create))
+                foreach (var file in Directory.EnumerateFiles(packageDir, "*", SearchOption.AllDirectories))
+                {
+                    if (Path.GetFileName(file).Equals("import-report.json", StringComparison.OrdinalIgnoreCase)) continue;
+                    archive.CreateEntryFromFile(file, Path.GetRelativePath(packageDir, file).Replace('\\', '/'), CompressionLevel.Optimal);
+                }
             await using var f = File.OpenRead(zip);
             using var content = new StreamContent(f);
             content.Headers.ContentType = new MediaTypeHeaderValue("application/zip");
