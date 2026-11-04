@@ -378,7 +378,7 @@
         actions: `<button class="btn" data-ask="${attention.length ? `Why is ${esc(attention[0].name)} ${esc(attention[0].blockedBy ? "blocked" : attention[0].state)}, and what do I check?` : "What is the machine doing right now?"}">Ask about it</button>${s.activeAlarms.length ? `<a class="btn b" href="#/alarm">${s.activeAlarms.length} active alarm${s.activeAlarms.length > 1 ? "s" : ""}</a>` : ""}`,
         extra: (s.overview.length ? `<div class="kpis plant-kpis">${s.overview.slice(0, 8).map((v) => `<div class="k"><b>${esc(v.text)}</b><span>${esc(v.label)}</span></div>`).join("")}</div>` : "")
           + `<nav class="ptabs" aria-label="Plant">${PLANT_TABS.filter(([k]) => (k !== "exchange" || s.exchange.length) && (k !== "settings" || (s.settings || []).length || (H.data && H.data.settings.length))).map(([k, l]) =>
-            `<a href="#/plant${k === "overview" ? "" : "/" + k}" class="${k === tab ? "on" : ""}" ${k === tab ? 'aria-current="page"' : ""}>${l}${(k === "devices" || k === "settings") && counts[k] ? ` <span class="count warn">${counts[k]}</span>` : ""}</a>`).join("")}</nav>`,
+            `<a href="#/plant${k === "overview" ? "" : "/" + k}" class="${k === tab ? "on" : ""}" ${k === tab ? 'aria-current="page"' : ""}>${l}${(k === "devices" || k === "settings") && counts[k] ? ` <span class="count warn">${counts[k]}</span>` : ""}</a>`).join("")}<a href="#/station">Stations</a></nav>`,
       });
 
       loadHmi();
@@ -580,5 +580,5 @@
     },
   });
 
-  window.PKLive = { parseLoc, bindAsk };
+  window.PKLive = { parseLoc, bindAsk, stepStrip, seqState };
 })();
