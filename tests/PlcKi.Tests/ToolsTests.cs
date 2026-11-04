@@ -38,6 +38,7 @@ public class ToolsTests
             ["get_alarm_history"] = new { id = "A02" },
             ["search_program"] = new { query = "Level" },
             ["lookup_siemens_diagnostic"] = new { query = "IO device failure" },
+            ["get_device_diagnostics"] = new { },
             ["get_alarm_capture"] = new { },
         };
         Assert.Equal(inputs.Keys.OrderBy(k => k), MachineTools.Specs.Select(s => s.Name).OrderBy(k => k));

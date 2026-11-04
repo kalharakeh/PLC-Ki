@@ -29,6 +29,9 @@ public sealed class LiveState
     public Snapshot? Snapshot => _snapshot;
     public MachineHistory History { get; }
 
+    /// <summary>Others that record each status (the production log for the reports). Set up at start, before polling.</summary>
+    public List<Action<MachineStatus>> Listeners { get; } = new();
+
     public void Publish(Snapshot snap, MachineStatus status)
     {
         _snapshot = snap;
@@ -36,6 +39,7 @@ public sealed class LiveState
         History.Add(snap, status);
         Check.Add(status);
         Memory.Observe(status);
+        foreach (var l in Listeners) l(status);
     }
 }
 
@@ -81,6 +85,37 @@ public sealed class WatchList
 }
 
 /// <summary>
+/// Device diagnostics the polling loop reads next to the model tags: the drive values (symbols set by the
+/// diagnostics service from the hardware and program) every 2 s, and the CPU's active alarms every 5 s.
+/// </summary>
+public sealed class DeviceWatch
+{
+    private volatile IReadOnlyList<TagDef> _symbols = Array.Empty<TagDef>();
+    private volatile Dictionary<string, (object? Value, string? Error)> _values = new();
+
+    /// <summary>What to read for the drives; set by the diagnostics service.</summary>
+    public IReadOnlyList<TagDef> Symbols { get => _symbols; set => _symbols = value; }
+    public Dictionary<string, (object? Value, string? Error)> Values => _values;
+    public DateTimeOffset? ValuesTime { get; private set; }
+
+    /// <summary>The CPU's active alarms as last read; null when the source cannot read them.</summary>
+    public IReadOnlyList<PlcKi.Core.Diagnostics.CpuAlarm>? Alarms { get; private set; }
+    public DateTimeOffset? AlarmsTime { get; private set; }
+    public string? AlarmsError { get; private set; }
+
+    public void PublishValues(Dictionary<string, (object? Value, string? Error)> values, DateTimeOffset time) { _values = values; ValuesTime = time; }
+    public void PublishAlarms(IReadOnlyList<PlcKi.Core.Diagnostics.CpuAlarm>? alarms, string? error, DateTimeOffset time)
+    {
+        if (alarms != null || error == null) Alarms = alarms;
+        AlarmsError = error;
+        AlarmsTime = time;
+    }
+
+    /// <summary>Not connected: what was read before is no longer true.</summary>
+    public void Clear() { _values = new(); Alarms = null; }
+}
+
+/// <summary>
 /// Owns the PLC connection. Connects, reads every model tag once per poll interval,
 /// and reconnects with a growing delay (2 s up to 30 s) when the link drops.
 /// The driver is synchronous, so the loop runs on its own thread.
@@ -93,12 +128,14 @@ public sealed class PollingService : BackgroundService
     private readonly PlcKiOptions _opt;
     private readonly ILogger<PollingService> _log;
     private readonly WatchList _watch;
+    private readonly DeviceWatch _devices;
     private readonly FastRecorder _fast;
     private readonly AlarmCaptureBook _captures;
 
-    public PollingService(IPlcSource source, StatusEngine engine, LiveState state, PlcKiOptions opt, ILogger<PollingService> log, WatchList watch,
+    public PollingService(IPlcSource source, StatusEngine engine, LiveState state, PlcKiOptions opt, ILogger<PollingService> log, WatchList watch, DeviceWatch devices,
         FastRecorder fast, AlarmCaptureBook captures)
     {
+        _devices = devices;
         _watch = watch;
         _fast = fast;
         _captures = captures;
@@ -121,6 +158,9 @@ public sealed class PollingService : BackgroundService
         int backoffMs = 2000;
         string? error = null;
         var lastCpu = DateTime.MinValue;
+        var lastDrives = DateTime.MinValue;
+        var lastAlarms = DateTime.MinValue;
+        var alarmFailures = 0;
         if (_source is not S7CommPlusSource)
             _fast.SetMode("reads", _opt.Plc.PollMs, _source.Kind == "snapshot" ? "values come from a test file."
                 : "it needs a direct connection from this PC to the PLC (not through PLC-Ki Link yet).");
@@ -184,6 +224,7 @@ public sealed class PollingService : BackgroundService
                     try { _state.Cpu = _source.ReadCpu(); }
                     catch (Exception ex) { _log.LogDebug(ex, "Reading the CPU mode failed."); }
                 }
+                ReadDevices(ref lastDrives, ref lastAlarms, ref alarmFailures);
                 Publish(snap, _source.Kind == "snapshot" ? "snapshot" : "connected", null, lastGood, missing);
                 Capture();
             }
@@ -193,6 +234,7 @@ public sealed class PollingService : BackgroundService
                 _log.LogWarning("Read from {Address} failed: {Error}", _source.Address, ex.Message);
                 _source.Disconnect();
                 _fast.Break(DateTimeOffset.Now);
+                _devices.Clear();
                 Publish(last, "disconnected", error, lastGood, missing);
                 Capture();
                 continue;
@@ -202,6 +244,33 @@ public sealed class PollingService : BackgroundService
             if (wait > 0 && ct.WaitHandle.WaitOne(wait)) break;
         }
         _source.Disconnect();
+    }
+
+    /// <summary>Drive values every 2 s, the CPU's alarm list every 5 s (every 60 s after it failed three times).</summary>
+    private void ReadDevices(ref DateTime lastDrives, ref DateTime lastAlarms, ref int alarmFailures)
+    {
+        var symbols = _devices.Symbols;
+        if (symbols.Count > 0 && DateTime.UtcNow - lastDrives > TimeSpan.FromSeconds(2))
+        {
+            lastDrives = DateTime.UtcNow;
+            try { _devices.PublishValues(_source.ReadSymbols(symbols), DateTimeOffset.Now); }
+            catch (Exception ex) { _log.LogDebug(ex, "Reading the drive values failed."); }
+        }
+        var every = alarmFailures >= 3 ? TimeSpan.FromSeconds(60) : TimeSpan.FromSeconds(5);
+        if (DateTime.UtcNow - lastAlarms > every)
+        {
+            lastAlarms = DateTime.UtcNow;
+            try
+            {
+                _devices.PublishAlarms(_source.ReadCpuAlarms(), null, DateTimeOffset.Now);
+                alarmFailures = 0;
+            }
+            catch (Exception ex)
+            {
+                if (alarmFailures++ == 0) _log.LogInformation("The CPU's alarm list cannot be read: {Error}", ex.Message);
+                _devices.PublishAlarms(null, "The CPU's alarm list cannot be read: " + ex.Message, DateTimeOffset.Now);
+            }
+        }
     }
 
     /// <summary>Cuts the alarm captures that are due; an alarm too short for the reads goes into the event list too.</summary>

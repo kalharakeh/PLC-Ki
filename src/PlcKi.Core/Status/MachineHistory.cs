@@ -57,7 +57,8 @@ public sealed class MachineHistory
         }
     }
 
-    /// <summary>Adds an event found elsewhere (e.g. an alarm that came and went between two reads), in time order.</summary>
+    /// <summary>Adds an event that did not come from comparing two reads (a value someone changed from PLC-Ki, an alarm that
+    /// came and went between two reads), in time order.</summary>
     public void Note(MachineEvent e)
     {
         lock (_lock)

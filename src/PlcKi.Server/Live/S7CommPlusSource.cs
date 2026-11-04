@@ -308,6 +308,45 @@ public sealed class S7CommPlusSource : IPlcSource
         }
     }
 
+    // Text lists turn "@2%t#519K@" in system diagnostic texts into words; loaded once per connection
+    private S7CommPlusTextListCatalog? _textLists;
+    private bool _textListsTried;
+
+    /// <summary>The CPU's active alarms with their texts (English when the CPU has it). Read-only.</summary>
+    public IReadOnlyList<PlcKi.Core.Diagnostics.CpuAlarm>? ReadCpuAlarms()
+    {
+        var client = _client;
+        if (client == null) return null;
+        if (!_textListsTried)
+        {
+            _textListsTried = true;
+            try { _textLists = client.GetTextListsAsync().GetAwaiter().GetResult(); }
+            catch (Exception ex) { _log.LogDebug(ex, "No text lists from the CPU; diagnostic texts may show placeholders."); }
+        }
+        var alarms = _textLists != null
+            ? client.GetActiveAlarmsAsync(_textLists).GetAwaiter().GetResult()
+            : client.GetActiveAlarmsAsync().GetAwaiter().GetResult();
+        var list = new List<PlcKi.Core.Diagnostics.CpuAlarm>();
+        foreach (var a in alarms)
+        {
+            // English (1033) first, then whatever the CPU has
+            var texts = a.AlarmTextsByLanguage.TryGetValue(1033, out var en) ? en
+                : a.AlarmTexts ?? a.AlarmTextsByLanguage.Values.FirstOrDefault();
+            var extra = texts == null ? new List<string>() : new[]
+            {
+                texts.AdditionalText1, texts.AdditionalText2, texts.AdditionalText3, texts.AdditionalText4, texts.AdditionalText5,
+                texts.AdditionalText6, texts.AdditionalText7, texts.AdditionalText8, texts.AdditionalText9,
+            }.Where(t => !string.IsNullOrWhiteSpace(t)).Select(t => t.Trim()).ToList();
+            var text = string.IsNullOrWhiteSpace(texts?.AlarmText) ? $"CPU alarm {a.CpuAlarmId}" : texts!.AlarmText.Trim();
+            var change = a.StateChange;
+            DateTimeOffset? since = change != null && change.Timestamp.Year > 2000 ? new DateTimeOffset(DateTime.SpecifyKind(change.Timestamp, DateTimeKind.Utc)) : null;
+            bool? acked = change != null && change.AckTimestamp.Year > 2000 ? true : null;
+            list.Add(new PlcKi.Core.Diagnostics.CpuAlarm(a.CpuAlarmId, text, string.IsNullOrWhiteSpace(texts?.Infotext) ? null : texts!.Infotext.Trim(),
+                extra, a.AlarmClassName, a.AlarmDomain, a.HmiInfo?.Priority ?? 0, since, acked));
+        }
+        return list;
+    }
+
     /// <summary>Lookups for the Tags page, kept while connected: symbol -> tag, or why it cannot be read.</summary>
     private readonly Dictionary<string, (PlcTag? Tag, string? Error)> _extra = new();
     private const int MaxLookupsPerRead = 30;
@@ -358,6 +397,8 @@ public sealed class S7CommPlusSource : IPlcSource
     {
         StopSubscriptions();
         _extra.Clear();
+        _textLists = null;
+        _textListsTried = false;
         var c = _client;
         _client = null;
         if (c == null) return;

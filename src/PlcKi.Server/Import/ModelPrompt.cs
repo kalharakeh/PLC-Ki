@@ -39,7 +39,7 @@ You get the program as text: the call structure, every block with its interface 
                 "fix": [ "Check the air supply at the valve", "Check the open limit switch", "Press Reset" ],
                 "checks": [ { "expr": "XV1_ZSO OR NOT XV1_OpenCmd", "text": "Open limit switch reached when opened" } ] } ],
   "settings": [ { "tag": "CalTolerance", "text": "Allowed deviation of the calibration check", "valid": "CalTolerance > 0",
-                  "problem": "the calibration check can never pass with 0 %" } ],
+                  "problem": "the calibration check can never pass with 0 %", "hmi": "Screen Parameters > Calibration tolerance" } ],
   "exchange": [ { "tag": "MES_StartRequest", "partner": "MES", "direction": "in", "text": "MES asks for a new batch" } ]
 }
 
@@ -75,6 +75,8 @@ Devices
 Alarms
 - One entry per alarm bit (alarm DB, alarm handler outputs, ProDiag or message tags). id: the alarm number or a short code; tag: the id of its Bool tag.
 - severity FAULT (stops the machine) or WARNING, from the program or the alarm text.
+- When the HMI panel section lists HMI alarms, text is the HMI alarm text the operator sees (same wording), and severity follows its alarm class (Errors/Alarm = FAULT, Warnings = WARNING).
+- When a panel button or switch is how the operator acts (Reset, Start, acknowledge, manual mode), name it in fix by its text and screen, e.g. "Press Reset on the panel (screen Main)".
 - location: the block, instance and output where the condition is made, and where it is latched.
 - condition: when the program raises it, in plain words, with the delay and limits from the code.
 - causes: 2 to 4 likely causes at the machine, most likely first. fix: concrete steps a technician takes, ending with every step the program needs to run again (for example "Press Reset, then Start to continue the batch" when the sequence waits for Start after a fault). Never suggest bridging, forcing or bypassing a safety function, E-stop, guard or interlock.
@@ -83,6 +85,7 @@ Alarms
 
 Settings
 - Values an operator or engineer sets that the machine needs: HMI parameters, tolerances, delays, enable switches, recipe limits (often retained members of an HMI or recipe DB). Add each one that a sequence, check or alarm depends on as a tag and a settings entry.
+- When the program text has an HMI panel section: add every operator setting listed there that the machine needs, use the label on the panel as the start of text (the operator's words, then what it does), and fill hmi with where the operator changes it: screen and label, e.g. "Screen Parameters > Calibration tolerance".
 - valid: TRUE when the value lets the machine work, from how the code uses it (a tolerance of 0 makes a window empty, a delay of 0 or a disabled enable skips a step on purpose). problem: what goes wrong otherwise, as a lower-case clause. Leave valid out when every value works.
 
 Data exchange
