@@ -220,8 +220,9 @@ static async Task<int> RunAppAsync(string[] appArgs, bool probe, JobService jobs
 
     // The program behind the model, for the Code and Logic pages (read-only, from the export file)
     app.MapGet("/api/program", (ProgramService p) => Results.Ok(p.Overview()));
+    // Kestrel keeps an encoded slash as %2F in route values: plant names like "0.2. Inputs/Outputs Images" have one
     app.MapGet("/api/program/blocks/{name}", (string name, ProgramService p) =>
-        p.Block(name) is { } b ? Results.Ok(b) : Results.NotFound(new { error = $"Block {name} is not in the program export." }));
+        p.Block(name = name.Replace("%2F", "/", StringComparison.OrdinalIgnoreCase)) is { } b ? Results.Ok(b) : Results.NotFound(new { error = $"Block {name} is not in the program export." }));
 
     app.MapGet("/api/program/search", (string? q, ProgramService p) => Results.Ok(p.Search(q ?? "")));
 

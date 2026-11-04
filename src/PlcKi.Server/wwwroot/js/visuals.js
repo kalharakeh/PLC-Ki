@@ -306,7 +306,7 @@
       const stats = tr ? stepStats(spans, tr) : new Map();
       const [stText, stCls] = !q ? ["", ""] : q.halted ? ["Halted", "bad"] : q.next.some((n) => n.ready === false) ? ["Waiting", "warn"] : ["Running", "ok"];
       const others = m.sequences.filter((d) => d.id !== def.id);
-      const blk = (def.block || "").split(/[ ,(]/)[0];
+      const blk = PK.blockOf(def.block);
       return hero({
         cls: "hero compact",
         eyebrow: `<a class="crumb" href="#/plant">Plant</a> › ${esc(def.name)}${q ? ` <span class="pill ${stCls}"><span class="dot"></span>${stText}</span>` : ""}`,

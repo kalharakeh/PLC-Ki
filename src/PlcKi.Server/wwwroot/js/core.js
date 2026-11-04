@@ -438,6 +438,41 @@ const PK = (() => {
     return state.program;
   }
 
+  /**
+   * The block a model location points at. Real plants write "FC 0.4. Alarms Common, network 2" or
+   * "FB 1.5. SequenceProgramRobot, transition X; latched in FC 0.5. Robot Sequence Alarms, network 7"; the demo writes
+   * "FB_VFD, instance ...". With the program loaded, the names are matched against its blocks ("latched in" wins,
+   * then the first and longest name); without it, the first word after an optional FB/FC/OB/DB.
+   */
+  function blockOf(text) {
+    text = String(text || "");
+    if (!text.trim()) return undefined;
+    const blocks = (state.program && state.program.blocks) || [];
+    if (blocks.length) {
+      const hits = [];
+      for (const b of blocks) {
+        const n = b.name;
+        if (!n) continue;
+        let i = text.indexOf(n);
+        while (i >= 0) {
+          const before = i === 0 ? " " : text[i - 1], after = text[i + n.length] || " ";
+          if (!/[\w.]/.test(before) && !/\w/.test(after) && !(after === "." && /\w/.test(text[i + n.length + 1] || ""))) { hits.push({ n, i }); break; }
+          i = text.indexOf(n, i + 1);
+        }
+      }
+      if (hits.length) {
+        const latched = text.search(/latched in /i);
+        const pick = (latched >= 0 && hits.filter((h) => h.i > latched)) || [];
+        const list = pick.length ? pick : hits;
+        list.sort((a, b) => a.i - b.i || b.n.length - a.n.length);
+        return list[0].n;
+      }
+    }
+    const m = text.match(/^\s*(?:(?:FB|FC|OB|DB)\s+)?("?)([^",;(]+?)\1\s*(?:[,;(]|$)/);
+    const name = m ? m[2].trim() : "";
+    return /^(FB|FC|OB|DB)$/i.test(name) ? undefined : name || undefined;
+  }
+
   // ---- values by symbol, for live chips in Code and Logic ----
   const norm = (s) => String(s || "").replace(/\s+/g, "").toLowerCase();
   function valueBySymbol() {
@@ -781,5 +816,5 @@ const PK = (() => {
   }
 
   return { dirty: setDirty, get isDirty() { return !!dirty; }, plain, connInfo, connSheet, helpSheet, screenSheet, passwordSheet, setHash, cmd, sec, hero, on, $, esc, icon, fillIcons, kindIcon, api, state, view, go, draw, route, toast, sheet, confirmSheet, cond, md, ago, clock, date, when,
-    loadProgram, valueBySymbol, norm, start, get current() { return current; } };
+    loadProgram, blockOf, valueBySymbol, norm, start, get current() { return current; } };
 })();
