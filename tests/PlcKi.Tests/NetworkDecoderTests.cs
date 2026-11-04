@@ -110,3 +110,66 @@ public class NetworkDecoderTests
         Assert.Equal("\"DB_IO\".Valve[3].Open", NetworkDecoder.AccessText(access));
     }
 }
+
+/// <summary>GRAPH step changes through alternative branches and jumps, as TIA exports them (shape from the Helium robot sequence).</summary>
+public class GraphBranchTests
+{
+    private static string C(string from, string to, string link = "Direct") => $"<Connection><NodeFrom>{from}</NodeFrom><NodeTo>{to}</NodeTo><LinkType>{link}</LinkType></Connection>";
+
+    // Step 1 -> alternative branch -> T1 to step 2, or T5 to step 4; step 2 -> T2 -> step 3; step 3 -> T3 jumps back to step 1
+    private static readonly XElement Graph = XElement.Parse($"""
+        <Graph><Sequence>
+          <Steps><Step Number="1" Init="true" Name="Init" /><Step Number="2" Name="A" /><Step Number="3" Name="B" /><Step Number="4" Name="C" /></Steps>
+          <Transitions><Transition Number="1" Name="T1" /><Transition Number="2" Name="T2" /><Transition Number="3" Name="T3" /><Transition Number="5" Name="T5" /><Transition Number="4" Name="T4" /></Transitions>
+          <Branches><Branch Number="1" Type="AltBegin" Cardinality="2" /></Branches>
+          <Connections>
+            {C("""<StepRef Number="1" />""", """<BranchRef Number="1" In="0" />""")}
+            {C("""<BranchRef Number="1" Out="0" />""", """<TransitionRef Number="1" />""")}
+            {C("""<BranchRef Number="1" Out="1" />""", """<TransitionRef Number="5" />""")}
+            {C("""<TransitionRef Number="1" />""", """<StepRef Number="2" />""")}
+            {C("""<TransitionRef Number="5" />""", """<StepRef Number="4" />""")}
+            {C("""<StepRef Number="2" />""", """<TransitionRef Number="2" />""")}
+            {C("""<TransitionRef Number="2" />""", """<StepRef Number="3" />""")}
+            {C("""<StepRef Number="3" />""", """<TransitionRef Number="3" />""")}
+            {C("""<TransitionRef Number="3" />""", """<StepRef Number="1" />""", "Jump")}
+            {C("""<StepRef Number="4" />""", """<TransitionRef Number="4" />""")}
+            {C("""<TransitionRef Number="4" />""", """<StepRef Number="1" />""", "Jump")}
+          </Connections>
+        </Sequence></Graph>
+        """);
+
+    [Fact]
+    public void Transitions_after_a_branch_know_the_step_before_them()
+    {
+        var text = NetworkDecoder.DecodeGraph(Graph);
+        Assert.Contains("Transition T5 T5: step 1 Init -> step 4 C", text);
+        Assert.Contains("Transition T3 T3: step 3 B -> step 1 Init", text);
+        Assert.DoesNotContain("?", text.Split('\n').Where(l => l.Contains("Transition")).Select(l => l[..l.IndexOf(" when")]).Aggregate("", (a, b) => a + b));
+    }
+
+    [Fact]
+    public void Every_step_change_is_listed()
+    {
+        var t = NetworkDecoder.GraphTransitions(Graph).OrderBy(x => x.From).ThenBy(x => x.To).ToList();
+        Assert.Equal(new List<(int, int)> { (1, 2), (1, 4), (2, 3), (3, 1), (4, 1) }, t);
+    }
+
+    [Fact]
+    public void The_import_check_names_step_changes_the_model_is_missing()
+    {
+        var plc = Assert.Single(ProgramExport.Load(Path.Combine(AppContext.BaseDirectory, "data", "demo-export.zip")).Plcs);
+        // The demo's step tag is its own Step variable (Idle = 0), so the GRAPH numbers do not apply
+        Assert.Empty(ModelCheck.CheckTransitions(TestData.Model, plc));
+        // Read GRAPH's S_NO instead: Idle is GRAPH step 1
+        var json = System.Text.Json.JsonSerializer.Serialize(TestData.Model, PlcKi.Core.Model.MachineModel.JsonOptions);
+        var m = System.Text.Json.JsonSerializer.Deserialize<PlcKi.Core.Model.MachineModel>(json, PlcKi.Core.Model.MachineModel.JsonOptions)!;
+        var seq = m.Sequences[0];
+        m.Tags.First(t => t.Id == seq.StepTag).Symbol = "\"DB_BatchSequence\".S_NO";
+        seq.Steps.First(s => s.No == 0).No = 1;
+        foreach (var n in seq.Steps.SelectMany(s => s.Next).Where(n => n.To == 0)) n.To = 1;
+        Assert.Empty(ModelCheck.CheckTransitions(m, plc));
+        seq.Steps.First(s => s.No == 20).Next.Clear();
+        var p = Assert.Single(ModelCheck.CheckTransitions(m, plc));
+        Assert.Contains("missing: 20 -> 30", p);
+    }
+}

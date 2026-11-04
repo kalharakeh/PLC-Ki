@@ -61,6 +61,48 @@ public class LiveModelCheckTests
     }
 
     [Fact]
+    public void A_step_shorter_than_one_read_is_not_reported()
+    {
+        var engine = new StatusEngine(TestData.Model);
+        var check = new LiveModelCheck(TestData.Model);
+        var t = DateTimeOffset.Now;
+        // 10 -> 30: step 20 came and went between two reads; the model explains it through step 20
+        check.Add(Eval(engine, Snap("step30-mix-heat", t, v => v["Step"] = 10.0)));
+        check.Add(Eval(engine, Snap("step30-mix-heat", t.AddSeconds(1))));
+        Assert.DoesNotContain(check.Report().Findings, x => x.Kind == "transition");
+    }
+
+    private static void Move30To40(LiveModelCheck check, StatusEngine engine, DateTimeOffset t, double tempAfter)
+    {
+        check.Add(Eval(engine, Snap("step30-mix-heat", t, v => { v["Temp"] = 20.0; v["StepTime"] = 1000.0; })));
+        check.Add(Eval(engine, Snap("step30-mix-heat", t.AddSeconds(1), v => { v["Step"] = 40.0; v["Temp"] = tempAfter; v["StepTime"] = 0.0; })));
+    }
+
+    [Fact]
+    public void A_move_while_a_condition_stayed_unmet_is_reported()
+    {
+        var engine = new StatusEngine(TestData.Model);
+        var check = new LiveModelCheck(TestData.Model);
+        var t = DateTimeOffset.Now;
+        Move30To40(check, engine, t, 20.0);
+        Move30To40(check, engine, t.AddSeconds(5), 20.0);
+        var f = check.Report().Findings.Where(x => x.Title.Contains("moved from step 30 to 40")).ToList();
+        Assert.Single(f);   // the temperature never changed; the step time did, so its moment fell between reads
+        Assert.Contains("Temperature", f[0].Title);
+    }
+
+    [Fact]
+    public void A_condition_whose_values_changed_between_reads_is_not_reported()
+    {
+        var engine = new StatusEngine(TestData.Model);
+        var check = new LiveModelCheck(TestData.Model);
+        var t = DateTimeOffset.Now;
+        Move30To40(check, engine, t, 85.0);
+        Move30To40(check, engine, t.AddSeconds(5), 85.0);
+        Assert.DoesNotContain(check.Report().Findings, x => x.Title.Contains("moved from step 30 to 40"));
+    }
+
+    [Fact]
     public void A_device_blocked_while_the_machine_keeps_stepping_is_reported()
     {
         var engine = new StatusEngine(TestData.Model);

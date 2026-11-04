@@ -436,27 +436,81 @@ public static class NetworkDecoder
                 if (svc != null && svc != "TRUE") sb.AppendLine($"    supervision (fault when true): {svc}");
             }
 
-            // Step -> transition -> step, from the connections
-            var from = new Dictionary<string, string>();   // transition -> step before it
-            var to = new Dictionary<string, string>();     // transition -> step after it
-            foreach (var c in seq.Descendants().Where(e => e.Name.LocalName == "Connection"))
-            {
-                var f = Ref(Child(c, "NodeFrom"));
-                var t = Ref(Child(c, "NodeTo"));
-                if (f.Kind == "StepRef" && t.Kind == "TransitionRef") from[t.Number] = f.Number;
-                if (f.Kind == "TransitionRef" && t.Kind == "StepRef") to[f.Number] = t.Number;
-            }
+            // Step -> transition -> step, from the connections, through alternative and simultaneous branches and jumps
+            var edges = GraphEdges(seq);
             foreach (var tr in seq.Descendants().Where(e => e.Name.LocalName == "Transition"))
             {
                 var no = tr.Attribute("Number")?.Value ?? "";
                 var flg = tr.Descendants().FirstOrDefault(e => e.Name.LocalName == "FlgNet");
                 var cond = flg != null ? CoilCondition(flg, "TrCoil") : null;
-                string StepText(string? n) => n == null ? "?" : $"step {n} {stepName.GetValueOrDefault(n)}".TrimEnd();
-                sb.AppendLine($"  Transition T{no} {tr.Attribute("Name")?.Value}: {StepText(from.GetValueOrDefault(no))} -> {StepText(to.GetValueOrDefault(no))} when {cond ?? "?"}");
+                string StepText(List<string> ns) => ns.Count == 0 ? "?"
+                    : string.Join(" and ", ns.Select(n => $"step {n} {stepName.GetValueOrDefault(n)}".TrimEnd()));
+                var (before, after) = TransitionSteps(edges, no);
+                sb.AppendLine($"  Transition T{no} {tr.Attribute("Name")?.Value}: {StepText(before)} -> {StepText(after)} when {cond ?? "?"}");
             }
         }
         Ops("PostOperations", "Permanent operations after the sequence:");
         return sb.ToString().TrimEnd();
+    }
+
+    /// <summary>The connections of a GRAPH sequence as node -> node edges ("S1", "T4", "B2").</summary>
+    private static List<(string From, string To)> GraphEdges(XElement seq)
+    {
+        static string Key((string Kind, string Number) r) => r.Kind switch
+        {
+            "StepRef" => "S" + r.Number, "TransitionRef" => "T" + r.Number, "BranchRef" => "B" + r.Number, _ => "",
+        };
+        var list = new List<(string, string)>();
+        foreach (var c in seq.Descendants().Where(e => e.Name.LocalName == "Connection"))
+        {
+            var f = Key(Ref(Child(c, "NodeFrom")));
+            var t = Key(Ref(Child(c, "NodeTo")));
+            if (f != "" && t != "") list.Add((f, t));
+        }
+        return list;
+    }
+
+    /// <summary>The steps a transition leaves and the steps it activates, following branches (and jumps, which are plain connections to a step).</summary>
+    public static (List<string> Before, List<string> After) TransitionSteps(List<(string From, string To)> edges, string transition)
+    {
+        List<string> Walk(bool forward)
+        {
+            var found = new List<string>();
+            var seen = new HashSet<string>();
+            var todo = new Stack<string>();
+            todo.Push("T" + transition);
+            while (todo.Count > 0)
+            {
+                var n = todo.Pop();
+                foreach (var (f, t) in edges)
+                {
+                    var next = forward ? (f == n ? t : null) : (t == n ? f : null);
+                    if (next == null || !seen.Add(next)) continue;
+                    if (next[0] == 'S') found.Add(next[1..]);
+                    else if (next[0] == 'B') todo.Push(next);
+                }
+            }
+            return found.OrderBy(x => int.TryParse(x, out var i) ? i : int.MaxValue).ToList();
+        }
+        return (Walk(false), Walk(true));
+    }
+
+    /// <summary>Every step change a GRAPH block allows: (from step, to step), for the import check.</summary>
+    public static List<(int From, int To)> GraphTransitions(XElement graph)
+    {
+        var list = new List<(int, int)>();
+        foreach (var seq in graph.Descendants().Where(e => e.Name.LocalName == "Sequence"))
+        {
+            var edges = GraphEdges(seq);
+            foreach (var tr in seq.Descendants().Where(e => e.Name.LocalName == "Transition"))
+            {
+                var (before, after) = TransitionSteps(edges, tr.Attribute("Number")?.Value ?? "");
+                foreach (var b in before)
+                    foreach (var a in after)
+                        if (int.TryParse(b, out var bi) && int.TryParse(a, out var ai)) list.Add((bi, ai));
+            }
+        }
+        return list.Distinct().ToList();
     }
 
     private static (string Kind, string Number) Ref(XElement? node)

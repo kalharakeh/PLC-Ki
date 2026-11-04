@@ -34,6 +34,8 @@ public static class ModelCheck
             tag.Type = real.ModelType;
         }
 
+        problems.AddRange(CheckTransitions(model, plc));
+
         try { model.Validate(); }
         catch (InvalidDataException ex)
         {
@@ -41,6 +43,49 @@ public static class ModelCheck
         }
         if (model.Tags.Count == 0) problems.Add("The model has no tags.");
         return problems;
+    }
+
+    /// <summary>
+    /// For sequences run by a GRAPH block: the step changes the block's connections allow (branches and jumps
+    /// followed) against the ones in the model. A missing one makes the live page show a step change it cannot explain.
+    /// </summary>
+    public static List<string> CheckTransitions(MachineModel model, ExportPlc plc)
+    {
+        var problems = new List<string>();
+        var symbols = model.Tags.ToDictionary(t => t.Id, t => t.Symbol);
+        foreach (var seq in model.Sequences)
+        {
+            var graph = GraphBlockOf(seq, symbols.GetValueOrDefault(seq.StepTag), plc);
+            if (graph == null || graph.GraphTransitions.Count == 0) continue;
+            var inProgram = graph.GraphTransitions.ToHashSet();
+            var inModel = seq.Steps.SelectMany(s => s.Next.Select(n => (s.No, n.To))).ToHashSet();
+            var missing = inProgram.Where(e => !inModel.Contains(e)).OrderBy(e => e.From).ThenBy(e => e.To).ToList();
+            var extra = inModel.Where(e => !inProgram.Contains(e)).OrderBy(e => e.Item1).ThenBy(e => e.Item2).ToList();
+            static string List(IEnumerable<(int, int)> es) => string.Join(", ", es.Take(30).Select(e => $"{e.Item1} -> {e.Item2}"));
+            if (missing.Count > 0)
+                problems.Add($"Sequence '{seq.Id}': {graph.Name} has {missing.Count} step change{(missing.Count == 1 ? "" : "s")} the model is missing: {List(missing)}{(missing.Count > 30 ? ", ..." : "")}. " +
+                    "Add each one (and any missing step) with the condition of its transition, as listed in the block's 'Transition' lines.");
+            if (extra.Count > 0)
+                problems.Add($"Sequence '{seq.Id}': the model has step change{(extra.Count == 1 ? "" : "s")} that {graph.Name} does not have: {List(extra)}. Remove or correct them.");
+        }
+        return problems;
+    }
+
+    /// <summary>The GRAPH FB behind a sequence whose step tag is GRAPH's S_NO: the FB of that instance DB, else the GRAPH FB named in its block text.</summary>
+    private static ExportBlock? GraphBlockOf(SequenceDef seq, string? stepSymbol, ExportPlc plc)
+    {
+        static bool IsGraph(ExportBlock? b) => b != null && (b.Language == "GRAPH" || b.NetworkLanguages.Contains("GRAPH"));
+        // Only when the model reads GRAPH's own step number (S_NO): a step tag the program fills itself may number the steps differently
+        if (stepSymbol == null || !stepSymbol.TrimEnd().EndsWith(".S_NO", StringComparison.OrdinalIgnoreCase)) return null;
+        {
+            var norm = ProgramExport.NormalizeSymbol(stepSymbol);
+            var db = norm.StartsWith('"') && norm.IndexOf('"', 1) > 0 ? norm[1..norm.IndexOf('"', 1)] : norm.Split('.')[0];
+            if (plc.Block(db) is { InstanceOf: { } fb } && plc.Block(fb) is { } b && IsGraph(b)) return b;
+        }
+        if (seq.Block != null)
+            return plc.Blocks.Where(IsGraph).OrderByDescending(b => b.Name.Length)
+                .FirstOrDefault(b => seq.Block.Contains(b.Name, StringComparison.OrdinalIgnoreCase));
+        return null;
     }
 
     /// <summary>The known symbol that shares the longest tail with the given one, as a hint for a typo.</summary>
