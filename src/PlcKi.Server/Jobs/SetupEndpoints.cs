@@ -85,15 +85,16 @@ public static class SetupEndpoints
             if (feature is { IsReadOnly: false }) feature.MaxRequestBodySize = 2L * 1024 * 1024 * 1024;
             var ext = Path.GetExtension(name).ToLowerInvariant();
             var isArchive = Regex.IsMatch(ext, @"^\.zap\d+$");
-            if (!isArchive && ext != ".zip") throw new JobException("Choose a TIA archive (.zap20) or a program export (.zip from TiaImporter export).");
-            var safe = ExportCommand.SafeName(Path.GetFileNameWithoutExtension(name)) + ext;
+            if (!isArchive && ext is not (".zip" or ".tnzip"))
+                throw new JobException("Choose a TIA archive (.zap20), a program export (.zip from TiaImporter export) or a TwinCAT 3 project (.zip of the project folder, or .tnzip).");
+            var safe = ExportCommand.SafeName(Path.GetFileNameWithoutExtension(name)) + (ext == ".tnzip" ? ".zip" : ext);   // a .tnzip is a zip
             var file = Path.Combine(Dir(ctx, isArchive ? "archives" : "exports"), safe);
             var tmp = file + ".part";
             await using (var fs = File.Create(tmp)) await request.Body.CopyToAsync(fs, ct);
             if (!isArchive)
             {
                 try { Describe(ProgramExport.Load(tmp)); }
-                catch (Exception ex) { File.Delete(tmp); throw new JobException("This zip is not a program export: " + ex.Message); }
+                catch (Exception ex) { File.Delete(tmp); throw new JobException("This zip is not a program export or TwinCAT project: " + ex.Message); }
             }
             File.Move(tmp, file, overwrite: true);
             return Results.Ok(new { kind = isArchive ? "archive" : "export", file, name = Path.GetFileName(file) });

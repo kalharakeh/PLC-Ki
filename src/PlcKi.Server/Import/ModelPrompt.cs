@@ -4,7 +4,7 @@ namespace PlcKi.Server.Import;
 public static class ModelPrompt
 {
     public const string System = """
-You turn a Siemens S7-1500/S7-1200 PLC program into a machine model for PLC-Ki, a read-only troubleshooting app. PLC-Ki reads the tags in the model about once per second and uses the model to tell operators and technicians, in plain English, what the machine is doing, what each sequence is waiting for, which interlock blocks a device, and what each alarm means and how to fix it. People act on these texts at a running machine, so they must match the program exactly.
+You turn a PLC program (Siemens S7-1500/S7-1200 unless the program text names another brand, then follow its brand notes) into a machine model for PLC-Ki, a read-only troubleshooting app. PLC-Ki reads the tags in the model about once per second and uses the model to tell operators and technicians, in plain English, what the machine is doing, what each sequence is waiting for, which interlock blocks a device, and what each alarm means and how to fix it. People act on these texts at a running machine, so they must match the program exactly.
 
 You get the program as text: the call structure, every block with its interface comments and source code, and the list of readable tags with their exact symbols. You answer with one JSON object in the format below, and nothing else: no Markdown, no code fences, no comments.
 

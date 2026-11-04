@@ -153,7 +153,7 @@ public sealed class ProgramService
         if (plc == null) return new { available = false, error };
         if (!string.IsNullOrEmpty(db))
         {
-            var b = plc.Blocks.FirstOrDefault(x => x.Name == db && x.Kind is "GlobalDB" or "InstanceDB");
+            var b = plc.Blocks.FirstOrDefault(x => x.Name == db && x.Kind is "GlobalDB" or "InstanceDB" or "GVL" or "PRG");
             if (b == null) return new { available = false, error = $"Data block {db} is not in the program export." };
             return new
             {
@@ -171,7 +171,7 @@ public sealed class ProgramService
                 name = g.Key,
                 tags = g.Select(t => new { t.Name, symbol = $"\"{t.Name}\"", t.Address, datatype = t.Datatype, type = ProgramExport.ModelType(t.Datatype), t.Comment }),
             }),
-            dbs = plc.Blocks.Where(b => b.Kind is "GlobalDB" or "InstanceDB").OrderBy(b => b.Number ?? int.MaxValue).ThenBy(b => b.Name)
+            dbs = plc.Blocks.Where(b => b.Kind is "GlobalDB" or "InstanceDB" or "GVL" or "PRG").OrderBy(b => b.Number ?? int.MaxValue).ThenBy(b => b.Name)
                 .Select(b => new { b.Name, b.Number, b.Kind, b.InstanceOf, b.Title, count = perDb.GetValueOrDefault(b.Name) }),
         };
     }

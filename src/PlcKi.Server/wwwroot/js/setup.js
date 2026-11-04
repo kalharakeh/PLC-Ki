@@ -610,9 +610,9 @@ const PKSetup = (() => {
           <div class="k"><b>${state.model ? state.model.equipment.length : "–"}</b><span>devices</span></div>
           <div class="k"><b style="font-size:16px;font-weight:600;word-break:break-all">${esc((cur.export || "none").split(/[\\/]/).pop())}</b><span>program file</span></div></div>`)
       + PK.sec("alt", `${PKModel.html()}${refreshHtml()}<div class="steps col">
-        ${step(1, "Choose the program", "A TIA archive (.zap20), or a program export (.zip) made earlier.", `
+        ${step(1, "Choose the program", "A TIA archive (.zap20), a program export (.zip) made earlier, or a Beckhoff TwinCAT 3 project (.tnzip, or the project folder zipped).", `
           <div class="dropzone" id="drop">${icon("import", "")}<div style="font-weight:600;margin-top:6px">Drop the file here, or click to choose it</div>
-            <input type="file" id="file" accept=".zap20,.zap19,.zap18,.zap17,.zap16,.zip" class="hidden"></div>
+            <input type="file" id="file" accept=".zap20,.zap19,.zap18,.zap17,.zap16,.zip,.tnzip" class="hidden"></div>
           ${ch ? `<p style="margin:12px 0 0">Chosen: <b>${esc(ch.name)}</b> <span class="tag ${isArchive ? "gold" : "blue"}">${isArchive ? "TIA archive" : "program export"}</span></p>` : ""}
           ${earlier}`)}
         ${step(2, "Export it with TIA Portal", "Only for archives. TIA opens it in the background on the TIA PC (see Connections) and exports every block. The archive is not changed.",

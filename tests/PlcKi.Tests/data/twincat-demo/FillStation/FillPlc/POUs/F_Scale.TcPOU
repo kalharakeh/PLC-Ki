@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4026.12">
+  <POU Name="F_Scale" Id="{3a2b3c4d-0000-4000-8000-000000000003}" SpecialFunc="None">
+    <Declaration><![CDATA[// Raw analog value to engineering units
+FUNCTION F_Scale : REAL
+VAR_INPUT
+	nRaw : INT;
+	fMax : REAL;
+END_VAR
+VAR
+	fTmp : REAL;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[fTmp := INT_TO_REAL(nRaw) / 32767.0;
+F_Scale := fTmp * fMax;]]></ST>
+    </Implementation>
+  </POU>
+</TcPlcObject>
