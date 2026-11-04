@@ -1,4 +1,5 @@
 using PlcKi.Core.Ask;
+using PlcKi.Core.Memory;
 using PlcKi.Core.Model;
 using PlcKi.Core.Status;
 using PlcKi.Plant;
@@ -9,6 +10,7 @@ using PlcKi.Server.Import;
 using PlcKi.Server.Jobs;
 using PlcKi.Server.Link;
 using PlcKi.Server.Live;
+using PlcKi.Server.Memory;
 
 // PLC-Ki server.
 //   PlcKi.Server                 start the web app (default http://localhost:5080)
@@ -115,24 +117,26 @@ static async Task<int> RunAppAsync(string[] appArgs, bool probe, JobService jobs
     builder.Services.AddSingleton(new StatusEngine(model));
     builder.Services.AddSingleton(new MachineHistory(TimeSpan.FromMinutes(Math.Clamp(opt.HistoryMinutes, 1, 240))));
     builder.Services.AddSingleton(new LiveModelCheck(model));
+    // Machine memory: every alarm occurrence and the technicians' notes, one file per machine in the data folder
+    var memory = new AlarmMemory(AlarmMemory.FileFor(plant.DataDir, model.Name), model.Name);
+    builder.Services.AddSingleton(memory);
     builder.Services.AddSingleton(new ModelFile(Resolve(opt.Model)));
     builder.Services.AddSingleton<ModelFixService>();
     builder.Services.AddSingleton(sp =>
     {
-        var live = new LiveState(sp.GetRequiredService<MachineHistory>(), sp.GetRequiredService<LiveModelCheck>());
+        var live = new LiveState(sp.GetRequiredService<MachineHistory>(), sp.GetRequiredService<LiveModelCheck>(), memory);
         // Shift, OEE and fault reports: every status goes into the production log (data folder\reports\<machine>)
         var reports = sp.GetRequiredService<PlcKi.Server.Reports.ReportService>();
         live.Listeners.Add(reports.Log.Add);
-        live.Listeners.Add(reports.Alarms.Add);
         return live;
     });
-    builder.Services.AddSingleton(new PlcKi.Server.Reports.ReportService(model, plant.DataDir));
+    builder.Services.AddSingleton(new PlcKi.Server.Reports.ReportService(model, plant.DataDir, memory));
     builder.Services.AddSingleton<WatchList>();
     builder.Services.AddSingleton(opt.Ask);
     builder.Services.AddSingleton(sp =>
     {
         var live = sp.GetRequiredService<LiveState>();
-        return new MachineTools(model, () => new LiveView(live.Status, live.Snapshot, live.History, DateTimeOffset.Now));
+        return new MachineTools(model, () => new LiveView(live.Status, live.Snapshot, live.History, DateTimeOffset.Now), live.Memory);
     });
     builder.Services.AddSingleton<AskService>();
     builder.Services.AddSingleton<IPlcSource>(sp => CreateSource(sp.GetRequiredService<ILoggerFactory>().CreateLogger("plc")));
@@ -289,8 +293,10 @@ static async Task<int> RunAppAsync(string[] appArgs, bool probe, JobService jobs
     app.MapPlant();     // /api/auth/... and /api/admin/... (settings, users)
     app.MapSetup();     // /api/admin/... jobs, TIA connection, program import, block generator
     app.MapLink();      // /link/... for PLC-Ki Link on the laptop, /api/admin/link for the Connections page
-    PlcKi.Server.Hardware.HardwareEndpoints.MapHardware(app);
-    PlcKi.Server.Reports.ReportEndpoints.MapReports(app);   // /api/reports/... shift report, OEE, fault summary   // /api/hardware, /api/cpu (PLC page), PLCSIM Start/Stop
+    PlcKi.Server.Hardware.HardwareEndpoints.MapHardware(app);   // /api/hardware, /api/cpu (PLC page), PLCSIM Start/Stop
+    app.MapMemory();    // /api/memory/... machine memory: alarm history and notes (History page)
+    app.Lifetime.ApplicationStopped.Register(() => memory.Save());
+    PlcKi.Server.Reports.ReportEndpoints.MapReports(app);   // /api/reports/... shift report, OEE, fault summary
 
     app.Lifetime.ApplicationStarted.Register(() =>
     {

@@ -169,12 +169,13 @@ public class ReportTests
     [Fact]
     public void Fault_summary_groups_alarm_occurrences()
     {
-        var alarms = new LiveAlarmSpans();
+        var memory = new PlcKi.Core.Memory.AlarmMemory(null);
+        var alarms = new MemoryAlarmSpans(memory);
         var t0 = DateTimeOffset.Now.AddMinutes(-30);
-        alarms.Add(At("step30-mix-heat", t0));
-        alarms.Add(At("step10-xv101-not-open", t0.AddMinutes(1)));    // A02 comes
-        alarms.Add(At("step30-mix-heat", t0.AddMinutes(4)));          // and goes after 3 min
-        alarms.Add(At("step10-xv101-not-open", t0.AddMinutes(10)));   // comes again
+        memory.Observe(At("step30-mix-heat", t0));
+        memory.Observe(At("step10-xv101-not-open", t0.AddMinutes(1)));    // A02 comes
+        memory.Observe(At("step30-mix-heat", t0.AddMinutes(4)));          // and goes after 3 min
+        memory.Observe(At("step10-xv101-not-open", t0.AddMinutes(10)));   // comes again
         var spans = alarms.Spans(t0, DateTimeOffset.Now);
         Assert.Equal(2, spans.Count(s => s.AlarmId == "A02"));
         Assert.Null(spans.Last(s => s.AlarmId == "A02").Went);

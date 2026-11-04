@@ -16,21 +16,21 @@ public sealed class ReportService
     private readonly object _lock = new();
     private ReportSettings _settings;
 
-    public ReportService(MachineModel model, string dataDir)
+    public ReportService(MachineModel model, string dataDir, PlcKi.Core.Memory.AlarmMemory memory)
     {
         Folder = Path.Combine(dataDir, "reports", Slug(model.Name));
         SettingsFile = Path.Combine(Folder, "settings.json");
         _settings = ReportSettings.Load(SettingsFile);
         Log = new ProductionLog(model, Folder, () => Settings);
-        // Until the machine memory keeps alarm occurrences on disk, the fault report uses the alarms seen since PLC-Ki started
-        Alarms = new LiveAlarmSpans();
+        // Alarm occurrences come from the machine memory (kept on disk, survives restarts)
+        Alarms = new MemoryAlarmSpans(memory);
         Builder = new ReportBuilder(model, Log, Alarms, () => Settings);
     }
 
     public string Folder { get; }
     public string SettingsFile { get; }
     public ProductionLog Log { get; }
-    public LiveAlarmSpans Alarms { get; }
+    public IAlarmSpans Alarms { get; }
     public ReportBuilder Builder { get; }
     public ReportSettings Settings { get { lock (_lock) return _settings; } }
 

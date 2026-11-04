@@ -1194,6 +1194,42 @@ tr.on td { background: var(--accent-soft); }
 .checks-list { list-style: none; margin: 0; padding: 0; }
 .setting-bad { color: var(--fault-ink); }
 
+/* ---------- machine memory: alarm history and notes (js/memory.js) ---------- */
+.mem-insight { display: flex; gap: 10px; align-items: flex-start; margin: 0; font-size: 17px; font-weight: 500; line-height: 1.4; }
+.mem-insight svg { width: 20px; height: 20px; flex: none; margin-top: 2px; color: var(--accent); }
+.mem-nums { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 10px 0 0 30px; font-size: 13.5px; color: var(--muted); }
+.mem-nums b { color: var(--ink); font-weight: 650; }
+.mem-list { list-style: none; margin: 0; padding: 0; }
+ul.mem-list.card { padding: 4px 22px; }
+.mem-occ { display: flex; gap: 16px; align-items: flex-start; padding: 12px 0; }
+.mem-occ + .mem-occ { border-top: 1px solid var(--line); }
+.mem-when { display: flex; flex-direction: column; gap: 2px; min-width: 112px; flex: none; font-variant-numeric: tabular-nums; }
+.mem-when b { font-weight: 600; font-size: 14.5px; }
+.mem-body { flex: 1; min-width: 0; display: grid; gap: 4px; overflow-wrap: anywhere; }
+.mem-body a { color: inherit; font-weight: 600; text-decoration: none; }
+.mem-body a:hover { color: var(--accent); }
+.mem-note { display: grid; gap: 2px; margin-top: 4px; padding: 8px 12px; border-radius: 12px; background: var(--ok-soft); color: var(--ok-ink); font-size: 14.5px; }
+.mem-note b { font-weight: 650; margin-right: 6px; }
+.mem-occ > .btn { flex: none; align-self: center; }
+.small-pill { padding: 1px 8px; font-size: 11.5px; }
+.mem-top li { gap: 14px; }
+.mem-top-t { flex: 1; min-width: 0; display: grid; gap: 5px; }
+.mem-top-t > b { font-weight: 600; overflow-wrap: anywhere; }
+.mem-bar { display: block; height: 6px; border-radius: 3px; background: var(--bg-alt); overflow: hidden; }
+.mem-bar i { display: block; height: 100%; border-radius: 3px; background: var(--fault); transition: width 0.5s var(--ease); }
+.mem-bar i.w { background: var(--warn); }
+.mem-top-n { display: grid; justify-items: end; gap: 2px; flex: none; font-variant-numeric: tabular-nums; }
+.mem-top-n b { font-size: 18px; font-weight: 700; }
+.mem-in-row { flex-basis: 100%; padding: 14px 0 4px; border-top: 1px solid var(--line); margin-top: 6px; cursor: default; }
+.mem-in-row h3 { margin-bottom: 10px; }
+@media (max-width: 600px) {
+  .mem-occ { flex-wrap: wrap; gap: 6px 12px; }
+  .mem-when { min-width: 0; flex-direction: row; gap: 10px; align-items: baseline; flex-basis: 100%; }
+  .mem-occ > .btn { align-self: flex-start; }
+  .mem-nums { margin-left: 0; }
+  ul.mem-list.card { padding: 2px 16px; }
+}
+
 /* Reports: shift report with OEE, fault summary, report settings */
 .rp-tabs { margin-top: 4px; width: fit-content; max-width: 100%; }
 .rp-pick input[type=date] { padding: 8px 12px; border-radius: 12px; border: 1px solid var(--line-strong); background: var(--field); color: var(--ink); font: inherit; font-size: 15px; }
