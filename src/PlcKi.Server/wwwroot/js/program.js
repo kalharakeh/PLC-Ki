@@ -126,12 +126,12 @@
   }
 
   function codeHtml(text, resolve, highlight, find) {
-    const hl = highlight ? new RegExp("#" + highlight.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b") : null;
+    const hl = highlight && !highlight.startsWith('"') ? new RegExp("#" + highlight.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b") : null;
     const f = (find || "").toLowerCase();
     let n = 0;
     return `<div class="code">${String(text).split(/\r?\n/).map((l) => {
       const hit = f && l.toLowerCase().includes(f);
-      return `<span class="ln ${hl && hl.test(l) ? "hl" : ""} ${hit ? "found" : ""}" ${hit ? `data-hit="${n++}"` : ""}>${sclLine(l, resolve) || " "}</span>`;
+      return `<span class="ln ${(hl && hl.test(l)) || writes(l, highlight) ? "hl" : ""} ${hit ? "found" : ""}" ${hit ? `data-hit="${n++}"` : ""}>${sclLine(l, resolve) || " "}</span>`;
     }).join("")}</div>`;
   }
 
@@ -214,7 +214,7 @@
     return { html: `<div class="par ${power && anyPass ? "on" : ""}">${branches.map((b) => `<div class="ser"><span class="wire ${power ? "on" : ""}"></span>${b.html}<span class="wire ${b.out ? "on" : ""}"></span></div>`).join("")}</div>`, out: power && anyPass };
   }
 
-  function rung(lhs, expr, resolve, box) {
+  function rung(lhs, expr, resolve, box, opt = {}) {
     const toks = tokenize(expr);
     const tree = toks && parseExpr(toks);
     if (!tree) return null;
@@ -227,8 +227,8 @@
     const body = drawNode(tree, resolve, true, ctx);
     const end = box
       ? `<div class="contact ${result ? "on" : result === false ? "off" : ""}"><span class="sym">${esc(box.kind)}</span><span class="nm">${esc(box.name)}${box.pt ? " · " + esc(box.pt) : ""}</span></div>`
-      : `<div class="contact coil ${coilOn === true ? "on" : coilOn === false ? "off" : ""}"><span class="sym">( )</span><span class="nm">${esc(lhs.replace(/^#/, ""))}</span></div>`;
-    return `<div class="rung"><span class="rail"></span><span class="wire on"></span>${body.html}<span class="wire ${body.out ? "on" : ""}"></span>${end}<span class="wire ${body.out ? "on" : ""}"></span><span class="rail"></span></div>`;
+      : `<div class="contact coil ${coilOn === true ? "on" : coilOn === false ? "off" : ""}"><span class="sym">${opt.coil ? "(" + opt.coil + ")" : "( )"}</span><span class="nm">${esc(lhs.replace(/^#/, ""))}</span></div>`;
+    return `<div class="rung ${opt.hl ? "hl" : ""}"><span class="rail"></span><span class="wire on"></span>${body.html}<span class="wire ${body.out ? "on" : ""}"></span>${end}<span class="wire ${body.out ? "on" : ""}"></span><span class="rail"></span></div>`;
   }
 
   /** Decoded logic text -> networks of { title, lang, statements[] } */
@@ -261,7 +261,17 @@
     return nets;
   }
 
-  function netHtml(net, resolve, highlight, curStep) {
+  /**
+   * Does this line write the highlighted signal? A local "#name" (instance output) or a global symbol
+   * ("\"Alarms\".ES1.EN"), as "x := ..." or as a set/reset "IF ... THEN x := TRUE; END_IF;".
+   */
+  function writes(line, highlight) {
+    if (!highlight) return false;
+    const sym = (highlight.startsWith('"') || highlight.startsWith("#") ? highlight : "#" + highlight).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp("(^|\\bTHEN\\s+)" + sym + "(?![\\w.\\[])\\s*:=").test(line.trim());
+  }
+
+  function netHtml(net, resolve, highlight, curStep, wantNet) {
     const parts = [];
     let plain = [];
     let inCur = false;
@@ -275,14 +285,17 @@
     for (const line of net.lines) {
       const s = line.trim().replace(/\s*\/\/.*$/, "");
       const timer = s.match(/^(#\w+)\s*\(\s*IN\s*:=\s*(.+?),\s*PT\s*:=\s*(.+?)\s*\)\s*;/);
-      const assign = s.match(/^(#[\w.]+|"[^"]+"(?:\.\w+)*)\s*:=\s*(.+);$/);
+      const assign = s.match(/^(#[\w.]+|"[^"]+"(?:\.(?:\w+|"[^"]+"))*)\s*:=\s*(.+);$/);
+      // Set / reset coils, as the decoder writes them: IF <rung> THEN x := TRUE; END_IF;   // set
+      const sr = s.match(/^IF\s+(.+)\s+THEN\s+(#[\w.]+|"[^"]+"(?:\.(?:\w+|"[^"]+"))*)\s*:=\s*(TRUE|FALSE);\s*END_IF;$/);
       let r = null;
       if (timer) r = rung(null, timer[2], resolve, { kind: (line.match(/\/\/\s*(TON|TOF|TP)/) || [, "TIMER"])[1], name: timer[1].slice(1), pt: timer[3].replace(/^#/, "") });
-      else if (assign) r = rung(assign[1], assign[2], resolve);
+      else if (sr) r = rung(sr[2], sr[1], resolve, null, { coil: sr[3] === "TRUE" ? "S" : "R", hl: writes(s, highlight) });
+      else if (assign) r = rung(assign[1], assign[2], resolve, null, { hl: writes(s, highlight) });
       if (r) { flush(); parts.push(r); } else plain.push(line);
     }
     flush();
-    const hl = highlight && net.lines.some((l) => new RegExp("#" + highlight + "\\b\\s*:=").test(l));
+    const hl = highlight ? net.lines.some((l) => writes(l, highlight)) : wantNet != null && net.no === String(wantNet);
     return `<div class="rung-card ${hl ? "hl" : ""}" ${hl ? 'id="hl"' : ""}>
       <div class="rung-title">${net.no ? "Network " + esc(net.no) : ""} ${net.lang ? `<span class="tag lang-${esc(net.lang)}">${esc(net.lang)}</span>` : ""}<span class="faint">${esc(net.title)}</span></div>
       ${parts.join("")}</div>`;
@@ -307,9 +320,13 @@
       try {
         const b = await block(first);
         const instances = await instancesOf(first);
-        const wanted = params[1];
-        const inst = instances.find((i) => i.path === wanted) || instances[0] || null;
-        sel = { name: first, params, block: b, instances, inst, highlight: params[2] || null };
+        // After the block: an instance path and a local output (devices), or "network-N" and "@<symbol>" (alarms)
+        const rest = params.slice(1);
+        const net = (rest.find((x) => /^network-\d+$/.test(x)) || "").slice(8) || null;
+        const sym = (rest.find((x) => x.startsWith("@")) || "").slice(1) || null;
+        const plain = rest.filter((x) => !/^network-\d+$/.test(x) && !x.startsWith("@"));
+        const inst = instances.find((i) => i.path === plain[0]) || instances[0] || null;
+        sel = { name: first, params, block: b, instances, inst, highlight: sym || plain[1] || null, network: net };
       } catch (e) {
         sel = { name: first, params, error: e.message };
       }
@@ -380,7 +397,12 @@
             <span><i class="lg unk"></i>No live value</span><span><i class="lg blocker"></i>First one that stops the output</span></div>`;
           const seq = ((state.status && state.status.sequences) || []).find((q) => q.block && PK.blockOf(q.block) === b.name);
           const now = seq && seq.step != null ? `<p class="small" style="margin:0 0 10px"><span class="now-tag">now</span> ${esc(seq.name)} is in step ${esc(String(seq.step))} “${esc(seq.stepName || "")}”${seq.halted ? ", halted" : ""}.</p>` : "";
-          bodyHtml = nets.length ? now + legend + nets.map((n) => netHtml(n, resolve, sel.highlight, seq ? seq.step : null)).join("")
+          // The signal is not written in this block (or the decoder wrote it another way): fall back to the network number
+          const hl = sel.highlight && nets.some((n) => n.lines.some((l) => writes(l, sel.highlight))) ? sel.highlight : null;
+          const where = sel.highlight && sel.highlight.startsWith('"')
+            ? (hl ? `<div class="notice" style="margin-bottom:12px">${icon("info")}<div>The highlighted rungs write <b>${esc(sel.highlight)}</b>: (S) sets it, (R) resets it, ( ) follows the rung. The values are live; amber marks the first contact that stops a rung.</div></div>`
+              : `<div class="notice gold" style="margin-bottom:12px">${icon("info")}<div>${esc(sel.highlight)} is not written in this block${sel.network ? `; network ${esc(sel.network)} is highlighted` : ""}.</div></div>`) : "";
+          bodyHtml = nets.length ? where + now + legend + nets.map((n) => netHtml(n, resolve, hl || (sel.highlight && !sel.highlight.startsWith('"') ? sel.highlight : null), seq ? seq.step : null, hl ? null : sel.network)).join("")
             : `<p class="muted">No boolean logic to draw in this block. <a href="#/code/${encodeURIComponent(b.name)}">Show the code</a>.</p>`;
         }
         const iface = (b.interface || []).filter((m) => m.section !== "Temp" && m.section !== "Constant");
@@ -400,7 +422,7 @@
       },
       after(page) {
         page.querySelectorAll("[data-switch]").forEach((b) => b.onclick = () => {
-          const rest = sel ? "/" + [sel.name, sel.inst ? sel.inst.path : null, sel.highlight].filter(Boolean).map(encodeURIComponent).join("/") : "";
+          const rest = sel ? "/" + sel.params.map(encodeURIComponent).join("/") : "";
           PK.go("#/" + b.dataset.switch + rest);
         });
         const s = page.querySelector("#inst");
