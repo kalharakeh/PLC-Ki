@@ -43,6 +43,7 @@ const PK = (() => {
     shield: '<path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6l-8-3Z"/>',
     search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/>',
     user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6"/>',
+    plus: '<path d="M12 5v14M5 12h14"/>',
     sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
     moon: '<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5Z"/>',
     help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14M12 17.5v.01"/>',
@@ -793,7 +794,8 @@ const PK = (() => {
       "1. Drop the TIA archive (.zap20). 2. TIA exports it on the TIA PC (needs the TIA helper). 3. Claude builds the model: a few minutes, about a dollar. 4. Check the numbers and press Use this program.",
       "Import again when the program in the PLC changes, so the explanations match."]],
     "setup/generator": ["Block generator", "Say what you need; Claude writes the blocks, TIA imports and compiles them, PLCSIM runs them.", [
-      "Each job becomes a package with versions v001, v002 and so on. To change blocks, open a package and say what to change.",
+      "New blocks: say what you need, pick the TIA project and press Generate. The package name is made from your words if you leave it empty.",
+      "Made before: pick a package on the left to see its versions, Claude's notes and the files. \"Change it\" makes the next version (v002, v003 …); older versions stay.",
       "Use a copy of the TIA project, not the plant's master.",
       "A real PLC needs two confirmations: you type the version here, and someone types the PLC address in the TIA helper window. The CPU must be in STOP."]],
     "setup/settings": ["Settings", "The machine model, the Claude key, who may open PLC-Ki, and logins.", [
