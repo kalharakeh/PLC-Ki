@@ -257,74 +257,118 @@
   // ---------- Plant ----------
   let eqQuery = "";
   let eqOnlyProblems = false;
+  // ---------- Plant ----------
+  // One short header (the step, what it waits for, the key values), then four tabs so the page stays one screen:
+  // Overview (what needs attention, the sequence, the machine at a glance), Devices (list and the picked one),
+  // Values over time, and Data exchange. The tab is in the address: #/plant/devices/M201, #/plant/values.
+  const PLANT_TABS = [["overview", "Overview"], ["devices", "Devices"], ["values", "Values over time"], ["exchange", "Data exchange"]];
+  const problemOf = (e) => !!e.blockedBy || (e.level !== "ok" && e.level !== "idle");
+  const rank = (e) => (e.level === "fault" || e.level === "bad" ? 0 : e.blockedBy ? 1 : e.level === "warn" ? 2 : 3);
+
   PK.view("plant", {
     live: true,
     render() {
       const s = state.status;
       if (!s) return waitingPage();
       if (offline()) return offlinePage() + guide();
+      const params = (PK.current && PK.current.params) || [];
+      const tab = PLANT_TABS.some(([k]) => k === params[0]) ? params[0] : "overview";
+      if (tab === "devices" && params[1]) selectedEq = params[1];
+      const V = window.PKVis;
       const main = s.sequences[0];
       const [stText, stCls] = main ? seqState(main) : ["", ""];
-      const blocked = blockedOf(s);
-      const top = hero({
-        eyebrow: main ? `<span class="pill ${stCls}"><span class="dot"></span>${stText}</span>${main.timeInStep ? `<span class="faint">for ${esc(main.timeInStep)}</span>` : ""}` : "",
+      const attention = s.equipment.filter(problemOf).sort((x, y) => rank(x) - rank(y));
+      const waitsFor = main ? main.next.flatMap((n) => n.conditions).filter((c) => c.met === false).map((c) => c.text) : [];
+      const counts = { devices: attention.length, exchange: s.exchange.length };
+
+      const head = hero({
+        eyebrow: main ? `<span class="pill ${stCls}"><span class="dot"></span>${stText}</span>${main.timeInStep ? `<span class="faint">for ${esc(main.timeInStep)}</span>` : ""}<span class="faint">· ${esc(main.name)}</span>` : "",
         title: main ? `Step ${main.step ?? "?"}: ${esc(main.stepName)}` : esc(s.machine),
-        sub: esc(main ? main.explanation : s.summary.join(" ")),
-        extra0: blocked.length ? blockedNotice(blocked) : "",
-        actions: `<button class="btn" data-ask="${blocked.length ? `Why is ${esc(blocked[0].name)} blocked, and what do I check?` : "What is the machine doing right now?"}">Ask about it</button>${s.activeAlarms.length ? `<a class="btn b" href="#/alarm">${s.activeAlarms.length} active alarm${s.activeAlarms.length > 1 ? "s" : ""}</a>` : ""}`,
-        extra: s.overview.length ? `<div class="kpis" style="margin-top:34px">${s.overview.slice(0, 8).map((v) => `<div class="k"><b>${esc(v.text)}</b><span>${esc(v.label)}</span></div>`).join("")}</div>` : "",
+        sub: main ? (main.halted ? esc("Halted: " + (main.haltReasons.join("; ") || "the outputs are off.")) : waitsFor.length ? esc("Waiting for: " + waitsFor.join("; ")) : esc(main.does || "")) : esc(s.summary[0] || ""),
+        actions: `<button class="btn" data-ask="${attention.length ? `Why is ${esc(attention[0].name)} ${esc(attention[0].blockedBy ? "blocked" : attention[0].state)}, and what do I check?` : "What is the machine doing right now?"}">Ask about it</button>${s.activeAlarms.length ? `<a class="btn b" href="#/alarm">${s.activeAlarms.length} active alarm${s.activeAlarms.length > 1 ? "s" : ""}</a>` : ""}`,
+        extra: (s.overview.length ? `<div class="kpis plant-kpis">${s.overview.slice(0, 8).map((v) => `<div class="k"><b>${esc(v.text)}</b><span>${esc(v.label)}</span></div>`).join("")}</div>` : "")
+          + `<nav class="ptabs" aria-label="Plant">${PLANT_TABS.filter(([k]) => k !== "exchange" || s.exchange.length).map(([k, l]) =>
+            `<a href="#/plant${k === "overview" ? "" : "/" + k}" class="${k === tab ? "on" : ""}" ${k === tab ? 'aria-current="page"' : ""}>${l}${k === "devices" && counts.devices ? ` <span class="count warn">${counts.devices}</span>` : ""}</a>`).join("")}</nav>`,
       });
 
-      const seqs = s.sequences.map((q) => `<div class="card stack">
-          <div class="row"><h3 style="margin:0">${esc(q.name)}</h3><span class="pill ${seqState(q)[1]}">${seqState(q)[0]}</span></div>
-          ${stepStrip(q)}${chartLink(q)}
-          ${q.does ? `<p style="margin:0"><span class="muted">This step should:</span> ${esc(q.does)}</p>` : ""}
-          ${q.halted && q.haltReasons.length ? `<div class="notice red">${icon("warn")}<div><b>Halted, outputs are off:</b> ${q.haltReasons.map(esc).join("; ")}</div></div>` : ""}
-          ${q.next.map((n) => `<div><p class="muted small" style="margin:0 0 8px">To go to step ${n.to} "${esc(n.toName)}" it needs</p><ul class="conds">${n.conditions.map(cond).join("")}</ul></div>`).join("")}
-          ${q.limit ? `<p class="faint" style="margin:0">${esc(q.limit)}</p>` : ""}
-        </div>`).join("");
-
-      const sel = s.equipment.find((e) => e.id === selectedEq);
-      const problem = (e) => !!e.blockedBy || (e.level !== "ok" && e.level !== "idle");
-      const nProblems = s.equipment.filter(problem).length;
-      const q = eqQuery.trim().toLowerCase();
-      const shown = s.equipment.filter((e) => (!eqOnlyProblems || problem(e)) && (!q || (e.id + " " + e.name + " " + (e.kind || "") + " " + e.state).toLowerCase().includes(q)));
-      const tools = s.equipment.length > 4 ? `<div class="toolbar">
-          <input type="search" id="eq-search" placeholder="Find a device by name or tag" value="${esc(eqQuery)}" aria-label="Find a device">
-          <div class="segmented" role="group" aria-label="Show">
-            <button type="button" class="${eqOnlyProblems ? "" : "on"}" data-eqf="all" aria-pressed="${!eqOnlyProblems}">All ${s.equipment.length}</button>
-            <button type="button" class="${eqOnlyProblems ? "on" : ""}" data-eqf="problems" aria-pressed="${eqOnlyProblems}">Needs attention ${nProblems}</button></div></div>` : "";
-      const V = window.PKVis;
-      return top
-        + (V && s.equipment.length ? sec("", `<h2>The machine at a glance</h2><p class="sub">Every device as a symbol, in the colour of what it is doing now. Tap one for the details.</p>${V.plantMap(s.equipment, selectedEq)}`) : "")
-        + (seqs ? sec("alt", `<h2>Sequence</h2><p class="sub">Each step, where it is now, and what it waits for.</p>${seqs}`) : "")
-        + (V ? sec("", `<h2>Values over time</h2><p class="sub">The measured values, the step each sequence was in, and when alarms came.</p>${V.trends()}`) : "")
-        + sec("", `<h2>Equipment</h2><p class="sub">Every device, and the chain from request to feedback. The first red link is why it is not running.</p>
-            ${sel ? `<div class="card stack eq-open" style="margin-bottom:18px">${eqCard(sel, true)}<div class="actions"><button class="btn small" data-ask="Why is ${esc(sel.id)} ${esc(sel.state)}?">Ask why</button><button class="btn b small" data-close-eq>Close</button></div></div>` : ""}
-            ${tools}
-            ${shown.length ? `<div class="grid auto">${shown.map((e) => `<div class="eq ${e.id === selectedEq ? "sel" : ""}" data-eq="${esc(e.id)}" role="button" tabindex="0" aria-label="${esc(e.name)}, ${esc(e.state)}">${eqCard(e, false)}</div>`).join("")}</div>`
-              : `<div class="nomatch">${eqOnlyProblems && !q ? `${icon("check")}<b>Every device is fine.</b><span>Nothing needs attention right now.</span>` : `${icon("search")}<b>No device matches.</b><span>Try part of the name or the tag, like ${esc((s.equipment[0] || {}).id || "XV101")}.</span>`}
-                <button class="btn b small" data-eq-reset>Show all devices</button></div>`}`)
-        + (s.exchange.length ? sec("dark", `<h2>Data exchange</h2><p class="sub">Signals to and from other systems.</p>
-            <table class="tbl xchg"><tr><th>With</th><th>Signal</th><th>Value</th><th>Meaning</th></tr>
+      let body = "";
+      if (tab === "overview") {
+        const alarmRows = s.activeAlarms.map((x) => `<li><a class="al ${x.severity === "WARNING" ? "w" : ""}" href="#/alarm">
+              <span class="ico">${icon("bell")}</span>
+              <span class="nd-t"><b>${esc(x.id)} · ${esc(x.text)}</b><span>${esc(x.condition || x.location || "")}</span></span>
+              <span class="lv lv-${x.severity === "WARNING" ? "warn" : "fault"}">${esc(x.severity === "WARNING" ? "warning" : "fault")}</span><span class="chev">›</span></a></li>`).join("");
+        const nNeeds = attention.length + s.activeAlarms.length;
+        const needs = nNeeds
+          ? `<ul class="needs">${alarmRows}${attention.map((e) => `<li><a href="#/plant/devices/${encodeURIComponent(e.id)}">
+              <span class="ico">${icon(PK.kindIcon(e.kind))}</span>
+              <span class="nd-t"><b>${esc(e.name)}</b><span>${esc(e.blockedBy ? (/^needs /.test(e.blockedBy) ? "Blocked: it " + e.blockedBy : "Blocked: " + e.blockedBy) : e.explanation || e.state)}</span></span>
+              <span class="lv lv-${esc(e.blockedBy ? "warn" : e.level)}">${esc(e.blockedBy ? "blocked" : e.state)}</span><span class="chev">›</span></a></li>`).join("")}</ul>`
+          : `<p class="ok-line">${icon("check")}<span>No alarm, and every device is doing what the program asks.</span></p>`;
+        const seqCards = s.sequences.map((q) => `<div class="card stack">
+            <div class="row"><h3 style="margin:0">${esc(q.name)}</h3><span class="pill ${seqState(q)[1]}">${seqState(q)[0]}</span><span class="spacer"></span>
+              <a class="small" href="#/sequence/${encodeURIComponent(q.id)}">Step chart and timeline ›</a></div>
+            ${stepStrip(q)}
+            ${q.does ? `<p style="margin:0"><span class="muted">This step should:</span> ${esc(q.does)}</p>` : ""}
+            ${q.halted && q.haltReasons.length ? `<div class="notice red">${icon("warn")}<div><b>Halted, outputs are off:</b> ${q.haltReasons.map(esc).join("; ")}</div></div>` : ""}
+            ${q.next.map((n) => `<div><p class="muted small" style="margin:0 0 6px">To go to step ${n.to} "${esc(n.toName)}" it needs</p><ul class="conds">${n.conditions.map(cond).join("")}</ul></div>`).join("")}
+            ${q.limit ? `<p class="faint" style="margin:0">${esc(q.limit)}</p>` : ""}
+          </div>`).join("");
+        body = sec("", `<div class="plant-cols">
+            <div class="stack">
+              <div class="card stack"><div class="row"><h3 style="margin:0">Needs attention</h3>${nNeeds ? `<span class="count ${s.activeAlarms.some((x) => x.severity !== "WARNING") ? "" : "warn"}">${nNeeds}</span>` : ""}<span class="spacer"></span>
+                <a class="small" href="#/plant/devices">All devices ›</a></div>${needs}</div>
+              ${seqCards}
+            </div>
+            <div class="stack">
+              ${V && s.equipment.length ? `<div class="card stack"><h3 style="margin:0">The machine at a glance</h3>${V.plantMap(s.equipment, null)}</div>` : ""}
+              ${V ? `<a class="card plink" href="#/plant/values"><span class="ico">${icon("clock")}</span><span><b>Values over time</b><span class="muted small">The last minutes of every measured value, with steps and alarms.</span></span><span class="chev">›</span></a>` : ""}
+              ${s.exchange.length ? `<a class="card plink" href="#/plant/exchange"><span class="ico">${icon("link")}</span><span><b>Data exchange</b><span class="muted small">${s.exchange.length} signals to and from ${esc([...new Set(s.exchange.map((x) => x.partner))].join(", "))}.</span></span><span class="chev">›</span></a>` : ""}
+            </div>
+          </div>`);
+      } else if (tab === "devices") {
+        const q = eqQuery.trim().toLowerCase();
+        const sorted = [...s.equipment].sort((x, y) => rank(x) - rank(y));
+        const shown = sorted.filter((e) => (!eqOnlyProblems || problemOf(e)) && (!q || (e.id + " " + e.name + " " + (e.kind || "") + " " + e.state).toLowerCase().includes(q)));
+        const sel = s.equipment.find((e) => e.id === selectedEq) || shown[0] || sorted[0];
+        const tools = `<div class="dev-tools">${s.equipment.length > 6 ? `<input type="search" id="eq-search" placeholder="Find a device" value="${esc(eqQuery)}" aria-label="Find a device">` : ""}
+            <div class="segmented" role="group" aria-label="Show">
+              <button type="button" class="${eqOnlyProblems ? "" : "on"}" data-eqf="all" aria-pressed="${!eqOnlyProblems}">All ${s.equipment.length}</button>
+              <button type="button" class="${eqOnlyProblems ? "on" : ""}" data-eqf="problems" aria-pressed="${eqOnlyProblems}">Needs attention ${attention.length}</button></div></div>`;
+        const list = shown.length ? `<ul class="devlist">${shown.map((e) => `<li><button type="button" class="${sel && e.id === sel.id ? "on" : ""}" data-pick="${esc(e.id)}" aria-pressed="${!!sel && e.id === sel.id}">
+            <span class="ico">${icon(PK.kindIcon(e.kind))}</span><span class="dv-t"><b>${esc(e.name)}</b><span>${esc(e.id)}</span></span>
+            <span class="lv lv-${esc(e.blockedBy ? "warn" : e.level)}">${esc(e.blockedBy ? "blocked" : e.state)}</span></button></li>`).join("")}</ul>`
+          : `<div class="nomatch">${eqOnlyProblems && !q ? `${icon("check")}<b>Every device is fine.</b>` : `${icon("search")}<b>No device matches.</b>`}<button class="btn b small" data-eq-reset>Show all devices</button></div>`;
+        body = sec("", `<div class="dev-cols"><div class="stack">${tools}${list}</div>
+            <div data-dev>${sel ? `<div class="card stack eq-open">${eqCard(sel, true)}<div class="actions"><button class="btn small" data-ask="Why is ${esc(sel.id)} ${esc(sel.state)}?">Ask why</button></div></div>` : ""}</div></div>`);
+      } else if (tab === "values") {
+        body = sec("", V ? V.trends() : `<p class="muted">Charts are not available.</p>`);
+      } else {
+        body = sec("", `<div class="card"><table class="tbl xchg"><tr><th>With</th><th>Signal</th><th>Value</th><th>Meaning</th></tr>
             ${s.exchange.map((x) => `<tr><td class="with"><b title="${x.direction === "in" ? "from" : "to"} ${esc(x.partner)}">${x.direction === "in" ? "← from" : "→ to"} ${esc(x.partner)}</b></td>
               <td class="sig">${esc(x.label)}</td><td class="val">${esc(x.value)}</td><td class="muted mean">${esc(x.text || "")}</td></tr>`).join("")}
-            </table>`) : "")
+            </table></div>`);
+      }
+      return head + body
         + (Object.keys(s.tagErrors || {}).length ? sec("tight", `<details class="more"><summary>${Object.keys(s.tagErrors).length} signals could not be read</summary><ul class="small">${Object.entries(s.tagErrors).map(([k, v]) => `<li><code>${esc(k)}</code>: ${esc(v)}</li>`).join("")}</ul></details>`) : "")
         + guide();
     },
     after(page) {
-      page.querySelectorAll("[data-eq]").forEach((d) => {
-        d.onclick = () => { selectedEq = selectedEq === d.dataset.eq ? null : d.dataset.eq; PK.draw(); if (selectedEq) PK.$("page").querySelector(".eq-open")?.scrollIntoView({ block: "nearest", behavior: "smooth" }); };
+      // The machine at a glance: a device opens on the Devices tab
+      page.querySelectorAll(".pmap [data-eq]").forEach((d) => {
+        d.onclick = () => PK.go("#/plant/devices/" + encodeURIComponent(d.dataset.eq));
         d.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); d.click(); } };
+      });
+      page.querySelectorAll("[data-pick]").forEach((b) => b.onclick = () => {
+        selectedEq = b.dataset.pick;
+        PK.setHash("#/plant/devices/" + encodeURIComponent(selectedEq));
+        PK.draw();
+        if (innerWidth <= 1000) setTimeout(() => { const el = page.querySelector("[data-dev]"); if (el) window.scrollTo({ top: el.getBoundingClientRect().top + scrollY - 70, behavior: "instant" }); }, 0);
       });
       const es = page.querySelector("#eq-search");
       if (es) es.oninput = () => { eqQuery = es.value; PK.draw(); };
       page.querySelectorAll("[data-eqf]").forEach((b) => b.onclick = () => { eqOnlyProblems = b.dataset.eqf === "problems"; PK.draw(); });
       const r = page.querySelector("[data-eq-reset]");
       if (r) r.onclick = () => { eqQuery = ""; eqOnlyProblems = false; PK.draw(); };
-      const c = page.querySelector("[data-close-eq]");
-      if (c) c.onclick = () => { selectedEq = null; PK.draw(); };
       if (window.PKVis) window.PKVis.bindTrends(page);
       bindAsk(page);
     },
