@@ -863,6 +863,7 @@ body { background: var(--bg-alt); }
 .sidebar .tl { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sidebar .tl-short { display: none; }
 .sidebar .count { margin-left: auto; flex: none; }
+.nav-more { display: none; }
 .rail-foot { margin-top: auto; display: flex; flex-direction: column; gap: 2px; padding-top: 10px; border-top: 1px solid var(--frame-line); }
 .rail-btn { width: 100%; font: inherit; font-size: 13.5px; text-align: left; border: 0; background: none; cursor: pointer; }
 .rail-who { min-height: 34px; color: var(--frame-ink); font-size: 13px; font-weight: 600; }
@@ -964,6 +965,11 @@ main#page section.hero .k span { margin-top: 2px; }
   .sidebar .tl-long { display: none; }
   .sidebar .tl-short { display: inline; }
   .sidebar .count { position: absolute; top: 2px; left: calc(50% + 6px); margin: 0; }
+  /* Four pages stay in the bar so every label fits; the rest are under "More" */
+  .sidebar .links a.more-item { display: none; }
+  .sidebar .links .nav-more { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 6px 2px; border: 0; border-radius: 10px;
+    background: none; color: var(--frame-ink); font: inherit; font-size: 10.5px; cursor: pointer; }
+  .sidebar .links .nav-more.active { background: var(--frame-on); color: #fff; font-weight: 600; }
   body { padding-bottom: calc(64px + env(safe-area-inset-bottom)); }
   .dirty-bar { bottom: calc(76px + env(safe-area-inset-bottom)); }
   .toast { bottom: calc(80px + env(safe-area-inset-bottom)); }
@@ -1426,3 +1432,23 @@ section.rp { padding-top: 8px; }
 .cap-rows .tr-now.small { grid-column: 2; grid-row: 1; }
 .cap-rows .tr-rng { display: none; }
 @media (max-width: 600px) { .cap-rows .tr-lab { grid-template-columns: minmax(0, 1fr) auto; } }
+
+/* "More" sheet (phone menu): grouped rows like iOS Settings */
+.more-sheet { gap: 12px; }
+.more-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.more-head .btn { font-weight: 600; }
+.mlist { list-style: none; margin: 0; padding: 0; background: var(--bg-alt); border-radius: 14px; overflow: hidden; }
+.mlist li + li .mrow::before { content: ""; position: absolute; left: 54px; right: 0; top: 0; height: 1px; background: var(--line); }
+.mrow { position: relative; display: flex; align-items: center; gap: 12px; width: 100%; min-height: 46px; padding: 7px 14px; border: 0; background: none;
+  color: var(--ink); font: inherit; font-size: 16px; text-align: left; text-decoration: none; cursor: pointer; transition: background 0.15s var(--ease); }
+@media (hover: hover) { .mrow:hover { background: var(--line); } }
+.mrow:active { background: var(--line); }
+.mrow-i { width: 28px; height: 28px; flex: none; display: grid; place-items: center; border-radius: 8px; background: var(--accent-soft); color: var(--accent); }
+.mrow-i svg { width: 17px; height: 17px; }
+.mrow-t { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.mrow-t small { font-size: 12.5px; color: var(--muted); }
+.mrow-go { width: 16px; height: 16px; flex: none; color: var(--muted); opacity: 0.6; }
+.mrow-go svg { width: 16px; height: 16px; }
+.mrow.on { font-weight: 600; }
+.mrow.on .mrow-i { background: var(--accent); color: #fff; }
+.more-who { margin: 4px 4px -6px; }
