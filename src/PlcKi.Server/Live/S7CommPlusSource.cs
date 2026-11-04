@@ -169,6 +169,22 @@ public sealed class S7CommPlusSource : IPlcSource
         return snap;
     }
 
+    /// <summary>Operating mode and mode switch (a read; the driver's mode change is never called, see ReadOnlyTests).</summary>
+    public CpuReading? ReadCpu()
+    {
+        var client = _client;
+        if (client == null) return null;
+        try
+        {
+            var st = client.GetCpuStateAsync(CancellationToken.None).GetAwaiter().GetResult();
+            return new CpuReading(st.OperatingState.ToString(), string.IsNullOrWhiteSpace(st.StateSwitch) ? null : st.StateSwitch, DateTimeOffset.Now);
+        }
+        catch (Exception ex)
+        {
+            return new CpuReading("Unknown", null, DateTimeOffset.Now, Describe(ex));
+        }
+    }
+
     /// <summary>Lookups for the Tags page, kept while connected: symbol -> tag, or why it cannot be read.</summary>
     private readonly Dictionary<string, (PlcTag? Tag, string? Error)> _extra = new();
     private const int MaxLookupsPerRead = 30;

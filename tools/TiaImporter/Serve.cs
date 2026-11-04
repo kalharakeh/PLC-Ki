@@ -24,6 +24,8 @@ namespace TiaImporter
     ///   POST /export                 {"archive"} -> {"job"}: export the archive's PLC programs (TiaImporter export)
     ///                                {"project","name"} -> {"job"}: export a project (.ap20) as it is now ("Refresh from TIA")
     ///   GET  /exports/{name}         the finished export as a zip
+    ///   GET  /cpu                    RUN/STOP state (and LEDs) of the PLCSIM CPU at --plcsim-ip (PLCSIM Advanced API)
+    ///   POST /cpu                    {"mode":"run"|"stop","ip"}: switches that PLCSIM CPU only; never a real PLC
     ///
     /// Projects are opened only when a request names them, and only .ap20 files under the allowed folder.
     /// </summary>
@@ -150,6 +152,33 @@ namespace TiaImporter
                 ctx.Response.Close();
                 return;
             }
+            if (req.HttpMethod == "GET" && path == "/cpu")
+            {
+                var st = _plcsimIp == null
+                    ? new Dictionary<string, object> { ["found"] = false, ["error"] = "No PLCSIM address on the TIA helper (start serve with --plcsim-ip)." }
+                    : PlcsimControl.State(_plcsimIp);
+                st["plcsimIp"] = _plcsimIp;
+                Reply(ctx, 200, st);
+                return;
+            }
+            if (req.HttpMethod == "POST" && path == "/cpu")
+            {
+                JsonElement body;
+                using (var r = new StreamReader(req.InputStream, Encoding.UTF8)) body = JsonDocument.Parse(r.ReadToEnd()).RootElement.Clone();
+                // Only the PLCSIM CPU this helper downloads to; the caller names it, so a mix-up is refused, not guessed
+                if (_plcsimIp == null) throw new InvalidOperationException("Start/Stop is off: start serve with --plcsim-ip <PLCSIM address>.");
+                if (!string.Equals(Str(body, "ip"), _plcsimIp, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException($"Refused: Start/Stop only works on the PLCSIM CPU at {_plcsimIp}, not {Str(body, "ip") ?? "(no address)"}.");
+                var mode = Str(body, "mode");
+                var log = new StringWriter();
+                var st = PlcsimControl.SetMode(_plcsimIp, mode, log);
+                Console.Write(log.ToString());
+                try { File.AppendAllText(Path.Combine(_packages.FullName, "plcsim-mode.log"), $"{DateTime.Now:o} {mode} {_plcsimIp} from {req.RemoteEndPoint?.Address}\r\n"); }
+                catch (IOException) { /* log is a courtesy */ }
+                st["plcsimIp"] = _plcsimIp;
+                Reply(ctx, 200, st);
+                return;
+            }
             if (req.HttpMethod == "GET" && path.StartsWith("/jobs/"))
             {
                 Job job;
@@ -219,7 +248,7 @@ namespace TiaImporter
                             var exports = Directory.CreateDirectory(Path.Combine(_packages.FullName, "exports"));
                             var outDir = new DirectoryInfo(Path.Combine(exports.FullName, name));
                             if (outDir.Exists) outDir.Delete(true);
-                            code = exportProject != null ? new Exporter(tee).RunProject(exportProject, outDir) : new Exporter(tee).Run(archive, outDir);
+                            code = exportProject != null ? new Exporter(tee).RunProject(exportProject, outDir) : new Exporter(tee).Run(archive, outDir, Bool(body, "hardwareOnly"));
                             var zip = Path.Combine(exports.FullName, name + ".zip");
                             if (File.Exists(zip)) File.Delete(zip);
                             if (code == 0 || outDir.Exists) ZipFile.CreateFromDirectory(outDir.FullName, zip, CompressionLevel.Optimal, false);

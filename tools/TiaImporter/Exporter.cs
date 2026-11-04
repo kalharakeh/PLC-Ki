@@ -24,13 +24,14 @@ namespace TiaImporter
 
         public Exporter(TextWriter log) { _log = log; }
 
-        public int Run(FileInfo archive, DirectoryInfo outDir)
+        /// <param name="hardwareOnly">only hardware.json (and the manifest): quick, for the PLC-Ki Hardware page</param>
+        public int Run(FileInfo archive, DirectoryInfo outDir, bool hardwareOnly = false)
         {
             if (!archive.Exists) throw new FileNotFoundException("Archive not found", archive.FullName);
             var temp = new DirectoryInfo(Path.Combine(Path.GetTempPath(), "TiaImporter_" + Guid.NewGuid().ToString("N")));
             try
             {
-                return Export(archive.Name, outDir, () =>
+                return Export(archive.Name, outDir, hardwareOnly, () =>
                 {
                     temp.Create();
                     _log.WriteLine("Starting TIA Portal V20 without user interface...");
@@ -54,7 +55,7 @@ namespace TiaImporter
         public int RunProject(FileInfo projectFile, DirectoryInfo outDir)
         {
             if (!projectFile.Exists) throw new FileNotFoundException("Project not found", projectFile.FullName);
-            return Export(projectFile.Name, outDir, () =>
+            return Export(projectFile.Name, outDir, false, () =>
             {
                 foreach (var process in TiaPortal.GetProcesses())
                 {
@@ -77,7 +78,7 @@ namespace TiaImporter
         }
 
         /// <summary>Exports every PLC of the project <paramref name="open"/> gives; closes it afterwards only when it opened it.</summary>
-        private int Export(string sourceName, DirectoryInfo outDir, Func<(TiaPortal Tia, Project Project, bool Close)> open)
+        private int Export(string sourceName, DirectoryInfo outDir, bool hardwareOnly, Func<(TiaPortal Tia, Project Project, bool Close)> open)
         {
             if (outDir.Exists && outDir.EnumerateFileSystemInfos().Any())
                 throw new IOException($"Output folder {outDir.FullName} is not empty. Use a new folder.");
@@ -101,7 +102,7 @@ namespace TiaImporter
                     {
                         _log.WriteLine($"PLC {plc.DeviceName} / {plc.CpuName} ({plc.TypeIdentifier})");
                         var plcDir = outDir.CreateSubdirectory(Safe(plc.Software.Name));
-                        var counts = ExportPlc(plc.Software, plcDir);
+                        var counts = hardwareOnly ? new Dictionary<string, int>() : ExportPlc(plc.Software, plcDir);
                         plcList.Add(new Dictionary<string, object>
                         {
                             ["name"] = plc.Software.Name,
@@ -113,6 +114,10 @@ namespace TiaImporter
                             ["counts"] = counts,
                         });
                     }
+                    // The racks, modules, addresses and channels, for the PLC-Ki Hardware and PLC pages
+                    _log.WriteLine("Exporting the hardware configuration...");
+                    try { HardwareExport.Write(project, Path.Combine(outDir.FullName, "hardware.json"), _log); }
+                    catch (Exception ex) { Problem("hardware", project.Name, ex); }
                 }
                 finally
                 {

@@ -12,6 +12,8 @@ public sealed class LiveState
     public LiveState(MachineHistory history) => History = history;
 
     public MachineStatus? Status => _status;
+    /// <summary>The CPU's mode as last read (null when the source cannot tell or never could).</summary>
+    public CpuReading? Cpu { get; set; }
     public Snapshot? Snapshot => _snapshot;
     public MachineHistory History { get; }
 
@@ -99,6 +101,7 @@ public sealed class PollingService : BackgroundService
         DateTimeOffset? lastGood = null;
         int backoffMs = 2000;
         string? error = null;
+        var lastCpu = DateTime.MinValue;
 
         while (!ct.IsCancellationRequested)
         {
@@ -151,6 +154,12 @@ public sealed class PollingService : BackgroundService
                 {
                     try { _watch.Publish(_source.ReadSymbols(extra), snap.Time); }
                     catch (Exception ex) { _log.LogDebug(ex, "Reading the watched tags failed."); }
+                }
+                if (DateTime.UtcNow - lastCpu > TimeSpan.FromSeconds(2))
+                {
+                    lastCpu = DateTime.UtcNow;
+                    try { _state.Cpu = _source.ReadCpu(); }
+                    catch (Exception ex) { _log.LogDebug(ex, "Reading the CPU mode failed."); }
                 }
                 Publish(snap, _source.Kind == "snapshot" ? "snapshot" : "connected", null, lastGood, missing);
             }

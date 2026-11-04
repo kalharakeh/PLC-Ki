@@ -35,6 +35,7 @@ const PK = (() => {
     laptop: '<rect x="5" y="5" width="14" height="10" rx="1.5"/><path d="M2 19h20l-2-4H4l-2 4Z"/>',
     server: '<rect x="4" y="3" width="16" height="7" rx="2"/><rect x="4" y="14" width="16" height="7" rx="2"/><path d="M8 6.5h.01M8 17.5h.01"/>',
     vm: '<rect x="3" y="4" width="18" height="14" rx="2"/><rect x="7" y="8" width="10" height="6" rx="1"/><path d="M8 21h8"/>',
+    rack: '<rect x="3" y="4" width="18" height="16" rx="1.5"/><path d="M8 4v16M12 4v16M16 4v16"/><path d="M5 7h1M10 7h0.5M14 7h0.5M18 7h0.5"/>',
     cpu: '<rect x="5" y="5" width="14" height="14" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/>',
     tia: '<path d="M4 6h16M4 12h10M4 18h7"/><path d="m16 15 3 3 3-6"/>',
     play: '<path d="M7 4v16l13-8L7 4Z"/>',
@@ -126,15 +127,19 @@ const PK = (() => {
     const { name, params } = parseRoute();
     const v = views[name] || views.alarm;
     document.querySelectorAll("#nav a").forEach((a) => a.classList.toggle("active", a.dataset.route === name || (a.dataset.route === "setup" && name.startsWith("setup/") && name !== "setup/generator")));
-    // The one page that can load blocks into a PLC says so where the rest say "read-only"
+    // The pages that can change a PLC say so where the rest say "read-only"
     const ro = $("ro-badge");
+    const except = name === "setup/generator" || name === "plc";
     if (ro) {
-      ro.textContent = name === "setup/generator" ? "Read-only, except here" : "Read-only";
-      ro.classList.toggle("except", name === "setup/generator");
-      ro.title = name === "setup/generator" ? "The block generator can load blocks into PLCSIM, or into a real PLC after two people confirm. Every other page only reads." : "PLC-Ki reads from the PLC only: it never writes values or changes the CPU state.";
+      ro.textContent = except ? "Read-only, except here" : "Read-only";
+      ro.classList.toggle("except", except);
+      ro.title = name === "setup/generator" ? "The block generator can load blocks into PLCSIM, or into a real PLC after two people confirm. Every other page only reads."
+        : name === "plc" ? "Start and Stop here switch the PLCSIM CPU only, after you confirm. A real PLC is never started or stopped."
+        : "PLC-Ki reads from the PLC only: it never writes values or changes the CPU state.";
     }
     $("foot-text").textContent = name === "setup/generator"
       ? "PLC-Ki reads from the PLC only. The one exception is this page: the block generator loads blocks into PLCSIM, or into a real PLC after two people confirm."
+      : name === "plc" ? "PLC-Ki reads from the PLC only. The one exception is on this page: Start and Stop switch the PLCSIM CPU, never a real PLC."
       : "PLC-Ki reads from the PLC only: it never writes values or changes the CPU state.";
     const page = $("page");
     if (current && current.view.leave) current.view.leave();
@@ -815,6 +820,16 @@ const PK = (() => {
       "Tag tables: every tag with its address (%I, %Q, %M), type and comment. Search by name, address or comment.",
       "Data blocks: pick one on the left to see all its values. Optimized blocks have no addresses; values are read by name.",
       "Up to 300 rows are read live at a time, about once a second. PLC-Ki only reads: nothing here changes the PLC."]],
+    plc: ["PLC monitor", "The CPU as it looks on the machine: its mode, its LEDs and a display with what PLC-Ki reads.", [
+      "Operating mode: RUN, STOP or STARTUP as the CPU reports it, with the position of the mode switch where the CPU tells it.",
+      "The picture is drawn from the CPU's order number. Use the keys under the display, or the buttons below it, to page through Overview, Diagnostics, Settings and Modules.",
+      "Start and Stop work only when PLC-Ki reads the PLCSIM CPU of the TIA helper, and only for administrators. You confirm first. A real PLC is never started or stopped from PLC-Ki.",
+      "ERROR and MAINT come from PLCSIM where it tells them; on a real CPU they are not read and stay dark here."]],
+    hardware: ["Hardware", "Every rack and module of the TIA project, with each input and output, its tag and its live value.", [
+      "Pick a device at the top (PLC, I/O stations, drives, robots), then tap a module in the rack for its channels.",
+      "Each module is drawn from its order number: width, LEDs and channel count as on the real device. Devices from other makers show as a plain box.",
+      "Channels are matched to the PLC tags by address (%I10.3, %IW256), so you see the tag name, its comment and the live value.",
+      "If only the CPU shows, the program export has no hardware yet: Read the hardware from TIA (administrators) takes a minute or two and changes nothing else."]],
     "setup/start": ["Get started", "Sets PLC-Ki up one question at a time. You can come back here any time.", [
       "Each step is saved when you press Continue. Skip what you don't need now: TIA Portal is only needed to import a program or build blocks.",
       "At the end, Apply restarts PLC-Ki with the new settings (a few seconds)."]],

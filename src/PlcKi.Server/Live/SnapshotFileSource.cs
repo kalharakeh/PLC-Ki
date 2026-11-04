@@ -57,6 +57,21 @@ public sealed class SnapshotFileSource : IPlcSource
         return snap;
     }
 
+    /// <summary>Test files may say the CPU mode: "$cpu": "Run" (or "Stop"), "$switch": "RUN".</summary>
+    public CpuReading? ReadCpu()
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(File.ReadAllText(_path), new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true });
+            var r = doc.RootElement;
+            var state = r.TryGetProperty("$cpu", out var c) && c.ValueKind == JsonValueKind.String ? c.GetString() : null;
+            if (state == null) return null;
+            var sw = r.TryGetProperty("$switch", out var s) && s.ValueKind == JsonValueKind.String ? s.GetString() : null;
+            return new CpuReading(state, sw, DateTimeOffset.Now);
+        }
+        catch (Exception) { return null; }
+    }
+
     public void Disconnect() => _connected = false;
     public void Dispose() => Disconnect();
 }
