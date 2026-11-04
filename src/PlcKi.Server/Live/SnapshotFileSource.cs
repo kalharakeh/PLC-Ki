@@ -72,7 +72,10 @@ public sealed class SnapshotFileSource : IPlcSource
         catch (Exception) { return null; }
     }
 
-    /// <summary>Symbols outside the model (drive values, the Tags page) come from the same file, by full symbol.</summary>
+    /// <summary>
+    /// Symbols (drive values, the Tags page) come from the same file. The full symbol is tried first;
+    /// otherwise the model tag with that symbol (exact, then ignoring case) supplies its id as the key.
+    /// </summary>
     public Dictionary<string, (object? Value, string? Error)> ReadSymbols(IReadOnlyList<TagDef> symbols)
     {
         var result = new Dictionary<string, (object?, string?)>();
@@ -81,7 +84,7 @@ public sealed class SnapshotFileSource : IPlcSource
             using var doc = JsonDocument.Parse(File.ReadAllText(_path), new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true });
             foreach (var s in symbols)
             {
-                if (!doc.RootElement.TryGetProperty(s.Symbol, out var v)) { result[s.Symbol] = (null, "Not in the test file."); continue; }
+                if (!TryFindValue(doc.RootElement, s.Symbol, out var v)) { result[s.Symbol] = (null, "Not in the test file."); continue; }
                 object? raw = v.ValueKind switch
                 {
                     JsonValueKind.True => true, JsonValueKind.False => false,
@@ -92,6 +95,16 @@ public sealed class SnapshotFileSource : IPlcSource
         }
         catch (Exception ex) when (ex is IOException or JsonException) { foreach (var s in symbols) result[s.Symbol] = (null, ex.Message); }
         return result;
+    }
+
+    private bool TryFindValue(JsonElement root, string symbol, out JsonElement value)
+    {
+        if (root.TryGetProperty(symbol, out value)) return true;
+        var tag = _tags.FirstOrDefault(t => string.Equals(t.Symbol, symbol, StringComparison.Ordinal))
+               ?? _tags.FirstOrDefault(t => string.Equals(t.Symbol, symbol, StringComparison.OrdinalIgnoreCase));
+        if (tag != null && root.TryGetProperty(tag.Id, out value)) return true;
+        value = default;
+        return false;
     }
 
     /// <summary>
