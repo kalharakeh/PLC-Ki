@@ -8,7 +8,7 @@
 
   const g = {
     packages: null, projects: null, projectsError: null, tia: null, settings: null,
-    open: null, detail: null, file: null,            // package shown below the form
+    open: null, detail: null, file: null, tab: "versions",   // the package picked on the left, and which part of it shows
     form: { name: "", request: "", project: "", plc: "", edit: "", useContext: true, sclOnly: false, download: "none", plcAddress: "", watch: 30, rounds: 3, effort: "high" },
     job: null, unfollow: null, sheet: null, sheetFor: null,
   };
@@ -26,13 +26,41 @@
     try { g.packages = await api("GET", "/api/admin/generator/packages"); } catch (e) { g.packages = []; toast(e.message, "error"); }
     PK.draw();
   }
-  async function openPackage(name) {
-    g.open = name; g.detail = null; g.file = null;
+  /** Picks a package on the left: the right side shows its versions, and "Change it" works on this package. */
+  async function openPackage(name, tab = "versions") {
+    if (g.open !== name) { g.form.request = ""; g.form.edit = ""; }
+    g.open = name; g.form.name = name; g.tab = tab; g.detail = null; g.file = null;
     PK.draw();
-    try { g.detail = await api("GET", "/api/admin/generator/packages/" + encodeURIComponent(name)); } catch (e) { toast(e.message, "error"); }
+    showWork();
+    try {
+      g.detail = await api("GET", "/api/admin/generator/packages/" + encodeURIComponent(name));
+      if (g.detail.plc && !g.form.plc) g.form.plc = g.detail.plc;
+      const last = g.detail.versions.find((v) => v.report && v.report.project);
+      if (last && !g.form.project) g.form.project = last.report.project;   // change it in the project it went into last
+    } catch (e) { toast(e.message, "error"); }
     PK.draw();
-    // The detail opens further down the page: bring it into view
-    requestAnimationFrame(() => { const el = document.querySelector(".pkg-detail"); if (el) el.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" }); });
+    showWork();   // again: the page is taller now that the versions are in
+  }
+  /** Starts a new package: the right side shows the empty form. */
+  function newPackage() {
+    g.open = null; g.detail = null; g.file = null; g.form.name = ""; g.form.request = ""; g.form.edit = "";
+    PK.draw();
+    showWork();
+  }
+  /** On a narrow screen the list sits above the work area: bring the work area into view (after draw() restores the scroll). */
+  function showWork() {
+    if (innerWidth > 1000) return;
+    setTimeout(() => { const el = document.querySelector("[data-work]"); if (el) window.scrollTo({ top: el.getBoundingClientRect().top + scrollY - 70, behavior: "instant" }); }, 0);
+  }
+  /** A package name from the request when none is typed: "An FB for a pump with start/stop" gives "fb-pump-start". */
+  const STOP = new Set("a an the for with and or of to in on at that which i we need needs want please make create write add new block blocks it is be from by as".split(" "));
+  function nameFrom(request) {
+    const words = (request || "").toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, " ").split(" ").filter((w) => w && !STOP.has(w));
+    let base = words.slice(0, 3).join("-").slice(0, 40) || "blocks";
+    const taken = new Set((g.packages || []).map((p) => p.name.toLowerCase()));
+    let name = base, n = 2;
+    while (taken.has(name)) name = `${base}-${n++}`;
+    return name;
   }
   async function showFile(version, file) {
     try {
@@ -143,43 +171,51 @@
       <span class="ico">${icon(o.icon)}</span><b>${esc(o.label)}</b><small>${esc(o.text)}</small></button>`).join("")}</div>`;
   }
 
+  /** One numbered step of the form. */
+  const gstep = (n, title, body, hint = "") => `<div class="gstep"><div class="gstep-n">${n}</div><div class="gstep-b"><h4>${title}</h4>${hint ? `<p class="hint" style="margin:0 0 10px">${hint}</p>` : ""}${body}</div></div>`;
+
+  /** The form: new blocks, or a change to the picked package. */
   function formHtml() {
     const f = g.form;
+    const change = !!g.open;
     const running = g.job && g.job.state === "running";
     const projects = g.projects || [];
     const known = projects.some((p) => p.path === f.project);
     const projectField = g.projects
-      ? `<select id="g-project"><option value="">Choose a project</option>${projects.map((p) => `<option value="${esc(p.path)}" ${p.path === f.project ? "selected" : ""}>${esc(projectLabel(p, projects))}</option>`).join("")}
+      ? `<select id="g-project" aria-label="TIA project"><option value="">Choose a project</option>${projects.map((p) => `<option value="${esc(p.path)}" ${p.path === f.project ? "selected" : ""}>${esc(projectLabel(p, projects))}</option>`).join("")}
           ${f.project && !known ? `<option value="${esc(f.project)}" selected>${esc(f.project)}</option>` : ""}</select>
          <span class="hint">Projects on the TIA PC${g.tia && g.tia.projectsFolder ? " under " + esc(g.tia.projectsFolder) : ""}. Use a copy, not the plant's master project.</span>`
-      : `<input id="g-project" value="${esc(f.project)}" placeholder="C:\\Users\\…\\MyProject.ap20"><span class="hint">${g.projectsError ? "Type the full path. The TIA PC did not list its projects: " + esc(g.projectsError) : "Looking for projects on the TIA PC…"}</span>`;
+      : `<input id="g-project" value="${esc(f.project)}" placeholder="C:\\Users\\…\\MyProject.ap20" aria-label="TIA project"><span class="hint">${g.projectsError ? "Type the full path: the TIA PC did not list its projects." : "Looking for projects on the TIA PC…"}</span>`;
     const realAllowed = g.tia && g.tia.realAllowed && g.tia.realAllowed.length;
     const dl = f.download === "plcsim"
-      ? `<div class="grid two"><label class="field">PLCSIM address<input id="g-plcAddress" value="${esc(f.plcAddress)}" placeholder="${esc((g.tia && g.tia.plcsimIp) || "e.g. 192.168.0.10")}"><span class="hint">Empty: the TIA PC's PLCSIM address.</span></label>
+      ? `<div class="grid two" style="margin-top:12px"><label class="field">PLCSIM address<input id="g-plcAddress" value="${esc(f.plcAddress)}" placeholder="${esc((g.tia && g.tia.plcsimIp) || "e.g. 192.168.0.10")}"><span class="hint">Empty: the TIA PC's PLCSIM address.</span></label>
           <label class="field">Watch for (seconds)<input id="g-watch" type="number" min="5" max="600" value="${f.watch}"><span class="hint">PLC-Ki reads the new blocks while they run.</span></label></div>`
       : f.download === "real"
-        ? `<div class="notice red">${icon("shield")}<div><b>A real PLC needs two people-confirmations.</b> When it compiles, you type the version here after reviewing it.
+        ? `<div class="notice red" style="margin-top:12px">${icon("shield")}<div><b>A real PLC needs two people to confirm.</b> When it compiles, you type the version here after reviewing it.
             Then someone at the TIA PC types the PLC address in the PLC-Ki TIA helper window (2 minutes). Only addresses on that PC's allow-list work, the CPU must be in STOP,
             it is tried once (no fixing loop), and every step is logged. The CPU stays in STOP afterwards.
             ${g.tia ? (realAllowed ? `<br>Allowed on the TIA PC: <b>${esc(g.tia.realAllowed.join(", "))}</b>.` : `<br><b>No address is allowed on the TIA PC yet.</b> At the TIA PC, run Setup-TIA-helper again and enter the PLC's address as allowed for real downloads.`) : ""}</div></div>`
         : "";
-    return `<div class="card stack">
-      <h3 style="margin:0">${g.open && f.name === g.open ? `Change ${esc(f.name)}` : "New blocks"}</h3>
-      <label class="field">What do you need?<textarea id="g-request" rows="4" placeholder="For example: an FB for a pump with start/stop, run feedback, a 5 s feedback alarm and run hours.">${esc(f.request)}</textarea>
-        <span class="hint">${g.open && f.name === g.open ? "Say what to change. Leave it empty to import the latest version again." : "Plain words are fine. Name signals and times if you know them."}</span></label>
-      <div class="grid two">
-        <label class="field">Name<input id="g-name" value="${esc(f.name)}" placeholder="pump-fb" autocomplete="off"><span class="hint">Letters, digits, - and _. A new name starts a new package.</span></label>
-        <label class="field">TIA project${projectField}</label>
-      </div>
-      <div class="row"><div style="flex:1"><b style="font-weight:600">Fit into the current program</b><div class="muted small">Claude sees the imported program: its types, tags and blocks.${g.settings && g.settings.export ? "" : " (No program imported yet.)"}</div></div>
-        <label class="switch"><input type="checkbox" id="g-useContext" ${f.useContext ? "checked" : ""}><span></span></label></div>
-      <span class="eyebrow" style="margin-top:6px">After it compiles</span>
-      ${choice("dl", f.download, [
+    const suggested = nameFrom(f.request);
+    const steps = [
+      gstep(1, change ? "What should change?" : "What do you need?",
+        `<textarea id="g-request" rows="4" aria-label="${change ? "What should change" : "What do you need"}" placeholder="${change ? "For example: add a dry-run stop when the tank level is below 10 %." : "For example: an FB for a pump with start/stop, run feedback, a 5 s feedback alarm and run hours."}">${esc(f.request)}</textarea>
+         <span class="hint">${change ? "Claude changes the latest version and saves it as the next one. Leave it empty to import the latest version again." : "Plain words are fine. Name signals and times if you know them."}</span>`),
+      gstep(2, "Where should it go?",
+        `<div class="grid ${change ? "" : "two"}">
+          ${change ? "" : `<label class="field">Package name<input id="g-name" value="${esc(f.name)}" placeholder="${esc(suggested)}" autocomplete="off" spellcheck="false"><span class="hint">Optional. Empty: <b data-suggest>${esc(suggested)}</b>, made from your words.</span></label>`}
+          <label class="field">TIA project${projectField}</label>
+        </div>
+        <div class="row" style="margin-top:12px"><div style="flex:1"><b style="font-weight:600">Fit into the current program</b><div class="muted small">Claude sees the imported program: its types, tags and blocks.${g.settings && g.settings.export ? "" : " (No program imported yet.)"}</div></div>
+          <label class="switch"><input type="checkbox" id="g-useContext" ${f.useContext ? "checked" : ""}><span></span></label></div>`),
+      gstep(3, "After it compiles", choice("dl", f.download, [
         { value: "none", icon: "tia", label: "Stop in TIA", text: "Import and compile only. You download yourself." },
         { value: "plcsim", icon: "vm", label: "Run in PLCSIM", text: "Download to PLCSIM, watch it run, fix what fails." },
         { value: "real", icon: "warn", label: "Real PLC: changes a machine", text: "Loads the blocks into a real CPU once, after two people confirm. The CPU must be in STOP.", danger: true },
-      ])}
-      ${dl}
+      ]) + dl),
+    ];
+    return `<div class="card stack gen-form">
+      ${steps.join("")}
       <details class="more"><summary>More options</summary><div class="stack" style="margin-top:12px">
         <div class="grid two">
           <label class="field">PLC in the project<input id="g-plc" value="${esc(f.plc)}" placeholder="Empty: the only PLC"></label>
@@ -190,19 +226,26 @@
         <div class="row"><div style="flex:1"><b style="font-weight:600">SCL only</b><div class="muted small">No LAD or GRAPH, only SCL blocks.</div></div>
           <label class="switch"><input type="checkbox" id="g-sclOnly" ${f.sclOnly ? "checked" : ""}><span></span></label></div>
       </div></details>
-      <div class="actions"><button class="btn big ${f.download === "real" ? "red" : ""}" data-run ${running ? "disabled" : ""}>${icon("play")}${running ? "A job is running" : f.download === "real" ? "Start (real PLC)" : "Start"}</button>
-        ${g.open && f.name === g.open ? `<button class="btn plain" data-newpkg>New package instead</button>` : ""}</div>
+      <div class="gen-go"><button class="btn big ${f.download === "real" ? "red" : ""}" data-run ${running ? "disabled" : ""}>${icon("play")}${running ? "A job is running" : change ? (f.download === "real" ? `Change ${esc(g.open)} (real PLC)` : `Change ${esc(g.open)}`) : f.download === "real" ? "Generate (real PLC)" : "Generate"}</button>
+        <span class="faint small">${running ? "Wait for the job above to finish." : change ? "Saved as the next version; the old ones stay." : "Becomes a package with versions: v001, v002 and so on."}</span></div>
     </div>`;
   }
 
-  function packagesHtml() {
-    if (!g.packages) return `<div class="card"><p class="muted">Loading…</p></div>`;
-    if (!g.packages.length) return `<div class="card"><h3 style="margin-top:0">Packages</h3><p class="muted" style="margin:0">Nothing generated yet. Each job you start becomes a package with versions: v001, v002 and so on.</p></div>`;
-    return `<div class="card"><h3 style="margin-top:0">Packages</h3><ul class="list">${g.packages.map((p) => `<li class="click ${g.open === p.name ? "sel" : ""}" data-open="${esc(p.name)}">
-        <span class="ico">${icon("file")}</span>
-        <span style="flex:1;min-width:0"><b style="font-weight:600">${esc(p.name)}</b> <span class="faint">${esc(p.latest || "")}</span>
-          <div class="faint" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(p.request || "")}</div></span>
-        ${p.state ? `<span class="pill ${stateCls(p.state)}">${esc(p.state)}</span>` : ""}<span class="chev">›</span></li>`).join("")}</ul></div>`;
+  /** Left: start something new, or pick a package made before. */
+  function listHtml() {
+    const pk = g.packages;
+    const items = !pk ? `<li class="muted small">Loading…</li>`
+      : !pk.length ? `<li class="muted small gen-empty">Nothing generated yet. What you start appears here.</li>`
+      : pk.map((p) => `<li><button type="button" class="gen-item ${g.open === p.name ? "on" : ""}" data-open="${esc(p.name)}" aria-pressed="${g.open === p.name}">
+          <span class="gi-top"><b>${esc(p.name)}</b>${p.state ? `<span class="pill ${stateCls(p.state)}">${esc(p.state)}</span>` : ""}</span>
+          <span class="gi-req">${esc(p.request || "")}</span>
+          <span class="gi-meta">${esc(p.latest || "")}${p.versions > 1 ? ` · ${p.versions} versions` : ""}${p.time ? " · " + esc(PK.date(p.time)) : ""}</span>
+        </button></li>`).join("");
+    return `<nav class="gen-list" aria-label="Packages">
+      <button type="button" class="gen-new ${g.open ? "" : "on"}" data-new aria-pressed="${!g.open}">${icon("plus")}<span>New blocks</span></button>
+      <div class="gen-list-h">Made before</div>
+      <ul>${items}</ul>
+    </nav>`;
   }
 
   function reportHtml(r) {
@@ -218,29 +261,39 @@
       ${r.runtime.length ? `<div class="notice gold" style="margin-top:10px">${icon("warn")}<div><b>While it ran in PLCSIM</b><ul class="small" style="margin:6px 0 0">${r.runtime.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div></div>` : ""}`;
   }
 
-  function detailHtml() {
-    if (!g.open) return "";
-    const d = g.detail;
-    if (!d) return PK.sec("pkg-detail", `<h2>${esc(g.open)}</h2><p class="muted">Loading…</p>`);
+  /** The versions of the picked package, newest first. */
+  function versionsHtml(d) {
     const kindText = { new: "First version", change: "Changed on request", fix: "Fixed after TIA's report" };
-    return PK.sec("pkg-detail", `<div class="row" style="align-items:flex-end"><div style="flex:1"><span class="eyebrow">Package</span><h2 style="margin:4px 0 0">${esc(d.name)}</h2>
-        <p class="sub" style="margin-top:6px">${d.versions.length} version${d.versions.length === 1 ? "" : "s"}${d.plc ? " · PLC " + esc(d.plc) : ""}${d.context ? " · fitted into " + esc(d.context.split(/[\\/]/).pop()) : ""}</p></div>
-        <button class="btn" data-change>Change it</button></div>
-      <div class="stack" style="margin-top:22px">${d.versions.map((v, i) => `<details class="card more" ${i === 0 ? "open" : ""}>
+    return `<div class="stack">${d.versions.map((v, i) => `<details class="card more gen-ver" ${i === 0 ? "open" : ""}>
         <summary><b>${esc(v.folder)}</b> <span class="muted">· ${esc(kindText[v.kind] || v.kind)} · ${PK.date(v.time)}</span>
           ${v.report ? `<span class="pill ${v.report.errorCount || v.report.fileErrors.length ? "bad" : stateCls(v.report.compileState)}" style="margin-left:8px">${esc(v.report.compileState || "?")}</span>` : ""}</summary>
         <div class="grid two" style="margin-top:14px;align-items:start">
           <div class="stack">
-            ${v.request ? `<div><span class="eyebrow">Asked for</span><p style="margin:6px 0 0">${esc(v.request)}</p></div>` : ""}
-            <div><span class="eyebrow">In TIA</span><div style="margin-top:8px">${reportHtml(v.report)}</div></div>
+            ${v.request ? `<div><span class="eyebrow">Asked for</span><p style="margin:4px 0 0">${esc(v.request)}</p></div>` : ""}
+            <div><span class="eyebrow">In TIA</span><div style="margin-top:6px">${reportHtml(v.report)}</div></div>
             ${v.problems && v.problems.length ? `<div class="notice gold">${icon("warn")}<div><b>The offline check still found</b><ul class="small" style="margin:6px 0 0">${v.problems.map((p) => `<li>${esc(p)}</li>`).join("")}</ul></div></div>` : ""}
-            <div><span class="eyebrow">Files</span><div class="row" style="margin-top:8px">${v.files.map((f) => `<button class="tag ${g.file && g.file.version === v.folder && g.file.file === f ? "on" : ""}" data-file="${esc(f)}" data-ver="${esc(v.folder)}">${esc(f)}${v.added.includes(f) ? " · new" : v.changed.includes(f) ? " · changed" : ""}</button>`).join("")}</div></div>
+            <div><span class="eyebrow">Files</span><div class="row" style="margin-top:6px">${v.files.map((f) => `<button class="tag ${g.file && g.file.version === v.folder && g.file.file === f ? "on" : ""}" data-file="${esc(f)}" data-ver="${esc(v.folder)}">${esc(f)}${v.added.includes(f) ? " · new" : v.changed.includes(f) ? " · changed" : ""}</button>`).join("")}</div></div>
             ${v.replaces && v.replaces.length ? `<p class="faint small" style="margin:0">May overwrite: ${esc(v.replaces.join(", "))}</p>` : ""}
           </div>
-          <div>${v.review ? `<span class="eyebrow">Claude's notes</span><div class="md" style="margin-top:8px">${PK.md(v.review)}</div>` : ""}</div>
+          <div>${v.review ? `<span class="eyebrow">Claude's notes</span><div class="md" style="margin-top:6px">${PK.md(v.review)}</div>` : ""}</div>
         </div>
         ${g.file && g.file.version === v.folder ? `<div class="code" style="margin-top:14px;max-height:480px;overflow:auto"><pre style="margin:0;padding:14px 16px">${esc(g.file.text)}</pre></div>` : ""}
-      </details>`).join("")}</div>`);
+      </details>`).join("")}</div>`;
+  }
+
+  /** Right: the form for new blocks, or the picked package with its versions and "Change it". */
+  function workHtml() {
+    if (!g.open) return `<div class="gen-head"><div><span class="eyebrow">New package</span><h2>New blocks</h2>
+        <p class="muted small" style="margin:0">Say what you need. Claude writes the blocks, TIA Portal imports and compiles them, and, if you choose, PLCSIM runs them.</p></div></div>${formHtml()}`;
+    const d = g.detail;
+    const p = (g.packages || []).find((x) => x.name === g.open) || {};
+    const meta = d ? [`${d.versions.length} version${d.versions.length === 1 ? "" : "s"}`, d.plc ? "PLC " + d.plc : "", d.context ? "fitted into " + d.context.split(/[\\/]/).pop() : ""].filter(Boolean).join(" · ") : "Loading…";
+    const tabs = `<div class="segmented" role="tablist" aria-label="Package">
+        <button type="button" role="tab" data-tab="versions" class="${g.tab === "versions" ? "on" : ""}" aria-selected="${g.tab === "versions"}">Versions</button>
+        <button type="button" role="tab" data-tab="change" class="${g.tab === "change" ? "on" : ""}" aria-selected="${g.tab === "change"}">Change it</button></div>`;
+    return `<div class="gen-head"><div style="min-width:0"><span class="eyebrow">Package${p.state ? ` <span class="pill ${stateCls(p.state)}">${esc(p.state)}</span>` : ""}</span><h2>${esc(g.open)}</h2>
+        <p class="muted small" style="margin:0">${esc(meta)}</p></div>${tabs}</div>
+      ${g.tab === "change" ? formHtml() : d ? versionsHtml(d) : `<div class="card"><p class="muted" style="margin:0">Loading…</p></div>`}`;
   }
 
   PK.view("setup/generator", {
@@ -268,20 +321,16 @@
     leave() { closeSheet(); },
     render() {
       const t = g.tia;
-      const tiaNote = t && !t.ok ? `<div class="notice gold" style="margin-top:22px">${icon("info")}<div style="flex:1"><b>TIA Portal is not reachable.</b> ${esc(t.message || "")}</div><a class="btn gold small" href="#/setup/connections">Connections</a></div>` : "";
-      const pk = g.packages || [];
+      const tiaChip = t ? `<span class="pill ${t.ok ? "ok" : "warn"}"><span class="dot"></span>TIA Portal ${t.ok ? "ready" + (t.machine ? " on " + esc(t.machine) : "") : "not reachable"}</span>` : `<span class="pill">TIA Portal …</span>`;
+      const chips = `<div class="row gen-status">${tiaChip}
+          <span class="pill">PLCSIM ${t && t.plcsimIp ? esc(t.plcsimIp) : "not set"}</span>
+          <span class="pill ${t && t.realAllowed && t.realAllowed.length ? "warn" : ""}">Real PLCs allowed: ${t && t.realAllowed ? t.realAllowed.length : "none"}</span></div>`;
+      const tiaNote = t && !t.ok ? `<div class="notice gold" style="margin-top:12px">${icon("info")}<div style="flex:1"><b>TIA Portal is not reachable.</b> ${esc(t.message || "")}</div><a class="btn gold small" href="#/setup/connections">Connections</a></div>` : "";
       return PK.sec("hero compact", `${PKSetup.setupNav("generator")}<h1>Block generator</h1>
-          <p class="sub">Say what you need. Claude writes the blocks, TIA Portal imports and compiles them, and PLCSIM runs them; problems go back to Claude until it is clean.
-          Nothing reaches a real PLC without two people confirming.</p>
-          <div class="kpis" style="margin-top:28px">
-            <div class="k"><b>${pk.length}</b><span>packages</span></div>
-            <div class="k"><b>${t ? (t.ok ? "Ready" : "Offline") : "…"}</b><span>TIA Portal${t && t.machine ? " on " + esc(t.machine) : ""}</span></div>
-            <div class="k"><b>${t && t.plcsimIp ? esc(t.plcsimIp) : "–"}</b><span>PLCSIM</span></div>
-            <div class="k"><b>${t && t.realAllowed ? t.realAllowed.length : "–"}</b><span>real PLCs allowed on the TIA PC</span></div>
-          </div>${tiaNote}`)
+          <p class="sub">Claude writes PLC blocks from plain words, TIA Portal compiles them, and problems go back to Claude until it is clean. Nothing reaches a real PLC without two people confirming.</p>
+          ${chips}${tiaNote}`)
         + (g.job ? PK.sec("tight", `<span class="eyebrow">Latest job</span>${PKSetup.jobCard(g.job, timeline(g.job))}`) : "")
-        + PK.sec("alt", `<div class="gen-grid" data-gen-grid>${formHtml()}${packagesHtml()}</div>`)
-        + detailHtml();
+        + PK.sec("", `<div class="gen-layout">${listHtml()}<div class="gen-work" data-work>${workHtml()}</div></div>`);
     },
     after(page) {
       PKSetup.bindJob(page);
@@ -294,28 +343,27 @@
       };
       page.querySelectorAll("textarea,input,select").forEach((x) => { if (x.id && x.id.startsWith("g-")) PK.on(x, "change", read); });
       page.querySelectorAll("[data-dl]").forEach((b) => b.onclick = () => { read(); f.download = b.dataset.dl; PK.draw(); });
-      page.querySelectorAll("[data-open]").forEach((li) => li.onclick = () => openPackage(li.dataset.open));
+      page.querySelectorAll("[data-open]").forEach((b) => b.onclick = () => { read(); openPackage(b.dataset.open); });
+      const nw = page.querySelector("[data-new]");
+      if (nw) nw.onclick = () => { read(); newPackage(); };
+      page.querySelectorAll("[data-tab]").forEach((b) => b.onclick = () => { read(); g.tab = b.dataset.tab; PK.draw(); });
+      const req = v("request"), sug = page.querySelector("[data-suggest]"), nm = v("name");
+      if (req && sug) PK.on(req, "input", () => { const n = nameFrom(req.value); sug.textContent = n; if (nm) nm.placeholder = n; });
       page.querySelectorAll("[data-file]").forEach((b) => b.onclick = (e) => { e.preventDefault(); showFile(b.dataset.ver, b.dataset.file); });
       const reopen = page.querySelector("[data-reopen]");
       if (reopen) reopen.onclick = () => { g.sheetFor = null; waitingSheets(g.job); };
-      const change = page.querySelector("[data-change]");
-      if (change) change.onclick = () => {
-        read(); f.name = g.open; f.request = "";
-        if (g.detail && g.detail.plc) f.plc = g.detail.plc;
-        PK.draw(); window.scrollTo({ top: page.querySelector("[data-gen-grid]").getBoundingClientRect().top + scrollY - 90, behavior: "smooth" });
-      };
-      const np = page.querySelector("[data-newpkg]");
-      if (np) np.onclick = () => { read(); f.name = ""; PK.draw(); };
-      page.querySelector("[data-run]").onclick = async () => {
+      const run = page.querySelector("[data-run]");
+      if (run) run.onclick = async () => {
         read();
+        const name = g.open || f.name.trim() || nameFrom(f.request);
         if (f.download === "real" && !(await PK.confirmSheet({ title: "Plan a real-PLC download?",
           text: "PLC-Ki still asks you to type the version after it compiles, and the TIA PC still asks for the PLC address. Nothing is downloaded before both.", ok: "Start", danger: true }))) return;
         try {
           const job = await api("POST", "/api/admin/generator/run", {
-            package: f.name.trim(), request: f.request.trim() || null, project: f.project.trim(), plc: f.plc.trim() || null, edit: f.edit.trim() || null,
+            package: name, request: f.request.trim() || null, project: f.project.trim(), plc: f.plc.trim() || null, edit: f.edit.trim() || null,
             useContext: f.useContext, sclOnly: f.sclOnly, download: f.download, plcAddress: f.plcAddress.trim() || null, watch: f.watch, rounds: f.rounds, effort: f.effort,
           });
-          g.open = f.name.trim();
+          g.open = name; f.name = name; g.tab = "versions";
           followJob(job);
           PK.draw();
           window.scrollTo({ top: 0, behavior: "smooth" });
