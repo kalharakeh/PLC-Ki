@@ -186,7 +186,7 @@ public sealed class MachineHistory
         return list;
     }
 
-    private static bool IsBlocked(EquipmentStatus e) => e.Requested == true && e.Commanded == false;
+    private static bool IsBlocked(EquipmentStatus e) => e.BlockedBy != null;
 
     private static string Because(List<string> reasons) =>
         reasons.Count == 0 ? "" : " because " + string.Join(", ", reasons);

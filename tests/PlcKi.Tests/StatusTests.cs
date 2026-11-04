@@ -137,6 +137,21 @@ public class StatusAttentionTests
         Assert.Contains("In this step it should run agitator M201", s.Sequences[0].Explanation);
     }
 
+    [Fact]
+    public void A_requested_device_with_every_interlock_met_is_not_blocked()
+    {
+        // Like a robot that keeps its last job number after the job: the request stays on, the output is off,
+        // and no interlock is missing. That is not "blocked".
+        var snap = TestData.Snapshot("step30-agitator-blocked");
+        snap.Values["Level"] = 50.0;
+        var m201 = TestData.Evaluate(snap, "snapshot").Equipment.Single(e => e.Id == "M201");
+        Assert.True(m201.Requested);
+        Assert.False(m201.Commanded);
+        Assert.Empty(m201.Blocking);
+        Assert.Null(m201.BlockedBy);
+        Assert.Contains("every interlock is met", m201.Explanation);
+    }
+
     [Theory]
     [InlineData("Runs agitator M201", "In this step it should run agitator M201.")]
     [InlineData("Mixes for 5 min.", "In this step it should mix for 5 min.")]
