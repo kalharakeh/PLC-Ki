@@ -1256,6 +1256,7 @@ main#page section.hero .st-kpis { grid-template-columns: repeat(3, minmax(0, 1fr
   .qr-sheet, .qr-sheet.qr-small, .qr-sheet.qr-large { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .qr-sheet.qr-small { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .qr-sheet.qr-large { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 /* ---------- machine memory: alarm history and notes (js/memory.js) ---------- */
 .mem-insight { display: flex; gap: 10px; align-items: flex-start; margin: 0; font-size: 17px; font-weight: 500; line-height: 1.4; }
 .mem-insight svg { width: 20px; height: 20px; flex: none; margin-top: 2px; color: var(--accent); }
@@ -1291,3 +1292,36 @@ ul.mem-list.card { padding: 4px 22px; }
   .mem-nums { margin-left: 0; }
   ul.mem-list.card { padding: 2px 16px; }
 }
+
+/* ---------- Alarm recordings: the seconds before an alarm (js/capture.js) ---------- */
+.cap-sum { margin: 0 0 16px; padding-left: 20px; display: grid; gap: 6px; }
+.cap-sum li { line-height: 1.45; }
+.cap-key { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0 0 12px; }
+.cap-key span { display: inline-flex; align-items: center; gap: 6px; }
+.cap-key i { display: inline-block; width: 14px; height: 10px; border-radius: 3px; }
+.cap-key .k-on { background: color-mix(in srgb, var(--accent) 55%, var(--bg)); }
+.cap-key .k-pulse { background: var(--warn); }
+.cap-key .k-zero { width: 2px; height: 14px; background: var(--fault); border-radius: 0; }
+.cap-rel { color: var(--accent); font-size: 10px; vertical-align: 1px; }
+.cap-rows .tr-plot { height: 46px; }
+.cap-rows .tr-plot.cap-b { height: 26px; background: var(--bg-alt); }
+.cap-rows .tr-now.small { font-size: 14px; }
+.cap-on { position: absolute; top: 4px; bottom: 4px; border-radius: 4px; background: color-mix(in srgb, var(--accent) 55%, var(--bg)); }
+.cap-on.pulse { background: var(--warn); min-width: 4px; box-shadow: 0 0 0 2px color-mix(in srgb, var(--warn) 30%, transparent); }
+.cap-off-pulse { position: absolute; top: 0; bottom: 0; width: 4px; margin-left: -2px; background: var(--warn); border-radius: 2px; }
+.cap-gap { position: absolute; top: 0; bottom: 0; background: repeating-linear-gradient(135deg, transparent 0 5px, color-mix(in srgb, var(--muted) 25%, transparent) 5px 7px); }
+.cap-zero { opacity: 0.9 !important; width: 2px; }
+.cap-axis { height: 18px; }
+.cap-tick { position: absolute; top: 2px; transform: translateX(-50%); font-size: 11px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.cap-tick:first-child { transform: none; }
+.cap-tick:last-child { transform: translateX(-100%); }
+.cap-tick.zero { color: var(--fault-ink); font-weight: 600; }
+.cap-li { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; width: 100%; color: inherit; text-decoration: none; }
+@media (max-width: 600px) { .cap-rows .tr-plot { height: 40px; } .cap-rows .tr-plot.cap-b { height: 22px; } }
+/* one compact line per tag: name, then the value just before the alarm */
+.cap-rows { gap: 4px; }
+.cap-rows .tr-lab { grid-template-columns: minmax(0, 1fr) auto; }
+.cap-rows .tr-name { grid-column: 1; grid-row: 1; }
+.cap-rows .tr-now.small { grid-column: 2; grid-row: 1; }
+.cap-rows .tr-rng { display: none; }
+@media (max-width: 600px) { .cap-rows .tr-lab { grid-template-columns: minmax(0, 1fr) auto; } }

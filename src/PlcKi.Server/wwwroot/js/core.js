@@ -796,8 +796,14 @@ const PK = (() => {
       "Fix it: work down the list and tap each step when done. The ticks are only on this screen.",
       "Where in the machine: the device behind the alarm and the chain Requested › Interlocks › Output › Feedback. The first red link is why it is not working.",
       "Where in the software: from the main cycle (OB1) down to the bit that sets the alarm. Show where it is set opens that network as rungs with live values.",
+      "The seconds before it came: every change of the machine's tags in the 10 s before the alarm, recorded much finer than the normal reads. Short pulses (amber) are signals the once-a-second reads would miss.",
       "This alarm before: how often it came, how long it stayed, and the cause and fix technicians noted last time. When you have found the cause, tap Note cause and fix so the next person sees it.",
       "Ask about this alarm: Claude looks at the live values, the last minutes, the machine memory and the program, and says why it is on and what to check."]],
+    capture: ["Alarm recordings", "The seconds before each alarm came, recorded from every change the PLC sends (usually sampled every 100 ms).", [
+      "Each row is one tag that changed. Blue bars show when a signal was on; amber marks a short pulse, shorter than one normal read. Number values are drawn as lines. The red line is the moment the alarm came.",
+      "● marks the tags in the alarm's own check. The list at the top says in words what changed last before the alarm.",
+      "A Blip is an alarm that went again faster than one normal read: the alarm list may never have shown it, but it is recorded here.",
+      "Nothing changes on the PLC for this: PLC-Ki asks the CPU to send changes, the same way an HMI does. The last 100 recordings are kept, also after a restart."]],
     plant: ["Plant", "What the machine is doing now. The top shows the step, what it waits for and the key values; the tabs below hold the rest.", [
       "Overview: Needs attention lists active alarms and blocked or faulted devices first; tap one to go to it. Below it the sequence: the blue step is where it is now, red means halted, ✓ is met, ✗ is missing.",
       "The machine at a glance: every device as a symbol. Green runs, grey is off, a dashed amber edge means the program asks for it but an interlock blocks it, red is a fault. Tap one to open it on Devices.",

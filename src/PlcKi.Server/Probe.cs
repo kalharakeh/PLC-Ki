@@ -10,7 +10,7 @@ namespace PlcKi.Server;
 /// </summary>
 public static class Probe
 {
-    public static int Run(MachineModel model, IPlcSource source)
+    public static int Run(MachineModel model, IPlcSource source, FastRecorder? fast = null)
     {
         Console.WriteLine($"PLC-Ki probe (read-only): {source.Kind} {source.Address}, model \"{model.Name}\", {model.Tags.Count} tags.");
         Dictionary<string, string> missing;
@@ -51,6 +51,13 @@ public static class Probe
         try
         {
             snap = source.Read();
+            if (fast != null && source is S7CommPlusSource)
+            {
+                // Fast capture check: let the subscription run a few seconds and say what came
+                Console.WriteLine($"Fast capture: {fast.Mode}{(fast.Mode == "subscription" ? $", {fast.FastTags} tags every {fast.CycleMs} ms" : "")}{(fast.Note != null ? " (" + fast.Note + ")" : "")}. Listening 5 s...");
+                Thread.Sleep(5000);
+                Console.WriteLine($"Fast capture: {fast.Notifications} messages from the PLC, {fast.Count} value changes kept.");
+            }
         }
         catch (Exception ex)
         {

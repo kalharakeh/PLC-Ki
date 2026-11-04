@@ -15,6 +15,8 @@ public sealed class PlantSettings
     public string Security { get; set; } = "Auto";
     public string Username { get; set; } = "";
     public int PollMs { get; set; } = 1000;
+    /// <summary>Fast capture: the PLC sends every change, sampled this often (ms). 0 = off.</summary>
+    public int FastMs { get; set; } = 100;
     public int TimeoutMs { get; set; } = 5000;
     public string Model { get; set; } = "";
     public string SnapshotFile { get; set; } = "";
@@ -49,7 +51,7 @@ public sealed class PlantSettings
     public bool ClearApiKey { get; set; }
 
     /// <summary>The settings that only take effect after a restart (everything but PublicView).</summary>
-    internal string RestartKey() => string.Join('|', Source, Address, Security, Username, PollMs, TimeoutMs, Model,
+    internal string RestartKey() => string.Join('|', Source, Address, Security, Username, PollMs, FastMs, TimeoutMs, Model,
         SnapshotFile, HistoryMinutes, AskEnabled, AskEffort, Port, AllowRemote, Export, PlcVia,
         TiaMode, TiaUrl, TiaImporterPath, TiaPlcsimIp, TiaAllowReal);
 }
@@ -92,6 +94,7 @@ public sealed class SettingsStore
             Security = c["PlcKi:Plc:Security"] ?? "Auto",
             Username = c["PlcKi:Plc:Username"] ?? "",
             PollMs = c.GetValue("PlcKi:Plc:PollMs", 1000),
+            FastMs = c.GetValue("PlcKi:Plc:FastMs", 100),
             TimeoutMs = c.GetValue("PlcKi:Plc:TimeoutMs", 5000),
             Model = c["PlcKi:Model"] ?? "",
             SnapshotFile = c["PlcKi:SnapshotFile"] ?? "",
@@ -203,6 +206,7 @@ public sealed class SettingsStore
             plc["Security"] = s.Security;
             plc["Username"] = s.Username.Trim();
             plc["PollMs"] = s.PollMs;
+            plc["FastMs"] = s.FastMs;
             plc["TimeoutMs"] = s.TimeoutMs;
             plc.Remove("Password");                 // never in plain text: see PlantSecrets
             ask["Enabled"] = s.AskEnabled;
@@ -252,6 +256,7 @@ public sealed class SettingsStore
         if (AddressProblem(s.Address) is { } bad) throw new PlantException(bad);
         if (s.Security is not ("Auto" or "Tls" or "LegacyChallenge")) throw new PlantException("Security is Auto, Tls or LegacyChallenge.");
         if (s.PollMs is < 100 or > 60_000) throw new PlantException("Read every: 0.1 to 60 seconds (100 to 60000 ms).");
+        if (s.FastMs is not 0 and (< 10 or > 10_000)) throw new PlantException("Fast capture: 0 (off) or 10 to 10000 ms.");
         if (s.TimeoutMs is < 500 or > 60_000) throw new PlantException("Wait for an answer: 0.5 to 60 seconds (500 to 60000 ms).");
         if (s.HistoryMinutes is < 1 or > 240) throw new PlantException("History: 1 to 240 minutes.");
         if (s.AskEffort is not ("low" or "medium" or "high" or "max")) throw new PlantException("Effort is low, medium, high or max.");

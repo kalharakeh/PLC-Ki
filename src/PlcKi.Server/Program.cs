@@ -94,16 +94,18 @@ static async Task<int> RunAppAsync(string[] appArgs, bool probe, JobService jobs
         return 2;
     }
 
+    // Fast capture: every change the PLC sends, the last 90 s, cut into a capture around each alarm
+    var fast = new FastRecorder();
     IPlcSource CreateSource(ILogger log) => opt.Source.Equals("snapshot", StringComparison.OrdinalIgnoreCase)
         ? new SnapshotFileSource(Resolve(opt.SnapshotFile))
         : opt.Plc.Via == "link" ? new LinkPlcSource(linkHub, opt.Plc)
-        : new S7CommPlusSource(opt.Plc, log);
+        : new S7CommPlusSource(opt.Plc, log, fast);
 
     if (probe)
     {
         // Probe is a diagnostic: show the driver's detailed connection log too
         using var lf = LoggerFactory.Create(b => b.AddSimpleConsole(o => o.SingleLine = true).SetMinimumLevel(LogLevel.Debug));
-        return Probe.Run(model, CreateSource(lf.CreateLogger("probe")));
+        return Probe.Run(model, CreateSource(lf.CreateLogger("probe")), fast);
     }
 
     builder.Services.AddSingleton(opt);
@@ -123,12 +125,17 @@ static async Task<int> RunAppAsync(string[] appArgs, bool probe, JobService jobs
     builder.Services.AddSingleton(new ModelFile(Resolve(opt.Model)));
     builder.Services.AddSingleton<ModelFixService>();
     builder.Services.AddSingleton<LiveState>();
+    builder.Services.AddSingleton(fast);
+    // Kept per machine model, so a capture never shows next to another machine's tags
+    builder.Services.AddSingleton(new AlarmCaptureBook(model, fast,
+        folder: Path.Combine(plant.DataDir, "captures", CaptureFolder(opt.Model))));
     builder.Services.AddSingleton<WatchList>();
     builder.Services.AddSingleton(opt.Ask);
     builder.Services.AddSingleton(sp =>
     {
         var live = sp.GetRequiredService<LiveState>();
-        return new MachineTools(model, () => new LiveView(live.Status, live.Snapshot, live.History, DateTimeOffset.Now), live.Memory);
+        var captures = sp.GetRequiredService<AlarmCaptureBook>();
+        return new MachineTools(model, () => new LiveView(live.Status, live.Snapshot, live.History, DateTimeOffset.Now, captures, fast), live.Memory);
     });
     builder.Services.AddSingleton<AskService>();
     builder.Services.AddSingleton<IPlcSource>(sp => CreateSource(sp.GetRequiredService<ILoggerFactory>().CreateLogger("plc")));
@@ -189,6 +196,20 @@ static async Task<int> RunAppAsync(string[] appArgs, bool probe, JobService jobs
             .Select(e => new { time = e.Time, kind = e.Kind, text = e.Text });
         return Results.Ok(list);
     });
+
+    // Fast capture: how values are recorded right now, and the seconds around each alarm (read-only)
+    app.MapGet("/api/fast", (FastRecorder f, AlarmCaptureBook book) => Results.Ok(new
+    {
+        mode = f.Mode, cycleMs = f.CycleMs, note = f.Note, fastTags = f.FastTags, readMs = opt.Plc.PollMs,
+        changes = f.Count, messages = f.Notifications, lastChange = f.LastChange, oldest = f.Oldest,
+        keepSeconds = f.Keep.TotalSeconds, beforeSeconds = book.Before.TotalSeconds, afterSeconds = book.After.TotalSeconds,
+        recording = book.Recording(),
+    }));
+    app.MapGet("/api/captures", (AlarmCaptureBook book, string? alarm, int? max) =>
+        Results.Ok(book.List().Where(c => string.IsNullOrEmpty(alarm) || c.AlarmId.Equals(alarm, StringComparison.OrdinalIgnoreCase))
+            .Take(Math.Clamp(max ?? 50, 1, 200))));
+    app.MapGet("/api/captures/{id}", (string id, AlarmCaptureBook book) =>
+        book.Get(id) is { } c ? Results.Json(c, MachineModel.JsonOptions) : Results.NotFound(new { error = "This capture is no longer kept." }));
 
     // How well the model fits the live machine: what the machine did that the model does not explain (read-only)
     app.MapGet("/api/model-check", (LiveModelCheck check) => Results.Ok(check.Report()));
@@ -311,6 +332,14 @@ static async Task<int> RunAppAsync(string[] appArgs, bool probe, JobService jobs
 
     await app.RunAsync();
     return 0;
+}
+
+/// <summary>A folder name for a model file ("models/helium.json" -> "helium").</summary>
+static string CaptureFolder(string model)
+{
+    var name = Path.GetFileNameWithoutExtension(model);
+    name = new string(name.Select(ch => char.IsLetterOrDigit(ch) || ch is '-' or '_' ? ch : '_').ToArray());
+    return string.IsNullOrEmpty(name) ? "model" : name;
 }
 
 static IResult ModelFixCall(Func<object> f)

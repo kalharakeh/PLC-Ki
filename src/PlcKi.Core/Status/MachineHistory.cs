@@ -57,6 +57,18 @@ public sealed class MachineHistory
         }
     }
 
+    /// <summary>Adds an event found elsewhere (e.g. an alarm that came and went between two reads), in time order.</summary>
+    public void Note(MachineEvent e)
+    {
+        lock (_lock)
+        {
+            var n = _events.Last;
+            while (n != null && n.Value.Time > e.Time) n = n.Previous;
+            if (n == null) _events.AddFirst(e); else _events.AddAfter(n, e);
+            if (_events.Count > _maxEvents) _events.RemoveFirst();
+        }
+    }
+
     public List<MachineEvent> Events(TimeSpan window, DateTimeOffset now)
     {
         lock (_lock) return _events.Where(e => e.Time >= now - window).ToList();

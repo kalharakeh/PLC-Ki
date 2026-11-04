@@ -265,6 +265,7 @@ public sealed class AskService
             "get_equipment" => "device " + S("id"),
             "get_alarm" => "alarm " + S("id"),
             "search_program" => $"program search \"{S("query")}\"",
+            "get_alarm_capture" => "seconds before " + (S("alarm") ?? S("capture") ?? "the alarms"),
             _ => tool,
         };
     }

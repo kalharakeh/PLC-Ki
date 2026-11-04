@@ -263,6 +263,7 @@
 
         + (checks.length ? sec("", `<h2>What the program checks</h2><p class="sub">The comparisons behind this alarm, ${a.checksAtAlarm ? "with the values from the last read before it came" : "with the values now"}. ✗ is the one that failed.</p>
             <div class="card"><ul class="conds">${checks.map(cond).join("")}</ul></div>`) : "")
+        + (window.PKCapture ? PKCapture.alarmSection(a) : "")
         + sec("alt", `<h2>Fix it</h2><p class="sub">Work down the list. Tap a step when it is done. The ticks are only on this screen.</p>
           <div class="grid two">
             <div class="card">${a.fix.length ? `<ol class="fix">${a.fix.map((f, i) => `<li class="${done.has(i) ? "done" : ""}"><button type="button" class="fix-b" data-fix="${i}" aria-pressed="${done.has(i)}">${esc(f)}</button></li>`).join("")}</ol>` : `<p class="muted">No fix written for this alarm yet. Ask about it.</p>`}</div>
@@ -290,6 +291,7 @@
         set.has(i) ? set.delete(i) : set.add(i);
         PK.draw();
       });
+      if (window.PKCapture) PKCapture.bind(page);
       bindAsk(page);
       if (window.PKMemory) PKMemory.bind(page);
     },
@@ -449,6 +451,7 @@
       const want = PK.current && PK.current.params[0];
       if (want && want !== deepLink) { deepLink = want; openAlarm = want; alarmKind = "all"; alarmFilter = ""; scrollToAlarm = want; }
       if (Date.now() - eventsAt > 5000) loadEvents();
+      if (window.PKCapture) PKCapture.needList();
       const active = new Set(s.activeAlarms.map((a) => a.id));
       const q = alarmFilter.toLowerCase();
       const kindOk = { all: () => true, active: (a) => active.has(a.id), faults: (a) => a.severity !== "WARNING", warnings: (a) => a.severity === "WARNING" }[alarmKind] || (() => true);
@@ -472,11 +475,15 @@
         </li>`;
       }).join("");
       const recent = !events ? `<p class="muted" style="margin:0">Loading…</p>` : events.length ? `<ul class="list events">${events.slice(0, recentAll ? events.length : 4).map((e) => {
-            const mm = /^(\S+) (came|went|was already active)/.exec(e.text);
-            const id = mm && mm[1], kind = mm ? (mm[2] === "went" ? "went" : mm[2] === "came" ? "came" : "start") : "";
-            return `<li><span class="ev-time">${esc(PK.date(e.time, true))}</span><span class="ev-kind ${kind}">${{ came: "Came", went: "Went", start: "Already on" }[kind] || ""}</span>
-              <span style="flex:1;min-width:180px">${id ? `<a href="#/alarms/${encodeURIComponent(id)}">${esc(id)}</a> ` : ""}${esc(id ? e.text.replace(/^\S+ (came|went|was already active when watching started):?\s*/, "") : e.text)}</span></li>`;
-          }).join("")}</ul>${events.length > 4 ? `<button type="button" class="btn plain small" data-recent style="margin-top:8px">${recentAll ? "Show fewer" : `Show all ${events.length}`}</button>` : ""}`
+            const mm = /^(\S+) (came|went|was already active|blipped)/.exec(e.text);
+            const id = mm && mm[1], kind = mm ? (mm[2] === "went" ? "went" : mm[2] === "came" ? "came" : mm[2] === "blipped" ? "blip" : "start") : "";
+            // An alarm that came (or only blipped) has a recording of the seconds before it
+            const cap = id && (kind === "came" || kind === "blip") && window.PKCapture ? PKCapture.forAlarm(id, e.time) : null;
+            return `<li><span class="ev-time">${esc(PK.date(e.time, true))}</span><span class="ev-kind ${kind === "blip" ? "start" : kind}">${{ came: "Came", went: "Went", start: "Already on", blip: "Blip" }[kind] || ""}</span>
+              <span style="flex:1;min-width:180px">${id ? `<a href="#/alarms/${encodeURIComponent(id)}">${esc(id)}</a> ` : ""}${esc(id ? e.text.replace(/^\S+ (came|went|was already active when watching started|blipped):?\s*/, "") : e.text)}</span>
+              ${cap ? `<a class="btn plain small" href="#/capture/${encodeURIComponent(cap.id)}">Seconds before</a>` : ""}</li>`;
+          }).join("")}</ul>${events.length > 4 ? `<button type="button" class="btn plain small" data-recent style="margin-top:8px">${recentAll ? "Show fewer" : `Show all ${events.length}`}</button>` : ""}
+            <a class="btn plain small" href="#/capture" style="margin-top:8px">Alarm recordings: the seconds before each alarm</a>`
         : `<p class="muted" style="margin:0">No alarm came or went since PLC-Ki started watching.</p>`;
       // The counts live in the filter buttons: one row to read and to click, no second row of the same numbers
       return hero({

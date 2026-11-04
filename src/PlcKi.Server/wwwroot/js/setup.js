@@ -348,6 +348,7 @@ const PKSetup = (() => {
           <div class="grid three" style="margin-top:12px">
             <label class="field">Security<select id="security">${["Auto", "Tls", "LegacyChallenge"].map((x) => `<option ${c.security === x ? "selected" : ""}>${x}</option>`).join("")}</select></label>
             <label class="field">Read the PLC every <span class="hint">milliseconds; 1000 = once a second</span><input id="pollMs" type="number" min="100" max="60000" step="100" value="${c.pollMs}"></label>
+            <label class="field">Fast capture: the PLC sends every change, sampled every <span class="hint">milliseconds; 100 is a good start, 0 = off. Used for the seconds before each alarm.</span><input id="fastMs" type="number" min="0" max="10000" step="10" value="${c.fastMs ?? 100}"></label>
             <label class="field">Wait for an answer up to <span class="hint">milliseconds; 5000 = 5 seconds</span><input id="timeoutMs" type="number" min="500" max="60000" step="500" value="${c.timeoutMs}"></label>
             <label class="field">Values from<select id="source"><option value="s7" ${c.source === "s7" ? "selected" : ""}>Live PLC</option><option value="snapshot" ${c.source === "snapshot" ? "selected" : ""}>Test file (no PLC)</option></select></label>
             <label class="field">Test file<select id="snapshotFile">${(lists.snapshots || []).map((f) => `<option value="${esc(f.path)}" ${f.path === c.snapshotFile ? "selected" : ""}>${esc(f.label)}</option>`).join("")}</select></label>
@@ -410,7 +411,7 @@ const PKSetup = (() => {
     for (const k of ["address", "security", "source", "snapshotFile", "tiaUrl", "tiaImporterPath", "tiaPlcsimIp", "tiaAllowReal", "tiaProject"]) {
       const x = v(k); if (x !== undefined) conn[k] = x.trim();
     }
-    for (const k of ["pollMs", "timeoutMs"]) { const x = v(k); if (x !== undefined) conn[k] = Number(x); }
+    for (const k of ["pollMs", "fastMs", "timeoutMs"]) { const x = v(k); if (x !== undefined) conn[k] = Number(x); }
     conn._plcPassword = v("plcPassword") || conn._plcPassword || null;
     conn._tiaToken = v("tiaToken") || conn._tiaToken || null;
   }

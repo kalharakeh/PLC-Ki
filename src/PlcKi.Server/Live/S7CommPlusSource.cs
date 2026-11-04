@@ -17,15 +17,23 @@ public sealed class S7CommPlusSource : IPlcSource
 {
     private readonly PlcOptions _opt;
     private readonly ILogger _log;
+    private readonly FastRecorder? _fast;
+    private readonly List<S7CommPlusTagSubscription> _subs = new();
+    private readonly HashSet<string> _fastIds = new(StringComparer.Ordinal);
     private S7CommPlusClient? _client;
     private readonly List<(TagDef Def, PlcTag Tag)> _tags = new();
     private const int LookupFailuresBeforeGivingUp = 3;
 
-    public S7CommPlusSource(PlcOptions opt, ILogger log)
+    /// <param name="fast">Where the subscription puts every change; null = no subscription (probe, PLC-Ki Link).</param>
+    public S7CommPlusSource(PlcOptions opt, ILogger log, FastRecorder? fast = null)
     {
         _opt = opt;
         _log = log;
+        _fast = fast;
     }
+
+    /// <summary>Model tags the PLC sends changes for (the subscription); the reads cover the rest.</summary>
+    public IReadOnlySet<string> FastTagIds { get { lock (_fastIds) return new HashSet<string>(_fastIds, StringComparer.Ordinal); } }
 
     public string Kind => "s7";
     public string Address => _opt.Address;
@@ -95,7 +103,122 @@ public sealed class S7CommPlusSource : IPlcSource
         _client = client;
         _log.LogInformation("Connected to {Address} ({Security}): {Found} of {Total} tags found.",
             _opt.Address, NegotiatedSecurity, _tags.Count, tags.Count);
+        if (_fast != null) Subscribe(client);
         return missing;
+    }
+
+    // ---------- fast data: a subscription, like an HMI's ----------
+    // The CPU samples the subscribed tags every FastMs and sends only what changed, with its own time stamp.
+    // Nothing changes on the PLC side (no trace, no extra block). It runs next to the normal reads; when it cannot be
+    // made (old firmware, too many tags, a PLC that refuses it), the normal reads carry on and feed the recording.
+    private const int TagsPerSubscription = 200;
+    private readonly Queue<double> _skews = new();
+    private double _skewMs;
+
+    private void Subscribe(S7CommPlusClient client)
+    {
+        var fast = _fast!;
+        lock (_fastIds) _fastIds.Clear();
+        if (_opt.FastMs <= 0)
+        {
+            fast.SetMode("reads", _opt.PollMs, "switched off in the settings (Fast capture).");
+            return;
+        }
+        var cycle = (ushort)Math.Clamp(_opt.FastMs, 10, 10_000);
+        string? firstError = null;
+        for (int i = 0; i < _tags.Count; i += TagsPerSubscription)
+        {
+            var chunk = _tags.Skip(i).Take(TagsPerSubscription).ToList();
+            try
+            {
+                var sub = client.SubscribeTagsAsync(chunk.Select(c => c.Tag), new S7CommPlusSubscriptionOptions
+                {
+                    CycleTimeMilliseconds = cycle,
+                    // A quiet machine sends nothing for a long time: that is not an error
+                    MaxConsecutiveTimeoutsBeforeFault = 0,
+                }).GetAwaiter().GetResult();
+                var defs = new Dictionary<PlcTag, TagDef>(ReferenceEqualityComparer.Instance);
+                foreach (var c in chunk) defs[c.Tag] = c.Def;
+                sub.NotificationReceived += (_, e) => OnNotification(e.Notification, defs);
+                sub.StateChanged += (_, e) =>
+                {
+                    if (e.NewState != S7CommPlusSubscriptionState.Faulted) return;
+                    _log.LogWarning("Fast capture stopped: {Error}. The normal reads carry on.", e.Exception?.Message);
+                    fast.SetMode("reads", _opt.PollMs, "the PLC stopped sending changes (" + (e.Exception?.Message ?? "no reason given") + "). It is tried again on the next connect.");
+                    lock (_fastIds) _fastIds.Clear();
+                };
+                _subs.Add(sub);
+                lock (_fastIds) foreach (var c in chunk) _fastIds.Add(c.Def.Id);
+            }
+            catch (Exception ex)
+            {
+                firstError ??= Describe(ex);
+                _log.LogWarning("Fast capture: the PLC refused a subscription for {Count} tags: {Error}", chunk.Count, Describe(ex));
+            }
+        }
+        if (_subs.Count > 0)
+        {
+            fast.SetMode("subscription", cycle, firstError == null ? null : "some tags are only read normally: " + firstError, _fastIds.Count);
+            _log.LogInformation("Fast capture on: {Count} tags, sampled every {Cycle} ms by the PLC.", _fastIds.Count, cycle);
+        }
+        else
+        {
+            fast.SetMode("reads", _opt.PollMs, "the PLC did not accept a subscription (" + (firstError ?? "no tags") + ").");
+        }
+    }
+
+    private void OnNotification(S7CommPlusTagNotification n, Dictionary<PlcTag, TagDef> defs)
+    {
+        var fast = _fast!;
+        fast.Tick();
+        var time = Align(n.Timestamp);
+        foreach (var item in n.Items)
+        {
+            if (!item.IsSuccess || item.Tag == null || !defs.TryGetValue(item.Tag, out var def)) continue;
+            object? value;
+            try { value = TagValue.Normalize(def, RawOf(item.Value) ?? item.Tag.GetType().GetProperty("Value")?.GetValue(item.Tag)); }
+            catch { continue; }
+            if (value != null) fast.Add(time, def.Id, value);
+        }
+    }
+
+    /// <summary>The driver hands the raw protocol value (ValueBool, ValueReal ...); they all have GetValue().</summary>
+    private static object? RawOf(object? pvalue)
+    {
+        if (pvalue == null) return null;
+        try { return pvalue.GetType().GetMethod("GetValue", Type.EmptyTypes)?.Invoke(pvalue, null); }
+        catch { return null; }
+    }
+
+    /// <summary>
+    /// The PLC's time stamp moved onto this PC's clock: the PLC clock can be off by seconds or hours (PLCSIM uses the
+    /// VM's clock), but the spacing between its time stamps is exact. The offset is the smallest (receive time - PLC
+    /// time) of the last 100 messages, so network delay does not shift it.
+    /// </summary>
+    private DateTimeOffset Align(DateTime plcUtc)
+    {
+        var now = DateTimeOffset.Now;
+        if (plcUtc.Year < 2000) return now;
+        var plc = new DateTimeOffset(DateTime.SpecifyKind(plcUtc, DateTimeKind.Utc));
+        lock (_skews)
+        {
+            _skews.Enqueue((now - plc).TotalMilliseconds);
+            while (_skews.Count > 100) _skews.Dequeue();
+            _skewMs = _skews.Min();
+        }
+        return plc.AddMilliseconds(_skewMs).ToLocalTime();
+    }
+
+    private void StopSubscriptions()
+    {
+        foreach (var s in _subs)
+        {
+            try { s.StopAsync(CancellationToken.None).Wait(2000); } catch { /* the connection goes anyway */ }
+        }
+        _subs.Clear();
+        lock (_fastIds) _fastIds.Clear();
+        lock (_skews) _skews.Clear();
+        _fast?.Break(DateTimeOffset.Now);
     }
 
     /// <summary>
@@ -233,6 +356,7 @@ public sealed class S7CommPlusSource : IPlcSource
 
     public void Disconnect()
     {
+        StopSubscriptions();
         _extra.Clear();
         var c = _client;
         _client = null;
