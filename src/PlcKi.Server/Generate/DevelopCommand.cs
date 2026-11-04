@@ -159,7 +159,7 @@ Usage: PlcKi.Server develop --vm <http://tia-pc:5090> --project <project .ap20 o
             }
             Console.WriteLine();
             Marker("stage", "fix", (round + 1).ToString());
-            Console.WriteLine($"=== fix round {round + 1} of {rounds}: {problems.Count} problem(s) go back to Claude ===");
+            Console.WriteLine($"=== fix round {round + 1} of {rounds}: {problems.Count} problem(s) go back to Ki ===");
             var fix = await GenerateCommand.RunAsync(GenArgs("--fix"), client, ct);
             if (fix >= 2) return fix;
         }

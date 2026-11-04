@@ -88,7 +88,7 @@ h3 { font-size: 17px; font-weight: 600; letter-spacing: -0.01em; margin: 0 0 6px
 .muted { color: var(--muted); }
 .faint { color: var(--muted); font-size: 13px; }
 .small { font-size: 14px; }
-.hint { font-size: 14px; color: var(--muted); line-height: 1.5; max-width: 90ch; }
+.hint { font-size: 14px; color: var(--muted); line-height: 1.5; max-width: 90ch; overflow-wrap: anywhere; }
 
 /* ---------- buttons ---------- */
 .btn {
@@ -449,10 +449,14 @@ button.tag.on { background: var(--accent); color: #fff; }
 @media (max-width: 760px) { .schematic, .schematic + .legend { display: none; } .linklist { display: block; } }
 
 /* job progress */
-.jobprog { margin-top: 14px; display: grid; gap: 8px; }
+.jobprog { margin-top: 14px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+.card.job { min-width: 0; overflow-wrap: anywhere; }
+.card.job > .row { flex-wrap: wrap; row-gap: 8px; }
+.jobprog .latest { margin: 0; font-family: var(--mono); font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.jobprog .latest span { font-family: var(--font); font-weight: 600; margin-right: 8px; }
 .jobprog .top { display: flex; gap: 12px; align-items: baseline; }
 .jobprog .pct { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; color: var(--accent); min-width: 72px; }
-.jobprog .phase { font-weight: 600; font-size: 15px; flex: 1; }
+.jobprog .phase { font-weight: 600; font-size: 15px; flex: 1; min-width: 0; }
 .jobprog .time { color: var(--muted); font-size: 13.5px; white-space: nowrap; }
 .jobprog .progress > div { transition: width 0.8s var(--ease); }
 .step .card.job { margin-top: 14px; box-shadow: none; border: 1px solid var(--line-strong); }
@@ -870,6 +874,9 @@ body { background: var(--bg-alt); }
 .topbar .pill.warn { background: rgba(240, 176, 74, 0.2); color: #f7cd80; }
 .topbar .pill.info { background: rgba(110, 160, 255, 0.2); color: #bcd2ff; }
 .topbar #conn:hover { filter: brightness(1.15); }
+.topbar #job-pill { min-width: 0; max-width: 280px; }
+.topbar #job-pill .jp-t { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.topbar #job-pill .jp-s { display: none; }
 .ro { font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 7px; border: 1px solid var(--frame-line); color: var(--frame-muted); white-space: nowrap; cursor: help; }
 .ro.except { border-color: rgba(240, 176, 74, 0.55); color: #f7cd80; }
 .clock { min-width: 4.6em; text-align: right; font-size: 13px; color: var(--frame-muted); font-variant-numeric: tabular-nums; }
@@ -959,6 +966,8 @@ main#page section.hero .k span { margin-top: 2px; }
   .topbar #machine-sub { font-size: 11.5px; max-width: 100%; }
   .topbar .right { gap: 4px; }
   .clock, .ro, .topbar kbd, .tb-t, #theme-btn { display: none; }
+  .topbar #job-pill .jp-t { display: none; }
+  .topbar #job-pill .jp-s { display: inline; }
   .tb-btn { padding: 0 7px; }
   footer.foot .foot-acct { display: inline; }
   main#page section:first-child { padding-top: 16px; }
@@ -1010,8 +1019,21 @@ html.test-values .topbar { border-bottom: 3px solid var(--warn); }
 .gen-form > details.more { margin: 14px 0 0 44px; }
 .gen-go { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; margin: 18px 0 0 44px; }
 .gen-ver summary { cursor: pointer; }
+.gen-job { display: flex; flex-direction: column; gap: 6px; }
+.gen-job .card.job { margin: 0; }
+/* "What Ki did": one line per block or tag change, a coloured mark for new / changed / removed */
+.gen-sum { background: var(--bg-alt); border: 1px solid var(--line); border-radius: 14px; padding: 12px 16px; }
+.gen-sum ul { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.gen-sum li { position: relative; padding-left: 18px; font-size: 14px; line-height: 1.45; overflow-wrap: anywhere; }
+.gen-sum li::before { content: ""; position: absolute; left: 2px; top: .5em; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.gen-sum li[data-k="add"]::before { background: var(--ok); }
+.gen-sum li[data-k="change"]::before { background: var(--accent); }
+.gen-sum li[data-k="remove"]::before { background: var(--fault); }
+.gen-sum li[data-k="same"], .gen-sum li[data-k="tia"] { color: var(--muted); }
+.gen-sum li[data-k="tia"]::before { border-radius: 2px; }
 @media (max-width: 1000px) {
   .gen-layout { grid-template-columns: minmax(0, 1fr); }
+  .gen-work { order: -1; }   /* one column: what you are doing first, the packages made before under it */
   .gen-list { position: static; }
   .gen-list ul { max-height: none; }
 }
@@ -1071,3 +1093,27 @@ main#page section.hero .plant-kpis { margin-top: 14px !important; }
 .needs a.al .ico { color: var(--fault-ink); }
 .needs a.al.w { background: color-mix(in srgb, var(--warn-soft) 55%, var(--panel)); border-left-color: var(--warn); }
 @media (max-width: 600px) { main#page section.hero .plant-kpis .k:nth-child(n+5) { display: none; } }
+
+/* Alarms: the filter buttons carry the counts; "Recent alarms" folds above the list */
+.segmented button.hot b { color: var(--fault); }
+details.more.recent { margin: 0 0 14px; padding: 12px 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); }
+details.more.recent > summary { cursor: pointer; color: var(--ink); }
+details.more.recent > summary::before { color: var(--accent); }
+
+/* Logins: the buttons wrap under the name on a phone instead of running off the screen */
+.list.logins li { flex-wrap: wrap; }
+.list.logins .li-acts { display: flex; flex-wrap: wrap; gap: 4px; }
+@media (max-width: 600px) { .list.logins .li-acts { flex-basis: 100%; padding-left: 34px; } }
+
+/* Phones: choice cards are one compact row each (icon left), and the Setup tabs stay on one line that scrolls */
+@media (max-width: 600px) {
+  .choice { gap: 8px; }
+  .choice button { grid-template-columns: 26px minmax(0, 1fr); column-gap: 12px; row-gap: 2px; padding: 12px 14px; align-items: center; }
+  .choice button .ico { grid-row: span 2; align-self: start; margin-top: 2px; }
+  .choice button > :not(.ico) { grid-column: 2; }
+  .choice b { font-size: 15px; }
+  .choice small { font-size: 13px; }
+  .subnav { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin-left: -16px; margin-right: -16px; padding: 0 16px 2px; }
+  .subnav::-webkit-scrollbar { display: none; }
+  .subnav > * { flex: none; }
+}

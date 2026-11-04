@@ -196,11 +196,11 @@ Generated code must be reviewed by an engineer before it goes to a real machine.
             Console.WriteLine($"  {b.File,-32} {b.Kind,-4} {b.Name}" + (b.Language != null ? $" ({b.Language})" : "") + (b.InstanceOf != null ? $" of {b.InstanceOf}" : ""));
         foreach (var f in result.Package.Files.Where(f => f.Extension == ".json"))
             Console.WriteLine($"  {f.Name,-32} tag tables");
-        if (previous != null)
-            Console.WriteLine($"Changed against {latest!.Folder}: {version.Added.Count} added, {version.Changed.Count} changed, {version.Removed.Count} removed.");
+        Console.WriteLine(previous != null ? $"What Ki changed against {latest!.Folder}:" : "What Ki made:");
+        foreach (var line in PackageSummary.Compare(previous, result.Package).Text) Console.WriteLine("  - " + line);
         if (version.Replaces.Count > 0)
             Console.WriteLine($"Replaces in the project: {string.Join(", ", version.Replaces)} (the importer saves a copy of each first).");
-        Console.WriteLine($"Claude: {result.Attempts} round(s), {result.Time.TotalMinutes:0.0} min, {result.InputTokens / 1000}k tokens in " +
+        Console.WriteLine($"Ki (Claude): {result.Attempts} round(s), {result.Time.TotalMinutes:0.0} min, {result.InputTokens / 1000}k tokens in " +
                           $"({result.CacheReadTokens / 1000}k from cache), {result.OutputTokens / 1000}k out, about ${Cost(result):0.00}.");
         Console.WriteLine($"Review notes: {Path.Combine(folder, BlockPackage.ReviewFile)}");
 

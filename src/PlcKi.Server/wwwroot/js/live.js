@@ -400,6 +400,7 @@
   let deepLink = null;          // #/alarms/A02: opened once, then scrolled to
   let scrollToAlarm = null;
   let events = null, eventsAt = 0;
+  let recentOpen = false, recentAll = false;   // the "Recent alarms" strip above the list
   async function loadEvents() {
     eventsAt = Date.now();
     try { events = await PK.api("GET", "/api/events?kind=alarm&max=30"); } catch { events = events || []; }
@@ -436,31 +437,35 @@
             </div>` : ""}
         </li>`;
       }).join("");
-      return hero({
-        title: "Alarms",
-        sub: "Every alarm the program can raise: what it means, where it is set, the likely causes and the fix.",
-        extra: `<div class="kpis" style="margin-top:12px">${[["active", s.activeAlarms.length, "active now", s.activeAlarms.length ? "bad" : "ok"], ["all", m.alarms.length, "alarms in the program", ""],
-            ["faults", faults, "faults (stop the machine)", ""], ["warnings", m.alarms.length - faults, "warnings", ""]]
-            .map(([k, n, l, c]) => `<button type="button" class="k kbtn ${c} ${alarmKind === k ? "on" : ""}" data-akind="${k}" aria-pressed="${alarmKind === k}" aria-label="Show ${esc(l)}: ${n}"><b>${n}</b><span>${esc(l)}</span></button>`).join("")}</div>`,
-      }) + sec("alt", `<div class="toolbar"><input type="search" id="alarm-search" placeholder="Search by number, text or device" value="${esc(alarmFilter)}" aria-label="Search alarms">
-          <div class="segmented" role="group" aria-label="Show">${[["all", "All", m.alarms.length], ["active", "Active", s.activeAlarms.length], ["faults", "Faults", faults], ["warnings", "Warnings", m.alarms.length - faults]]
-            .map(([k, l, n]) => `<button type="button" class="${alarmKind === k ? "on" : ""}" data-akind="${k}" aria-pressed="${alarmKind === k}">${l} ${n}</button>`).join("")}</div></div>
-          ${rows ? `<ul class="list">${rows}</ul>` : `<div class="nomatch">${alarmKind === "active" && !q ? `${icon("check")}<b>No alarm is active.</b><span>The machine reports no fault or warning right now.</span>`
-            : `${icon("search")}<b>No alarm matches.</b><span>Search by the alarm number (like ${esc((m.alarms[0] || {}).id || "A101")}), a word from the text, or a device tag.</span>`}
-            ${q || alarmKind !== "all" ? `<button class="btn b small" data-areset>Show all alarms</button>` : ""}</div>`}`)
-        + sec("", `<h2>Recent alarms</h2><p class="sub">When alarms came and went since PLC-Ki started watching. Newest first.</p>
-          ${!events ? `<p class="muted">Loading…</p>` : events.length ? `<ul class="list events">${events.map((e) => {
+      const recent = !events ? `<p class="muted" style="margin:0">Loading…</p>` : events.length ? `<ul class="list events">${events.slice(0, recentAll ? events.length : 4).map((e) => {
             const mm = /^(\S+) (came|went|was already active)/.exec(e.text);
             const id = mm && mm[1], kind = mm ? (mm[2] === "went" ? "went" : mm[2] === "came" ? "came" : "start") : "";
             return `<li><span class="ev-time">${esc(PK.date(e.time, true))}</span><span class="ev-kind ${kind}">${{ came: "Came", went: "Went", start: "Already on" }[kind] || ""}</span>
               <span style="flex:1;min-width:180px">${id ? `<a href="#/alarms/${encodeURIComponent(id)}">${esc(id)}</a> ` : ""}${esc(id ? e.text.replace(/^\S+ (came|went|was already active when watching started):?\s*/, "") : e.text)}</span></li>`;
-          }).join("")}</ul>` : `<p class="muted">No alarm came or went since PLC-Ki started watching.</p>`}`);
+          }).join("")}</ul>${events.length > 4 ? `<button type="button" class="btn plain small" data-recent style="margin-top:8px">${recentAll ? "Show fewer" : `Show all ${events.length}`}</button>` : ""}`
+        : `<p class="muted" style="margin:0">No alarm came or went since PLC-Ki started watching.</p>`;
+      // The counts live in the filter buttons: one row to read and to click, no second row of the same numbers
+      return hero({
+        title: "Alarms",
+        sub: "Every alarm the program can raise: what it means, where it is set, the likely causes and the fix.",
+      }) + sec("alt", `<div class="toolbar"><input type="search" id="alarm-search" placeholder="Search by number, text or device" value="${esc(alarmFilter)}" aria-label="Search alarms">
+          <div class="segmented" role="group" aria-label="Show">${[["all", "All", m.alarms.length, "Every alarm in the program"], ["active", "Active", s.activeAlarms.length, "On right now"], ["faults", "Faults", faults, "Faults stop the machine"], ["warnings", "Warnings", m.alarms.length - faults, "Warnings do not stop the machine"]]
+            .map(([k, l, n, t]) => `<button type="button" class="${alarmKind === k ? "on" : ""} ${k === "active" && n ? "hot" : ""}" data-akind="${k}" aria-pressed="${alarmKind === k}" title="${t}">${l} <b>${n}</b></button>`).join("")}</div></div>
+          <details class="more recent" ${recentOpen ? "open" : ""}><summary><b>Recent alarms</b> <span class="muted small">${events ? `${events.length} since PLC-Ki started watching` : ""}</span></summary>
+            <div style="margin-top:10px">${recent}</div></details>
+          ${rows ? `<ul class="list">${rows}</ul>` : `<div class="nomatch">${alarmKind === "active" && !q ? `${icon("check")}<b>No alarm is active.</b><span>The machine reports no fault or warning right now.</span>`
+            : `${icon("search")}<b>No alarm matches.</b><span>Search by the alarm number (like ${esc((m.alarms[0] || {}).id || "A101")}), a word from the text, or a device tag.</span>`}
+            ${q || alarmKind !== "all" ? `<button class="btn b small" data-areset>Show all alarms</button>` : ""}</div>`}`);
     },
     after(page) {
       const inp = page.querySelector("#alarm-search");
       if (!inp) return;
       inp.oninput = () => { alarmFilter = inp.value; PK.draw(); };
       page.querySelectorAll("[data-akind]").forEach((b) => b.onclick = () => { alarmKind = b.dataset.akind; PK.draw(); });
+      const rc = page.querySelector("details.recent");
+      if (rc) rc.ontoggle = () => { recentOpen = rc.open; };
+      const ra = page.querySelector("[data-recent]");
+      if (ra) ra.onclick = () => { recentAll = !recentAll; PK.draw(); };
       const ar = page.querySelector("[data-areset]");
       if (ar) ar.onclick = () => { alarmFilter = ""; alarmKind = "all"; PK.draw(); };
       page.querySelectorAll("[data-open]").forEach((li) => {
