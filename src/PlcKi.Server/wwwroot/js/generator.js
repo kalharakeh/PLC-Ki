@@ -175,6 +175,12 @@
   /** One numbered step of the form. */
   const gstep = (n, title, body, hint = "") => `<div class="gstep"><div class="gstep-n">${n}</div><div class="gstep-b"><h4>${title}</h4>${hint ? `<p class="hint" style="margin:0 0 10px">${hint}</p>` : ""}${body}</div></div>`;
 
+  /** The Change-it button: an empty box imports the latest version again, without Ki. */
+  const runLabel = (request) => {
+    const real = g.form.download === "real" ? " (real PLC)" : "";
+    return (request || "").trim() ? `Change ${esc(g.open)}${real}` : `Import ${esc(g.open)} again${real}`;
+  };
+
   /** The form: new blocks, or a change to the picked package. */
   function formHtml() {
     const f = g.form;
@@ -201,7 +207,7 @@
     const steps = [
       gstep(1, change ? "What should change?" : "What do you need?",
         `<textarea id="g-request" rows="4" aria-label="${change ? "What should change" : "What do you need"}" placeholder="${change ? "For example: add a dry-run stop when the tank level is below 10 %." : "For example: an FB for a pump with start/stop, run feedback, a 5 s feedback alarm and run hours."}">${esc(f.request)}</textarea>
-         <span class="hint">${change ? `${AI} changes the latest version and saves it as the next one. Leave it empty to import the latest version again.` : "Plain words are fine. Name signals and times if you know them."}</span>`),
+         <span class="hint">${change ? `${AI} changes the latest version and saves it as the next one. Leave it empty to import the latest version again (no ${AI}, no cost).` : "Plain words are fine. Name signals and times if you know them."}</span>`),
       gstep(2, "Where should it go?",
         `<div class="grid ${change ? "" : "two"}">
           ${change ? "" : `<label class="field">Package name<input id="g-name" value="${esc(f.name)}" placeholder="${esc(suggested)}" autocomplete="off" spellcheck="false"><span class="hint">Optional. Empty: <b data-suggest>${esc(suggested)}</b>, made from your words.</span></label>`}
@@ -227,7 +233,7 @@
         <div class="row"><div style="flex:1"><b style="font-weight:600">SCL only</b><div class="muted small">No LAD or GRAPH, only SCL blocks.</div></div>
           <label class="switch"><input type="checkbox" id="g-sclOnly" ${f.sclOnly ? "checked" : ""}><span></span></label></div>
       </div></details>
-      <div class="gen-go"><button class="btn big ${f.download === "real" ? "red" : ""}" data-run ${running ? "disabled" : ""}>${icon("play")}${running ? "A job is running" : change ? (f.download === "real" ? `Change ${esc(g.open)} (real PLC)` : `Change ${esc(g.open)}`) : f.download === "real" ? "Generate (real PLC)" : "Generate"}</button>
+      <div class="gen-go"><button class="btn big ${f.download === "real" ? "red" : ""}" data-run ${running ? "disabled" : ""}>${icon("play")}<span data-runlabel>${running ? "A job is running" : change ? runLabel(f.request) : f.download === "real" ? "Generate (real PLC)" : "Generate"}</span></button>
         <span class="faint small">${running ? "Wait for the job above to finish." : change ? "Saved as the next version; the old ones stay." : "Becomes a package with versions: v001, v002 and so on."}</span></div>
     </div>`;
   }
@@ -406,6 +412,8 @@
       page.querySelectorAll("[data-tab]").forEach((b) => b.onclick = () => { read(); g.tab = b.dataset.tab; PK.draw(); });
       const req = v("request"), sug = page.querySelector("[data-suggest]"), nm = v("name");
       if (req && sug) PK.on(req, "input", () => { const n = nameFrom(req.value); sug.textContent = n; if (nm) nm.placeholder = n; });
+      const rl = page.querySelector("[data-runlabel]");
+      if (req && rl && g.open && !(g.job && g.job.state === "running")) PK.on(req, "input", () => { rl.innerHTML = runLabel(req.value); });
       page.querySelectorAll("[data-file]").forEach((b) => b.onclick = (e) => { e.preventDefault(); showFile(b.dataset.ver, b.dataset.file); });
       page.querySelectorAll("[data-hidejob]").forEach((b) => b.onclick = () => { g.jobHidden = g.job && g.job.id; PK.draw(); });
       const reopen = page.querySelector("[data-reopen]");
