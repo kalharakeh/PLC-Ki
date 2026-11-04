@@ -20,19 +20,28 @@
   }
 
   // ---- instances: where a block's "#x" lives in the PLC ----
-  /** All instance paths of a block, each with how its inputs are wired: [{ path, wires: {member -> symbol} }] */
+  /**
+   * All instance paths of a block, each with how its inputs are wired and who calls it:
+   * [{ path, wires: {member -> symbol}, caller: { block, path, local } | null }]
+   */
   async function instancesOf(name, depth = 0) {
     const p = state.program;
     if (!p || depth > 6) return [];
     const out = [];
-    for (const db of p.blocks.filter((b) => b.instanceOf === name)) out.push({ path: `"${db.name}"`, wires: {} });
+    for (const db of p.blocks.filter((b) => b.instanceOf === name)) out.push({ path: `"${db.name}"`, wires: {}, caller: null });
     for (const parent of p.blocks) {
       for (const c of parent.calls || []) {
         if (c.block !== name || !c.instance) continue;
-        if (c.instance.startsWith('"')) { if (!out.some((o) => o.path === c.instance)) out.push({ path: c.instance, wires: await wiresIn(parent.name, c.instance, null) }); continue; }
+        if (c.instance.startsWith('"')) {
+          // Its own instance DB: "DB_BatchSequence"(Start := ...) in FB_Station
+          let o = out.find((x) => x.path === c.instance);
+          if (!o) out.push(o = { path: c.instance, wires: {}, caller: null });
+          if (!o.caller) { o.wires = await wiresIn(parent.name, c.instance, null); o.caller = { block: parent.name, path: null, local: c.instance }; }
+          continue;
+        }
         const local = c.instance.replace(/^#/, "");
         for (const pi of await instancesOf(parent.name, depth + 1)) {
-          out.push({ path: pi.path + "." + local, wires: await wiresIn(parent.name, c.instance, pi) });
+          out.push({ path: pi.path + "." + local, wires: await wiresIn(parent.name, c.instance, pi), caller: { block: parent.name, path: pi.path, local: c.instance } });
         }
       }
     }
@@ -73,28 +82,66 @@
     return wires;
   }
 
-  function resolver(inst) {
+  // ---- values the machine model does not read: the open block's members, asked for while it is shown ----
+  const WATCH_TYPES = new Set(["Bool", "Int", "DInt", "Real", "Time"]);   // the types the server turns into values
+  const STRUCTURED = /^("|Struct|Array|IEC_|TON|TOF|TP|TONR|R_TRIG|F_TRIG|CTU|CTD|CTUD|DTL|G7_)/i;
+  const TIMER = /^(TON|TOF|TP|TONR)(_L?TIME)?$|^IEC_L?TIMER$/i;
+  /** A member's type from the block interface: "Out" -> Bool, "tOpen.Q" (a timer) -> Bool; undefined when not known. */
+  function memberType(b, name) {
+    const parts = name.split(".");
+    const m = ((b && b.interface) || []).find((x) => x.name === parts[0]);
+    if (!m) return undefined;
+    if (parts.length === 1) return m.datatype;
+    if (parts.length === 2 && TIMER.test(m.datatype)) return /^(Q|IN)$/i.test(parts[1]) ? "Bool" : /^(ET|PT)$/i.test(parts[1]) ? "Time" : undefined;
+    return undefined;
+  }
+  const seconds = (ms) => (ms < 1000 ? ms + " ms" : (ms / 1000).toFixed(ms % 1000 ? 1 : 0) + " s");
+  /** The page's own answer for a symbol (the server sends "True" or numbers as text from the PLC, real values in test mode). */
+  function watched(sym, type) {
+    const w = window.PKTags && PKTags.value(sym);
+    if (!w || w.error || w.value == null) return null;
+    let v = w.value;
+    if (v === "True" || v === "False") v = v === "True";
+    else if (typeof v === "string" && /^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(v.trim())) v = Number(v);
+    const text = typeof v === "boolean" ? (v ? "TRUE" : "FALSE")
+      : typeof v === "number" ? (type === "Time" ? seconds(v) : Number.isInteger(v) ? String(v) : v.toFixed(3).replace(/0+$/, "").replace(/\.$/, ""))
+      : String(v);
+    return { value: v, text };
+  }
+
+  /**
+   * operand ("#Out", "#Permit", "\"DB_IO\".X") -> its live value for this instance, or null.
+   * want (a Map, optional) collects every symbol it needed that the model does not read, with its type, so the page can ask for it.
+   */
+  function resolver(inst, block, want) {
     const vals = PK.valueBySymbol();
     return (operand) => {
       let sym = operand;
       let negate = false;
+      let type;
       if (operand.startsWith("#")) {
         const name = operand.slice(1);
         const first = name.split(".")[0];
         if (inst && inst.wires[first] && typeof inst.wires[first] === "object" && name === first) {
           const w = inst.wires[first];
           const toks = tokenize(w.expr), tree = toks && parseExpr(toks);
-          const v = tree ? evalNode(tree, resolver(null)) : null;
+          const v = tree ? evalNode(tree, resolver(null, null, want)) : null;
           return v == null ? null : { raw: v, text: v ? "TRUE" : "FALSE", symbol: w.text, label: w.text };
         }
         if (inst && inst.wires[first] && name === first) {
           sym = inst.wires[first];
           if (/^NOT\s+/.test(sym)) { negate = true; sym = sym.replace(/^NOT\s+/, ""); }
-        } else if (inst) sym = inst.path + "." + name;
+        } else if (inst) { sym = inst.path + "." + name; type = memberType(block, name); }
         else return null;
       }
-      const t = vals.get(PK.norm(sym));
-      if (!t) return null;
+      let t = vals.get(PK.norm(sym));
+      if (!t) {
+        if (type && STRUCTURED.test(type)) return null;          // a timer or struct as a whole has no single value
+        const wt = type && WATCH_TYPES.has(type) ? type : null;
+        if (want && !want.has(sym)) want.set(sym, wt);
+        t = watched(sym, wt);
+        if (!t) return null;
+      }
       let raw = t.value;
       if (negate && typeof raw === "boolean") raw = !raw;
       return { raw, text: negate ? (raw ? "TRUE" : "FALSE") : t.text, symbol: sym, label: t.label };
@@ -117,7 +164,7 @@
     let last = 0, m;
     while ((m = re.exec(rest))) {
       out += esc(rest.slice(last, m.index));
-      if (m[1]) out += (m[1].startsWith('"') ? `<span class="op" data-used="${esc(m[1])}" title="Where is this used?">${esc(m[1])}</span>` : esc(m[1])) + chip(resolve(m[1]));
+      if (m[1]) out += opHtml(m[1]) + chip(resolve(m[1]));
       else if (m[2]) out += `<span class="str">${esc(m[2])}</span>`;
       else if (m[3]) out += `<span class="num">${esc(m[3])}</span>`;
       else out += KW.has(m[4].toUpperCase()) ? `<span class="kw">${esc(m[4])}</span>` : esc(m[4]);
@@ -128,17 +175,28 @@
     return out;
   }
 
-  function codeHtml(text, resolve, highlight, find) {
-    const hl = highlight && !highlight.startsWith('"') ? new RegExp("#" + highlight.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b") : null;
+  /** A signal in the code: a button that answers what sets it. A block or its instance DB ("FB_Valve", "DB_BatchSequence") links to that block. */
+  function opHtml(op) {
+    const bare = /^"([^"]+)"$/.exec(op);
+    const b = bare && ((state.program && state.program.blocks) || []).find((x) => x.name === bare[1]);
+    if (b && !/DB$/.test(b.kind)) return `<a class="op" href="${hrefOf(b.name)}">${esc(op)}</a>`;
+    if (b && b.instanceOf) return `<a class="op" href="${hrefOf(b.instanceOf, [op])}">${esc(op)}</a>`;
+    return `<button type="button" class="op" data-src="${esc(op)}" title="What sets ${esc(clean(op))}?">${esc(op)}</button>`;
+  }
+
+  function codeHtml(text, resolve, highlight, find, lineNo) {
+    const hl = highlight && !highlight.startsWith('"') ? new RegExp("#" + highlight.replace(/^#/, "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b") : null;
     const f = (find || "").toLowerCase();
     let n = 0;
-    return `<div class="code">${String(text).split(/\r?\n/).map((l) => {
+    return `<div class="code">${String(text).split(/\r?\n/).map((l, k) => {
       const hit = f && l.toLowerCase().includes(f);
-      return `<span class="ln ${(hl && hl.test(l)) || writes(l, highlight) ? "hl" : ""} ${hit ? "found" : ""}" ${hit ? `data-hit="${n++}"` : ""}>${sclLine(l, resolve) || " "}</span>`;
+      const mark = (hl && hl.test(l)) || writes(l, highlight) || (lineNo != null && k + 1 === Number(lineNo));
+      return `<span class="ln ${mark ? "hl" : ""} ${hit ? "found" : ""}" ${hit ? `data-hit="${n++}"` : ""}>${sclLine(l, resolve) || " "}</span>`;
     }).join("")}</div>`;
   }
 
   // ---- LAD-style rungs from boolean statements ----
+  const isSignal = (x) => !!x && /^(#|")/.test(x);
   function tokenize(expr) {
     const re = /\s*(\(|\)|AND\b|OR\b|XOR\b|NOT\b|<>|>=|<=|=|<|>|"[^"]+"(?:\.(?:[A-Za-z_]\w*|"[^"]+")|\[\d+\])*|#?[A-Za-z_][\w.]*(?:\[\d+\])?|T#\w+|-?\d+(?:\.\d+)?)/gy;
     const toks = [];
@@ -192,8 +250,11 @@
       const blocker = power && v === false && !ctx.blocked;
       if (blocker) { ctx.blocked = true; if (!ctx.first) ctx.first = { n, live }; }
       const tip = v == null ? `${label}: no live value (not read, or not found in the PLC)` : `${label}${live ? " = " + live.text : ""}: ${v ? "passes" : "does not pass"}`;
-      return { html: `<div class="contact ${n.t === "cmp" ? "cmp" : ""} ${v === true ? "on" : v === false ? "off" : "unk"} ${blocker && ctx.coilOff ? "blocker" : ""}" title="${esc(tip)}">
-          <span class="sym">${sym}${v == null ? `<span class="q" aria-hidden="true">?</span>` : ""}</span><span class="nm">${esc(label.replace(/^#/, ""))}</span></div>`, out: power && v === true };
+      // A click asks what sets it; a comparison asks about its first signal
+      const src = n.t === "cmp" ? [n.a, n.b].find(isSignal) : n.op;
+      const attrs = src ? `data-src="${esc(src)}" aria-label="${esc(tip)}. What sets ${esc(clean(src))}?"` : "";
+      return { html: `<${src ? 'button type="button"' : "div"} class="contact ${n.t === "cmp" ? "cmp" : ""} ${v === true ? "on" : v === false ? "off" : "unk"} ${blocker && ctx.coilOff ? "blocker" : ""}" title="${esc(tip)}" ${attrs}>
+          <span class="sym">${sym}${v == null ? `<span class="q" aria-hidden="true">?</span>` : ""}</span><span class="nm">${esc(label.replace(/^#/, ""))}</span></${src ? "button" : "div"}>`, out: power && v === true };
     }
     if (n.t === "not") {
       const inner = drawNode(n.x, resolve, power, ctx);
@@ -232,7 +293,8 @@
     if (opt.why && !box && !opt.coil && ctx.coilOff && ctx.first) opt.why.push({ coil: lhs, first: ctx.first, net: opt.net });
     const end = box
       ? `<div class="contact ${result ? "on" : result === false ? "off" : ""}"><span class="sym">${esc(box.kind)}</span><span class="nm">${esc(box.name)}${box.pt ? " · " + esc(box.pt) : ""}</span></div>`
-      : `<div class="contact coil ${coilOn === true ? "on" : coilOn === false ? "off" : ""}"><span class="sym">${opt.coil ? "(" + opt.coil + ")" : "( )"}</span><span class="nm">${esc(lhs.replace(/^#/, ""))}</span></div>`;
+      : `<button type="button" class="contact coil ${coilOn === true ? "on" : coilOn === false ? "off" : ""}" data-src="${esc(lhs)}" data-coil
+          title="${esc(clean(lhs))}${coil ? " = " + esc(coil.text) : ""}" aria-label="Output ${esc(clean(lhs))}${coil ? ", " + esc(coil.text) : ""}. Where is it used?"><span class="sym">${opt.coil ? "(" + opt.coil + ")" : "( )"}</span><span class="nm">${esc(lhs.replace(/^#/, ""))}</span></button>`;
     return `<div class="rung ${opt.hl ? "hl" : ""}"><span class="rail"></span><span class="wire on"></span>${body.html}<span class="wire ${body.out ? "on" : ""}"></span>${end}<span class="wire ${body.out ? "on" : ""}"></span><span class="rail"></span></div>`;
   }
 
@@ -307,7 +369,7 @@
   }
 
   // ---- the Program page ----
-  // #/program/<block>[/<instance>[/<local>]][/network-N][/@<symbol>][/as-rungs|/as-text]
+  // #/program/<block>[/<instance>[/<local>]][/network-N|/line-N][/@<symbol>][/as-rungs|/as-text]
   // The old #/logic/... and #/code/... links still work: they open this page as rungs or as text.
   const MODE = /^as-(rungs|text)$/;
   const clean = (x) => String(x || "").replace(/^#/, "");
@@ -339,8 +401,13 @@
     if (!why.length) return "";
     const MAX = 6;
     return `<div class="why-off"><div class="why-h">${icon("info")}<b>Why ${why.length === 1 ? "an output is" : why.length + " outputs are"} off right now</b></div>
-      <ul>${why.slice(0, MAX).map((w) => `<li>${named(w.coil, resolve)} is off because ${because(w.first, resolve, instPath)}.
-        ${w.net ? `<button type="button" class="linkbtn" data-goto-net="${esc(w.net)}">Network ${esc(w.net)} ›</button>` : ""}</li>`).join("")}</ul>
+      <ul>${why.slice(0, MAX).map((w) => {
+        // The next question, as in the design: "Why is that off?" goes to what sets the contact that stops the output
+        const n = w.first.n, src = n.t === "cmp" ? [n.a, n.b].find(isSignal) : n.op;
+        const next = src ? `<button type="button" class="linkbtn" data-src="${esc(src)}">${n.t === "cmp" ? "What sets " + esc(clean(src)) + "?" : `Why is it ${n.neg ? "on" : "off"}?`}</button> · ` : "";
+        return `<li>${named(w.coil, resolve)} is off because ${because(w.first, resolve, instPath)}.
+        ${next}${w.net ? `<button type="button" class="linkbtn" data-goto-net="${esc(w.net)}">Network ${esc(w.net)} ›</button>` : ""}</li>`;
+      }).join("")}</ul>
       ${why.length > MAX ? `<p class="faint small" style="margin:6px 0 0">And ${why.length - MAX} more: look for the amber contacts in the rungs.</p>` : ""}</div>`;
   }
 
@@ -557,6 +624,7 @@
     let find = "";         // text: find in this block
     let findAt = 0;
     let allParts = false;  // overview: show every part, not only the first ones
+    let watchList = [];    // the open block's members the model does not read: asked for while they are drawn
 
     /** Rungs for LAD/FBD/GRAPH blocks and text for SCL, unless the link or the switch says otherwise. */
     const autoMode = (b) => (b.logic ? "rungs" : "text");
@@ -576,13 +644,14 @@
         // After the block: an instance path and a local output (devices), or "network-N" and "@<symbol>" (alarms)
         const rest = rest0.slice(1);
         const net = (rest.find((x) => /^network-\d+$/.test(x)) || "").slice(8) || null;
+        const line = (rest.find((x) => /^line-\d+$/.test(x)) || "").slice(5) || null;
         const sym = (rest.find((x) => x.startsWith("@")) || "").slice(1) || null;
         const alarmId = (rest.find((x) => x.startsWith("alarm-")) || "").slice(6) || null;
-        const plain = rest.filter((x) => !/^network-\d+$/.test(x) && !x.startsWith("@") && !x.startsWith("alarm-"));
+        const plain = rest.filter((x) => !/^(network|line)-\d+$/.test(x) && !x.startsWith("@") && !x.startsWith("alarm-"));
         const inst = instances.find((i) => i.path === plain[0]) || instances[0] || null;
         let mode = want || autoMode(b);
         if (mode === "rungs" && !b.logic && !b.source) mode = "text";
-        sel = { name: first, params, block: b, instances, inst, highlight: sym || plain[1] || null, network: net, mode, deep: !!(net || sym || want || alarmId),
+        sel = { name: first, params, block: b, instances, inst, highlight: sym || plain[1] || null, network: net, line, mode, deep: !!(net || line || sym || want || alarmId),
           alarm: alarmId ? await alarmTrail(alarmId) : null };
       } catch (e) {
         sel = { name: first, params, error: e.message };
@@ -676,6 +745,8 @@
       needsValues: true,
       mount(el, params) {
         sel = null;
+        watchList = [];
+        if (window.PKTags && PKTags.programSymbols) PKTags.programSymbols(() => watchList);
         PK.loadProgram().then(() => select(params));
         PK.draw();
       },
@@ -698,6 +769,7 @@
           <p class="sub">What the PLC program does and why, live. Each part is explained in plain words first; the code with live values is underneath.</p>`);
         const picked = sel && !sel.overview;
         const body = (inner) => head + PK.sec("alt", `<div class="split ${picked ? "has-sel" : ""}"><nav class="blocklist" aria-label="Program blocks">${list(tree, roll)}</nav><div class="stack">${inner}</div></div>`);
+        if (!sel || sel.overview || sel.error) watchList = [];
         if (!sel) return body(`<div class="card"><p class="muted">Loading…</p></div>`);
         if (sel.overview) return body(overview(tree, idx, roll));
         const crumbs = (name) => {
@@ -706,7 +778,8 @@
         };
         if (sel.error) return body(crumbs(sel.name) + `<div class="notice red">${icon("warn")}<div>${esc(sel.error)}</div></div>`);
         const b = sel.block;
-        const resolve = resolver(sel.inst);
+        const asked = new Map();
+        const resolve = resolver(sel.inst, b, asked);
         const eqName = (i) => { const e = ((state.status && state.status.equipment) || []).find((x) => x.location && x.location.includes(i.path)); return e ? " · " + e.name : ""; };
         const instPick = sel.instances.length > 1 ? `<label class="pg-inst"><span class="faint small">Which one</span><select id="inst" aria-label="Instance">${sel.instances.map((i) => `<option value="${esc(i.path)}" ${i === sel.inst ? "selected" : ""}>${esc(i.path + eqName(i))}</option>`).join("")}</select></label>`
           : sel.inst ? `<span class="pill info" title="Instance: where its values live">${esc(sel.inst.path)}</span>` : "";
@@ -717,6 +790,7 @@
 
         // The rungs are worked out in both modes: they give the "why is it off" summary at the top
         const nets = b.logic ? networks(b.logic) : sclNetworks(b.source);
+        sel.nets = nets;
         const seq = ((state.status && state.status.sequences) || []).find((q) => q.block && PK.blockOf(q.block) === b.name);
         // From an alarm with no output named: highlight the alarm bit when this block writes it (the latch)
         const alarmSym = sel.alarm && sel.alarm.symbol;
@@ -753,15 +827,15 @@
         } else if (canText) {
           const hits = find ? String(text).split(/\r?\n/).filter((l) => l.toLowerCase().includes(find.toLowerCase())).length : 0;
           bodyHtml = trail + `<div class="findbar"><input type="search" id="code-find" placeholder="Find in this block" aria-label="Find in this block" value="${esc(find)}">
-              <span class="faint small" aria-live="polite">${find ? (hits ? `${hits} line${hits > 1 ? "s" : ""} · Enter for the next` : "Not in this block") : ""}</span></div>` + codeHtml(text, resolve, want, find)
-            + `<p class="faint small" style="margin:10px 0 0">Click a signal in quotes to see where else it is used.</p>`;
+              <span class="faint small" aria-live="polite">${find ? (hits ? `${hits} line${hits > 1 ? "s" : ""} · Enter for the next` : "Not in this block") : ""}</span></div>` + codeHtml(text, resolve, want, find, sel.line)
+            + `<p class="faint small" style="margin:10px 0 0">Click a signal to see what sets it.</p>`;
         } else bodyHtml = `<p class="muted">No code in this block (data only). Its fields are listed below.</p>`;
 
         const iface = (b.interface || []).filter((m) => m.section !== "Temp" && m.section !== "Constant");
         const isDb = /DB$/.test(b.kind);
         const title = plainTitle(b);
         const tagsHtml = window.PKTags ? window.PKTags.blockTagsHtml(text).replace(/<details([^>]*) open>/, "<details$1>") : "";
-        return body(crumbs(b.name) + `
+        const page = body(crumbs(b.name) + `
             <div class="card pg-card">
               <div class="row" style="gap:10px 12px;flex-wrap:wrap;align-items:center"><h2 class="pg-title">${esc(title || b.name)}${dot(ownState(n))}</h2><span class="spacer"></span>${instPick}</div>
               <div class="pg-meta"><span class="mono">${esc(b.name)}</span><span class="tag">${esc(b.kind)}${b.number != null ? " " + b.number : ""}</span>${lang ? `<span class="tag lang-${esc(lang)}">${esc(lang)}</span>` : ""}
@@ -779,6 +853,9 @@
               <table class="tbl iface" style="margin-top:8px"><tr><th>Name</th><th>Section</th><th>Type</th><th>Now</th><th>Comment</th></tr>
               ${iface.map((m) => { const v = resolve("#" + m.name); return `<tr><td>${esc(m.name)}</td><td class="muted">${esc(m.section)}</td><td class="mono">${esc(m.datatype)}</td><td>${v ? chip(v) : ""}</td><td class="muted">${esc(m.comment || "")}</td></tr>`; }).join("")}
               </table></details></div>` : ""}`);
+        // Everything drawn above asked for its value: rungs or text first, then the interface table
+        watchList = [...asked].slice(0, 300).map(([symbol, type]) => ({ symbol, type }));
+        return page;
       },
       after(page) {
         if (window.PKTags && PKTags.wire) PKTags.wire(page);
@@ -805,13 +882,47 @@
           cf.oninput = () => { find = cf.value; findAt = 0; PK.draw(); jump(page, findAt); };
           cf.onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); findAt += e.shiftKey ? -1 : 1; jump(page, findAt); } };
         }
-        page.querySelectorAll("[data-used]").forEach((o) => o.onclick = () => usedIn(o.dataset.used));
+        page.querySelectorAll("[data-src]").forEach((o) => o.onclick = () => explain(o, page));
       },
     };
+
+    /** A contact, coil or signal was clicked: go to where this block sets it, or say in a sheet where it comes from. */
+    async function explain(el, page) {
+      if (!sel || !sel.block || el.dataset.busy) return;
+      const op = el.dataset.src, coil = el.hasAttribute("data-coil"), ctx = { b: sel.block, inst: sel.inst };
+      el.dataset.busy = "1";
+      let r;
+      try { r = coil ? { html: await usesOf(op, ctx) } : await sourceOf(op, ctx); }
+      catch (e) { r = { html: `<p class="muted">${esc(e.message)}</p>` }; }
+      delete el.dataset.busy;
+      if (r.here) { showHere(page, r.here); return; }
+      const v = resolver(sel.inst, sel.block)(op);
+      PK.sheet(`<span class="eyebrow">${coil ? "Where it is used" : "What sets it"}</span>
+        <h2 class="mono" style="font-size:20px;word-break:break-all">${esc(clean(op))}${v ? " " + chip(v) : ""}</h2>
+        <div class="src-answer">${r.html}</div><div class="row end"><button class="btn" data-close>OK</button></div>`);
+    }
+
+    /** Scroll to a place in this block: its rung, or its line in the text (switching to the text when it has no rung). */
+    function showHere(page, here) {
+      const n = sel.mode === "rungs" && (sel.nets || []).find((x) => x.lines.some(here.hit));
+      if (n) { flash(page.querySelector(`.rung-card[data-net="${CSS.escape(n.no)}"]`)); return; }
+      if (sel.mode !== "text") setMode("text");
+      setTimeout(() => flash(page.querySelectorAll("#pg-code .code .ln")[here.line - 1]), 60);
+    }
+  }
+
+  /** Bring a rung or a line into view, mark it for a moment and put the keyboard there. */
+  function flash(el) {
+    if (!el) return;
+    el.scrollIntoView({ block: "center" });
+    if (el.animate) el.animate([{ outline: "2px solid var(--accent)", outlineOffset: "2px" }, { outline: "2px solid transparent", outlineOffset: "2px" }], { duration: 1800 });
+    el.tabIndex = -1;
+    el.focus({ preventScroll: true });
   }
 
   /** The old Logic and Code addresses open the Program page as rungs or as text, without an extra history step. */
   const alias = (mode) => ({
+    transient: true,      // the back chip skips it: it only forwards
     mount(el, params) { location.replace("#/program/" + [...params, "as-" + mode].map(encodeURIComponent).join("/")); },
     render() { return ""; },
   });
@@ -826,18 +937,190 @@
     el.animate && el.animate([{ outline: "2px solid var(--accent)" }, { outline: "2px solid transparent" }], { duration: 1200 });
   }
 
-  /** "Where is this used": every block that mentions the signal, from /api/program/search. */
-  async function usedIn(symbol) {
-    const s = PK.sheet(`<span class="eyebrow">Where is this used</span><h2 class="mono" style="font-size:20px;word-break:break-all">${esc(symbol)}</h2><div class="used-list"><p class="muted">Searching the program…</p></div>
-      <div class="row end"><button class="btn" data-close>OK</button></div>`);
-    let r;
-    try { r = await PK.api("GET", "/api/program/search?q=" + encodeURIComponent(symbol)); } catch (e) { r = { results: [], error: e.message }; }
-    const box = s.el.querySelector(".used-list");
-    if (!box) return;
-    box.innerHTML = r.error ? `<p class="muted">${esc(r.error)}</p>` : !r.results.length ? `<p class="muted">Not found in any block.</p>`
-      : `<p class="muted small" style="margin:0 0 8px">In ${r.results.length} block${r.results.length > 1 ? "s" : ""}.</p><ul class="list">${r.results.map((x) => `<li style="display:block">
-          <a href="#/program/${encodeURIComponent(x.block)}/as-text" data-close><b>${esc(x.block)}</b></a> <span class="faint small">${esc(x.kind)} · ${x.count} line${x.count > 1 ? "s" : ""}</span>
-          ${x.lines.map((l) => `<div class="mono small faint" style="margin-top:4px;overflow-wrap:anywhere">${esc(l.text)}</div>`).join("")}</li>`).join("")}</ul>`;
+  // ---- "What sets it": a click on a contact, a coil or a signal in the code says where its value comes from ----
+  const progBlock = (name) => ((state.program && state.program.blocks) || []).find((x) => x.name === name);
+  /** '"FB_Valve"' -> "FB_Valve" when it is a function block of this program (a block inside another one). */
+  const fbOf = (datatype) => { const m = /^"([^"]+)"$/.exec(datatype || ""); const b = m && progBlock(m[1]); return b && b.kind === "FB" ? b.name : null; };
+  const loadBlock = async (name) => { try { return await block(name); } catch { return null; } };
+
+  /**
+   * Where a block sets a signal: { net, line, hit } with the network (LAD/FBD) and the line in its text (1-based), or null.
+   * Counts "x := ...", set/reset, a timer call for its .Q/.ET ("#tOpen(IN := ...)") and a GRAPH step action ("action N #x").
+   */
+  function placeIn(b, op) {
+    if (!b || !op) return null;
+    const name = op.replace(/^#/, "");
+    const first = op.startsWith("#") ? name.split(".")[0] : null;
+    const m = first && (b.interface || []).find((x) => x.name === first);
+    const call = m && name.includes(".") && TIMER.test(m.datatype) ? new RegExp("^#" + reEsc(first) + "\\s*\\(") : null;
+    const action = op.startsWith("#") ? new RegExp("^action\\s+\\w+\\s+" + reEsc(op) + "(?![\\w.])") : null;
+    const hit = (l) => writes(l, op) || !!(call && call.test(l.trim())) || !!(action && action.test(l.trim()));
+    const i = String(b.source || b.logic || "").split(/\r?\n/).findIndex(hit);
+    if (i < 0) return null;
+    const n = b.logic ? networks(b.logic).find((x) => x.lines.some(hit)) : null;
+    return { net: n && n.no && n.lang !== "GRAPH" ? n.no : null, line: i + 1, hit };
+  }
+  const placeText = (p) => (p.net ? "network " + p.net : "line " + p.line);
+  /** A link to a place in a block: rungs at the network when it has one, otherwise the text at the line. */
+  function placeHref(name, instPath, p, op) {
+    const extra = instPath ? [instPath] : [];
+    if (p && p.net) extra.push("network-" + p.net, ...(op ? ["@" + op] : []), "as-rungs");
+    else if (p) extra.push("line-" + p.line, "as-text");
+    return hrefOf(name, extra);
+  }
+  /** "FB_Station, line 47" as a link that closes the sheet. */
+  const placeLink = (name, instPath, p, op) => `<a href="${esc(placeHref(name, instPath, p, op))}" data-close><b>${esc(name)}</b>${p ? ", " + esc(placeText(p)) : ""}</a>`;
+
+  /** The line of a call in the caller, at the given input when it is named there: #XV101(Open := ..., Permit := ...). */
+  function callLine(cb, local, input) {
+    const lines = String((cb && (cb.source || cb.logic)) || "").split(/\r?\n/);
+    const start = lines.findIndex((l) => l.includes(local + "("));
+    if (start < 0) return null;
+    const re = input ? new RegExp("(^|[(,\\s])" + reEsc(input) + "\\s*(:=|=>)") : null;
+    for (let i = start; re && i < lines.length && i < start + 80; i++) {
+      if (re.test(lines[i])) return { line: i + 1, text: lines[i].trim() };
+      if (/\)\s*;/.test(lines[i])) break;
+    }
+    return { line: start + 1, text: lines[start].trim() };
+  }
+
+  /** The block and instance that hold a global signal: "Station".XV101.Out -> { FB_Valve, "Station".XV101, #Out }. */
+  async function ownerOf(sym) {
+    const m = /^"([^"]+)"((?:\.[A-Za-z_]\w*)+)$/.exec(sym);
+    const db = m && progBlock(m[1]);
+    if (!db || !db.instanceOf) return null;
+    let fb = db.instanceOf, path = `"${m[1]}"`;
+    const parts = m[2].slice(1).split(".");
+    while (parts.length > 1) {
+      const b = await loadBlock(fb);
+      const inner = b && fbOf(((b.interface || []).find((x) => x.name === parts[0]) || {}).datatype);
+      if (!inner) break;
+      fb = inner; path += "." + parts.shift();
+    }
+    return { block: fb, path, op: "#" + parts.join(".") };
+  }
+
+  /** Every place that writes a global signal: the program search, plus the block whose instance data holds it. */
+  async function writersOf(sym) {
+    const out = [];
+    let r = null;
+    try { r = await PK.api("GET", "/api/program/search?q=" + encodeURIComponent(sym)); } catch { /* the owner alone */ }
+    for (const x of (r && r.results) || []) {
+      if (!(x.lines || []).some((l) => l.writes)) continue;
+      out.push({ block: x.block, path: null, op: sym, place: placeIn(await loadBlock(x.block), sym) });
+    }
+    const own = await ownerOf(sym);
+    if (own && !out.some((o) => o.block === own.block)) {
+      const p = placeIn(await loadBlock(own.block), own.op);
+      if (p) out.push({ block: own.block, path: own.path, op: own.op, place: p });
+    }
+    return { writers: out, readers: ((r && r.results) || []).filter((x) => !(x.lines || []).some((l) => l.writes)) };
+  }
+
+  // The tag tables and the hardware, read once, for "an input from the field at %I0.3, on this module"
+  let ioData = null;
+  window.addEventListener("pk:program-changed", () => { ioData = null; });
+  async function ioOf(sym) {
+    ioData ||= Promise.all([PK.api("GET", "/api/program/tags").catch(() => null), PK.api("GET", "/api/hardware").catch(() => null)]);
+    const [tags, hw] = await ioData;
+    let tag = null;
+    for (const tb of (tags && tags.tables) || []) for (const t of tb.tags) if (PK.norm(t.symbol) === PK.norm(sym)) tag = t;
+    const addr = tag && String(tag.address || "").replace(/\s/g, "").toUpperCase();
+    if (!addr || !/^%[IQ]/.test(addr)) return null;
+    let ch = null;
+    for (const st of (hw && hw.available && hw.stations) || []) for (const mo of st.modules || []) for (const c of mo.channels || []) {
+      if (ch) break;
+      const same = PK.norm(c.symbol) === PK.norm(sym) || (c.tag && PK.norm('"' + c.tag + '"') === PK.norm(sym)) || String(c.address || "").replace(/\s/g, "").toUpperCase() === addr;
+      if (same) ch = { href: `#/hardware/${encodeURIComponent(st.name)}${mo.slot != null ? "/" + encodeURIComponent(mo.slot) : ""}`, where: `${st.name} · ${mo.title || mo.name || "slot " + mo.slot}` };
+    }
+    return { address: addr, input: addr.startsWith("%I"), ch };
+  }
+
+  /** What sets a global signal, as sheet paragraphs; { here } when the only writer is the block on screen. */
+  async function globalAnswer(sym, onScreen) {
+    const { writers, readers } = await writersOf(sym);
+    if (writers.length === 1 && writers[0].block === onScreen && writers[0].place) return { here: writers[0].place, readers };
+    const parts = [];
+    if (writers.length) parts.push(`<p>Set in ${writers.map((w) => placeLink(w.block, w.path, w.place, w.op)).join(" and in ")}.</p>`);
+    const io = await ioOf(sym);
+    if (io) {
+      const hwLink = io.ch ? ` <a href="${esc(io.ch.href)}" data-close>${esc(io.ch.where)} ›</a>` : "";
+      parts.push(io.input ? `<p>An input from the field, at <span class="mono">${esc(io.address)}</span>.${hwLink || " PLC-Ki does not know its module."}</p>`
+        : `<p>An output to the field, at <span class="mono">${esc(io.address)}</span>.${hwLink}</p>`);
+    }
+    if (!parts.length) parts.push(`<p class="muted">Nothing in the program sets it. It comes from outside the program: an input, the HMI or another device.</p>`);
+    const others = onScreen ? readers.filter((x) => x.block !== onScreen) : [];   // not inside an input's answer: it would only repeat the caller
+    if (others.length) parts.push(`<p class="small muted" style="margin-top:12px">Also read in ${others.slice(0, 8).map((x) => `<a href="${esc(hrefOf(x.block, ["as-text"]))}" data-close>${esc(x.block)}</a>`).join(", ")}${others.length > 8 ? ` and ${others.length - 8} more` : ""}.</p>`);
+    return { parts, readers };
+  }
+
+  /**
+   * Where an operand of the block on screen gets its value: { here } for a place in this block (the page scrolls to it),
+   * or { html } for a sheet with the answer and links. ctx: { b, inst }.
+   */
+  async function sourceOf(op, ctx) {
+    const { b, inst } = ctx;
+    if (!op.startsWith("#")) {
+      const a = await globalAnswer(op, b.name);
+      return a.here ? { here: a.here } : { html: a.parts.join("") };
+    }
+    const name = op.slice(1), first = name.split(".")[0], rest = name.split(".").slice(1).join(".");
+    const mem = (b.interface || []).find((x) => x.name === first);
+    // A block inside this one: #LT101.High is set in FB_AnalogIn, for "Station".LT101
+    const fb = mem && fbOf(mem.datatype);
+    if (fb) {
+      const path = inst ? inst.path + "." + first : null;
+      if (!rest) return { html: `<p><b>${esc(first)}</b> runs ${esc(fb)} inside this block. <a href="${esc(hrefOf(fb, path ? [path] : []))}" data-close>Open ${esc(fb)} for ${esc(first)} ›</a></p>` };
+      const p = placeIn(await loadBlock(fb), "#" + rest);
+      return { html: `<p>Set in ${placeLink(fb, path, p, "#" + rest)}${path ? `, for <span class="mono">${esc(path)}</span>` : ""}.</p>` };
+    }
+    const here = placeIn(b, op);
+    if (here) return { here };
+    if (mem && /^(Input|InOut)$/.test(mem.section)) {
+      const c = inst && inst.caller;
+      if (!c) {
+        const callers = (b.calledBy || []).map((n) => `<a href="${esc(hrefOf(n))}" data-close><b>${esc(n)}</b></a>`).join(", ");
+        return { html: `<p>An input: the block that calls ${esc(b.name)} gives it${callers ? `. Called by ${callers}` : ""}.</p>` };
+      }
+      const cl = callLine(await loadBlock(c.block), c.local, first);
+      const w = inst.wires[first];
+      const wire = w && typeof w === "object" ? w.text : w;
+      const parts = [`<p>An input from ${placeLink(c.block, c.path, cl ? { line: cl.line } : null)}, where it calls <span class="mono">${esc(clean(c.local))}</span>${wire ? ":" : "."}</p>`];
+      if (wire) parts.push(`<pre class="code-line">${esc(first)} := ${esc(wire)}</pre>`);
+      const g = typeof w === "string" ? w.replace(/^NOT\s+/, "") : null;
+      if (g && g.startsWith('"')) {
+        const a = await globalAnswer(g, null);
+        parts.push(`<p class="small muted" style="margin:12px 0 4px">And <span class="mono">${esc(g)}</span>:</p>` + (a.here ? `<p>Set in ${placeLink(b.name, null, a.here, g)}.</p>` : a.parts.join("")));
+      }
+      return { html: parts.join("") };
+    }
+    return { html: `<p class="muted">PLC-Ki did not find where the program sets it. ${mem && mem.section === "Static" ? "It keeps its value from the last cycle, or the HMI sets it." : "The HMI or another device may set it."}</p>` };
+  }
+
+  /** Where an output of the block on screen is used: the caller's lines that read it, or the blocks that read a global signal. */
+  async function usesOf(op, ctx) {
+    const { b, inst } = ctx;
+    const set = placeIn(b, op);
+    const parts = [set ? `<p>Set in this block, ${esc(placeText(set))}.</p>` : ""];
+    if (op.startsWith("#") && inst && inst.caller) {
+      const c = inst.caller, ref = c.local + "." + op.slice(1);
+      const cb = await loadBlock(c.block);
+      const lines = String((cb && (cb.source || cb.logic)) || "").split(/\r?\n/);
+      const used = lines.map((l, i) => ({ l: l.trim(), i })).filter((x) => x.l.includes(ref) && !x.l.replace(/\/\/.*$/, "").trim().startsWith("//"));
+      parts.push(used.length ? `<p>Read in ${placeLink(c.block, c.path, { line: used[0].i + 1 })}:</p>` + used.slice(0, 6).map((x) => `<pre class="code-line">${esc(x.l)}</pre>`).join("")
+        : `<p class="muted">${esc(c.block)} does not read it. The HMI or another device may.</p>`);
+    } else if (!op.startsWith("#")) {
+      const { readers } = await writersOf(op);
+      const links = [];
+      for (const x of readers.slice(0, 8)) {
+        const xb = await loadBlock(x.block);
+        const i = String((xb && (xb.source || xb.logic)) || "").split(/\r?\n/).findIndex((l) => l.includes(op));
+        links.push(placeLink(x.block, null, i >= 0 ? { line: i + 1 } : null));
+      }
+      parts.push(readers.length ? `<p>Read in ${links.join(", ")}${readers.length > 8 ? ` and ${readers.length - 8} more` : ""}.</p>`
+        : `<p class="muted">No other block reads it. The HMI or another device may.</p>`);
+    } else parts.push(`<p class="muted">An output of ${esc(b.name)}: the block that calls it reads it.</p>`);
+    return parts.join("");
   }
 
   PK.view("program", program());

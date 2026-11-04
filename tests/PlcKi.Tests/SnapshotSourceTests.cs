@@ -37,6 +37,32 @@ public class SnapshotSourceTests
     }
 
     [Fact]
+    public void Block_members_are_read_by_their_full_name()
+    {
+        // The Program page asks for the open block's members ("Station".XV101.Out); FB_Valve network 4 needs these
+        using var src = new SnapshotFileSource(File_("step10-xv101-not-open"));
+        src.Connect(TestData.Model.Tags);
+        var asked = new[] { "\"Station\".XV101.Out", "\"Station\".XV101.IsOpen", "\"Station\".XV101.tOpen.Q", "\"Station\".XV101.MonitorTime" };
+        var r = src.ReadSymbols(asked.Select(Asked).ToList());
+        Assert.All(asked, s => Assert.Null(r[s].Error));
+        Assert.Equal(false, r["\"Station\".XV101.Out"].Value);
+        Assert.Equal(false, r["\"Station\".XV101.tOpen.Q"].Value);
+        Assert.Equal(10000.0, r["\"Station\".XV101.MonitorTime"].Value);
+    }
+
+    [Fact]
+    public void Block_members_in_the_file_are_not_model_values()
+    {
+        // The polling loop's read keeps to the model's tags: the extra keys only answer the Program page
+        using var src = new SnapshotFileSource(File_("step10-xv101-not-open"));
+        src.Connect(TestData.Model.Tags);
+        var snap = src.Read();
+        var ids = TestData.Model.Tags.Select(t => t.Id).ToHashSet();
+        Assert.All(snap.Values.Keys, k => Assert.Contains(k, ids));
+        Assert.Equal(true, snap.Values["A02"]);
+    }
+
+    [Fact]
     public void Estop_and_drive_file_shows_two_alarms()
     {
         var s = TestData.Status("step30-estop-and-drive");

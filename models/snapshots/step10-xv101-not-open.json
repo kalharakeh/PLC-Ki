@@ -82,5 +82,22 @@
   "Step": 10,
   "StepTime": "T#45S",
   "Level": 0.0,
-  "Temp": 20.0
+  "Temp": 20.0,
+  "_comment_members": "Block members the Program page reads by their full name (instance + member). Times in ms. The sequence is halted, so XV101 and M201 are not asked to run; A02 stays latched in FB_AlarmHandler.",
+  "\"Station\".XV101.Out": false,
+  "\"Station\".XV101.IsOpen": false,
+  "\"Station\".XV101.IsClosed": true,
+  "\"Station\".XV101.FaultNotOpen": false,
+  "\"Station\".XV101.FaultNotClosed": false,
+  "\"Station\".XV101.MonitorTime": 10000,
+  "\"Station\".XV101.tOpen.Q": false,
+  "\"Station\".XV101.tClose.Q": false,
+  "\"Station\".M201.RunOut": false,
+  "\"Station\".M201.SpeedOut": 0.0,
+  "\"Station\".M201.SpeedMin": 270.0,
+  "\"Station\".M201.FaultDrive": false,
+  "\"Station\".M201.NotReady": false,
+  "\"Station\".M201.FaultSpeedDev": false,
+  "\"Station\".M201.DeviationTime": 15000,
+  "\"Station\".M201.tDev.Q": false
 }

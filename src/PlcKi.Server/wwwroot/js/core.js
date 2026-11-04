@@ -117,7 +117,7 @@ const PK = (() => {
   async function onHash() {
     if (dirty && location.hash !== shownHash) {
       const target = location.hash;
-      history.replaceState(null, "", shownHash || location.pathname);
+      history.replaceState(current ? { pkBack: current.back || null } : null, "", shownHash || location.pathname);
       const leave = await confirmSheet({ title: "Leave without saving?", text: "Your changes on this page are not saved yet.", ok: "Leave without saving", cancel: "Stay", danger: true });
       if (!leave) return;
       setDirty(null);
@@ -129,10 +129,12 @@ const PK = (() => {
 
   function route() {
     setDirty(null);
+    const leftHash = shownHash;
     shownHash = location.hash;
     let { name, params } = parseRoute();
     let v = views[name];
     if (!v) { params = [name, ...params]; name = "notfound"; v = views.notfound; }   // say so, instead of showing Active alarm
+    const back = backFor(leftHash);
     const navName = v.nav || name;   // a page can light another menu item (Stations lights Plant)
     document.querySelectorAll("#nav a").forEach((a) => a.classList.toggle("active", a.dataset.route === navName || (a.dataset.route === "setup" && name.startsWith("setup/") && name !== "setup/generator")));
     // Phone: a page that lives under "More" lights the More tab
@@ -140,7 +142,8 @@ const PK = (() => {
     if (more) more.classList.toggle("active", !!document.querySelector("#nav a.more-item.active"));
     const page = $("page");
     if (current && current.view.leave) current.view.leave();
-    current = { name, view: v, params };
+    current = { name, view: v, params, back };
+    showBack();
     lastHtml = "";
     page.innerHTML = "";
     if (v.mount) v.mount(page, params);
@@ -211,10 +214,46 @@ const PK = (() => {
     if (f && f.textContent !== a.text) f.textContent = a.text;
   }
 
+  // ---- "← Back to A02": each history entry keeps the page it was opened from ----
+  // Kept in history.state, so the browser's own Back and Forward and a reload stay right. A click on the main menu starts afresh.
+  let fromMenu = false;
+  /** Where the page now opening came from: { hash, label } or null. */
+  function backFor(leftHash) {
+    const hs = history.state;
+    if (hs && "pkBack" in hs) { fromMenu = false; return hs.pkBack; }      // an entry seen before: Back, Forward, reload
+    let back = null;
+    if (current && !fromMenu) back = current.view.transient ? current.back : leftHash && leftHash !== location.hash ? { hash: leftHash, label: crumbOf(current.name, current.params) } : null;
+    fromMenu = false;
+    history.replaceState({ ...(hs || {}), pkBack: back }, "");
+    return back;
+  }
+  /** A short name for a page, as the chip says it: "A02", "FB_Station", "Plant". */
+  function crumbOf(name, params) {
+    const page = (HELP[name] || [""])[0] || name;
+    const p = (params || []).filter((x) => !/^(as-(rungs|text)|network-\d+|line-\d+|alarm-.+|@.*)$/.test(x));
+    let label = page;
+    if (name === "alarm") { const al = (state.status && state.status.activeAlarms) || []; if (al.length) label = al[0].id; }
+    else if (name === "plant" && p[0] === "devices" && p[1]) label = p[1];
+    else if (name === "tags" && p[0] === "db" && p[1]) label = p[1];
+    else if (["alarms", "program", "sequence", "hardware", "station"].includes(name) && p[0]) label = p[0];
+    return label.length > 28 ? label.slice(0, 27) + "…" : label;
+  }
+  function showBack() {
+    const bar = $("back-bar");
+    if (!bar) return;
+    const b = current && current.back;
+    bar.classList.toggle("hidden", !b);
+    document.documentElement.classList.toggle("has-back", !!b);
+    if (!b) return;
+    const a = bar.querySelector("a");
+    a.href = b.hash || "#/";
+    a.querySelector(".back-l").textContent = "Back to " + b.label;
+  }
+
   /** Change the address shown (e.g. #/alarms/A02 for an opened alarm) without leaving the page, so it can be shared. */
   function setHash(h) {
     if (location.hash === h) return;
-    history.replaceState(null, "", h);
+    history.replaceState(history.state, "", h);     // keeps where the page came from
     shownHash = location.hash;
     if (current) current.params = parseRoute().params;
   }
@@ -891,7 +930,8 @@ const PK = (() => {
     program: ["Program", "Every block of the PLC program with live values, as rungs or as text.", [
       "Pick a block on the left. At the top, \"Why outputs are off right now\" names each output that is off and the signal that stops it.",
       "Rungs: each network drawn as a rung. Green passes power, grey does not, a dashed ? has no live value. Read from left to right: the amber contact is the first one that stops the output.",
-      "Text: the code as written in TIA (LAD and GRAPH as readable text with the same meaning), with the live value after each signal. Click a signal in quotes to see where else it is used.",
+      "Click a contact or a signal to see what sets it: the network in this block, the block that writes it, or the block that calls this one for an input. Click an output to see where it is used.",
+      "Text: the code as written in TIA (LAD and GRAPH as readable text with the same meaning), with the live value after each signal.",
       "LAD, FBD and GRAPH blocks open as rungs, SCL blocks as text. Switch with Rungs / Text. Coming from an alarm, the network that sets it is marked.",
       "Values update every two seconds."]],
     tags: ["Tags", "The PLC tag tables with addresses, and every data block's values, live.", [
@@ -1070,6 +1110,14 @@ const PK = (() => {
     $("ro-badge").onclick = connSheet;
     $("ro-badge").onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); connSheet(); } };
     window.addEventListener("hashchange", onHash);
+    // The back chip sits above the page, so every page has it without drawing it
+    const back = document.createElement("div");
+    back.id = "back-bar";
+    back.className = "back-bar hidden";
+    back.innerHTML = `<div class="wrap"><a class="back-chip" href="#/"><span aria-hidden="true">←</span><span class="back-l"></span></a></div>`;
+    $("page").before(back);
+    back.querySelector("a").onclick = (e) => { if (e.button || e.ctrlKey || e.metaKey || e.shiftKey) return; e.preventDefault(); history.back(); };
+    document.addEventListener("click", (e) => { if (e.target.closest && e.target.closest("#nav a, .rail-brand, a.mrow[href]")) fromMenu = true; }, true);
     const bar = document.createElement("div");
     bar.id = "dirty-bar";
     bar.className = "dirty-bar";
