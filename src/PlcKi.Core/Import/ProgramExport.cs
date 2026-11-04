@@ -37,6 +37,10 @@ public sealed class ExportBlock
     /// <summary>For an instance DB: the FB it belongs to.</summary>
     public string? InstanceOf { get; init; }
     public List<ExportMember> Interface { get; } = new();
+    /// <summary>Global tags and data blocks the block's code reads or writes (first part of each global access).</summary>
+    public HashSet<string> GlobalNames { get; } = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>Part of the safety program (F_LAD, F_FBD, F_DB ...).</summary>
+    public bool IsSafety => Language?.StartsWith("F_", StringComparison.Ordinal) == true;
     /// <summary>Languages of the networks / compile units (LAD, FBD, SCL, STL, GRAPH...).</summary>
     public List<string> NetworkLanguages { get; } = new();
     public List<ExportCall> Calls { get; } = new();
@@ -65,6 +69,10 @@ public sealed class ExportPlc
     public List<ExportBlock> Types { get; } = new();
     public List<ExportPlcTag> PlcTags { get; } = new();
     public List<string> Problems { get; } = new();
+
+    /// <summary>Global tags the safety program uses: PLC-Ki never changes these.</summary>
+    public HashSet<string> SafetyTags() => Blocks.Where(b => b.IsSafety).SelectMany(b => b.GlobalNames)
+        .Where(n => PlcTags.Any(t => t.Name.Equals(n, StringComparison.OrdinalIgnoreCase))).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
     public ExportBlock? Block(string name) => Blocks.FirstOrDefault(b => b.Name == name) ?? Types.FirstOrDefault(b => b.Name == name);
 }
@@ -204,6 +212,9 @@ public sealed class ProgramExport
             catch (Exception ex) { logic.AppendLine($"// Network {networkNo}: could not decode ({ex.Message})"); }
         }
         if (logic.Length > 0) block.DecodedLogic = logic.ToString().TrimEnd();
+        foreach (var acc in el.Descendants().Where(e => e.Name.LocalName == "Access" && (string?)e.Attribute("Scope") == "GlobalVariable"))
+            if (acc.Elements().FirstOrDefault(e => e.Name.LocalName == "Symbol")?.Elements().FirstOrDefault(e => e.Name.LocalName == "Component")?.Attribute("Name")?.Value is { } g)
+                block.GlobalNames.Add(g);
         foreach (var call in el.Descendants().Where(e => e.Name.LocalName == "CallInfo"))
         {
             var inst = call.Elements().FirstOrDefault(e => e.Name.LocalName == "Instance");

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Anthropic;
 using Anthropic.Exceptions;
 using PlcKi.Core.Generate;
@@ -81,6 +82,7 @@ Generated code must be reviewed by an engineer before it goes to a real machine.
         string? digest = null;
         HashSet<string>? existingNames = null;
         var existing = new List<(string Name, string Extension, string Text)>();
+        var editTags = new List<string>();
         if (contextPath != null)
         {
             contextPath = Path.GetFullPath(contextPath);
@@ -98,7 +100,30 @@ Generated code must be reviewed by an engineer before it goes to a real machine.
             if (o.TryGetValue("edit", out var editList))
             {
                 var names = editList.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+                // PLC tags in the list: their address, type or comment may change (standard tags only)
+                var tagEdits = plc.PlcTags.Where(t => names.Contains(t.Name, StringComparer.OrdinalIgnoreCase)).ToList();
+                var safety = plc.SafetyTags();
+                var refused = tagEdits.Where(t => safety.Contains(t.Name)).Select(t => t.Name).ToList();
+                if (refused.Count > 0)
+                {
+                    Console.Error.WriteLine($"{string.Join(", ", refused)}: used by the safety program. PLC-Ki does not change safety tags; change them in TIA Portal (safety password needed).");
+                    return 2;
+                }
+                names = names.Where(n => !tagEdits.Any(t => t.Name.Equals(n, StringComparison.OrdinalIgnoreCase))).ToList();
                 existing = ExportSources.Read(contextPath, plc.Name, names);
+                if (tagEdits.Count > 0)
+                {
+                    existing.Add(("PLC tags to change", ".json", JsonSerializer.Serialize(new
+                    {
+                        tables = tagEdits.GroupBy(t => t.Table).Select(g => new
+                        {
+                            name = g.Key,
+                            tags = g.Select(t => new { name = t.Name, dataType = t.Datatype, address = t.Address, comment = t.Comment }),
+                        }),
+                    }, new JsonSerializerOptions { WriteIndented = true })));
+                    editTags = tagEdits.Select(t => t.Name).ToList();
+                    Console.WriteLine($"Changing tags: {string.Join(", ", tagEdits.Select(t => $"{t.Name} ({t.Address})"))}");
+                }
                 var missing = names.Where(n => existing.All(e => !e.Name.Equals(n, StringComparison.OrdinalIgnoreCase))).ToList();
                 if (missing.Count > 0) { Console.Error.WriteLine($"Not found in the export: {string.Join(", ", missing)}."); return 2; }
                 Console.WriteLine($"Editing: {string.Join(", ", existing.Select(e => e.Name + (e.Extension == ".scl" ? " (SCL)" : " (XML)")))}");
@@ -112,7 +137,8 @@ Generated code must be reviewed by an engineer before it goes to a real machine.
 
         // Blocks this package may overwrite in the project: the ones asked to edit, and its own from earlier versions
         var replaces = new HashSet<string>(latest?.Replaces ?? new(), StringComparer.OrdinalIgnoreCase);
-        foreach (var e in existing) replaces.Add(e.Name);
+        foreach (var e in existing.Where(e => e.Extension != ".json")) replaces.Add(e.Name);
+        replaces.UnionWith(editTags);
         foreach (var v in history.Versions)
         {
             var dir = Path.Combine(outDir, v.Folder);
@@ -145,6 +171,7 @@ Generated code must be reviewed by an engineer before it goes to a real machine.
             Standard = standard,
             ProgramContext = digest,
             Existing = existing,
+            EditTags = editTags,
             Previous = previous,
             TiaProblems = tiaProblems,
             ExistingNames = existingNames,

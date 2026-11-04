@@ -95,6 +95,9 @@ review. Answer with the complete new file for each block you change, under the s
 version (0.1 -> 0.2) and say in the review exactly what changed and why. Blocks you do not change are left out.
 An existing block keeps its exact name even when it has dots, spaces or slashes (FUNCTION "0.2. Inputs/Outputs Images");
 only the file name uses letters, digits and _ (30_FC_InputsOutputsImages.scl). Never rename a block you were asked to change.
+An <existing name="PLC tags to change.json"> lists PLC tags the user wants changed (address, type or comment). Answer
+with a .json tag table file holding those tags under the same names and the same table names, with the new values;
+the importer changes them in place, so every block that uses them follows.
 SCL blocks come back as .scl, the others in the same SimaticML form they arrived in.
 
 # Corrections

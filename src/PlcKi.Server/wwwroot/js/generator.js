@@ -220,7 +220,7 @@
       <details class="more"><summary>More options</summary><div class="stack" style="margin-top:12px">
         <div class="grid two">
           <label class="field">PLC in the project<input id="g-plc" value="${esc(f.plc)}" placeholder="Empty: the only PLC"></label>
-          <label class="field">Change existing blocks<input id="g-edit" value="${esc(f.edit)}" placeholder="FB_Mixer, FC_Valves"><span class="hint">Only these may be overwritten. Needs "Fit into the current program".</span></label>
+          <label class="field">Change existing blocks or tags<input id="g-edit" value="${esc(f.edit)}" placeholder="FB_Mixer, FC_Valves, XV101_ZSO"><span class="hint">Only these may be overwritten. Tags: address, type or comment, standard tags only (never the safety program's). Needs "Fit into the current program".</span></label>
           <label class="field">Fixing rounds<input id="g-rounds" type="number" min="0" max="6" value="${f.rounds}"><span class="hint">How often ${AI} fixes compile or run problems on its own.</span></label>
           <label class="field">How hard ${AI} thinks<select id="g-effort">${["low", "medium", "high", "max"].map((x) => `<option ${f.effort === x ? "selected" : ""}>${x}</option>`).join("")}</select></label>
         </div>

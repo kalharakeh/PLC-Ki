@@ -141,6 +141,30 @@ END_FUNCTION_BLOCK
     }
 
     [Fact]
+    public void A_tag_asked_to_change_must_come_back()
+    {
+        var existing = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Sim_Door" };
+        var p = new BlockPackage { Review = "r" };
+        p.Files.Add(new PackageFile("90_Tags.json", """{"tables":[{"name":"IO","tags":[{"name":"Sim_Door","dataType":"Bool","address":"%M900.1"}]}]}"""));
+        Assert.Empty(PackageCheck.Check(p, existing, existing, new[] { "Sim_Door" }));
+        Assert.Single(PackageCheck.Check(p, existing, existing, new[] { "Sim_ES1" }), x => x.Contains("\"Sim_ES1\""));
+    }
+
+    [Fact]
+    public void Tags_of_the_safety_program_are_known()
+    {
+        var plc = new PlcKi.Core.Import.ExportPlc();
+        plc.PlcTags.Add(new("FDI_ES1", "Bool", "%I8.2", null, "Safety"));
+        plc.PlcTags.Add(new("DI_Start", "Bool", "%I0.0", null, "IO"));
+        var f = new PlcKi.Core.Import.ExportBlock { Name = "Main_Safety", Kind = "FB", Language = "F_LAD" };
+        f.GlobalNames.Add("FDI_ES1");
+        var std = new PlcKi.Core.Import.ExportBlock { Name = "Main", Kind = "OB", Language = "LAD" };
+        std.GlobalNames.Add("DI_Start"); std.GlobalNames.Add("FDI_ES1");
+        plc.Blocks.Add(f); plc.Blocks.Add(std);
+        Assert.Equal(new[] { "FDI_ES1" }, plc.SafetyTags());
+    }
+
+    [Fact]
     public void Versions_record_what_changed()
     {
         var dir = Directory.CreateTempSubdirectory("plcki-pkg-").FullName;
