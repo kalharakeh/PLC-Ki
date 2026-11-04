@@ -57,6 +57,8 @@ const PK = (() => {
     chart: '<path d="M3 20h18"/><path d="M6 16v-5M11 16V6M16 16v-8M21 16v-3"/>',
     logout: '<path d="M15 4h4v16h-4"/><path d="M10 8l-4 4 4 4M6 12h10"/>',
     book: '<path d="M4 5a2 2 0 0 1 2-2h13v15H6a2 2 0 0 0-2 2V5Z"/><path d="M4 20a2 2 0 0 0 2 2h13v-4"/><path d="M9 7h6"/>',
+    more: '<circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/>',
+    chevron: '<path d="m9 6 6 6-6 6"/>',
     drawing: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9h4v6H7zM11 12h6M17 9v6"/>',
   };
   const icon = (name, cls = "") =>
@@ -132,6 +134,9 @@ const PK = (() => {
     const v = views[name] || views.alarm;
     const navName = v.nav || name;   // a page can light another menu item (Stations lights Plant)
     document.querySelectorAll("#nav a").forEach((a) => a.classList.toggle("active", a.dataset.route === navName || (a.dataset.route === "setup" && name.startsWith("setup/") && name !== "setup/generator")));
+    // Phone: a page that lives under "More" lights the More tab
+    const more = $("nav-more");
+    if (more) more.classList.toggle("active", !!document.querySelector("#nav a.more-item.active"));
     // The pages that can change a PLC say so where the rest say "read-only"
     const ro = $("ro-badge");
     const canWrite = state.user && state.user.role === "admin" && (name === "tags" || name === "program");
@@ -903,6 +908,40 @@ const PK = (() => {
     h.el.querySelector("[data-screen]").onclick = () => { h.close(); screenSheet(); };
   }
 
+  /**
+   * Phone menu: the bottom bar keeps the four pages used most; "More" opens a sheet with the other pages
+   * (the ones this login may see) and the account settings that the side menu shows on larger screens.
+   */
+  function moreSheet() {
+    const label = (a) => { const l = a.querySelector(".tl-long") || a.querySelector(".tl"); return l ? l.textContent.trim() : a.title; };
+    const pages = [...document.querySelectorAll("#nav a.more-item")].filter((a) => !a.classList.contains("hidden"));
+    const row = (inner, attrs, on) => attrs.startsWith("href")
+      ? `<li><a class="mrow${on ? " on" : ""}" ${attrs}${on ? ' aria-current="page"' : ""}>${inner}<span class="mrow-go" data-icon="chevron"></span></a></li>`
+      : `<li><button type="button" class="mrow" ${attrs}>${inner}</button></li>`;
+    const item = (ic, text, sub) => `<span class="mrow-i" data-icon="${ic}"></span><span class="mrow-t">${esc(text)}${sub ? `<small>${esc(sub)}</small>` : ""}</span>`;
+    const pageRows = pages.map((a) => row(item(a.querySelector(".ti").dataset.icon, label(a), a.title.includes(":") ? a.title.split(":")[1].trim().replace(/^./, (c) => c.toUpperCase()) : ""),
+      `href="${a.getAttribute("href")}" data-close`, a.classList.contains("active"))).join("");
+    const acct = [
+      row(item("sound", "Alarm sound and screen"), 'data-m="screen"'),
+      row(item("moon", darkNow() ? "Light screen" : "Dark screen"), 'data-m="theme"'),
+      state.user ? row(item("key", "Change my password"), 'data-m="pw"') : "",
+      row(item("logout", state.user ? "Log out" : "Log in"), 'data-m="logout"'),
+    ].join("");
+    const who = state.user ? `<p class="faint small more-who">${esc(state.user.name)} · ${state.user.role === "admin" ? "administrator" : "operator"}</p>` : "";
+    const s = sheet(`<div class="more-head"><h2>More</h2><button class="btn plain small" type="button" data-close>Done</button></div>
+      <ul class="mlist" aria-label="Pages">${pageRows}</ul>
+      ${who}<ul class="mlist" aria-label="Account">${acct}</ul>`);
+    s.el.classList.add("more-sheet");
+    s.el.addEventListener("click", (e) => {
+      const b = e.target.closest("[data-m]");
+      if (!b) return;
+      const m = b.dataset.m;
+      s.close();
+      if (m === "theme") setTheme(darkNow() ? "light" : "dark");
+      else { const t = document.querySelector(`.rail-foot [data-act="${m}"]`); if (t && t.onclick) t.onclick(); }
+    });
+  }
+
   async function start() {
     fillIcons();
     try {
@@ -924,6 +963,7 @@ const PK = (() => {
       if (b.dataset.act === "pw") b.classList.toggle("hidden", !state.user);
     });
     $("theme-btn").onclick = () => setTheme(darkNow() ? "light" : "dark");
+    $("nav-more").onclick = moreSheet;
     showTheme();
     const tick = () => { const c = $("clock"); if (c) c.textContent = clock(Date.now()); };
     tick(); setInterval(tick, 1000);
