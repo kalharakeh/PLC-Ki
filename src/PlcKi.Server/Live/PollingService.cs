@@ -24,12 +24,16 @@ public sealed class LiveState
     public Snapshot? Snapshot => _snapshot;
     public MachineHistory History { get; }
 
+    /// <summary>Others that record each status (the production log for the reports). Set up at start, before polling.</summary>
+    public List<Action<MachineStatus>> Listeners { get; } = new();
+
     public void Publish(Snapshot snap, MachineStatus status)
     {
         _snapshot = snap;
         _status = status;
         History.Add(snap, status);
         Check.Add(status);
+        foreach (var l in Listeners) l(status);
     }
 }
 
