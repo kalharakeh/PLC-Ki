@@ -322,15 +322,18 @@
             <div class="gwrap">${stepChart(def, q, stats)}</div>`);
     },
     after(page, params) {
+      // #/sequence (no id) shows the first sequence: name it in the address, never "#/sequence//10"
+      const def = seqDef(params[0]) || (state.model && state.model.sequences[0]);
+      const base = "#/sequence" + (def ? "/" + encodeURIComponent(def.id) : "");
       page.querySelectorAll("[data-gs]").forEach((b) => b.onclick = () => {
         const no = Number(b.dataset.gs);
         selStep = selStep === no ? null : no;
-        PK.setHash(`#/sequence/${encodeURIComponent(params[0] || "")}${selStep != null ? "/" + selStep : ""}`);
+        PK.setHash(base + (selStep != null ? "/" + selStep : ""));
         PK.draw();
       });
       page.querySelectorAll("[data-gs-go]").forEach((b) => b.onclick = () => {
         selStep = Number(b.dataset.gsGo); jumpTo = selStep;
-        PK.setHash(`#/sequence/${encodeURIComponent(params[0] || "")}/${selStep}`);
+        PK.setHash(base + "/" + selStep);
         PK.draw();
       });
       if (jumpTo != null) {
@@ -364,6 +367,39 @@
     }
     return svg(`<rect x="9" y="9" width="30" height="30" rx="6"/><circle cx="24" cy="24" r="4"/>`);
   }
+  // ---------- which device an alarm is about ----------
+  /** The instance path in a model location: FB_Valve, instance "Station".XV101 (output …) → "Station".XV101. */
+  const instPath = (loc) => { const m = /instance\s+("[^"]+"(?:\.[A-Za-z0-9_]+)*)/.exec(loc || ""); return m ? m[1] : ""; };
+  const word = (id) => new RegExp("(^|[^A-Za-z0-9])" + String(id).replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(?![A-Za-z0-9])");
+  /** Is this alarm about this device? The same instance ("Station".XV101) when the alarm names one; when it names
+   *  no device instance (FB_Station, "DB_IO".E301_OverTemp) the device id must appear in its text or location.
+   *  An alarm on an instance that is not a device (a sensor, the sequence) matches nothing: no guessing. */
+  function alarmIsOn(a, e, devPaths) {
+    const ap = instPath(a.location);
+    if (ap && devPaths.has(ap)) return instPath(e.location) === ap;
+    if (ap && ap.includes(".")) return false;                     // a member that is not a device
+    return word(e.id).test(a.text + " " + (a.location || ""));
+  }
+  /** The active alarms about device e, read from the status now (FAULTs first). */
+  function deviceAlarms(e, s = state.status) {
+    if (!s || !e) return [];
+    const paths = new Set(s.equipment.map((x) => instPath(x.location)).filter(Boolean));
+    return s.activeAlarms.filter((a) => alarmIsOn(a, e, paths)).sort((x, y) => (x.severity === "WARNING") - (y.severity === "WARNING"));
+  }
+  /** How to show a device: its own state, made worse by an alarm on it. FAULT → fault, WARNING → warn.
+   *  { lvl: fault|warn|blocked|own level, word: short label, alarms } */
+  function devLook(e, s = state.status) {
+    const alarms = deviceAlarms(e, s);
+    const fault = alarms.find((a) => a.severity !== "WARNING");
+    if (fault || e.level === "fault" || e.level === "bad")
+      return { lvl: "fault", word: fault ? fault.id : e.state, alarms };
+    if (alarms.length) return { lvl: "warn", word: alarms[0].id, alarms };
+    if (e.blockedBy) return { lvl: "blocked", word: "blocked", alarms };
+    return { lvl: e.level, word: e.state, alarms };
+  }
+  PK.deviceAlarms = deviceAlarms;
+  PK.devLook = devLook;
+
   /** The station a device belongs to, from its location: FB_VFD, instance "Station".M201 → Station;
    *  FB_Station (heater interlock line) → Station (programmed inside that block). */
   function stationOf(loc) {
@@ -379,9 +415,10 @@
     equipment.forEach((e) => { const g = stationOf(e.location); groups.set(g, [...(groups.get(g) || []), e]); });
     const many = groups.size > 1;
     const tile = (e) => {
-      const lvl = e.blockedBy ? "blocked" : e.level;
-      return `<div class="pm-dev lv-${esc(lvl)} ${e.id === selected ? "sel" : ""}" data-eq="${esc(e.id)}" role="button" tabindex="0" aria-label="${esc(e.name)}, ${esc(e.state)}" title="${esc(e.name)}: ${esc(e.state)}">
-        <span class="pm-sym">${symbolFor(e.kind, e.id)}</span><b>${esc(e.id)}</b><span class="pm-st">${esc(e.blockedBy ? "blocked" : e.state)}</span></div>`;
+      const look = devLook(e);
+      const said = `${e.name}: ${e.state}` + look.alarms.map((a) => `. ${a.severity === "WARNING" ? "Warning" : "Alarm"} ${a.id}: ${a.text}`).join("");
+      return `<div class="pm-dev lv-${esc(look.lvl)} ${e.id === selected ? "sel" : ""}" data-eq="${esc(e.id)}" role="button" tabindex="0" aria-label="${esc(said)}" title="${esc(said)}">
+        <span class="pm-sym">${symbolFor(e.kind, e.id)}</span><b>${esc(e.id)}</b><span class="pm-st">${esc(look.word)}</span></div>`;
     };
     return `<div class="pmap">${[...groups].map(([g, list]) => `<div class="pm-grp">${many ? `<div class="pm-h">${esc(g || "Other devices")}</div>` : ""}<div class="pm-devs">${list.map(tile).join("")}</div></div>`).join("")}
       <div class="pm-key small"><span class="lv-ok">running or fine</span><span class="lv-idle">off</span><span class="lv-blocked">asked for but blocked</span><span class="lv-warn">warning</span><span class="lv-fault">fault</span></div></div>`;
