@@ -480,6 +480,7 @@
       }) + sec("alt", `<div class="toolbar"><input type="search" id="alarm-search" placeholder="Search by number, text or device" value="${esc(alarmFilter)}" aria-label="Search alarms">
           <div class="segmented" role="group" aria-label="Show">${[["all", "All", m.alarms.length, "Every alarm in the program"], ["active", "Active", s.activeAlarms.length, "On right now"], ["faults", "Faults", faults, "Faults stop the machine"], ["warnings", "Warnings", m.alarms.length - faults, "Warnings do not stop the machine"]]
             .map(([k, l, n, t]) => `<button type="button" class="${alarmKind === k ? "on" : ""} ${k === "active" && n ? "hot" : ""}" data-akind="${k}" aria-pressed="${alarmKind === k}" title="${t}">${l} <b>${n}</b></button>`).join("")}</div></div>
+          ${PK.deviceDiagnostics ? `<div class="diag-zone">${PK.deviceDiagnostics()}</div>` : ""}
           <details class="more recent" ${recentOpen ? "open" : ""}><summary><b>Recent alarms</b> <span class="muted small">${events ? `${events.length} since PLC-Ki started watching` : ""}</span></summary>
             <div style="margin-top:10px">${recent}</div></details>
           ${rows ? `<ul class="list">${rows}</ul>` : `<div class="nomatch">${alarmKind === "active" && !q ? `${icon("check")}<b>No alarm is active.</b><span>The machine reports no fault or warning right now.</span>`
@@ -487,6 +488,7 @@
             ${q || alarmKind !== "all" ? `<button class="btn b small" data-areset>Show all alarms</button>` : ""}</div>`}`);
     },
     after(page) {
+      if (PK.wireDeviceDiagnostics) PK.wireDeviceDiagnostics(page);
       const inp = page.querySelector("#alarm-search");
       if (!inp) return;
       inp.oninput = () => { alarmFilter = inp.value; PK.draw(); };

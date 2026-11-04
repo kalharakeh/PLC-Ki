@@ -1165,6 +1165,10 @@ main#page { overflow-wrap: break-word; }
 .hw-st b { font-size: 15px; }
 .hw-st span { font-size: 12.5px; color: var(--muted); white-space: nowrap; }
 .hw-st.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.sev-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 7px; vertical-align: 1px; background: var(--muted); }
+.sev-dot.bad { background: var(--fault-ink); } .sev-dot.warn { background: var(--warn-ink); } .sev-dot.info { background: var(--accent); }
+.diag-zone > .card, .diag-zone > div > .card { margin-top: 16px; }
+.drive-card h3 a { color: inherit; }
 .hw-rack .rack-scroll { overflow-x: auto; margin-top: 12px; padding: 6px 0 4px; border-radius: 12px; background: linear-gradient(var(--bg-alt), color-mix(in srgb, var(--bg-alt) 40%, var(--card))); }
 .hw-rack .rack-scroll svg { margin: 0 auto; }
 .hw-detail { margin-top: 16px; }

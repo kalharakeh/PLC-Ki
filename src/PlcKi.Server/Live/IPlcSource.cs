@@ -35,6 +35,12 @@ public interface IPlcSource : IDisposable
     /// </summary>
     CpuReading? ReadCpu() => null;
 
+    /// <summary>
+    /// The CPU's active alarms, its system diagnostics included (PROFINET device failure, module and channel faults,
+    /// drive faults). Read-only. Sources that cannot tell return null. Called every few seconds from the polling loop.
+    /// </summary>
+    IReadOnlyList<PlcKi.Core.Diagnostics.CpuAlarm>? ReadCpuAlarms() => null;
+
     void Disconnect();
 }
 
