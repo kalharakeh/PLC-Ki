@@ -90,6 +90,8 @@ public sealed class ProgramExport
     /// <summary>When TIA wrote the export (UTC), from manifest.json.</summary>
     public DateTimeOffset? ExportedAt { get; private set; }
     public List<ExportPlc> Plcs { get; } = new();
+    /// <summary>The HMI panels of the project (screens, operator fields, HMI tags, text lists), when the export has them.</summary>
+    public List<HmiDevice> Hmis { get; } = new();
     public List<string> Problems { get; } = new();
 
     private static readonly XNamespace Ns = "http://www.siemens.com/automation/Openness/SW/Interface/v5";
@@ -145,6 +147,7 @@ public sealed class ProgramExport
             FillCommentsFromTypes(plc);
             export.Plcs.Add(plc);
         }
+        export.Hmis.AddRange(HmiProject.Load(root));
         return export;
     }
 

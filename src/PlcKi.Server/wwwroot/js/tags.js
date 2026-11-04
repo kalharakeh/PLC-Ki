@@ -149,7 +149,9 @@
     return isDb ? `<a href="#/tags/db/${encodeURIComponent(m[1])}">${esc(sym)}</a>` : esc(sym);
   }
   W.providers.program = () => blockShown;
-  window.PKTags = { blockTagsHtml, wire: (root) => window.PKWrite && PKWrite.wire(root, current) };
+  /** Other pages (Plant > Settings) show live values of symbols outside the model the same way. */
+  const watch = (page, provider) => { W.providers[page] = provider; };
+  window.PKTags = { blockTagsHtml, watch, live, wire: (root) => window.PKWrite && PKWrite.wire(root, current) };
 
   PK.view("tags", {
     live: false,

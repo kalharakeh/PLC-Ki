@@ -34,7 +34,7 @@ public sealed record EquipmentStatus(
 public sealed record AlarmStatus(string Id, string Severity, string Text, string? Location, string? Condition, List<string> Causes, List<string> Fix,
     DateTimeOffset? Since = null, bool AtStart = false, List<ConditionStatus>? Checks = null, bool ChecksAtAlarm = false);
 /// <param name="Valid">FALSE when the value keeps the machine from working (see Problem); null when the model has no rule.</param>
-public sealed record SettingStatus(string Id, string Label, string Value, string? Text, bool? Valid, string? Problem);
+public sealed record SettingStatus(string Id, string Label, string Value, string? Text, bool? Valid, string? Problem, string? Hmi = null);
 public sealed record ExchangeStatus(string Partner, string Direction, string Label, string Value, string? Text);
 
 public sealed record MachineStatus(
@@ -101,7 +101,7 @@ public sealed class StatusEngine
         var settings = _model.Settings.Select(st => new SettingStatus(st.Tag, Label(st.Tag), Fmt(st.Tag, Get),
                 st.Text != null ? Fill(st.Text, Get) : null,
                 st.Valid != null && hasValues ? EvalBool(st.Valid, Get) : null,
-                st.Problem != null ? Fill(st.Problem, Get) : null))
+                st.Problem != null ? Fill(st.Problem, Get) : null, st.Hmi))
             .ToList();
         var exchange = _model.Exchange
             .Select(x => new ExchangeStatus(x.Partner, x.Direction, Label(x.Tag), Fmt(x.Tag, Get), x.Text))
