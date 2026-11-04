@@ -322,7 +322,7 @@
   }
   function packageHtml() {
     if (!g.open) return `<div class="gen-head"><div><span class="eyebrow">New package</span><h2>New blocks</h2>
-        <p class="muted small" style="margin:0">Say what you need. ${AI} writes the blocks, TIA Portal imports and compiles them, and, if you choose, PLCSIM runs them.</p></div></div>${formHtml()}`;
+        <p class="muted small" style="margin:0">Describe the blocks in three steps. Each later change is saved as a new version; the old ones stay.</p></div></div>${formHtml()}`;
     const d = g.detail;
     const p = (g.packages || []).find((x) => x.name === g.open) || {};
     const meta = d ? [`${d.versions.length} version${d.versions.length === 1 ? "" : "s"}`, d.plc ? "PLC " + d.plc : "", d.context ? "fitted into " + d.context.split(/[\\/]/).pop() : ""].filter(Boolean).join(" · ") : "Loading…";

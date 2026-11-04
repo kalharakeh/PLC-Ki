@@ -662,10 +662,10 @@ const PKSetup = (() => {
         </div>
         <div class="actions" style="margin-top:24px"><button class="btn big" data-save-settings>Save</button><span class="muted small">Saves Machine, Assistant and Access. Logins below save on their own.</span></div>`)
         + PK.sec("", `<h2>Logins</h2><p class="sub">Operators see every machine page. Administrators also see Setup.</p>
-          <ul class="list">${(users || []).map((u) => `<li><span class="ico">${icon("user")}</span>
+          <ul class="list logins">${(users || []).map((u) => `<li><span class="ico">${icon("user")}</span>
             <span style="flex:1"><b style="font-weight:600">${esc(u.name)}</b>${state.user && u.name === state.user.name ? " (you)" : ""}<div class="faint">${u.role === "admin" ? "Administrator" : "Operator"}</div></span>
-            ${state.user && u.name !== state.user.name ? `<button class="btn plain small" data-role="${esc(u.name)}" data-to="${u.role === "admin" ? "operator" : "admin"}">Make ${u.role === "admin" ? "operator" : "administrator"}</button>
-              <button class="btn plain small" data-pw="${esc(u.name)}">New password</button><button class="btn plain small" style="color:var(--fault)" data-del="${esc(u.name)}">Delete</button>` : `<button class="btn plain small" data-pw-own>Change my password</button>`}</li>`).join("")}</ul>
+            <span class="li-acts">${state.user && u.name !== state.user.name ? `<button class="btn plain small" data-role="${esc(u.name)}" data-to="${u.role === "admin" ? "operator" : "admin"}">Make ${u.role === "admin" ? "operator" : "administrator"}</button>
+              <button class="btn plain small" data-pw="${esc(u.name)}">New password</button><button class="btn plain small" style="color:var(--fault)" data-del="${esc(u.name)}">Delete</button>` : `<button class="btn plain small" data-pw-own>Change my password</button>`}</span></li>`).join("")}</ul>
           <h3 style="margin-top:26px">Add a login</h3>
           <div class="grid three"><label class="field">Name<input id="nu-name" autocomplete="off"></label>
             <label class="field">Password <span class="hint">at least 8 characters</span><input id="nu-pw" type="password" autocomplete="new-password"></label>
