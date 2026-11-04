@@ -492,6 +492,64 @@
 
   const hrefOf = (name, extra = []) => "#/program/" + [name, ...extra].map(encodeURIComponent).join("/");
 
+  // ---- "Show where it is set": where an alarm bit is latched and where its condition is made ----
+  /** "network 4" (rungs) or "line 57" (SCL text): where a block writes a signal, or null. */
+  function whereWritten(b, sym) {
+    if (!b || !sym) return null;
+    if (b.logic) { const n = networks(b.logic).find((x) => x.lines.some((l) => writes(l, sym))); return n && n.no ? "network " + n.no : null; }
+    const i = String(b.source || "").split(/\r?\n/).findIndex((l) => writes(l, sym));
+    return i >= 0 ? "line " + (i + 1) : null;
+  }
+
+  /**
+   * An alarm for the Program page: its bit, the blocks that write the bit (from the program search) and the cause the
+   * machine notes name (block, instance, output). Without the search (no export, offline) the cause is still known.
+   */
+  async function alarmTrail(id) {
+    const m = state.model || {};
+    const def = (m.alarms || []).find((a) => a.id === id) || ((state.status && state.status.activeAlarms) || []).find((a) => a.id === id);
+    if (!def) return null;
+    const tag = def.tag && (m.tags || []).find((t) => t.id === def.tag);
+    const symbol = tag && tag.symbol ? tag.symbol : null;
+    const cause = window.PKLive ? PKLive.alarmWhere(def) : {};
+    const at = async (name, sym) => { try { return whereWritten(await block(name), sym); } catch { return null; } };
+    let latch = [];
+    if (symbol) {
+      try {
+        const r = await PK.api("GET", "/api/program/search?q=" + encodeURIComponent(symbol));
+        latch = (r.results || []).filter((x) => (x.lines || []).some((l) => l.writes)).map((x) => ({ block: x.block }));
+      } catch { /* the cause alone */ }
+      for (const l of latch) l.at = await at(l.block, symbol);
+    }
+    if (cause.block && cause.symbol) cause.at = await at(cause.block, cause.symbol);
+    return { id, text: def.text, location: String(def.location || ""), symbol, latch, cause };
+  }
+
+  /**
+   * One calm line on top of the code: "A02 · Latched in FB_AlarmHandler, line 57 · caused in FB_Valve, network 4
+   * (output FaultNotOpen)". Each place is a link; the block on screen is in bold.
+   */
+  function alarmLine(t, here) {
+    const place = (name, at, href) => (name === here ? `<b>${esc(name)}</b>` : `<a href="${esc(href)}">${esc(name)}</a>`) + (at ? ", " + esc(at) : "");
+    const latchHref = (name) => hrefOf(name, ["@" + t.symbol, "alarm-" + t.id]);
+    const c = t.cause || {};
+    const parts = [];
+    const same = c.block && t.latch.length === 1 && t.latch[0].block === c.block;
+    if (same) parts.push("Set in " + place(c.block, t.latch[0].at || c.at, c.href));
+    else {
+      if (t.latch.length) parts.push("Latched in " + t.latch.map((l) => place(l.block, l.at, latchHref(l.block))).join(" and "));
+      if (c.block && c.symbol) parts.push((t.latch.length ? "caused in " : "Caused in ") + place(c.block, c.at, c.href) + ` (output ${esc(c.symbol)})`);
+      else if (c.block) {
+        // No output in the notes: say what they say ("FB_Station, alarm input EStop (...)")
+        const rest = t.location.split(/;|\blatched in\b/i)[0].replace(new RegExp("^\\s*(?:(?:FB|FC|OB)\\s+)?\"?" + reEsc(c.block) + "\"?\\s*,?\\s*"), "").trim();
+        parts.push((t.latch.length ? "comes from " : "Comes from ") + place(c.block, null, c.href) + (rest ? ": " + esc(rest) : ""));
+      }
+    }
+    if (!parts.length) return "";
+    const missing = t.symbol && !t.latch.length ? ` <span class="faint">PLC-Ki did not find the block that writes <span class="mono">${esc(t.symbol)}</span>.</span>` : "";
+    return `<div class="notice alarm-trail" style="margin-bottom:12px">${icon("info")}<div><a href="#/alarms/${encodeURIComponent(t.id)}"><b>${esc(t.id)}</b></a> · ${parts.join(" · ")}.${missing}</div></div>`;
+  }
+
   function program() {
     let sel = null;        // { name, params, block, instances, inst, mode } or { overview: true, params }
     let loading = null;
@@ -519,18 +577,21 @@
         const rest = rest0.slice(1);
         const net = (rest.find((x) => /^network-\d+$/.test(x)) || "").slice(8) || null;
         const sym = (rest.find((x) => x.startsWith("@")) || "").slice(1) || null;
-        const plain = rest.filter((x) => !/^network-\d+$/.test(x) && !x.startsWith("@"));
+        const alarmId = (rest.find((x) => x.startsWith("alarm-")) || "").slice(6) || null;
+        const plain = rest.filter((x) => !/^network-\d+$/.test(x) && !x.startsWith("@") && !x.startsWith("alarm-"));
         const inst = instances.find((i) => i.path === plain[0]) || instances[0] || null;
         let mode = want || autoMode(b);
         if (mode === "rungs" && !b.logic && !b.source) mode = "text";
-        sel = { name: first, params, block: b, instances, inst, highlight: sym || plain[1] || null, network: net, mode, deep: !!(net || sym || want) };
+        sel = { name: first, params, block: b, instances, inst, highlight: sym || plain[1] || null, network: net, mode, deep: !!(net || sym || want || alarmId),
+          alarm: alarmId ? await alarmTrail(alarmId) : null };
       } catch (e) {
         sel = { name: first, params, error: e.message };
       }
       loading = null;
       PK.draw();
-      // A link to a network or signal (from an alarm) jumps to it; a plain block link starts at the top
-      if (sel.deep) setTimeout(() => { const h = document.getElementById("hl") || document.querySelector(".ln.hl"); if (h) h.scrollIntoView({ block: "center", behavior: "smooth" }); }, 60);
+      // A link to a network or signal (from an alarm) jumps to it; a plain block link starts at the top.
+      // Not smooth: a live redraw keeps the scroll position and would stop the animation half way.
+      if (sel.deep) setTimeout(() => { const h = document.getElementById("hl") || document.querySelector(".ln.hl"); if (h) h.scrollIntoView({ block: "center" }); }, 60);
       else window.scrollTo({ top: 0 });
     }
 
@@ -657,10 +718,14 @@
         // The rungs are worked out in both modes: they give the "why is it off" summary at the top
         const nets = b.logic ? networks(b.logic) : sclNetworks(b.source);
         const seq = ((state.status && state.status.sequences) || []).find((q) => q.block && PK.blockOf(q.block) === b.name);
+        // From an alarm with no output named: highlight the alarm bit when this block writes it (the latch)
+        const alarmSym = sel.alarm && sel.alarm.symbol;
+        const want = sel.highlight || (alarmSym && whereWritten(b, alarmSym) ? alarmSym : null);
         // The signal is not written in this block (or the decoder wrote it another way): fall back to the network number
-        const hl = sel.highlight && nets.some((n) => n.lines.some((l) => writes(l, sel.highlight))) ? sel.highlight : null;
+        const hl = want && nets.some((n) => n.lines.some((l) => writes(l, want))) ? want : null;
         const why = [];
-        const netsHtml = nets.map((n) => netHtml(n, resolve, hl || (sel.highlight && !sel.highlight.startsWith('"') ? sel.highlight : null), seq ? seq.step : null, hl ? null : sel.network, why)).join("");
+        const netsHtml = nets.map((n) => netHtml(n, resolve, hl || (want && !want.startsWith('"') ? want : null), seq ? seq.step : null, hl ? null : sel.network, why)).join("");
+        const trail = sel.alarm ? alarmLine(sel.alarm, b.name) : "";
 
         // Notes for this block; with several instances (FB_Valve for XV101 and XV102) only the chosen one's devices and alarms
         let n = idx.get(b.name) || EMPTY;
@@ -679,15 +744,16 @@
         if (mode === "rungs" && canRungs) {
           const legend = `<div class="legend rung-legend"><span><i class="lg on"></i>Passes power</span><span><i class="lg off"></i>Does not pass</span>
             <span><i class="lg unk"></i>No live value</span><span><i class="lg blocker"></i>First one that stops the output</span></div>`;
-          const where = sel.highlight && sel.highlight.startsWith('"')
+          // From an alarm, its own line says where it is set instead
+          const where = trail || (sel.highlight && sel.highlight.startsWith('"')
             ? (hl ? `<div class="notice" style="margin-bottom:12px">${icon("info")}<div>The highlighted rungs write <b>${esc(sel.highlight)}</b>: (S) sets it, (R) resets it, ( ) follows the rung. The values are live; amber marks the first contact that stops a rung.</div></div>`
-              : `<div class="notice gold" style="margin-bottom:12px">${icon("info")}<div>${esc(sel.highlight)} is not written in this block${sel.network ? `; network ${esc(sel.network)} is highlighted` : ""}.</div></div>`) : "";
+              : `<div class="notice gold" style="margin-bottom:12px">${icon("info")}<div>${esc(sel.highlight)} is not written in this block${sel.network ? `; network ${esc(sel.network)} is highlighted` : ""}.</div></div>`) : "");
           bodyHtml = where + legend + netsHtml
             + (b.source && !b.logic ? `<p class="faint small" style="margin:12px 0 0">Only the on/off statements of this SCL block are drawn as rungs. <button type="button" class="linkbtn" data-mode="text">Show all of it as text</button>.</p>` : "");
         } else if (canText) {
           const hits = find ? String(text).split(/\r?\n/).filter((l) => l.toLowerCase().includes(find.toLowerCase())).length : 0;
-          bodyHtml = `<div class="findbar"><input type="search" id="code-find" placeholder="Find in this block" aria-label="Find in this block" value="${esc(find)}">
-              <span class="faint small" aria-live="polite">${find ? (hits ? `${hits} line${hits > 1 ? "s" : ""} · Enter for the next` : "Not in this block") : ""}</span></div>` + codeHtml(text, resolve, sel.highlight, find)
+          bodyHtml = trail + `<div class="findbar"><input type="search" id="code-find" placeholder="Find in this block" aria-label="Find in this block" value="${esc(find)}">
+              <span class="faint small" aria-live="polite">${find ? (hits ? `${hits} line${hits > 1 ? "s" : ""} · Enter for the next` : "Not in this block") : ""}</span></div>` + codeHtml(text, resolve, want, find)
             + `<p class="faint small" style="margin:10px 0 0">Click a signal in quotes to see where else it is used.</p>`;
         } else bodyHtml = `<p class="muted">No code in this block (data only). Its fields are listed below.</p>`;
 

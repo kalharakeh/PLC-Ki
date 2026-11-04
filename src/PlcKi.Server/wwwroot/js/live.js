@@ -55,21 +55,26 @@
   }
 
   /**
-   * Where an alarm is set, for "Show where it is set": the block and network that write its bit, and the bit itself.
-   * A location can name several places ("FB x, transition y; latched in FC z, network 7"): the last part is where the
-   * alarm bit is written. Returns { block, network, symbol, href }.
+   * Where an alarm comes from, for "Show where it is set". A location names where the condition is made, sometimes
+   * followed by where the alarm bit is latched: 'FB_Valve, instance "Station".XV101 (output FaultNotOpen), latched in
+   * FB_AlarmHandler' or "FB x, transition y; latched in FC z, network 7". The link opens the cause with its output
+   * highlighted; the Program page finds the block that writes the alarm bit and names both (alarm-<id>).
+   * Returns { block, network, symbol (the output), href }.
    */
   function alarmWhere(a) {
-    const parts = String(a.location || "").split(";").map((x) => x.trim()).filter(Boolean);
-    const part = parts.length ? parts[parts.length - 1] : "";
-    const block = PK.blockOf(part) || PK.blockOf(a.location);
+    const text = String(a.location || "");
+    const cause = text.split(/;|\blatched in\b/i)[0];
+    // Only a latch named ("latched in FC z, network 7"): open that block, the page highlights the alarm bit there
+    const part = PK.blockOf(cause) ? cause : text;
+    const block = PK.blockOf(part);
     if (!block) return {};
+    const loc = parseLoc(part);
+    // "(output FaultNotOpen)", or a bare name: "(TimeoutStep10)", "(NoHeating, timer tHeat)"
+    const output = loc.output || (part.match(/\(\s*([A-Za-z_]\w*)\s*[,)]/) || [])[1] || null;
     const network = (part.match(/\bnetwork\s+(\d+)/i) || [])[1] || null;
-    const def = state.model && (state.model.alarms || []).find((x) => x.id === a.id);
-    const tag = def && def.tag && (state.model.tags || []).find((t) => t.id === def.tag);
-    const symbol = tag && tag.symbol && tag.symbol.startsWith('"') ? tag.symbol : null;
-    const href = "#/program/" + [block, network ? "network-" + network : null, symbol ? "@" + symbol : null, "as-rungs"].filter(Boolean).map(encodeURIComponent).join("/");
-    return { block, network, symbol, href };
+    const href = "#/program/" + [block, loc.instance, network ? "network-" + network : null, output ? "@" + output : null, "alarm-" + a.id]
+      .filter(Boolean).map(encodeURIComponent).join("/");
+    return { block, network, symbol: output, href };
   }
 
   function relatedEquipment(alarm) {
@@ -591,5 +596,5 @@
     },
   });
 
-  window.PKLive = { parseLoc, bindAsk, stepStrip, seqState };
+  window.PKLive = { parseLoc, alarmWhere, bindAsk, stepStrip, seqState };
 })();
