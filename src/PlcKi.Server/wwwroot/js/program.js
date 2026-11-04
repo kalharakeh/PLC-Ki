@@ -378,7 +378,7 @@
           let nets = b.logic ? networks(b.logic) : sclNetworks(b.source);
           const legend = `<div class="legend rung-legend"><span><i class="lg on"></i>Passes power</span><span><i class="lg off"></i>Does not pass</span>
             <span><i class="lg unk"></i>No live value</span><span><i class="lg blocker"></i>First one that stops the output</span></div>`;
-          const seq = ((state.status && state.status.sequences) || []).find((q) => q.block && q.block.split(/[ ,(]/)[0] === b.name);
+          const seq = ((state.status && state.status.sequences) || []).find((q) => q.block && PK.blockOf(q.block) === b.name);
           const now = seq && seq.step != null ? `<p class="small" style="margin:0 0 10px"><span class="now-tag">now</span> ${esc(seq.name)} is in step ${esc(String(seq.step))} “${esc(seq.stepName || "")}”${seq.halted ? ", halted" : ""}.</p>` : "";
           bodyHtml = nets.length ? now + legend + nets.map((n) => netHtml(n, resolve, sel.highlight, seq ? seq.step : null)).join("")
             : `<p class="muted">No boolean logic to draw in this block. <a href="#/code/${encodeURIComponent(b.name)}">Show the code</a>.</p>`;

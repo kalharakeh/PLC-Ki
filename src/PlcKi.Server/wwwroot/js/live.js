@@ -48,7 +48,7 @@
   function parseLoc(loc) {
     if (!loc) return {};
     return {
-      block: (loc.match(/^\s*([A-Za-z_]\w*)/) || [])[1],
+      block: PK.blockOf(loc),
       instance: (loc.match(/instance\s+("[^"]+"(?:\.[\w#]+)*)/) || [])[1],
       output: (loc.match(/\((?:output|bit|tag|member)\s+([\w.]+)\)/i) || [])[1],
     };
