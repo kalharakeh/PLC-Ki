@@ -1023,3 +1023,50 @@ html.test-values .topbar { border-bottom: 3px solid var(--warn); }
 }
 /* phone: a notice's button goes under its text instead of sticking out of the card */
 @media (max-width: 600px) { .notice { flex-wrap: wrap; } .notice > .btn { margin-left: 32px; } }
+
+/* ---------- Plant: a short header, four tabs, two columns ---------- */
+main#page section.hero .plant-kpis { margin-top: 14px !important; }
+.ptabs { display: flex; gap: 4px; margin-top: 18px; border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: none; }
+.ptabs a { padding: 9px 14px 10px; font-size: 15px; font-weight: 500; color: var(--muted); white-space: nowrap; border-bottom: 2px solid transparent; margin-bottom: -1px; display: inline-flex; gap: 6px; align-items: center; text-decoration: none !important; }
+.ptabs a:hover { color: var(--ink); }
+.ptabs a.on { color: var(--ink); font-weight: 600; border-bottom-color: var(--accent); }
+.plant-cols { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+.plant-cols > .stack, .dev-cols > * { min-width: 0; }
+.needs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.needs a { display: flex; gap: 12px; align-items: center; padding: 10px 12px; border-radius: 12px; color: var(--ink); text-decoration: none !important;
+  background: color-mix(in srgb, var(--warn-soft) 55%, var(--panel)); border-left: 3px solid var(--warn); }
+.needs a:hover { background: var(--warn-soft); }
+.needs .ico { width: 22px; height: 22px; flex: none; color: var(--warn-ink); }
+.needs .ico svg { width: 22px; height: 22px; }
+.nd-t { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.nd-t b { font-weight: 600; }
+.nd-t span { font-size: 14px; color: var(--muted); }
+.chev { color: var(--muted); font-size: 18px; flex: none; }
+.ok-line { display: flex; gap: 10px; align-items: center; margin: 0; color: var(--ok-ink); font-weight: 600; }
+.ok-line svg { width: 20px; height: 20px; }
+.plink { display: flex; gap: 14px; align-items: center; color: var(--ink); text-decoration: none !important; padding: 16px 18px; }
+.plink:hover { border-color: var(--line-strong); }
+.plink > span:nth-child(2) { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.plink .ico { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); flex: none; }
+.plink .ico svg { width: 20px; height: 20px; }
+.dev-cols { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 18px; align-items: start; }
+.dev-cols [data-dev] { position: sticky; top: calc(var(--navh, 52px) + 14px); }
+.dev-tools { display: flex; flex-direction: column; gap: 8px; }
+.devlist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.devlist button { width: 100%; display: flex; gap: 12px; align-items: center; text-align: left; font: inherit; cursor: pointer; padding: 10px 12px; border-radius: 12px;
+  border: 1px solid var(--line); background: var(--panel); color: var(--ink); }
+.devlist button:hover { border-color: var(--line-strong); }
+.devlist button.on { border-color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); }
+.devlist .ico { width: 22px; height: 22px; flex: none; color: var(--muted); }
+.devlist .ico svg { width: 22px; height: 22px; }
+.dv-t { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.dv-t b { font-weight: 600; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dv-t span { font-size: 12.5px; color: var(--muted); font-family: var(--mono); }
+@media (max-width: 1100px) { .plant-cols { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 900px) { .dev-cols { grid-template-columns: minmax(0, 1fr); } .dev-cols [data-dev] { position: static; } }
+@media (max-width: 600px) { .ptabs a { padding: 9px 10px 10px; font-size: 14px; } main#page section.hero .plant-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.needs a.al { background: color-mix(in srgb, var(--fault-soft) 55%, var(--panel)); border-left-color: var(--fault); }
+.needs a.al:hover { background: var(--fault-soft); }
+.needs a.al .ico { color: var(--fault-ink); }
+.needs a.al.w { background: color-mix(in srgb, var(--warn-soft) 55%, var(--panel)); border-left-color: var(--warn); }
+@media (max-width: 600px) { main#page section.hero .plant-kpis .k:nth-child(n+5) { display: none; } }

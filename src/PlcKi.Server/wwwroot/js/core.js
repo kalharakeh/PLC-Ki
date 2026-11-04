@@ -728,11 +728,11 @@ const PK = (() => {
       "Where in the machine: the device behind the alarm and the chain Requested › Interlocks › Output › Feedback. The first red link is why it is not working.",
       "Where in the software: from the main cycle (OB1) down to the bit that sets the alarm. Show the logic opens that network with live values.",
       "Ask about this alarm: Claude looks at the live values, the last minutes and the program, and says why it is on and what to check."]],
-    plant: ["Plant", "What the machine is doing now: the devices, the sequence, the values over time, and data to and from other systems.", [
-      "The machine at a glance: every device as a symbol. Green runs, grey is off, a dashed amber edge means the program asks for it but an interlock blocks it, red is a fault. Tap one for its details.",
-      "Sequence: the blue step is where it is now, red means halted. Below it, what it needs to go to the next step: ✓ is met, ✗ is missing. \"Step chart and timeline\" shows the whole sequence.",
-      "Values over time: the measured values of the last minutes, with the step band and alarm marks under them. Move along a chart to read every value at that moment. Add or remove values; this browser remembers your choice.",
-      "Equipment: each device with the chain Requested › Interlocks › Output › Feedback. The first red link is why it is not running. Click a device for its interlocks.",
+    plant: ["Plant", "What the machine is doing now. The top shows the step, what it waits for and the key values; the tabs below hold the rest.", [
+      "Overview: Needs attention lists active alarms and blocked or faulted devices first; tap one to go to it. Below it the sequence: the blue step is where it is now, red means halted, ✓ is met, ✗ is missing.",
+      "The machine at a glance: every device as a symbol. Green runs, grey is off, a dashed amber edge means the program asks for it but an interlock blocks it, red is a fault. Tap one to open it on Devices.",
+      "Devices: the list on the left (needs attention first), the picked device on the right with the chain Requested › Interlocks › Output › Feedback. The first red link is why it is not running.",
+      "Values over time: the measured values of the last minutes, with the step band and alarm marks under them. Move along a chart to read every value at that moment.",
       "Data exchange: signals to and from MES, a filler and so on, with their live values."]],
     sequence: ["Step chart", "One sequence as a chain of steps, read like the GRAPH editor, with how long each step took.", [
       "Step timeline: which step ran when in the last minutes, and the last and average time of each step. A step that takes longer than usual is where the machine waits.",
