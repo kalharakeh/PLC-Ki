@@ -70,35 +70,21 @@ public class LiveModelCheckTests
         check.Add(Eval(engine, Snap("step30-mix-heat", t, v => v["Step"] = 10.0)));
         check.Add(Eval(engine, Snap("step30-mix-heat", t.AddSeconds(1))));
         Assert.DoesNotContain(check.Report().Findings, x => x.Kind == "transition");
-    }
-
-    private static void Move30To40(LiveModelCheck check, StatusEngine engine, DateTimeOffset t, double tempAfter)
-    {
-        check.Add(Eval(engine, Snap("step30-mix-heat", t, v => { v["Temp"] = 20.0; v["StepTime"] = 1000.0; })));
-        check.Add(Eval(engine, Snap("step30-mix-heat", t.AddSeconds(1), v => { v["Step"] = 40.0; v["Temp"] = tempAfter; v["StepTime"] = 0.0; })));
+        Assert.Contains(check.Report().Seen, x => x.Contains("3 of 7 steps seen"));   // 10, 30 and the skipped 20
     }
 
     [Fact]
-    public void A_move_while_a_condition_stayed_unmet_is_reported()
+    public void A_condition_true_only_between_two_reads_is_not_reported()
     {
         var engine = new StatusEngine(TestData.Model);
         var check = new LiveModelCheck(TestData.Model);
         var t = DateTimeOffset.Now;
-        Move30To40(check, engine, t, 20.0);
-        Move30To40(check, engine, t.AddSeconds(5), 20.0);
-        var f = check.Report().Findings.Where(x => x.Title.Contains("moved from step 30 to 40")).ToList();
-        Assert.Single(f);   // the temperature never changed; the step time did, so its moment fell between reads
-        Assert.Contains("Temperature", f[0].Title);
-    }
-
-    [Fact]
-    public void A_condition_whose_values_changed_between_reads_is_not_reported()
-    {
-        var engine = new StatusEngine(TestData.Model);
-        var check = new LiveModelCheck(TestData.Model);
-        var t = DateTimeOffset.Now;
-        Move30To40(check, engine, t, 85.0);
-        Move30To40(check, engine, t.AddSeconds(5), 85.0);
+        for (int i = 0; i < 3; i++)
+        {
+            // the temperature reads low before and after; it reached the setpoint for a moment in between
+            check.Add(Eval(engine, Snap("step30-mix-heat", t.AddSeconds(i * 5), v => { v["Temp"] = 20.0; v["StepTime"] = 1000.0; })));
+            check.Add(Eval(engine, Snap("step30-mix-heat", t.AddSeconds(i * 5 + 1), v => { v["Step"] = 40.0; v["Temp"] = 20.0; })));
+        }
         Assert.DoesNotContain(check.Report().Findings, x => x.Title.Contains("moved from step 30 to 40"));
     }
 
