@@ -62,7 +62,7 @@ const PK = (() => {
     drawing: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9h4v6H7zM11 12h6M17 9v6"/>',
   };
   const icon = (name, cls = "") =>
-    `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[name] || P.device}</svg>`;
+    `<svg class="pk-i ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[name] || P.device}</svg>`;
   const fillIcons = (root = document) => root.querySelectorAll("[data-icon]").forEach((el) => {
     if (!el.firstElementChild) el.innerHTML = icon(el.dataset.icon);
   });
