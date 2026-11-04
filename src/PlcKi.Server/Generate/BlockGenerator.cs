@@ -75,7 +75,7 @@ public sealed class BlockGenerator
             var text = await AskAsync(input, draft, problems, result, ct);
             result.LastAnswer = text;
             var package = BlockPackage.Parse(text);
-            problems = PackageCheck.Check(package, input.ExistingNames, input.Replaces);
+            problems = PackageCheck.Check(package, input.ExistingNames, input.Replaces, input.Existing.Select(e => e.Name));
             if (package.Files.Count > 0)
             {
                 result.Package = package;

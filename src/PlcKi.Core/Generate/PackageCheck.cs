@@ -108,7 +108,7 @@ public static class PackageCheck
     /// Problems in the package, in words Claude can act on. <paramref name="existing"/> are the names already in the
     /// PLC program (when known) and <paramref name="replaces"/> the ones this package may overwrite.
     /// </summary>
-    public static List<string> Check(BlockPackage package, ISet<string>? existing = null, ISet<string>? replaces = null)
+    public static List<string> Check(BlockPackage package, ISet<string>? existing = null, ISet<string>? replaces = null, IEnumerable<string>? mustChange = null)
     {
         var problems = new List<string>();
         if (package.Files.Count == 0)
@@ -126,7 +126,7 @@ public static class PackageCheck
             if (!names.Add(f.Name)) problems.Add($"{f.Name}: the file appears twice.");
             switch (f.Extension)
             {
-                case ".scl": case ".db": case ".udt": CheckSource(f, problems); break;
+                case ".scl": case ".db": case ".udt": CheckSource(f, problems, replaces); break;
                 case ".xml": CheckXml(f, problems); break;
                 case ".json": CheckTags(f, problems, existing, replaces); break;
             }
@@ -165,13 +165,18 @@ public static class PackageCheck
             foreach (var b in blocks)
                 if (existing.Contains(b.Name) && (replaces == null || !replaces.Contains(b.Name)))
                     problems.Add($"\"{b.Name}\" ({b.File}) already exists in the PLC program and is not one of the blocks you were asked to change. Use a new name.");
+
+        // A block the user asked to change must come back under its exact name, or the import adds a copy nobody calls
+        foreach (var name in mustChange ?? Enumerable.Empty<string>())
+            if (!blocks.Any(b => b.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))
+                problems.Add($"You were asked to change \"{name}\", but no file holds a block with exactly that name. Answer with the changed block under its existing name \"{name}\" (keep the quotes and every character); do not rename it.");
         return problems;
     }
 
     private static bool BuiltInFb(string name) => name.StartsWith("TON", StringComparison.OrdinalIgnoreCase) || name.StartsWith("TOF", StringComparison.OrdinalIgnoreCase)
                                                   || name.StartsWith("TP", StringComparison.OrdinalIgnoreCase) || name.StartsWith("CTU", StringComparison.OrdinalIgnoreCase);
 
-    private static void CheckSource(PackageFile f, List<string> problems)
+    private static void CheckSource(PackageFile f, List<string> problems, ISet<string>? replaces = null)
     {
         var heads = SclHeader.Matches(f.Text);
         var ends = SclEnd.Matches(f.Text);
@@ -187,7 +192,8 @@ public static class PackageCheck
             problems.Add($"{f.Name}: #{m.Groups[1].Value}(IN := NOT #{m.Groups[1].Value}.Q ...) does not pulse reliably on S7-1500; use a separate timer reset or compare elapsed time.");
         if (Regex.IsMatch(f.Text, @"\bF_(SCL|LAD|FBD)\b|S7_F_|\{\s*S7_Safety", RegexOptions.IgnoreCase))
             problems.Add($"{f.Name}: looks like a safety (F) block. F-blocks are out of scope for the generator.");
-        if (!heads[0].Groups[2].Value.All(c => char.IsLetterOrDigit(c) || c == '_'))
+        // An existing block being changed keeps its name, whatever characters the plant used ("0.2. Inputs/Outputs Images")
+        if (!heads[0].Groups[2].Value.All(c => char.IsLetterOrDigit(c) || c == '_') && replaces?.Contains(heads[0].Groups[2].Value) != true)
             problems.Add($"{f.Name}: block name \"{heads[0].Groups[2].Value}\" should only use letters, digits and _.");
     }
 

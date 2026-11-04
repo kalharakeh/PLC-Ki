@@ -120,6 +120,27 @@ END_FUNCTION_BLOCK
     }
 
     [Fact]
+    public void An_edited_block_keeps_its_plant_name()
+    {
+        const string name = "0.2. Inputs/Outputs Images";
+        var src = "FUNCTION \"" + name + "\" : Void\n{ S7_Optimized_Access := 'TRUE' }\nVERSION : 0.2\nBEGIN\n\nEND_FUNCTION\n";
+        var replaces = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { name };
+        var existing = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { name };
+
+        var kept = new BlockPackage { Review = "r" };
+        kept.Files.Add(new PackageFile("30_FC_InputsOutputsImages.scl", src));
+        Assert.Empty(PackageCheck.Check(kept, existing, replaces, new[] { name }));
+
+        // Renamed: the import would add a copy that nothing calls
+        var renamed = new BlockPackage { Review = "r" };
+        renamed.Files.Add(new PackageFile("30_FC_MapInputsOutputs.scl", src.Replace(name, "FC_MapInputsOutputs")));
+        Assert.Single(PackageCheck.Check(renamed, existing, replaces, new[] { name }), x => x.Contains("do not rename it"));
+
+        // A new block still needs a plain name
+        Assert.Single(PackageCheck.Check(kept), x => x.Contains("should only use letters, digits and _"));
+    }
+
+    [Fact]
     public void Versions_record_what_changed()
     {
         var dir = Directory.CreateTempSubdirectory("plcki-pkg-").FullName;
