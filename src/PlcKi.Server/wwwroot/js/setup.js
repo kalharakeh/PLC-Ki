@@ -477,6 +477,42 @@ const PKSetup = (() => {
 
   // ---------- Program import ----------
   const imp = { files: null, chosen: null, exportInfo: null, plc: "", effort: "high", compare: true, job: null, unfollow: null, model: null, modelInfo: null };
+  // "Refresh from TIA": the project on the TIA PC, read again as it is now
+  const fresh = { projects: null, error: null, project: "", program: null };
+
+  async function loadRefresh() {
+    try { fresh.program = await api("GET", "/api/program"); } catch { fresh.program = null; }
+    try {
+      const d = await loadSettings();
+      const p = await api("GET", "/api/admin/tia/projects");
+      fresh.projects = p.projects || []; fresh.error = null;
+      if (!fresh.project) {
+        // the project the shown program came from, else the one the block generator used last
+        const name = fresh.program && fresh.program.available ? (fresh.program.project || "").toLowerCase() : "";
+        const same = fresh.projects.find((x) => x.name.toLowerCase() === name);
+        fresh.project = same ? same.path : (d.settings.tiaProject || (fresh.projects[0] || {}).path || "");
+      }
+    } catch (e) { fresh.projects = null; fresh.error = e.message; }
+    PK.draw();
+  }
+
+  function refreshHtml() {
+    const pr = fresh.program && fresh.program.available ? fresh.program : null;
+    const running = imp.job && imp.job.state === "running";
+    const list = fresh.projects || [];
+    const known = list.some((x) => x.path === fresh.project);
+    const opts = (known || !fresh.project ? [] : [{ path: fresh.project, name: fresh.project.split(/[\\/]/).pop() }]).concat(list);
+    return `<div class="card stack" style="margin-bottom:22px">
+      <div class="row"><span class="ico">${icon("import")}</span><h3 style="margin:0;flex:1">Changed the program in TIA? Refresh it</h3></div>
+      <p class="muted" style="margin:0">PLC-Ki shows the code, tags and addresses of the program it last read${pr ? `: <b>${esc(pr.project)}</b>${pr.exportedAt ? `, read ${PK.date(pr.exportedAt)}` : ""}` : ""}.
+        After changes in TIA (new addresses, edited blocks), read the project again. About a minute; no Claude, no cost. Alarms and steps stay as they are.
+        If TIA Portal has the project open, it is read from there (TIA asks once to allow access).</p>
+      ${fresh.error ? `<div class="notice gold">${icon("warn")}<div>Cannot list the TIA projects: ${esc(fresh.error)} Check Connections.</div></div>`
+        : `<div class="row"><label class="field" style="flex:1;margin:0">TIA project<select id="fresh-project">${opts.map((x) => `<option value="${esc(x.path)}" ${x.path === fresh.project ? "selected" : ""}>${esc(x.name)}  ·  ${esc(x.path)}</option>`).join("")}</select></label>
+          <button class="btn" data-refresh ${running || !fresh.project ? "disabled" : ""}>Refresh from TIA</button></div>`}
+      ${imp.job && imp.job.kind === "refresh" ? jobCard(imp.job) : ""}
+    </div>`;
+  }
 
   async function refreshFiles() {
     imp.files = await api("GET", "/api/admin/import/files");
@@ -560,7 +596,7 @@ const PKSetup = (() => {
           <div class="k"><b>${state.model ? state.model.alarms.length : "–"}</b><span>alarms explained</span></div>
           <div class="k"><b>${state.model ? state.model.equipment.length : "–"}</b><span>devices</span></div>
           <div class="k"><b style="font-size:16px;font-weight:600;word-break:break-all">${esc((cur.export || "none").split(/[\\/]/).pop())}</b><span>program file</span></div></div>`)
-      + PK.sec("alt", `<div class="steps col">
+      + PK.sec("alt", `${refreshHtml()}<div class="steps col">
         ${step(1, "Choose the program", "A TIA archive (.zap20), or a program export (.zip) made earlier.", `
           <div class="dropzone" id="drop">${icon("import", "")}<div style="font-weight:600;margin-top:6px">Drop the file here, or click to choose it</div>
             <input type="file" id="file" accept=".zap20,.zap19,.zap18,.zap17,.zap16,.zip" class="hidden"></div>
@@ -577,14 +613,15 @@ const PKSetup = (() => {
               ${exp && exp.plcs.length > 1 && !imp.plc ? `<span class="faint">Choose the PLC first.</span>` : ""}</div>` + (imp.job && imp.job.kind === "import" ? jobCard(imp.job) : "") : `<span class="faint">Needs a program export.</span>`)}
         ${step(4, "Check it and use it", "What Claude found. Use it, and PLC-Ki restarts with this machine.", review || `<span class="faint">The result shows here.</span>`)}
         </div>
-        ${imp.job && imp.job.kind !== "export" && imp.job.kind !== "import" ? `<div style="margin-top:22px">${jobCard(imp.job)}</div>` : ""}`);
+        ${imp.job && !["export", "import", "refresh"].includes(imp.job.kind) ? `<div style="margin-top:22px">${jobCard(imp.job)}</div>` : ""}`);
   }
 
   PK.view("setup/program", {
     live: false,
     async mount() {
       await refreshFiles().catch((e) => toast(e.message, "error"));
-      const run = (state.jobs || []).find((j) => j.state === "running" && (j.kind === "export" || j.kind === "import"));
+      loadRefresh();
+      const run = (state.jobs || []).find((j) => j.state === "running" && ["export", "import", "refresh"].includes(j.kind));
       if (run && !imp.job) startJob(run);
       PK.draw();
     },
@@ -604,6 +641,21 @@ const PKSetup = (() => {
       page.querySelectorAll("[data-effort]").forEach((b) => b.onclick = () => { imp.effort = b.dataset.effort; PK.draw(); });
       const cmp = page.querySelector("#compare");
       if (cmp) cmp.onchange = () => { imp.compare = cmp.checked; };
+      const fp = page.querySelector("#fresh-project");
+      if (fp) fp.onchange = () => { fresh.project = fp.value; };
+      const rf = page.querySelector("[data-refresh]");
+      if (rf) rf.onclick = async () => {
+        try {
+          const job = await api("POST", "/api/admin/import/refresh", { project: fresh.project });
+          startJob(job, async (j) => {
+            if (j.state !== "done") return;
+            state.program = null; state.programError = null;   // Code, Logic and Tags load the new program
+            window.dispatchEvent(new Event("pk:program-changed"));
+            await refreshFiles(); await loadRefresh();
+            toast("Refreshed. Code, Logic and Tags show the program as it is in TIA now.");
+          });
+        } catch (e) { toast(e.message, "error"); }
+      };
       const ex = page.querySelector("[data-export]");
       if (ex) ex.onclick = async () => {
         try {

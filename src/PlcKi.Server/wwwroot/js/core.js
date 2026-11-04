@@ -470,10 +470,20 @@ const PK = (() => {
     setTimeout(pollValues, 2000);
   }
 
+  const refreshing = new Set();
   async function pollJobs() {
     if (state.user && state.user.role === "admin") {
       try {
         state.jobs = await api("GET", "/api/admin/jobs");
+        // A "Refresh from TIA" finished (also the one the block generator starts by itself): show the new program
+        for (const j of state.jobs.filter((x) => x.kind === "refresh")) {
+          if (j.state === "running") refreshing.add(j.id);
+          else if (refreshing.delete(j.id) && j.state === "done") {
+            state.program = null; state.programError = null;
+            window.dispatchEvent(new Event("pk:program-changed"));
+            loadProgram().then(draw);
+          }
+        }
         const run = state.jobs.find((j) => j.state === "running");
         const pill = $("job-pill");
         pill.classList.toggle("hidden", !run);
