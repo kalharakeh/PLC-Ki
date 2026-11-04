@@ -483,6 +483,15 @@ public class DevelopTests
         finally { Directory.Delete(Path.GetDirectoryName(dir)!, true); }
     }
 
+    [Fact]
+    public void The_last_log_line_skips_stack_frames()
+    {
+        var log = "Opening...\nUnhandled exception. System.InvalidOperationException: TIA PC answered 409: a job is running\n   at VmClient.PostAsync()\n   at Program.<Main>(String[] args)\n";
+        Assert.Equal("TIA PC answered 409: a job is running", DevelopCommand.LastLine(log));
+        Assert.Equal("ERROR text", DevelopCommand.LastLine("x\nERROR: ERROR text\n"));
+        Assert.Equal("no answer", DevelopCommand.LastLine("  \n"));
+    }
+
     private static async Task<(int code, FakeTiaPc tia, string dir)> RealRun(string? typed, params string[] extra)
     {
         var dir = Path.Combine(Directory.CreateTempSubdirectory("plcki-dev-").FullName, "valve");

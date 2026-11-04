@@ -111,8 +111,12 @@ const PKSetup = (() => {
       return { text: "The download to PLCSIM did not work.", todo: "On the VM: check PLCSIM Advanced runs the virtual PLC (green), and its address is the PLCSIM address in Setup. Then start the job again." };
     if (has(/compil\w*[^\n]*\b[1-9]\d* error/i) || has(/\berrors?: *[1-9]/i))
       return { text: "TIA found compile errors.", todo: "Open the log below for the lines TIA complained about. More fixing rounds (More options) let Ki fix them by itself." };
-    const lines = log.split("\n").map((l) => l.replace(/^\s*\|\s?/, "").trim()).filter((l) => l && !l.startsWith(">"));
-    const last = lines.reverse().find((l) => /error|fail|cannot|could not|not found|refused|problem/i.test(l)) || lines[0] || "";
+    if (has(/already been opened by user|project\/library .* cannot be accessed/i))
+      return { text: "TIA could not open the project: it is still open or locked on the TIA PC.", todo: "Close the project in TIA Portal on the TIA PC. If it is not open there, a hidden TIA is holding it: close the TIA helper window, run taskkill /im Siemens.Automation.Portal.exe /f on the TIA PC, wait 2 minutes, start the TIA helper again, then start the job again." };
+    // Stack frames ("at X.Y()") say nothing to a person: skip them, and cut "Unhandled exception. Type:" off the message
+    const lines = log.split("\n").map((l) => l.replace(/^\s*\|\s?/, "").trim()).filter((l) => l && !l.startsWith(">") && !/^at |^--- End of/.test(l))
+      .map((l) => l.replace(/^(Unhandled exception\.\s*)?(ERROR:\s*)?([\w.]+(Exception|Error):\s*)?/, ""));
+    const last = lines.reverse().find((l) => /error|fail|cannot|could not|not found|refused|problem|answered/i.test(l)) || lines[0] || "";
     const p = PK.plain(last);
     return { text: p.todo ? p.text : job.state === "problems" ? "It finished, but with problems." : "The job stopped with an error.", todo: p.todo || (last ? "The log says: " + last.slice(0, 240) : "Open the log below.") };
   }

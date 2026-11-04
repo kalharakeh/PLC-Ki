@@ -215,7 +215,14 @@ Usage: PlcKi.Server develop --vm <http://tia-pc:5090> --project <project .ap20 o
 
     private static string Indent(string log) => string.Concat(log.Split('\n').Where(l => l.Length > 0).Select(l => "  | " + l.TrimEnd('\r') + "\n"));
 
-    private static string LastLine(string log) => log.Split('\n').Select(l => l.Trim()).LastOrDefault(l => l.Length > 0) ?? "no answer";
+    /// <summary>The last line that says something: stack frames ("at X.Y()") are skipped, "Unhandled exception. Type:" is cut off.</summary>
+    public static string LastLine(string log)
+    {
+        var line = log.Split('\n').Select(l => l.Trim())
+            .LastOrDefault(l => l.Length > 0 && !l.StartsWith("at ", StringComparison.Ordinal) && !l.StartsWith("--- End of", StringComparison.Ordinal)) ?? "no answer";
+        var m = System.Text.RegularExpressions.Regex.Match(line, @"^(?:Unhandled exception\.\s*)?(?:ERROR:\s*)?(?:[\w.]+(?:Exception|Error):\s*)?(.+)$");
+        return m.Success ? m.Groups[1].Value : line;
+    }
 
     private static readonly HashSet<string> Flags = new(StringComparer.OrdinalIgnoreCase) { "download", "download-real", "scl-only" };
 
