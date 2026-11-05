@@ -166,8 +166,12 @@ public static class HoldEndpoints
         var instance = S("name");
         var cpu = live.Cpu;
         var plcState = cpu != null && cpu.Error == null && DateTimeOffset.Now - cpu.Time < TimeSpan.FromSeconds(30) ? cpu.State : null;
-        var simRefusal = HoldRules.PlcsimRefusal(plc, plcsim.GetValueOrDefault("applies") is true, plcsim.GetValueOrDefault("found") is true, instance, S("why"),
-            plcState, S("state"));
+        var applies = plcsim.GetValueOrDefault("applies") is true;
+        var found = plcsim.GetValueOrDefault("found") is true;
+        // The helper answers within 3 s; when PLCSIM is slower it says so in "error" (not "no instance")
+        var simRefusal = applies && !found && S("error") is { Length: > 0 } slow
+            ? "The TIA helper could not read PLCSIM just now: " + slow
+            : HoldRules.PlcsimRefusal(plc, applies, found, instance, S("why"), plcState, S("state"));
         if (simRefusal == null && S("error") is { Length: > 0 } err) simRefusal = "The TIA helper reports a PLCSIM problem: " + err;
 
         var (hw, source, _) = hardware.Load();
