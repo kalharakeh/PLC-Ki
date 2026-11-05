@@ -15,7 +15,14 @@ public sealed class Snapshot
 public sealed record PlcLinkInfo(string State, string Address, string? Error, DateTimeOffset? LastGoodRead, int TagCount, int TagErrors);
 
 public sealed record ValueView(string Id, string Label, string Text, object? Raw);
-public sealed record ConditionStatus(string Text, bool? Met, List<ValueView> Values);
+/// <param name="HeldBy">The device whose own signal this condition waits for (E301's "M201 at speed" -> M201), when that is
+/// why it is not met: the next link of the cause chain. Set on interlocks that are not met, and on step conditions that
+/// wait for a device that is blocked or in fault.</param>
+public sealed record ConditionStatus(string Text, bool? Met, List<ValueView> Values, string? HeldBy = null)
+{
+    /// <summary>The tag ids the condition reads, to find the device behind it.</summary>
+    [System.Text.Json.Serialization.JsonIgnore] public IReadOnlyList<string> Ids { get; init; } = Array.Empty<string>();
+}
 public sealed record NextStatus(int To, string ToName, bool? Ready, List<ConditionStatus> Conditions);
 
 public sealed record SequenceStatus(
@@ -27,7 +34,10 @@ public sealed record EquipmentStatus(
     string Id, string Name, string? Kind, string? Location,
     string State, string Level, bool? Requested, bool? Commanded,
     List<ConditionStatus> Permits, List<ConditionStatus> Blocking, List<ValueView> Values, string Explanation,
-    string? BlockedBy = null);
+    string? BlockedBy = null, List<ConditionStatus>? Feedback = null, string? BlockedVia = null);
+// Feedback: what tells the program the device did what its output asked (open switch, at speed); null when not known.
+// BlockedVia: for a blocked device, the device its missing interlock waits for (E301 -> M201), so pages can show the
+// chain root first: Level 15 % -> M201 blocked -> E301 blocked.
 
 /// <param name="Since">When PLC-Ki first saw the alarm on (server time).</param>
 /// <param name="AtStart">The alarm was already on at the first read, so when it really came is not known.</param>
@@ -66,10 +76,89 @@ public sealed class StatusEngine
     private readonly Dictionary<string, Dictionary<string, object?>> _alarmValues = new(StringComparer.Ordinal);
     private Dictionary<string, object?>? _prevValues;
 
+    // Which device a tag belongs to (its command, request, states, values, feedback, or an id like "M201_..."), only
+    // when exactly one device claims it. Shared signals (Level, EStop_OK) belong to none.
+    private readonly Dictionary<string, string> _owner = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, List<CondDef>> _feedback = new(StringComparer.Ordinal);
+
     public StatusEngine(MachineModel model)
     {
         _model = model;
         _tags = model.Tags.ToDictionary(t => t.Id, StringComparer.Ordinal);
+        var claims = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
+        foreach (var e in model.Equipment)
+        {
+            _feedback[e.Id] = FeedbackOf(e);
+            var exprs = new[] { e.Request, e.Command }.Concat(e.States.Select(st => st.When)).Concat(_feedback[e.Id].Select(f => f.Expr));
+            var ids = exprs.Where(x => x != null).SelectMany(x => IdsOf(x!)).Concat(e.Values)
+                .Concat(_tags.Keys.Where(t => t.StartsWith(e.Id + "_", StringComparison.Ordinal)));
+            foreach (var id in ids) { if (!claims.TryGetValue(id, out var set)) claims[id] = set = new(); set.Add(e.Id); }
+        }
+        foreach (var (id, set) in claims) if (set.Count == 1) _owner[id] = set.First();
+    }
+
+    private IEnumerable<string> IdsOf(string expr)
+    {
+        try { return Parse(expr).Identifiers().ToList(); }
+        catch (ExprException) { return Array.Empty<string>(); }
+    }
+
+    /// <summary>The feedback of a device: from the model, or else the first "ok" state that needs the command, minus the
+    /// command. "XV101_OpenCmd AND XV101_ZSO AND NOT XV101_ZSC" -> open switch: reached, closed switch: not reached.</summary>
+    private List<CondDef> FeedbackOf(EquipmentDef e)
+    {
+        if (e.Feedback.Count > 0) return e.Feedback;
+        if (e.Command == null) return new();
+        var cmd = IdsOf(e.Command).ToHashSet(StringComparer.Ordinal);
+        if (cmd.Count == 0) return new();
+        var ok = e.States.FirstOrDefault(st => st.Level == "ok" && IdsOf(st.When).Any(cmd.Contains));
+        if (ok == null) return new();
+        Expr when;
+        try { when = Parse(ok.When); } catch (ExprException) { return new(); }
+        var terms = new List<Expr>();
+        void Split(Expr x) { if (x is BinaryExpr { Op: "AND" } b) { Split(b.Left); Split(b.Right); } else terms.Add(x); }
+        Split(when);
+        var list = new List<CondDef>();
+        foreach (var t in terms)
+        {
+            var (id, neg) = t switch
+            {
+                IdentExpr i => (i.Name, false),
+                UnaryExpr { Op: "NOT", Operand: IdentExpr i } => (i.Name, true),
+                _ => ((string?)null, false),
+            };
+            if (id == null || cmd.Contains(id) || !_tags.TryGetValue(id, out var tag)) continue;
+            var word = neg ? tag.FalseText ?? "off" : tag.TrueText ?? "on";
+            list.Add(new CondDef { Expr = (neg ? "NOT " : "") + id, Text = $"{tag.Label ?? id}: {word}" });
+        }
+        return list;
+    }
+
+    /// <summary>The device behind a condition that is not met, other than the device itself.</summary>
+    private string? OwnerOf(ConditionStatus c, string? self) =>
+        c.Met == true ? null : c.Ids.Select(id => _owner.GetValueOrDefault(id)).FirstOrDefault(d => d != null && d != self);
+
+    /// <summary>Links each interlock that is not met to the device behind it, and a blocked device to that device.</summary>
+    private List<EquipmentStatus> LinkDevices(List<EquipmentStatus> equipment) => equipment.Select(e =>
+    {
+        var permits = e.Permits.Select(p => p.Met == true ? p : p with { HeldBy = OwnerOf(p, e.Id) }).ToList();
+        var blocking = permits.Where(p => p.Met != true).ToList();
+        var via = e.BlockedBy != null ? blocking.Select(p => p.HeldBy).FirstOrDefault(d => d != null) : null;
+        return e with { Permits = permits, Blocking = blocking, BlockedVia = via };
+    }).ToList();
+
+    /// <summary>A step condition that waits for a value of a device that is blocked or in fault cannot come by itself.</summary>
+    private List<SequenceStatus> LinkSteps(List<SequenceStatus> sequences, List<EquipmentStatus> equipment)
+    {
+        var stuck = equipment.Where(e => e.BlockedBy != null || e.Level is "fault" or "bad").Select(e => e.Id).ToHashSet(StringComparer.Ordinal);
+        if (stuck.Count == 0) return sequences;
+        return sequences.Select(q => q with
+        {
+            Next = q.Next.Select(n => n with
+            {
+                Conditions = n.Conditions.Select(c => c.Met == false && OwnerOf(c, null) is { } d && stuck.Contains(d) ? c with { HeldBy = d } : c).ToList(),
+            }).ToList(),
+        }).ToList();
     }
 
     public MachineModel Model => _model;
@@ -81,7 +170,8 @@ public sealed class StatusEngine
 
         var sequences = _model.Sequences.Select(s => EvaluateSequence(s, Get)).ToList();
         var halted = sequences.Where(q => q.Halted).Select(q => q.Name).ToList();
-        var equipment = _model.Equipment.Select(e => EvaluateEquipment(e, Get, halted)).ToList();
+        var equipment = LinkDevices(_model.Equipment.Select(e => EvaluateEquipment(e, Get, halted)).ToList());
+        sequences = LinkSteps(sequences, equipment);
         var on = _model.Alarms.Where(a => Get(a.Tag) is true).ToList();
         var since = TrackAlarms(on.Select(a => a.Id), snap.Time, hasValues);
         // First-out first: by when each alarm came. Alarms that were already on at the first read have no known
@@ -272,7 +362,8 @@ public sealed class StatusEngine
             : null;
 
         var values = e.Values.Select(v => View(v, get)).ToList();
-        return new EquipmentStatus(e.Id, e.Name, e.Kind, e.Location, state, level, requested, commanded, permits, blocking, values, explanation, blockedBy);
+        var feedback = _feedback.TryGetValue(e.Id, out var fb) && fb.Count > 0 ? fb.Select(f => EvaluateCondition(f, get)).ToList() : null;
+        return new EquipmentStatus(e.Id, e.Name, e.Kind, e.Location, state, level, requested, commanded, permits, blocking, values, explanation, blockedBy, feedback);
     }
 
     private ConditionStatus EvaluateCondition(CondDef c, Func<string, object?> get)
@@ -284,7 +375,7 @@ public sealed class StatusEngine
         // Show the live values the condition depends on, except those already written into its text
         var inText = TextTemplate.Placeholders(c.Text).ToHashSet(StringComparer.Ordinal);
         var values = expr.Identifiers().Where(id => _tags.ContainsKey(id) && !inText.Contains(id)).Select(id => View(id, get)).ToList();
-        return new ConditionStatus(Fill(c.Text, get), met, values);
+        return new ConditionStatus(Fill(c.Text, get), met, values) { Ids = expr.Identifiers().ToList() };
     }
 
     /// <summary>"tank level above 20 % (blades covered), now Level 15 %" for a condition that is not met.</summary>

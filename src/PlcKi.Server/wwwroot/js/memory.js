@@ -129,6 +129,29 @@
       ${h.total > 0 ? `<a class="btn plain small" href="#/history/${encodeURIComponent(id)}" style="margin-top:8px">All ${h.total} in History</a>` : ""}`;
   }
 
+  /**
+   * One line for Active alarm, next to Fix it. With a note from an earlier time: "Last time: solenoid coil Y101 burnt ·
+   * fix: …", the most useful sentence for the next technician. Without one: "First time" (or "Seen 3 times, nothing
+   * noted"), with the button to note cause and fix. "" while the memory is loading.
+   */
+  function lastLine(id) {
+    const d = cached(`/api/memory/alarms/${encodeURIComponent(id)}`);
+    if (!d) return "";
+    const occ = remember(d.occurrences).slice().sort((x, y) => Date.parse(y.came) - Date.parse(x.came));
+    const open = occ.find((o) => !o.went);
+    const before = occ.filter((o) => o !== open);
+    const last = before.find((o) => o.note && (o.note.cause || o.note.fix || o.note.text));
+    const btn = open ? `<button type="button" class="btn ${last ? "plain" : "b"} small" data-note="${esc(open.id)}">${open.note ? "Edit your note" : "Note cause and fix"}</button>` : "";
+    const times = Math.max(before.length, d.summary.total - (open ? 1 : 0));
+    const hist = times > 0 ? `<a class="small" href="#/history/${encodeURIComponent(id)}">${times === 1 ? "1 time" : times + " times"} before ›</a>` : "";
+    if (last) {
+      const n = last.note;
+      const text = [n.cause, n.fix ? "fix: " + n.fix : "", n.text].filter(Boolean).join(" · ");
+      return `<div class="lastline noted">${icon("clock")}<span><b>Last time:</b> ${esc(text)} <span class="faint">${esc(n.by)}, ${esc(PK.when(n.at))}</span></span>${hist}${btn}</div>`;
+    }
+    return `<div class="lastline">${icon("clock")}<span>${times > 0 ? `Seen before, nobody noted the cause` : "First time PLC-Ki sees this alarm"}</span>${hist}${btn}</div>`;
+  }
+
   /** On Active alarm when nothing is on: the alarms that went lately and nobody noted what fixed them. */
   function unnotedBlock() {
     const d = cached("/api/memory?days=7", 15000);
@@ -236,5 +259,5 @@
     },
   });
 
-  window.PKMemory = { alarmBlock, unnotedBlock, noteSheet, bind };
+  window.PKMemory = { alarmBlock, lastLine, unnotedBlock, noteSheet, bind };
 })();

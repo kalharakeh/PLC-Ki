@@ -408,8 +408,114 @@
     const b = /^\s*(?:FB|FC)_?([A-Za-z0-9_]+)/.exec(loc || "");
     return b ? b[1] : "";
   }
-  /** Every device as a symbol in its state colour, grouped by station. Uses the Plant page's [data-eq] selection. */
-  function plantMap(equipment, selected) {
+  // ---------- why a device runs or not, and the cause chain ----------
+  const cap = (t) => String(t || "").charAt(0).toUpperCase() + String(t || "").slice(1);
+  /** "XV101 open switch" (tag XV101_ZSO) -> "Open switch ZSO": the device id is already said, the short tag name helps
+   *  find the switch on the drawings. */
+  function sigName(text, e, v) {
+    const name = cap(String(text).split(":")[0].replace(new RegExp("^" + e.id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\s+"), ""));
+    const short = v && v.id && v.id.startsWith(e.id + "_") ? v.id.slice(e.id.length + 1) : "";
+    return /^[A-Z]{2,4}$/.test(short) && !name.includes(short) ? name + " " + short : name;
+  }
+  /**
+   * The four steps of a device: asked for → interlocks → output → feedback (or its state when the model knows no
+   * feedback). Each is { k, v, note, st: ok | off | warn | bad, alarm }. Only the first broken step is red. A FAULT
+   * alarm on the device makes its last step red when nothing before it is: the alarm says the result failed, even when
+   * a halt has switched everything off since.
+   */
+  function devSteps(e, s = state.status) {
+    const look = devLook(e, s);
+    const fault = look.alarms.find((a) => a.severity !== "WARNING");
+    const halted = s && s.sequences.find((q) => q.halted);
+    const blocking = e.permits.filter((p) => p.met === false);
+    const permOk = !blocking.length;
+    const by = (id) => (s && s.equipment.find((x) => x.id === id)) || null;
+    const steps = [];
+    steps.push(e.requested === true ? { k: "Requested", v: "yes", st: "ok" }
+      : e.requested === false ? { k: "Requested", v: "no", st: "off", note: halted ? `${halted.name} is halted${fault ? " by " + fault.id : ""}` : "not in this step" }
+      : { k: "Requested", v: "not known", st: "off" });
+    if (permOk) steps.push({ k: "Interlocks", v: e.permits.length ? "OK" : "none", st: e.permits.length ? "ok" : "off" });
+    else {
+      const p = blocking[0], held = p.heldBy && by(p.heldBy);
+      steps.push({ k: "Interlocks", v: blocking.length === 1 ? "1 missing" : `${blocking.length} missing`, st: e.requested === true ? "bad" : "warn",
+        note: p.text + (held ? ` (waits for ${held.name})` : "") });
+    }
+    steps.push(e.commanded === true ? { k: "Output", v: "on", st: "ok" }
+      : e.commanded === false ? { k: "Output", v: "off", st: e.requested === true && permOk ? "warn" : "off", note: e.requested === true && permOk ? "interlocks are OK, but it stays off" : "" }
+      : { k: "Output", v: "not known", st: "off" });
+    const fb = e.feedback || [];
+    if (fb.length) {
+      // Feedback only counts while the output is on: a closed valve nobody asked to open is not "missing" its open switch
+      const on = e.commanded === true;
+      const miss = fb.filter((f) => f.met === false), f = miss[0] || fb[0], v = f.values && f.values[0];
+      const st = !miss.length ? (on ? "ok" : "off") : on ? (look.lvl === "fault" ? "bad" : "warn") : "off";
+      steps.push({ k: "Feedback", v: `${sigName(f.text, e, v)}: ${v ? v.text : f.met ? "yes" : f.met === false ? "no" : "not known"}`, st,
+        mark: on ? (f.met === false ? "✗" : f.met ? "✓" : "") : "", note: on && miss.length > 1 ? `and ${miss.length - 1} more` : "" });
+    } else {
+      const map = { ok: "ok", idle: "off", info: "off", warn: "warn", blocked: "warn", fault: "bad", bad: "bad" };
+      steps.push({ k: "State", v: e.state, st: map[look.lvl] || "off" });
+    }
+    if (fault && !steps.some((x) => x.st === "bad")) {
+      const last = steps[steps.length - 1];
+      Object.assign(last, { st: "bad", alarm: fault.id, mark: last.k === "Feedback" ? "✗" : "" });
+    }
+    let red = false;
+    steps.forEach((x) => { if (x.st === "bad") { if (red) x.st = "warn"; red = true; } });
+    return steps;
+  }
+  /** The device's steps as one full-width strip; the first broken step is red. */
+  function devStrip(e) {
+    return `<ol class="dstrip" aria-label="Why ${esc(e.name)} runs or not">${devSteps(e).map((x) => `<li class="ds ${x.st}">
+        <span class="ds-k">${esc(x.k)}</span><b>${esc(x.v)}${x.mark ? ` <span class="ds-m">${x.mark}</span>` : ""}</b>
+        ${x.alarm ? `<span class="ds-n">alarm ${esc(x.alarm)}</span>` : x.note ? `<span class="ds-n">${esc(x.note)}</span>` : ""}</li>`).join("")}</ol>`;
+  }
+
+  /**
+   * Blocked devices as chains, root first: what is missing at the root, the devices that wait on each other (from the
+   * server's blockedVia links), and the step conditions that cannot come while they are blocked (heldBy).
+   * [{ why: the root's missing interlock or null, devices: [root … last], waits: [{ seq, cond }] }]
+   */
+  function causeChains(s = state.status) {
+    if (!s) return [];
+    const by = new Map(s.equipment.map((e) => [e.id, e]));
+    const blocked = s.equipment.filter((e) => e.blockedBy);
+    const pointed = new Set(blocked.map((e) => e.blockedVia).filter(Boolean));
+    return blocked.filter((e) => !pointed.has(e.id)).map((last) => {
+      const devices = [last], ids = new Set([last.id]);
+      for (let cur = last; cur.blockedVia && by.has(cur.blockedVia) && !ids.has(cur.blockedVia);) {
+        cur = by.get(cur.blockedVia); ids.add(cur.id); devices.unshift(cur);
+      }
+      const root = devices[0];
+      const why = (root.blocking || []).find((p) => !p.heldBy) || (root.blocking || [])[0] || null;
+      const waits = s.sequences.flatMap((q) => q.next.flatMap((n) => n.conditions.filter((c) => c.heldBy && ids.has(c.heldBy)).map((c) => ({ seq: q, cond: c }))));
+      return { why, devices, waits };
+    });
+  }
+  const devWord = (e) => e.blockedBy ? "blocked" : devLook(e).lvl === "fault" ? "fault" : e.state;
+  /** One chain as a line of links: Level 15 % (needs above 20 %) → M201 blocked → E301 blocked → step 30 can't finish. */
+  function chainHtml(ch) {
+    const parts = [];
+    if (ch.why) {
+      const val = ch.why.values && ch.why.values.length ? ch.why.values.map((v) => `${esc(v.label)} <b>${esc(v.text)}</b>`).join(", ") : "";
+      parts.push(`<li class="cc cc-root"><span class="cc-box"><span class="cc-t">${val || esc(cap(ch.why.text))}</span><span class="cc-n">${val ? "needs: " + esc(ch.why.text.charAt(0).toLowerCase() + ch.why.text.slice(1)) : "missing"}</span></span></li>`);
+    }
+    ch.devices.forEach((e) => parts.push(`<li class="cc cc-dev"><a href="#/plant/devices/${encodeURIComponent(e.id)}"><span class="cc-t">${esc(e.name)}</span><span class="cc-n">${esc(devWord(e))}</span></a></li>`));
+    const bySeq = new Map();
+    ch.waits.forEach((w) => bySeq.set(w.seq, [...(bySeq.get(w.seq) || []), w.cond]));
+    bySeq.forEach((conds, q) => parts.push(`<li class="cc cc-step"><a href="#/sequence/${encodeURIComponent(q.id)}${q.step != null ? "/" + q.step : ""}"><span class="cc-t">Step ${esc(q.step ?? "?")} can't go on</span><span class="cc-n">${conds.map((c) => esc(c.text)).join("; ")}</span></a></li>`));
+    return `<ol class="cchain" aria-label="Cause, root first">${parts.join("")}</ol>`;
+  }
+  /** A condition line (PK.cond) that also says which blocked device it waits for. */
+  function condHeld(c, s = state.status) {
+    const html = PK.cond(c);
+    const d = c.heldBy && s && s.equipment.find((e) => e.id === c.heldBy);
+    return d ? html.replace(/<\/span><\/li>$/, `<span class="held">Can't come while <a href="#/plant/devices/${encodeURIComponent(d.id)}">${esc(d.name)}</a> is ${esc(devWord(d))}.</span></span></li>`) : html;
+  }
+  Object.assign(PK, { devSteps, devStrip, causeChains, chainHtml, condHeld });
+
+  /** Every device as a symbol in its state colour, grouped by station. Uses the Plant page's [data-eq] selection.
+   *  ring: device ids to ring (the device an alarm is about, on Active alarm). */
+  function plantMap(equipment, selected, ring) {
     if (!equipment.length) return "";
     const groups = new Map();
     equipment.forEach((e) => { const g = stationOf(e.location); groups.set(g, [...(groups.get(g) || []), e]); });
@@ -417,12 +523,21 @@
     const tile = (e) => {
       const look = devLook(e);
       const said = `${e.name}: ${e.state}` + look.alarms.map((a) => `. ${a.severity === "WARNING" ? "Warning" : "Alarm"} ${a.id}: ${a.text}`).join("");
-      return `<div class="pm-dev lv-${esc(look.lvl)} ${e.id === selected ? "sel" : ""}" data-eq="${esc(e.id)}" role="button" tabindex="0" aria-label="${esc(said)}" title="${esc(said)}">
+      return `<div class="pm-dev lv-${esc(look.lvl)} ${e.id === selected ? "sel" : ""} ${ring && ring.includes(e.id) ? "ring" : ""}" data-eq="${esc(e.id)}" role="button" tabindex="0" aria-label="${esc(said)}" title="${esc(said)}">
         <span class="pm-sym">${symbolFor(e.kind, e.id)}</span><b>${esc(e.id)}</b><span class="pm-st">${esc(look.word)}</span></div>`;
     };
     return `<div class="pmap">${[...groups].map(([g, list]) => `<div class="pm-grp">${many ? `<div class="pm-h">${esc(g || "Other devices")}</div>` : ""}<div class="pm-devs">${list.map(tile).join("")}</div></div>`).join("")}
       <div class="pm-key small"><span class="lv-ok">running or fine</span><span class="lv-idle">off</span><span class="lv-blocked">asked for but blocked</span><span class="lv-warn">warning</span><span class="lv-fault">fault</span></div></div>`;
   }
 
-  window.PKVis = { trends, bindTrends, plantMap, loadTrend, symbolFor };
+  /** The devices around the given ones, for a small map: their own station, at most max, the given ones first. */
+  function around(ids, max = 12) {
+    const all = (state.status && state.status.equipment) || [];
+    const mine = all.filter((e) => ids.includes(e.id));
+    const st = new Set(mine.map((e) => stationOf(e.location)));
+    const near = all.filter((e) => !ids.includes(e.id) && st.has(stationOf(e.location)));
+    return [...mine, ...near].slice(0, Math.max(max, mine.length)).sort((x, y) => all.indexOf(x) - all.indexOf(y));
+  }
+
+  window.PKVis = { trends, bindTrends, plantMap, around, loadTrend, symbolFor };
 })();
