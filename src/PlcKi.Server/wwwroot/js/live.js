@@ -196,7 +196,7 @@
       </details>`;
   }
   /** The way to the full step chart and step timeline of a sequence. */
-  const chartLink = (seq) => `<div><a class="btn b small" href="#/sequence/${encodeURIComponent(seq.id)}">Step chart and timeline ›</a></div>`;
+  const chartLink = (seq) => `<div><a class="btn b small" href="#/plant/sequence/${encodeURIComponent(seq.id)}">Step chart and timeline ›</a></div>`;
   /** Settings (HMI values) the model says keep the machine from working, e.g. a 0 % tolerance. */
   function settingsNotice(s) {
     const bad = (s.settings || []).filter((x) => x.valid === false);
@@ -360,7 +360,7 @@
   // One short header (the step, what it waits for, the key values), then four tabs so the page stays one screen:
   // Overview (what needs attention, the sequence, the machine at a glance), Devices (list and the picked one),
   // Values over time, and Data exchange. The tab is in the address: #/plant/devices/M201, #/plant/values.
-  const PLANT_TABS = [["overview", "Overview"], ["devices", "Devices"], ["stations", "Stations"], ["values", "Values over time"], ["settings", "Settings"], ["exchange", "Data exchange"]];
+  const PLANT_TABS = [["overview", "Overview"], ["devices", "Devices"], ["sequence", "Sequence"], ["stations", "Stations"], ["values", "Values over time"], ["settings", "Settings"], ["exchange", "Data exchange"]];
   // The HMI panel's operator settings and buttons (from the program export), loaded once for the Settings tab
   const H = { data: null, error: null, loading: false, q: "", shown: [] };
   async function loadHmi() {
@@ -419,6 +419,8 @@
 
   PK.view("plant", {
     live: true,
+    // The Sequence tab shows settings such as {LevelA} with their value, so it needs all tag values
+    get needsValues() { return !!(PK.current && PK.current.params && PK.current.params[0] === "sequence"); },
     render() {
       const s = state.status;
       if (!s) return waitingPage();
@@ -443,8 +445,9 @@
         title: main ? `Step ${main.step ?? "?"}: ${esc(main.stepName)}` : esc(s.machine),
         sub: main ? (main.halted ? esc("Halted: " + (main.haltReasons.join("; ") || "the outputs are off.")) : waitsFor.length ? esc("Waiting for: " + waitsFor.join("; ")) : esc(main.does || "")) : esc(s.summary[0] || ""),
         actions: `<button class="btn" data-ask="${ask0 ? `Why is alarm ${esc(ask0.id)} on for ${esc(attention[0].name)}, and what do I check?` : attention.length ? `Why is ${esc(attention[0].name)} ${esc(attention[0].blockedBy ? "blocked" : attention[0].state)}, and what do I check?` : "What is the machine doing right now?"}">Ask about it</button>${s.activeAlarms.length ? `<a class="btn b" href="#/alarm">${s.activeAlarms.length} active alarm${s.activeAlarms.length > 1 ? "s" : ""}</a>` : ""}`,
-        extra: (s.overview.length ? `<div class="kpis plant-kpis">${s.overview.slice(0, 8).map((v) => `<div class="k"><b>${esc(v.text)}</b><span>${esc(v.label)}</span></div>`).join("")}</div>` : "")
-          + `<nav class="ptabs" aria-label="Plant">${PLANT_TABS.filter(([k]) => (k !== "exchange" || s.exchange.length) && (k !== "settings" || (s.settings || []).length || (H.data && H.data.settings.length)) && (k !== "stations" || stationList.stations.length > 1)).map(([k, l]) =>
+        // Measured values as bars with the interlock limit marked; switches and counters stay as numbers
+        extra: (s.overview.length ? (V ? V.valueBars(s.overview.slice(0, 8)) : `<div class="kpis plant-kpis">${s.overview.slice(0, 8).map((v) => `<div class="k"><b>${esc(v.text)}</b><span>${esc(v.label)}</span></div>`).join("")}</div>`) : "")
+          + `<nav class="ptabs" aria-label="Plant">${PLANT_TABS.filter(([k]) => (k !== "exchange" || s.exchange.length) && (k !== "settings" || (s.settings || []).length || (H.data && H.data.settings.length)) && (k !== "stations" || stationList.stations.length > 1) && (k !== "sequence" || (state.model && state.model.sequences.length))).map(([k, l]) =>
             `<a href="#/plant${k === "overview" ? "" : "/" + k}" class="${k === tab ? "on" : ""}" ${k === tab ? 'aria-current="page"' : ""}>${l}${(k === "devices" || k === "settings") && counts[k] ? ` <span class="count warn">${counts[k]}</span>` : ""}</a>`).join("")}</nav>`,
       });
 
@@ -472,7 +475,7 @@
           : `<p class="ok-line">${icon("check")}<span>No alarm, and every device is doing what the program asks.</span></p>`;
         const seqCards = s.sequences.map((q) => `<div class="card stack">
             <div class="row"><h3 style="margin:0">${esc(q.name)}</h3><span class="pill ${seqState(q)[1]}">${seqState(q)[0]}</span><span class="spacer"></span>
-              <a class="small" href="#/sequence/${encodeURIComponent(q.id)}">Step chart and timeline ›</a></div>
+              <a class="small" href="#/plant/sequence/${encodeURIComponent(q.id)}">Step chart and timeline ›</a></div>
             ${stepStrip(q)}
             ${q.does ? `<p style="margin:0"><span class="muted">This step should:</span> ${esc(q.does)}</p>` : ""}
             ${q.halted && q.haltReasons.length ? `<div class="notice red">${icon("warn")}<div><b>Halted, outputs are off:</b> ${q.haltReasons.map(esc).join("; ")}</div></div>` : ""}
@@ -509,6 +512,8 @@
       } else if (tab === "stations") {
         // The stations inside Plant; each card opens that station's phone page (the one its QR label opens)
         body = sec("", PKStations.grid(stationList.stations, stationList.machineAlarms));
+      } else if (tab === "sequence") {
+        body = sec("", V ? V.sequenceBody(params[1], params[2]) : `<p class="muted">The step chart is not available.</p>`);
       } else if (tab === "values") {
         body = sec("", V ? V.trends() : `<p class="muted">Charts are not available.</p>`);
       } else if (tab === "settings") {
@@ -550,6 +555,8 @@
       const r = page.querySelector("[data-eq-reset]");
       if (r) r.onclick = () => { eqQuery = ""; eqOnlyProblems = false; PK.draw(); };
       if (window.PKVis) window.PKVis.bindTrends(page);
+      const pp = (PK.current && PK.current.params) || [];
+      if (window.PKVis && pp[0] === "sequence") window.PKVis.bindSequence(page, pp[1]);
       bindAsk(page);
     },
   });

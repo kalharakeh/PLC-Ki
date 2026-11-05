@@ -1644,3 +1644,49 @@ section.hero.aa { padding-block: 26px 30px; }
   .cc + .cc::before { content: "↓"; margin: 0 0 4px 16px; }
 }
 .conds .held { display: block; margin-top: 2px; font-size: 13.5px; font-weight: 600; color: var(--warn-ink); }
+
+/* ---------- Plant header: measured values as bars, the interlock limit marked ---------- */
+.vbars { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(230px, 100%), 1fr)); gap: 12px 22px; margin-top: 16px; }
+.vb-plain { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 14px; align-content: start; min-width: 0; }
+.vb-plain .k b { font-size: 15px; }
+.vb-plain .k span { font-size: 11.5px; margin-top: 0; }
+.vbar { display: grid; gap: 5px; min-width: 0; }
+.vb-h { display: flex; align-items: baseline; gap: 10px; }
+.vb-l { flex: 1; min-width: 0; font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vb-h b { font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
+.vbar.short .vb-h b { color: var(--warn-ink); }
+.vb-track { position: relative; height: 10px; border-radius: 6px; background: var(--bg-alt); border: 1px solid var(--line); }
+.vb-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 6px; background: var(--accent); }
+.vb-fill.warn { background: var(--warn); }
+.vb-fill.bad { background: var(--fault); }
+.vb-lim { position: absolute; top: -4px; bottom: -4px; width: 2px; margin-left: -1px; background: var(--ink); opacity: 0.55; }
+.vb-lim.no { background: var(--fault); opacity: 1; }
+.vb-sp { position: absolute; top: -4px; bottom: -4px; width: 0; margin-left: -1px; border-left: 2px dashed var(--ok); }
+.vb-f { display: flex; align-items: center; gap: 10px; min-height: 18px; font-size: 12.5px; color: var(--muted); }
+.vb-f > span { flex: 1; min-width: 0; }
+.vb-need { color: var(--fault-ink); font-weight: 600; }
+.vb-spark { width: 84px; height: 20px; flex: none; }
+.vb-spark path { fill: none; stroke: var(--accent); stroke-width: 1.5; }
+
+/* Values over time: a setpoint is a dashed line on its value's chart */
+.tr-sp { fill: none; stroke: var(--ok); stroke-width: 1.5; stroke-dasharray: 6 4; }
+.tr-sp-k { display: inline-block; width: 14px; margin-right: 5px; vertical-align: middle; border-top: 2px dashed var(--ok); }
+
+/* Map tiles: the device's key value under its state */
+.pm-v { font-size: 12.5px; font-weight: 650; color: var(--ink); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Plant › Sequence: the step chart, and the selected step beside it */
+.seq-tools { gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+.seq-cols { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+.seq-side { position: sticky; top: 72px; }
+.sp-card .conds { font-size: 14.5px; margin-top: 6px; }
+.sp-time { display: grid; gap: 6px; }
+.sp-time .vb-track { height: 12px; }
+.sp-tr { border-top: 1px solid var(--line); padding-top: 10px; }
+@media (max-width: 960px) { .seq-cols { grid-template-columns: minmax(0, 1fr); } .seq-side { position: static; order: -1; } }
+@media (max-width: 600px) {
+  .vbars { gap: 10px; margin-top: 12px; }
+  .vb-h b { font-size: 17px; }
+  .vb-plain { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px 10px; }
+  .vb-plain .k span { font-size: 11px; }
+}

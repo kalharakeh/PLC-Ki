@@ -72,37 +72,57 @@
     return best ? best[1] : null;
   }
 
-  function chartRow(sr, tr) {
-    const tag = tagOf(sr.id) || {};
-    const vals = sr.points.map((p) => p[1]).filter((v) => v != null);
-    const unit = sr.unit ? " " + esc(sr.unit) : "";
-    let lo = Math.min(...vals), hi = Math.max(...vals);
-    if (!vals.length) { lo = 0; hi = 1; }
-    if (hi - lo < 1e-9) { const pad = Math.abs(hi) * 0.1 || 1; lo -= pad; hi += pad; }
-    const y = (v) => 92 - ((v - lo) / (hi - lo)) * 84;      // a little room at top and bottom
-    let d = "", area = "", started = false, firstX = 0, lastX = 0;
-    for (const [t, v] of sr.points) {
+  /** The scale of a value: 0 to 100 for a percentage, else from 0 (or below, for negative values) to the highest value,
+   *  so a flat level reads as a level and not as a line in the middle of −1..1. */
+  function scaleOf(unit, values) {
+    let lo = values.length ? Math.min(0, ...values) : 0, hi = values.length ? Math.max(0, ...values) : 1;
+    if (String(unit || "").trim() === "%") { lo = Math.min(0, lo); hi = Math.max(100, hi); }
+    if (hi - lo < 1e-9) hi = lo + 1;
+    return { lo, hi };
+  }
+  /** The SVG path of a series over the time window; the last value holds until now. */
+  function pathOf(points, tr, y) {
+    let d = "", started = false, firstX = 0, lastX = 0, last = null;
+    for (const [t, v] of points) {
       if (v == null) { started = false; continue; }
       const px = (x(t, tr) * 10).toFixed(1), py = y(v).toFixed(1);
-      if (!started) { d += `M${px} ${py}`; started = true; if (!area) firstX = px; } else d += `L${px} ${py}`;
-      lastX = px;
+      if (!started) { if (!d) firstX = px; d += `M${px} ${py}`; started = true; } else d += `L${px} ${py}`;
+      lastX = px; last = v;
     }
-    // the last value holds until now
-    const last = vals.length ? vals[vals.length - 1] : null;
     if (last != null && started) { d += `L1000 ${y(last).toFixed(1)}`; lastX = 1000; }
-    area = d ? `${d}L${lastX} 100L${firstX} 100Z` : "";
+    return { d, firstX, lastX, last };
+  }
+  /** A setpoint series is drawn dashed on the chart of its value: TempSP on Temp, M201_SpeedSP on M201_SpeedPV. */
+  function baseOf(sp, list) {
+    if (!/SP$/i.test(sp.id) && !/setpoint/i.test(sp.label || "")) return null;
+    const ids = [sp.id.replace(/_?SP$/i, ""), sp.id.replace(/SP$/i, "PV")];
+    return list.find((b) => b !== sp && ids.includes(b.id) && (b.unit || "") === (sp.unit || "")) || null;
+  }
+
+  function chartRow(sr, tr, sp) {
+    const tag = tagOf(sr.id) || {};
+    const vals = sr.points.map((p) => p[1]).filter((v) => v != null);
+    const spVals = sp ? sp.points.map((p) => p[1]).filter((v) => v != null) : [];
+    const unit = sr.unit ? " " + esc(sr.unit) : "";
+    const { lo, hi } = scaleOf(sr.unit, [...vals, ...spVals]);
+    const y = (v) => 92 - ((v - lo) / (hi - lo)) * 84;      // a little room at top and bottom
+    const { d, firstX, lastX, last } = pathOf(sr.points, tr, y);
+    const area = d ? `${d}L${lastX} 100L${firstX} 100Z` : "";
+    const spPath = sp ? pathOf(sp.points, tr, y) : null;
     const marks = tr.alarms.map((a) => `<i class="tr-al ${a.came ? "came" : "went"}" style="left:${x(a.time, tr).toFixed(2)}%" title="${esc(hhmmss(a.time) + " " + a.text)}"></i>`).join("");
     const t = hover != null ? tr.from + hover * (tr.to - tr.from) : null;
     const hv = t != null ? valueAt(sr.points, t) : null;
+    const spNow = sp ? (t != null ? valueAt(sp.points, t) : spPath.last) : null;
     return `<div class="tr-row">
       <div class="tr-lab"><span class="tr-name" title="${esc(sr.id)}">${esc(sr.label)}</span>
         <b class="tr-now">${num(hover != null ? hv : last, tag)}${unit}</b>
-        <span class="tr-rng">${vals.length ? `${num(Math.min(...vals), tag)} to ${num(Math.max(...vals), tag)}` : "no values yet"}</span>
+        <span class="tr-rng">${sp ? `<span class="tr-sp-k" aria-hidden="true"></span>setpoint ${num(spNow, tagOf(sp.id))}${unit}` : vals.length ? `${num(Math.min(...vals), tag)} to ${num(Math.max(...vals), tag)}` : "no values yet"}</span>
         <button type="button" class="tr-x" data-tr-remove="${esc(sr.id)}" aria-label="Remove ${esc(sr.label)} from the chart" title="Remove from the chart">×</button></div>
       <div class="tr-plot" data-plot>
         <svg viewBox="0 0 1000 100" preserveAspectRatio="none" aria-hidden="true">
           <line x1="0" y1="50" x2="1000" y2="50" class="tr-grid"/>
           ${area ? `<path class="tr-area" d="${area}"/><path class="tr-line" d="${d}" vector-effect="non-scaling-stroke"/>` : ""}
+          ${spPath && spPath.d ? `<path class="tr-sp" d="${spPath.d}" vector-effect="non-scaling-stroke"/>` : ""}
         </svg>
         <span class="tr-y hi">${num(hi, tag)}</span><span class="tr-y lo">${num(lo, tag)}</span>
         ${marks}
@@ -130,11 +150,10 @@
 
   function axisRow(tr, label = true) {
     const span = tr.to - tr.from;
-    const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => {
-      const ago = (1 - f) * span;
-      const txt = f === 1 ? "now" : span <= 180000 ? "−" + Math.round(ago / 1000) + " s" : "−" + (Math.round(ago / 6000) / 10).toString().replace(/\.0$/, "") + " min";
-      return `<span class="tr-tick" style="left:${f * 100}%">${txt}</span>`;
-    }).join("");
+    // Clock times ("18:12"), with seconds when the window is short; the right end is "now"
+    const clock = (ms) => new Date(ms).toLocaleTimeString([], span <= 600000 ? { hour: "2-digit", minute: "2-digit", second: "2-digit" } : { hour: "2-digit", minute: "2-digit" });
+    const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) =>
+      `<span class="tr-tick" style="left:${f * 100}%">${f === 1 ? "now" : clock(tr.from + f * span)}</span>`).join("");
     const t = hover != null ? tr.from + hover * span : null;
     return `<div class="tr-row axis ${label ? "" : "nolab"}">${label ? `<div class="tr-lab"></div>` : ""}<div class="tr-plot axis">${ticks}
       ${t != null ? `<span class="tr-tick at" style="left:${(hover * 100).toFixed(2)}%">${hhmmss(t)}</span>` : ""}</div></div>`;
@@ -155,6 +174,12 @@
     const short = (trendMin || tr.keepMinutes) * 60000 - (tr.to - tr.from) > 30000;
     const note = short ? `PLC-Ki started watching ${dur(tr.to - tr.from)} ago, so the charts start there.` : "";
     const ids = tr.series.map((s) => s.id);
+    // A setpoint goes on its value's chart as a dashed line, not on a chart of its own
+    const spFor = new Map(), onBase = new Set();
+    tr.series.forEach((s) => { const b = baseOf(s, tr.series); if (b && !spFor.has(b.id)) { spFor.set(b.id, s); onBase.add(s.id); } });
+    const admin = state.user && state.user.role === "admin";
+    const keep = admin ? `<a href="#/setup/settings">PLC-Ki keeps ${tr.keepMinutes} minutes</a>, in memory only (up to 240 in Setup › Settings).`
+      : `PLC-Ki keeps ${tr.keepMinutes} minutes, in memory only. An administrator can set up to 240.`;
     return `<div class="trends">
       <div class="toolbar tr-tools">${windowChoice(tr)}
         <input type="search" list="tr-choices" id="tr-add" placeholder="Add a value to the chart" aria-label="Add a value to the chart" autocomplete="off">
@@ -162,11 +187,11 @@
         ${picked ? `<button type="button" class="linkbtn" data-tr-reset>Back to the usual values</button>` : ""}
       </div>
       <div class="tr-rows" data-tr-rows>
-        ${tr.series.length ? tr.series.map((s) => chartRow(s, tr)).join("") : `<p class="muted">No measured values in this machine model to draw. Add one above.</p>`}
+        ${tr.series.length ? tr.series.filter((s) => !onBase.has(s.id)).map((s) => chartRow(s, tr, spFor.get(s.id))).join("") : `<p class="muted">No measured values in this machine model to draw. Add one above.</p>`}
         ${tr.steps.map((q) => bandRow(q, tr)).join("")}
         ${axisRow(tr)}
       </div>
-      <p class="faint small" style="margin:10px 0 0">${note ? esc(note) + " " : ""}Move along a chart to read the values at that time. Red marks: an alarm came. Grey marks: it went. PLC-Ki keeps ${tr.keepMinutes} minutes, in memory only.</p>
+      <p class="faint small" style="margin:10px 0 0">${note ? esc(note) + " " : ""}Move along a chart to read the values at that time. Dashed line: the setpoint. Red marks: an alarm came. Grey marks: it went. ${keep}</p>
     </div>`;
   }
 
@@ -264,9 +289,6 @@
     return `<li class="gs ${isCur ? "cur" + (q.halted ? " halted" : "") : ""} ${sel ? "sel" : ""} ${i === 0 ? "init" : ""} ${main ? "link" : "end"}" id="gs-${s.no}">
       ${from.length ? `<div class="gs-in">${from.map((f) => `<button type="button" class="linkbtn" data-gs-go="${f}">from ${f}</button>`).join(", ")} <span aria-hidden="true">↴</span></div>` : ""}
       <button type="button" class="gs-box" data-gs="${s.no}" aria-expanded="${sel}"><b class="gs-no">${s.no}</b><span class="gs-name">${esc(s.name)}</span>${time ? `<span class="gs-t">${esc(time)}</span>` : ""}</button>
-      ${sel ? `<div class="gs-more">${s.does ? `<p><span class="muted">This step should:</span> ${esc(fill(s.does))}</p>` : ""}${s.limit ? `<p class="faint">${esc(fill(s.limit))}</p>` : ""}
-        ${e ? `<p class="faint small">In the last minutes: ran ${e.n}×${e.done ? `, on average ${dur(e.total / e.done)}, longest ${dur(e.max)}` : ""}.</p>` : ""}
-        ${!s.does && !s.limit && !e ? `<p class="faint small">No more is known about this step.</p>` : ""}</div>` : ""}
       ${jumps.map((t) => `<div class="gt jump ${ready(t)}"><i class="gt-bar" aria-hidden="true"></i>${condsOf(t)}
         <button type="button" class="gt-to" data-gs-go="${t.to}" title="Jump to step ${t.to}">↷ ${t.to} ${esc(stepName(def, t.to))}</button></div>`).join("")}
       ${main ? `<div class="gt main ${ready(main)}"><i class="gt-bar" aria-hidden="true"></i>${condsOf(main)}</div>` : ""}
@@ -283,67 +305,102 @@
     return `<ol class="gchain">${def.steps.map((s, i) => chainStep(def, q, s, i, incoming, stats)).join("")}</ol>`;
   }
 
-  PK.view("sequence", {
-    live: true,
-    needsValues: true,          // to show settings such as {LevelA} with their value
-    mount(page, params) {
-      selStep = params[1] != null ? Number(params[1]) : null;
+  /** "1 min 20 s", "45 s", "1 h 5 min" -> ms (the status sends the time in step as text). */
+  function msOf(text) {
+    const m = String(text || "").match(/(\d+(?:[.,]\d+)?)\s*(h|min|s|ms)\b/g);
+    if (!m) return null;
+    return m.reduce((t, p) => { const [, n, u] = /(\d+(?:[.,]\d+)?)\s*(h|min|s|ms)/.exec(p); return t + parseFloat(n.replace(",", ".")) * { h: 3600000, min: 60000, s: 1000, ms: 1 }[u]; }, 0);
+  }
+  /** The time limit of a step from its model text: "Longer than 600 s raises A18" -> 600 000 ms. */
+  const limitMs = (s) => (s && s.limit ? msOf((fill(s.limit).match(/\d+(?:[.,]\d+)?\s*(?:h|min|s)\b/) || [])[0]) : null);
+
+  /** The selected step on the right of the chart: its time against the limit, what it does, and one row per condition. */
+  function stepPanel(def, q, stats, no) {
+    const s = def.steps.find((x) => x.no === no);
+    if (!s) return `<div class="card"><p class="muted" style="margin:0">Tap a step in the chart to see it here.</p></div>`;
+    const isCur = q && q.step === s.no;
+    const e = stats.get(s.no);
+    const lim = limitMs(s);
+    const t = isCur ? msOf(q.timeInStep) : e && e.last != null ? e.last : null;
+    const over = lim && t != null && t > lim;
+    const bar = t != null && lim ? `<div class="sp-time"><div class="row"><span>${isCur ? "In this step" : "Last time it took"} <b>${dur(t)}</b></span><span class="spacer"></span><span class="faint">limit ${dur(lim)}</span></div>
+        <div class="vb-track"><i class="vb-fill ${over ? "bad" : t > lim * 0.8 ? "warn" : ""}" style="width:${Math.min(100, (t / lim) * 100).toFixed(1)}%"></i></div></div>`
+      : t != null ? `<p style="margin:0">${isCur ? "In this step for" : "Last time it took"} <b>${dur(t)}</b>. No time limit is known.</p>` : "";
+    const live = isCur ? q.next : [];
+    const trans = s.next.map((tn) => {
+      const l = live.find((n) => n.to === tn.to);
+      const rows = l ? l.conditions.map((c) => PK.condHeld(c)).join("")
+        : (tn.conditions || []).map((c) => `<li><span class="mark unk" aria-label="not checked now">·</span><span>${esc(fill(c.text))}</span></li>`).join("");
+      return `<div class="sp-tr"><div class="row"><b>To step ${tn.to} ${esc(stepName(def, tn.to))}</b><span class="spacer"></span>${l ? `<span class="pill ${l.ready ? "ok" : l.ready === false ? "warn" : ""} small-pill">${l.ready ? "ready" : l.ready === false ? "waiting" : "not known"}</span>` : ""}</div>
+        ${rows ? `<ul class="conds">${rows}</ul>` : `<p class="faint small" style="margin:4px 0 0">No condition.</p>`}</div>`;
+    }).join("");
+    return `<div class="card stack sp-card">
+      <div class="row"><h3 style="margin:0">Step ${s.no} ${esc(s.name)}</h3>${isCur ? `<span class="now-tag">now</span>` : ""}</div>
+      ${bar}
+      ${s.does ? `<p style="margin:0"><span class="muted">This step should:</span> ${esc(fill(s.does))}</p>` : ""}
+      ${s.limit ? `<p class="faint small" style="margin:0">${esc(fill(s.limit))}</p>` : ""}
+      ${e ? `<p class="faint small" style="margin:0">In the last minutes: ran ${e.n}×${e.done ? `, on average ${dur(e.total / e.done)}, longest ${dur(e.max)}` : ""}.</p>` : ""}
+      ${trans ? `<div class="stack" style="gap:12px">${trans}</div>` : `<p class="faint small" style="margin:0">The last step: no transition goes on from here.</p>`}
+    </div>`;
+  }
+
+  // The Plant tab "Sequence": #/plant/sequence/<id>/<step>. The old #/sequence/<id>/<step> links lead there.
+  let stepParam;          // the step in the address last time, to follow it when it changes
+  const seqBase = (def) => "#/plant/sequence" + (def ? "/" + encodeURIComponent(def.id) : "");
+  /** The step chart with the selected step beside it, then the step timeline. "" when the machine has no sequence. */
+  function sequenceBody(id, step) {
+    const s = state.status, m = state.model;
+    if (!s || !m) return `<p class="muted">Loading the sequence…</p>`;
+    const def = seqDef(id) || m.sequences[0];
+    if (!def) return `<p class="muted">The imported program has no GRAPH sequence or step chain.</p>`;
+    const q = s.sequences.find((x) => x.id === def.id);
+    if (step !== stepParam || def.id !== seqShown) {
+      stepParam = step; seqShown = def.id;
+      selStep = step != null && step !== "" ? Number(step) : null;
       jumpTo = selStep;
-      seqShown = params[0];
-      loadTrend(true);
-      PK.loadProgram && PK.loadProgram().then(PK.draw);
-      PK.draw();
+    }
+    const tr = needTrend();
+    const spans = tr ? ((tr.steps.find((x) => x.id === def.id) || {}).spans || []) : [];
+    const stats = tr ? stepStats(spans, tr) : new Map();
+    const others = m.sequences.filter((d) => d.id !== def.id);
+    const blk = PK.blockOf(def.block);
+    const shown = selStep != null ? selStep : q ? q.step : null;
+    return `<div class="row seq-tools">${m.sequences.length > 1 ? `<span class="small">${[def, ...others].map((d) => d === def ? `<b>${esc(d.name)}</b>` : `<a href="${seqBase(d)}">${esc(d.name)}</a>`).join(" · ")}</span>` : `<b>${esc(def.name)}</b>`}
+        <span class="spacer"></span>${q && q.step != null ? `<button class="btn b small" data-gs-go="${q.step}">Go to step ${q.step}</button>` : ""}
+        ${blk ? `<a class="btn b small" href="#/program/${encodeURIComponent(blk)}/as-rungs">Show in the program</a>` : ""}
+        <button class="btn b small" data-ask="Explain what ${esc(def.name)} does, step by step, and where it is now.">Ask</button></div>
+      <div class="seq-cols">
+        <div><p class="faint small" style="margin:0 0 10px">${def.steps.length} steps, read like the GRAPH editor: each step, the transition under it, and jumps (↷) to other steps. Tap a step to see it on the right.</p>
+          <div class="gwrap">${stepChart(def, q, stats)}</div></div>
+        <aside class="seq-side">${stepPanel(def, q, stats, shown)}</aside>
+      </div>
+      <h2 style="margin-top:34px">Step timeline</h2><p class="sub">Which step ran when, and how long each one took.</p>${tr ? timeline(def, spans, tr) : `<p class="muted">Loading…</p>`}`;
+  }
+  /** Clicks on the step chart (called from the Plant page's after()). */
+  function bindSequence(page, id) {
+    const def = seqDef(id) || (state.model && state.model.sequences[0]);
+    const base = seqBase(def);
+    const pick = (no) => { selStep = no; stepParam = no != null ? String(no) : undefined; PK.setHash(base + (no != null ? "/" + no : "")); PK.draw(); };
+    page.querySelectorAll("[data-gs]").forEach((b) => b.onclick = () => {
+      const no = Number(b.dataset.gs);
+      pick(selStep === no ? null : no);
+      // One column (phone): the step's details are above the chart, so bring them into view
+      if (innerWidth <= 960) setTimeout(() => { const p = document.querySelector(".seq-side"); if (p) p.scrollIntoView({ block: "start", behavior: "instant" }); }, 0);
+    });
+    page.querySelectorAll("[data-gs-go]").forEach((b) => b.onclick = () => { jumpTo = Number(b.dataset.gsGo); pick(jumpTo); });
+    if (jumpTo != null) {
+      const el = page.querySelector(`#gs-${jumpTo}`);
+      // after this redraw has put the page back where it was
+      if (el) { jumpTo = null; setTimeout(() => el.scrollIntoView({ block: "center", behavior: "instant" }), 0); }
+    }
+  }
+
+  // Old links (#/sequence/<id>/<step>, from notes, QR pages or bookmarks) open the Plant tab
+  PK.view("sequence", {
+    mount(page, params) {
+      location.replace("#/plant/sequence" + params.filter((p) => p != null && p !== "").map((p) => "/" + encodeURIComponent(p)).join(""));
     },
-    leave() { hover = null; },
-    render(params) {
-      const s = state.status, m = state.model;
-      if (!s || !m) return hero({ title: "Loading the sequence…", sub: "One moment." });
-      const def = seqDef(params[0]) || m.sequences[0];
-      if (!def) return hero({ title: "This machine has no sequence.", sub: "The imported program has no GRAPH sequence or step chain.", actions: `<a class="btn" href="#/plant">Back to the plant</a>` });
-      const q = s.sequences.find((x) => x.id === def.id);
-      const tr = needTrend();
-      const spans = tr ? ((tr.steps.find((x) => x.id === def.id) || {}).spans || []) : [];
-      const stats = tr ? stepStats(spans, tr) : new Map();
-      const [stText, stCls] = !q ? ["", ""] : q.halted ? ["Halted", "bad"] : q.next.some((n) => n.ready === false) ? ["Waiting", "warn"] : ["Running", "ok"];
-      const others = m.sequences.filter((d) => d.id !== def.id);
-      const blk = PK.blockOf(def.block);
-      return hero({
-        cls: "hero compact",
-        eyebrow: `<a class="crumb" href="#/plant">Plant</a> › ${esc(def.name)}${q ? ` <span class="pill ${stCls}"><span class="dot"></span>${stText}</span>` : ""}`,
-        title: q && q.step != null ? `Step ${q.step}: ${esc(q.stepName)}` : esc(def.name),
-        sub: esc(q ? q.explanation : ""),
-        actions: `${q && q.step != null ? `<button class="btn" data-gs-go="${q.step}">Go to step ${q.step} in the chart</button>` : ""}
-          ${blk ? `<a class="btn b" href="#/program/${encodeURIComponent(blk)}/as-rungs">Show in the program</a>` : ""}
-          <button class="btn b" data-ask="Explain what ${esc(def.name)} does, step by step, and where it is now.">Ask</button>`,
-        extra: others.length ? `<div class="seq-others small">Other sequences: ${others.map((d) => `<a href="#/sequence/${encodeURIComponent(d.id)}">${esc(d.name)}</a>`).join(" · ")}</div>` : "",
-      })
-        + sec("alt", `<h2>Step timeline</h2><p class="sub">Which step ran when, and how long each one took.</p>${tr ? timeline(def, spans, tr) : `<p class="muted">Loading…</p>`}`)
-        + sec("", `<h2>Step chart</h2><p class="sub">${def.steps.length} steps, read like the GRAPH editor: each step, the transition under it, and jumps (↷) to other steps. Tap a step for its details.</p>
-            <div class="gwrap">${stepChart(def, q, stats)}</div>`);
-    },
-    after(page, params) {
-      // #/sequence (no id) shows the first sequence: name it in the address, never "#/sequence//10"
-      const def = seqDef(params[0]) || (state.model && state.model.sequences[0]);
-      const base = "#/sequence" + (def ? "/" + encodeURIComponent(def.id) : "");
-      page.querySelectorAll("[data-gs]").forEach((b) => b.onclick = () => {
-        const no = Number(b.dataset.gs);
-        selStep = selStep === no ? null : no;
-        PK.setHash(base + (selStep != null ? "/" + selStep : ""));
-        PK.draw();
-      });
-      page.querySelectorAll("[data-gs-go]").forEach((b) => b.onclick = () => {
-        selStep = Number(b.dataset.gsGo); jumpTo = selStep;
-        PK.setHash(base + "/" + selStep);
-        PK.draw();
-      });
-      if (jumpTo != null) {
-        const el = page.querySelector(`#gs-${jumpTo}`);
-        // after this redraw has put the page back where it was
-        if (el) { jumpTo = null; setTimeout(() => el.scrollIntoView({ block: "center", behavior: "instant" }), 0); }
-      }
-      bindTrends(page);
-      page.querySelectorAll("[data-ask]").forEach((b) => b.onclick = () => window.PKAsk && window.PKAsk.open(b.dataset.ask));
-    },
+    render() { return ""; },
   });
 
   // ---------- plant map ----------
@@ -502,7 +559,7 @@
     ch.devices.forEach((e) => parts.push(`<li class="cc cc-dev"><a href="#/plant/devices/${encodeURIComponent(e.id)}"><span class="cc-t">${esc(e.name)}</span><span class="cc-n">${esc(devWord(e))}</span></a></li>`));
     const bySeq = new Map();
     ch.waits.forEach((w) => bySeq.set(w.seq, [...(bySeq.get(w.seq) || []), w.cond]));
-    bySeq.forEach((conds, q) => parts.push(`<li class="cc cc-step"><a href="#/sequence/${encodeURIComponent(q.id)}${q.step != null ? "/" + q.step : ""}"><span class="cc-t">Step ${esc(q.step ?? "?")} can't go on</span><span class="cc-n">${conds.map((c) => esc(c.text)).join("; ")}</span></a></li>`));
+    bySeq.forEach((conds, q) => parts.push(`<li class="cc cc-step"><a href="#/plant/sequence/${encodeURIComponent(q.id)}${q.step != null ? "/" + q.step : ""}"><span class="cc-t">Step ${esc(q.step ?? "?")} can't go on</span><span class="cc-n">${conds.map((c) => esc(c.text)).join("; ")}</span></a></li>`));
     return `<ol class="cchain" aria-label="Cause, root first">${parts.join("")}</ol>`;
   }
   /** A condition line (PK.cond) that also says which blocked device it waits for. */
@@ -522,12 +579,83 @@
     const many = groups.size > 1;
     const tile = (e) => {
       const look = devLook(e);
-      const said = `${e.name}: ${e.state}` + look.alarms.map((a) => `. ${a.severity === "WARNING" ? "Warning" : "Alarm"} ${a.id}: ${a.text}`).join("");
+      const kv = keyValue(e);
+      const said = `${e.name}: ${e.state}${kv ? `, ${kv.label} ${kv.text}` : ""}` + look.alarms.map((a) => `. ${a.severity === "WARNING" ? "Warning" : "Alarm"} ${a.id}: ${a.text}`).join("");
       return `<div class="pm-dev lv-${esc(look.lvl)} ${e.id === selected ? "sel" : ""} ${ring && ring.includes(e.id) ? "ring" : ""}" data-eq="${esc(e.id)}" role="button" tabindex="0" aria-label="${esc(said)}" title="${esc(said)}">
-        <span class="pm-sym">${symbolFor(e.kind, e.id)}</span><b>${esc(e.id)}</b><span class="pm-st">${esc(look.word)}</span></div>`;
+        <span class="pm-sym">${symbolFor(e.kind, e.id)}</span><b>${esc(e.id)}</b><span class="pm-st">${esc(look.word)}</span>${kv ? `<span class="pm-v" title="${esc(kv.label)}">${esc(kv.text)}</span>` : ""}</div>`;
     };
     return `<div class="pmap">${[...groups].map(([g, list]) => `<div class="pm-grp">${many ? `<div class="pm-h">${esc(g || "Other devices")}</div>` : ""}<div class="pm-devs">${list.map(tile).join("")}</div></div>`).join("")}
       <div class="pm-key small"><span class="lv-ok">running or fine</span><span class="lv-idle">off</span><span class="lv-blocked">asked for but blocked</span><span class="lv-warn">warning</span><span class="lv-fault">fault</span></div></div>`;
+  }
+
+  // ---------- the Plant header: measured values as bars ----------
+  const reEsc = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  /** Interlock limits on a tag from the model: "Level > 20" in M201's interlocks -> { v: 20, op: ">", dev, met, asked }. */
+  function limitsOf(id) {
+    const m = state.model, s = state.status;
+    if (!m) return [];
+    const re = new RegExp("^\\s*" + reEsc(id) + "\\s*(>=|>|<=|<)\\s*(-?\\d+(?:\\.\\d+)?)\\s*$");
+    const out = [];
+    m.equipment.forEach((e) => (e.permits || []).forEach((p, i) => {
+      const mm = re.exec(p.expr || "");
+      if (!mm) return;
+      const st = s && s.equipment.find((x) => x.id === e.id);
+      out.push({ v: Number(mm[2]), op: mm[1], dev: e, met: st && st.permits[i] ? st.permits[i].met : null, asked: !!(st && st.requested === true) });
+    }));
+    return out;
+  }
+  /** The setpoint series of a value in the trend data (TempSP for Temp), or null. */
+  const setpointOf = (id, tr) => tr && tr.series.find((sp) => { const b = baseOf(sp, tr.series); return b && b.id === id; }) || null;
+  /** A small line of the last minutes, scaled to its own range: the shape is what matters here. */
+  function sparkline(sr) {
+    const pts = sr ? sr.points.filter((p) => p[1] != null) : [];
+    if (pts.length < 2) return "";
+    const t0 = pts[0][0], t1 = pts[pts.length - 1][0] || t0 + 1;
+    const vs = pts.map((p) => p[1]);
+    let lo = Math.min(...vs), hi = Math.max(...vs);
+    if (hi - lo < 1e-9) { lo -= 1; hi += 1; }
+    const d = pts.map(([t, v], i) => `${i ? "L" : "M"}${(((t - t0) / Math.max(1, t1 - t0)) * 100).toFixed(1)} ${(22 - ((v - lo) / (hi - lo)) * 20).toFixed(1)}`).join("");
+    return `<svg class="vb-spark" viewBox="0 0 100 24" preserveAspectRatio="none" aria-hidden="true"><path d="${d}" vector-effect="non-scaling-stroke"/></svg>`;
+  }
+  /**
+   * The Plant header's values: a number with a unit gets a bar with each interlock limit marked and a sparkline
+   * ("Tank level 15 %, ▏20 % needed for Agitator M201"); switches and counters stay plain numbers.
+   */
+  function valueBars(overview) {
+    const tr = needTrend();
+    const unitOf = (v) => { const t = tagOf(v.id); return t && t.unit ? t.unit : ""; };
+    const isBar = (v) => typeof v.raw === "number" && unitOf(v);
+    const bars = overview.filter(isBar), plain = overview.filter((v) => !isBar(v));
+    const html = bars.map((v) => {
+      const unit = unitOf(v), tag = tagOf(v.id) || {};
+      const lims = limitsOf(v.id);
+      const spSr = setpointOf(v.id, tr);
+      const sp = spSr ? (spSr.points.filter((p) => p[1] != null).pop() || [])[1] : null;
+      const sr = tr && tr.series.find((x) => x.id === v.id);
+      const max = unit.trim() === "%" ? 100 : Math.max(1, v.raw, sp || 0, ...lims.map((l) => l.v)) * 1.2;
+      const pos = (n) => Math.max(0, Math.min(100, (n / max) * 100)).toFixed(1);
+      // The limit to name: one that is not met for a device the program asks for now. A limit of a device that is
+      // not asked for (the agitator in the fill step) is only marked on the bar: it holds nothing back yet.
+      const miss = lims.find((l) => l.met === false && l.asked);
+      const need = miss ? `${miss.v} ${unit} ${miss.op.startsWith(">") ? "needed" : "at most"} for ${miss.dev.name}` : "";
+      return `<div class="vbar ${miss ? "short" : ""}">
+          <div class="vb-h"><span class="vb-l">${esc(v.label)}</span><b>${esc(v.text)}</b></div>
+          <div class="vb-track" title="${esc(lims.map((l) => `${l.dev.name} needs ${v.label} ${l.op} ${l.v} ${unit}`).join("\n"))}">
+            <i class="vb-fill ${miss ? "warn" : ""}" style="width:${pos(Math.max(0, v.raw))}%"></i>
+            ${lims.map((l) => `<i class="vb-lim ${l.met === false ? "no" : ""}" style="left:${pos(l.v)}%"></i>`).join("")}
+            ${sp != null ? `<i class="vb-sp" style="left:${pos(sp)}%" title="Setpoint ${esc(num(sp, tag))} ${esc(unit)}"></i>` : ""}</div>
+          <div class="vb-f"><span>${need ? `<span class="vb-need">▏${esc(need)}</span>` : sp != null ? `setpoint ${esc(num(sp, tag))} ${esc(unit)}` : ""}</span>${sparkline(sr)}</div>
+        </div>`;
+    }).join("");
+    // Switches and counters share the row with the bars, as a small block of numbers, so the header stays short
+    const nums = plain.length ? `<div class="vb-plain">${plain.map((v) => `<div class="k"><b>${esc(v.text)}</b><span>${esc(v.label)}</span></div>`).join("")}</div>` : "";
+    return html || nums ? `<div class="vbars">${html}${nums}</div>` : "";
+  }
+
+  /** The value that says most about a device on its tile: its actual speed, its temperature… (not a setpoint). */
+  function keyValue(e) {
+    const nums = (e.values || []).filter((v) => typeof v.raw === "number" && !/SP$/i.test(v.id) && !/setpoint/i.test(v.label));
+    return nums.find((v) => /actual|PV$|\bvalue\b/i.test(v.label + " " + v.id)) || nums[0] || null;
   }
 
   /** The devices around the given ones, for a small map: their own station, at most max, the given ones first. */
@@ -539,5 +667,5 @@
     return [...mine, ...near].slice(0, Math.max(max, mine.length)).sort((x, y) => all.indexOf(x) - all.indexOf(y));
   }
 
-  window.PKVis = { trends, bindTrends, plantMap, around, loadTrend, symbolFor };
+  window.PKVis = { trends, bindTrends, plantMap, around, valueBars, sequenceBody, bindSequence, loadTrend, symbolFor };
 })();
