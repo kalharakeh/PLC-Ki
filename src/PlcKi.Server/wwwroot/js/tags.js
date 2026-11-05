@@ -150,10 +150,18 @@
     const isDb = m && data && data.dbs.some((d) => d.name === m[1]);
     return isDb ? `<a href="#/tags/db/${encodeURIComponent(m[1])}">${esc(sym)}</a>` : esc(sym);
   }
-  W.providers.program = () => blockShown;
+  // The Program page also asks for the open block's own members ("Station".XV101.Out), up to the server's 300
+  let programExtra = () => [];
+  W.providers.program = () => {
+    const extra = programExtra().slice(0, 300), have = new Set(extra.map((t) => t.symbol));
+    return extra.concat(blockShown.filter((t) => !have.has(t.symbol)).slice(0, 300 - extra.length));
+  };
   /** Other pages (Plant > Settings) show live values of symbols outside the model the same way. */
   const watch = (page, provider) => { W.providers[page] = provider; };
-  window.PKTags = { blockTagsHtml, watch, live, wire: (root) => window.PKWrite && PKWrite.wire(root, current) };
+  /** The last answer for a symbol, exactly as it was asked: { value, error } or undefined. */
+  const value = (sym) => W.values[sym];
+  window.PKTags = { blockTagsHtml, watch, live, value, programSymbols: (fn) => { programExtra = fn; },
+    wire: (root) => window.PKWrite && PKWrite.wire(root, current) };
 
   PK.view("tags", {
     live: false,
