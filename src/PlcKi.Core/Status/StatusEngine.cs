@@ -52,7 +52,7 @@ public sealed record MachineStatus(
     List<string> Summary, List<ValueView> Overview,
     List<SequenceStatus> Sequences, List<EquipmentStatus> Equipment,
     List<AlarmStatus> ActiveAlarms, List<ExchangeStatus> Exchange,
-    Dictionary<string, string> TagErrors, List<SettingStatus>? Settings = null)
+    Dictionary<string, string> TagErrors, List<SettingStatus>? Settings = null, CpuStatus? Cpu = null)
 {
     /// <summary>The raw values of this read, by tag id, for the machine memory and the production log (not sent to the pages).</summary>
     [System.Text.Json.Serialization.JsonIgnore]
@@ -163,15 +163,30 @@ public sealed class StatusEngine
 
     public MachineModel Model => _model;
 
-    public MachineStatus Evaluate(Snapshot snap, PlcLinkInfo connection)
+    /// <param name="cpu">The CPU's mode as last read; null when the source cannot tell. Only used while the PLC is read.</param>
+    public MachineStatus Evaluate(Snapshot snap, PlcLinkInfo connection, CpuStatus? cpu = null)
     {
         object? Get(string id) => snap.Values.TryGetValue(id, out var v) ? v : null;
         bool hasValues = snap.Values.Count > 0;
+        if (connection.State is not ("connected" or "snapshot")) cpu = null;
+        // In STOP the program does not run: the values are its last state, nothing waits for anything and nothing is
+        // held back by an interlock. Saying "waiting for" or "blocked" then would send people after the wrong cause.
+        var stop = cpu is { Stopped: true } ? cpu : null;
 
         var sequences = _model.Sequences.Select(s => EvaluateSequence(s, Get)).ToList();
         var halted = sequences.Where(q => q.Halted).Select(q => q.Name).ToList();
         var equipment = LinkDevices(_model.Equipment.Select(e => EvaluateEquipment(e, Get, halted)).ToList());
         sequences = LinkSteps(sequences, equipment);
+        if (stop != null)
+        {
+            var word = stop.Word ?? "STOP";
+            sequences = sequences.Select(q => q with { Next = new(), Explanation = StoppedText(q, word) }).ToList();
+            equipment = equipment.Select(e => e with
+            {
+                Blocking = new(), BlockedBy = null, BlockedVia = null,
+                Explanation = $"{e.Name}: not running, because the CPU is in {word}. Last state: {LowerFirst(e.State)}.",
+            }).ToList();
+        }
         var on = _model.Alarms.Where(a => Get(a.Tag) is true).ToList();
         var since = TrackAlarms(on.Select(a => a.Id), snap.Time, hasValues);
         // First-out first: by when each alarm came. Alarms that were already on at the first read have no known
@@ -199,6 +214,11 @@ public sealed class StatusEngine
         var overview = _model.Overview.Select(id => View(id, Get)).ToList();
 
         var summary = new List<string>();
+        if (stop != null)
+        {
+            summary.Add($"The PLC is in {stop.Word ?? "STOP"}{SinceText(stop, snap.Time)}: the program is not running.");
+            if (hasValues) summary.Add("The values below are its last state.");
+        }
         if (connection.State != "connected" && connection.State != "snapshot")
         {
             summary.Add(connection.State == "notset" ? "No PLC is set yet, so there are no live values."
@@ -223,13 +243,26 @@ public sealed class StatusEngine
             foreach (var st in settings.Where(st => st.Valid == false))
                 summary.Add($"Setting {st.Label} is {st.Value}: " + (st.Problem ?? "the machine cannot work with this value") + ".");
             var active = equipment.Where(e => e.Commanded == true && e.Level is "ok" or "warn").Select(e => $"{e.Name}: {e.State}").ToList();
-            if (active.Count > 0) summary.Add("Active now: " + string.Join("; ", active) + ".");
+            if (active.Count > 0 && stop == null) summary.Add("Active now: " + string.Join("; ", active) + ".");
         }
         if (snap.Errors.Count > 0)
             summary.Add($"{snap.Errors.Count} tag(s) could not be read, see the tag list.");
 
         return new MachineStatus(snap.Time, _model.Name, connection, summary, overview, sequences, equipment, alarms, exchange,
-            new Dictionary<string, string>(snap.Errors), settings) { Raw = new Dictionary<string, object?>(snap.Values) };
+            new Dictionary<string, string>(snap.Errors), settings, cpu) { Raw = new Dictionary<string, object?>(snap.Values) };
+    }
+
+    /// <summary>"Mixing sequence: not running, because the CPU is in STOP. It stopped in step 30 "Mix and heat"."</summary>
+    private static string StoppedText(SequenceStatus q, string word) =>
+        $"{q.Name}: not running, because the CPU is in {word}." +
+        (q.Step != null ? $" Its last step was {q.Step} \"{q.StepName}\"." : "");
+
+    /// <summary>" since 09:12", " since at least 09:12" when it was already so at the first read, with the date when not today.</summary>
+    public static string SinceText(CpuStatus cpu, DateTimeOffset now)
+    {
+        if (cpu.Since is not { } t) return "";
+        var when = t.ToLocalTime().Date == now.ToLocalTime().Date ? t.ToLocalTime().ToString("HH:mm") : t.ToLocalTime().ToString("d MMM HH:mm");
+        return (cpu.AtStart ? " since at least " : " since ") + when;
     }
 
     /// <summary>An alarm's checks, on the values of the read before it came (kept while it stays on). An alarm that was

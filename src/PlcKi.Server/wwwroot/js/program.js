@@ -472,7 +472,7 @@
   }
   const EMPTY = { seqs: [], eqs: [], alarms: [], active: [] };
   /** "alarm" (an alarm set here is on), "blocked" (a device here is asked to run but held back), "run" (a sequence here is in a step), or "". */
-  const ownState = (n) => n.active.length ? "alarm" : n.eqs.some((e) => e.blockedBy) ? "blocked" : n.seqs.some((q) => q.step != null) ? "run" : "";
+  const ownState = (n) => n.active.length ? "alarm" : n.eqs.some((e) => e.blockedBy) ? "blocked" : n.seqs.some((q) => q.step != null) && !PK.cpuStop() ? "run" : "";
   const RANK = { alarm: 3, blocked: 2, run: 1, "": 0 };
 
   /** The call tree from the OBs (Main first): [{ b, depth }], plus blocks no OB calls and the data blocks. */
@@ -546,15 +546,18 @@
 
   // ---- "What it does": plain words first ----
   function seqHtml(q, compact) {
-    const time = q.timeInStep ? ` · ${esc(q.timeInStep)}` : "";
-    const step = q.step != null ? `<span class="pill info">Step ${esc(String(q.step))}${q.stepName ? " · " + esc(q.stepName) : ""}${time}</span>` : `<span class="pill">Not in a step</span>`;
+    // CPU not in RUN: the step is where the program was when it stopped, not what it does now
+    const stop = PK.cpuStop();
+    const time = q.timeInStep && !stop ? ` · ${esc(q.timeInStep)}` : "";
+    const step = q.step != null ? `<span class="pill ${stop ? "" : "info"}">${stop ? "Last step" : "Step"} ${esc(String(q.step))}${q.stepName ? " · " + esc(q.stepName) : ""}${time}</span>` : `<span class="pill">Not in a step</span>`;
     const next = (q.next || []);
     const wait = next.length ? next.map((n, k) => `<p class="pg-wait">${k ? "Or, to" : "To"} go on to step ${esc(String(n.to))}${n.toName ? ` “${esc(n.toName)}”` : ""} it waits for:</p>
         <ul class="conds">${n.conditions.map(PK.cond).join("")}</ul>`).join("") : "";
-    const halted = q.halted ? `<div class="notice red" style="margin-top:10px">${icon("warn")}<div><b>The sequence is halted.</b>${q.haltReasons && q.haltReasons.length ? " " + q.haltReasons.map(esc).join(" ") : ""}</div></div>` : "";
+    const halted = stop ? `<div class="notice red" style="margin-top:10px">${icon("warn")}<div>${esc(q.explanation)}</div></div>`
+      : q.halted ? `<div class="notice red" style="margin-top:10px">${icon("warn")}<div><b>The sequence is halted.</b>${q.haltReasons && q.haltReasons.length ? " " + q.haltReasons.map(esc).join(" ") : ""}</div></div>` : "";
     return `<div class="pg-seq">
-      <div class="row" style="gap:8px 10px;flex-wrap:wrap"><b>${esc(q.name)}</b>${step}${q.halted ? `<span class="pill bad">Halted</span>` : ""}</div>
-      ${q.does ? `<p class="pg-does">${esc(q.does)}</p>` : ""}${halted}${compact ? "" : wait}
+      <div class="row" style="gap:8px 10px;flex-wrap:wrap"><b>${esc(q.name)}</b>${step}${stop ? `<span class="pill bad">Not running</span>` : q.halted ? `<span class="pill bad">Halted</span>` : ""}</div>
+      ${q.does && !stop ? `<p class="pg-does">${esc(q.does)}</p>` : ""}${halted}${compact ? "" : wait}
       ${compact ? "" : `<a class="small" href="#/sequence/${encodeURIComponent(q.id)}">Step chart and timeline ›</a>`}</div>`;
   }
   function eqRow(e) {
@@ -741,9 +744,11 @@
           <div style="flex:1;min-width:0"><b>${esc(e.name)}</b><div class="pg-blocked">${esc(e.blockedBy.charAt(0).toUpperCase() + e.blockedBy.slice(1))}</div></div>${where(e.location)}</li>`).join("")}</ul></div>`);
       if (seqs.length) now.push(`<div class="pg-sec"><h3>Sequences</h3>${seqs.map((q) => `<div class="pg-seqrow">${seqHtml(q, false).replace('<div class="pg-seq">', `<div class="pg-seq">${where(q.block)}`)}</div>`).join("")}</div>`);
       const connected = st.connection && st.connection.state === "connected";
+      const stop = PK.cpuStop(st);
       const right = `<div class="card pg-card"><div class="row" style="align-items:baseline"><h2 class="pg-h">Right now</h2><span class="spacer"></span>
           ${connected ? `<span class="pill ok"><span class="dot"></span>Live</span>` : st.connection ? `<span class="pill">${esc(st.connection.state === "snapshot" ? "Test values" : "Not live")}</span>` : ""}</div>
-        ${!alarms.length && !blocked.length ? `<div class="notice green" style="margin:10px 0 4px">${icon("check")}<div>No alarm is on and nothing the program asks for is held back.</div></div>` : ""}
+        ${stop ? `<div class="notice red" style="margin:10px 0 4px">${icon("warn")}<div><b>The PLC is in ${esc(stop.word || "STOP")} ${esc(PK.cpuSince(stop))}: the program is not running.</b> What you see is its last state. <a href="#/plc">PLC page</a></div></div>`
+          : !alarms.length && !blocked.length ? `<div class="notice green" style="margin:10px 0 4px">${icon("check")}<div>No alarm is on and nothing the program asks for is held back.</div></div>` : ""}
         ${now.join("") || (!seqs.length ? `<p class="muted">The machine notes have no sequences to follow.</p>` : "")}</div>`;
 
       // What each part is for: the units Main calls (one per machine section, as a rule), with everything inside them
