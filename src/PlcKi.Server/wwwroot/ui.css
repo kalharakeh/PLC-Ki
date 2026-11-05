@@ -366,7 +366,17 @@ a.op { color: inherit; }
 .contact.unk .sym { border-style: dashed; color: var(--muted); position: relative; }
 .contact .sym .q { position: absolute; top: -8px; right: -8px; width: 16px; height: 16px; border-radius: 50%; background: var(--muted); color: var(--bg); font: 700 11px/16px var(--font); text-align: center; }
 .contact.blocker .sym { border-color: var(--warn); color: var(--warn-ink); background: var(--warn-soft); border-width: 2px; }
-.contact .nm { font-family: var(--mono); font-size: 11px; color: var(--muted); max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Names break after "." and "_" (nameHtml adds the break points) and show up to three lines instead of being cut */
+.contact .nm { font-family: var(--mono); font-size: 11px; line-height: 1.35; color: var(--muted); max-width: 150px; text-align: center; overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; }
+/* A temp or an FC parameter: never readable, so no "?" badge, a dotted frame and a small word saying which */
+.contact.tmp .sym { border-style: dotted; background: transparent; color: var(--muted); }
+.contact.tmp .nm { -webkit-line-clamp: 4; line-clamp: 4; }
+.contact .tmp-tag { display: block; font-family: var(--font); font-size: 10px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+.lg.tmp { border-style: dotted; background: transparent; }
+.chip.tmp { background: var(--bg-alt); color: var(--muted); font-weight: 600; }
+/* A rung wider than its card: a soft fade on the right says there is more to scroll to */
+.rung.more-right { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 56px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 56px), transparent); }
 .contact.blocker .nm { color: var(--warn-ink); font-weight: 700; }
 .contact.blocker .nm::after { content: "↑ stops the output"; display: block; font-weight: 600; }
 .rung-legend { margin: 0 0 12px; }
@@ -668,7 +678,7 @@ html.frozen main#page:not(:has(.offline-page)) { filter: grayscale(1); opacity: 
 section.guide-sec { padding-block: 28px; }
 @media (max-width: 600px) { .guide-bar { grid-template-columns: minmax(0, 1fr); } }
 .contact.blocker { max-width: 200px; }
-.contact.blocker .nm { max-width: 196px; overflow: visible; white-space: normal; overflow-wrap: anywhere; text-align: center; }
+.contact.blocker .nm { display: block; -webkit-line-clamp: unset; line-clamp: none; max-width: 196px; overflow: visible; white-space: normal; overflow-wrap: anywhere; text-align: center; }
 
 /* ---------- layout (UX review B) ---------- */
 .stack > *, .card { min-width: 0; }
@@ -725,7 +735,7 @@ html.anon main [data-ask], html.anon #ask-open { display: none; }
 .eq.sel .eq-more { visibility: hidden; }
 /* Program page (rungs and text) */
 .blk-q { margin: 4px 0 6px; font-size: 14px; padding: 8px 12px; border-radius: 999px; }
-.contact.cmp .nm { max-width: 220px; white-space: normal; overflow: visible; overflow-wrap: anywhere; text-align: center; }
+.contact.cmp .nm { display: block; -webkit-line-clamp: unset; line-clamp: none; max-width: 220px; white-space: normal; overflow: visible; overflow-wrap: anywhere; text-align: center; }
 .stmt.graph .gl { display: block; padding: 0 8px; border-radius: 6px; }
 .stmt.graph .gl.cur { background: var(--accent-soft); color: var(--ink); }
 .now-tag { display: inline-block; font-family: var(--font); font-size: 11px; font-weight: 700; color: #fff; background: var(--accent); border-radius: 999px; padding: 1px 8px; margin-right: 8px; vertical-align: 1px; }
@@ -741,6 +751,13 @@ html.anon main [data-ask], html.anon #ask-open { display: none; }
 .why-off ul { margin: 8px 0 0; padding-left: 20px; font-size: 14px; line-height: 1.5; }
 .why-off li { overflow-wrap: anywhere; }
 .why-off .linkbtn { margin-left: 4px; font-size: 13px; }
+/* "State_Value is 5: Ste_Idle is on; the other 7 states are off": neutral, nothing is wrong */
+.state-sum { margin-top: 14px; padding: 12px 16px; border-radius: 14px; background: var(--bg-alt); border: 1px solid var(--line); }
+.state-sum .why-h { display: flex; gap: 8px; align-items: center; font-size: 15px; }
+.state-sum .why-h svg { width: 18px; height: 18px; flex: none; color: var(--accent); }
+.state-sum ul { margin: 8px 0 0; padding-left: 20px; font-size: 14px; line-height: 1.5; }
+.state-sum li { overflow-wrap: anywhere; }
+.state-sum .linkbtn { font-size: inherit; }
 /* Program page: the call tree on the left, plain words first, the code below */
 .blocklist a { padding-top: 5px; padding-bottom: 5px; }
 .blocklist .pl-t { display: flex; flex-direction: column; min-width: 0; flex: 1; line-height: 1.25; }
