@@ -209,8 +209,10 @@ static async Task<int> RunAppAsync(string[] appArgs, bool probe, JobService jobs
     // What happened lately (alarms came and went, steps, blocked devices), newest first. Kept in memory since PLC-Ki started.
     app.MapGet("/api/events", (MachineHistory history, string? kind, int? max) =>
     {
+        // kind: one kind or several, comma-separated ("alarm,cpu")
+        var kinds = string.IsNullOrEmpty(kind) ? null : kind.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToHashSet();
         var list = history.Events(TimeSpan.FromDays(30), DateTimeOffset.Now)
-            .Where(e => string.IsNullOrEmpty(kind) || e.Kind == kind)
+            .Where(e => kinds == null || kinds.Contains(e.Kind))
             .Reverse().Take(Math.Clamp(max ?? 50, 1, 500))
             .Select(e => new { time = e.Time, kind = e.Kind, text = e.Text });
         return Results.Ok(list);

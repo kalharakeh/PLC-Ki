@@ -75,7 +75,10 @@ public sealed class ProductionLog
                 _ => "No connection to the PLC" + (st.Connection.Error is { Length: > 0 } e ? ": " + e : "."),
             }, null);
 
-        var fault = st.ActiveAlarms.Where(a => !NotFaults.Contains(a.Severity))
+        // The program does not run in STOP: downtime, whatever the frozen alarm bits say. A failed mode read is not STOP.
+        if (st.Cpu is { Stopped: true } cpu) return ("down", $"PLC in {cpu.Word ?? "STOP"}.", null);
+
+        var fault =st.ActiveAlarms.Where(a => !NotFaults.Contains(a.Severity))
             .OrderBy(a => a.Since ?? DateTimeOffset.MaxValue).FirstOrDefault();
         if (fault != null) return ("down", $"{fault.Id} {fault.Text}".Trim(), fault.Id);
 

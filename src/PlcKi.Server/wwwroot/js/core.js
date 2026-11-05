@@ -356,8 +356,11 @@ const PK = (() => {
     }
     pill.className = "pill " + cls;
     const [main, extra] = String(text).split("|");
-    // Short in the bar; the address or test file is in the tooltip (a long file name wrapped into the menu)
-    pill.title = (extra ? main + ": " + extra + ". " : "") + "What does this mean?";
+    // Short in the bar; the address or test file is in the tooltip (a long file name wrapped into the menu).
+    // A mode read that failed is only said here, quietly: it is not a STOP.
+    const cpu = !stale && state.status && state.status.cpu;
+    pill.title = (extra ? main + ": " + extra + ". " : "") + (cpu && cpu.error ? "PLC mode unknown. " : "") + "What does this mean?";
+    renderCpuPill(stale);
     const html = `<span class="dot"></span><span>${esc(main)}</span>`;
     if (pill.innerHTML !== html) pill.innerHTML = html;
     const alarms = (state.status && state.status.activeAlarms) || [];
@@ -384,19 +387,48 @@ const PK = (() => {
     if (el && el.textContent !== t) { el.textContent = t; el.title = t; }
   }
 
-  /** Says loudly when the values on the page are not live: PLC-Ki not answering, PLC not read, or test values. */
+  /** The CPU's mode when it is really not in RUN (STOP, startup, hold, defect), else null. A failed mode read is never STOP. */
+  const cpuStop = (s = state.status) => (s && s.cpu && s.cpu.stopped ? s.cpu : null);
+  /** "STOP since 09:12", "STOP since at least 09:12" (already so when PLC-Ki started watching), with the day when not today. */
+  function cpuSince(c) {
+    if (!c || !c.since) return "";
+    const d = new Date(c.since), today = d.toDateString() === new Date().toDateString();
+    return (c.atStart ? "since at least " : "since ") + (today ? `${pad(d.getHours())}:${pad(d.getMinutes())}` : date(c.since));
+  }
+
+  /** The red STOP chip next to the connection: only for a mode that was really read and is not RUN. */
+  function renderCpuPill(stale) {
+    const p = $("cpu-pill");
+    if (!p) return;
+    const c = !stale && cpuStop();
+    p.classList.toggle("hidden", !c);
+    if (!c) return;
+    const html = `<span class="dot"></span><span>${esc(c.word || "STOP")}</span>`;
+    if (p.innerHTML !== html) p.innerHTML = html;
+    p.title = `The PLC is in ${c.word || "STOP"} ${cpuSince(c)}: the program is not running. Open the PLC page.`;
+  }
+
+  /** Says loudly when the values on the page are not live: PLC-Ki not answering, PLC not read, PLC in STOP, or test values. */
   function renderBanner(stale) {
     const c = state.status && state.status.connection;
-    let text = "", kind = "";
+    const stop = cpuStop();
+    let text = "", kind = "", link = "";
     if (state.lastOk && stale) { text = `PLC-Ki is not answering. Values frozen since ${clock(state.lastOk)}.`; kind = "frozen"; }
     else if (c && (c.state === "disconnected" || c.state === "connecting" || c.state === "waiting") && c.lastGoodRead) {
       text = `No connection to the PLC. Values are from the last good read at ${clock(c.lastGoodRead)}.`; kind = "frozen";
     }
+    else if (stop) {
+      text = `PLC in ${stop.word || "STOP"} ${cpuSince(stop)}. The program is not running; what you see is its last state.`;
+      kind = "stop"; link = `<a href="#/plc">PLC page</a>`;
+    }
     else if (c && c.state === "snapshot") { text = "Test values from a file, not the real machine."; kind = "test"; }
-    document.documentElement.classList.toggle("test-values", kind === "test");
+    document.documentElement.classList.toggle("test-values", !!c && c.state === "snapshot" && !(state.lastOk && stale));
+    document.documentElement.classList.toggle("cpu-stop", kind === "stop");
     const b = $("banner");
     if (!b) return;
-    if (b.textContent !== text) b.innerHTML = text ? `<span class="dot"></span><span>${esc(text)}</span>` : "";
+    const html = text ? `<span class="dot"></span><span>${esc(text)}${link ? " " + link : ""}</span>` : "";
+    // Compared with what was last written, not with innerHTML: the link must not be replaced under a click
+    if (b.dataset.html !== html) { b.innerHTML = html; b.dataset.html = html; }
     b.className = "banner " + kind + (text ? "" : " hidden");
     document.documentElement.classList.toggle("frozen", kind === "frozen");
   }
@@ -408,9 +440,10 @@ const PK = (() => {
   function setTitle() {
     const al = (state.status && state.status.activeAlarms) || [];
     const page = current ? (HELP[current.name] || [""])[0] : "";
-    const t = [al.length ? `(${al.length}) ${al[0].id}` : "", page, "PLC-Ki"].filter(Boolean).join(" · ");
+    const stop = Date.now() - state.lastOk <= 5000 && cpuStop();
+    const t = [stop ? stop.word || "STOP" : "", al.length ? `(${al.length}) ${al[0].id}` : "", page, "PLC-Ki"].filter(Boolean).join(" · ");
     if (document.title !== t) document.title = t;
-    const level = !al.length ? "ok" : al.some((a) => a.severity === "FAULT") ? "fault" : "warn";
+    const level = stop ? "fault" : !al.length ? "ok" : al.some((a) => a.severity === "FAULT") ? "fault" : "warn";
     if (setTitle.level !== level) {
       setTitle.level = level;
       const fill = { ok: "#2a64c9", fault: "#d93025", warn: "#c27c0e" }[level];
@@ -420,6 +453,7 @@ const PK = (() => {
       link.href = "data:image/svg+xml," + encodeURIComponent(svg);
     }
     alertNew(al);
+    alertStop();
   }
 
   // ---- This screen: alert on new alarms, keep the screen on. Saved per browser. ----
@@ -436,6 +470,22 @@ const PK = (() => {
     if (screenOpt.notify && "Notification" in window && Notification.permission === "granted") {
       const a = fresh[0];
       try { const n = new Notification(`${a.severity} ${a.id}: ${a.text}`, { body: state.status.machine || "PLC-Ki", tag: "plcki-" + a.id }); n.onclick = () => { window.focus(); go("#/alarm"); }; } catch { /* not allowed here */ }
+    }
+  }
+  // The CPU going to STOP alerts like a new fault alarm. The first status only sets where things are, as for alarms.
+  let seenStop = null;
+  function alertStop() {
+    if (!state.status || Date.now() - state.lastOk > 5000) return;
+    const c = cpuStop();
+    const was = seenStop;
+    seenStop = !!c;
+    if (!c || was !== false) return;
+    if (screenOpt.sound) beep(true);
+    if (screenOpt.notify && "Notification" in window && Notification.permission === "granted") {
+      try {
+        const n = new Notification(`The PLC is in ${c.word || "STOP"}`, { body: `${state.status.machine || "PLC-Ki"}: the program is not running.`, tag: "plcki-cpu" });
+        n.onclick = () => { window.focus(); go("#/alarm"); };
+      } catch { /* not allowed here */ }
     }
   }
   let audio;
@@ -1141,6 +1191,13 @@ const PK = (() => {
     $("conn").tabIndex = 0;
     $("conn").title = "What does this mean?";
     $("conn").onclick = connSheet;
+    const cpuPill = $("cpu-pill");
+    if (cpuPill) {
+      cpuPill.setAttribute("role", "link");
+      cpuPill.tabIndex = 0;
+      cpuPill.onclick = () => go("#/plc");
+      cpuPill.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go("#/plc"); } };
+    }
     $("conn").onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); connSheet(); } };
     // The badge says in a word what may change; a tap shows the full sentence (a phone has no tooltip)
     $("ro-badge").setAttribute("role", "button");
@@ -1200,5 +1257,5 @@ const PK = (() => {
   }
 
   return { AI, dirty: setDirty, get isDirty() { return !!dirty; }, plain, connInfo, connSheet, helpSheet, screenSheet, passwordSheet, setHash, cmd, sec, hero, on, $, esc, icon, fillIcons, kindIcon, api, state, view, go, draw, route, toast, sheet, confirmSheet, cond, md, ago, clock, date, when,
-    loadProgram, blockOf, valueBySymbol, norm, start, loadHeld, releaseAll, get current() { return current; } };
+    loadProgram, blockOf, valueBySymbol, norm, start, cpuStop, cpuSince, loadHeld, releaseAll, get current() { return current; } };
 })();

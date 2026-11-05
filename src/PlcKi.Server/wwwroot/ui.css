@@ -366,7 +366,17 @@ a.op { color: inherit; }
 .contact.unk .sym { border-style: dashed; color: var(--muted); position: relative; }
 .contact .sym .q { position: absolute; top: -8px; right: -8px; width: 16px; height: 16px; border-radius: 50%; background: var(--muted); color: var(--bg); font: 700 11px/16px var(--font); text-align: center; }
 .contact.blocker .sym { border-color: var(--warn); color: var(--warn-ink); background: var(--warn-soft); border-width: 2px; }
-.contact .nm { font-family: var(--mono); font-size: 11px; color: var(--muted); max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Names break after "." and "_" (nameHtml adds the break points) and show up to three lines instead of being cut */
+.contact .nm { font-family: var(--mono); font-size: 11px; line-height: 1.35; color: var(--muted); max-width: 150px; text-align: center; overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; }
+/* A temp or an FC parameter: never readable, so no "?" badge, a dotted frame and a small word saying which */
+.contact.tmp .sym { border-style: dotted; background: transparent; color: var(--muted); }
+.contact.tmp .nm { -webkit-line-clamp: 4; line-clamp: 4; }
+.contact .tmp-tag { display: block; font-family: var(--font); font-size: 10px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+.lg.tmp { border-style: dotted; background: transparent; }
+.chip.tmp { background: var(--bg-alt); color: var(--muted); font-weight: 600; }
+/* A rung wider than its card: a soft fade on the right says there is more to scroll to */
+.rung.more-right { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 56px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 56px), transparent); }
 .contact.blocker .nm { color: var(--warn-ink); font-weight: 700; }
 .contact.blocker .nm::after { content: "↑ stops the output"; display: block; font-weight: 600; }
 .rung-legend { margin: 0 0 12px; }
@@ -622,7 +632,7 @@ kbd { font-family: var(--font); font-size: 12px; font-weight: 600; min-width: 20
   .btn.plain.small { min-height: 40px; }
   .chips button { min-height: 40px; padding: 8px 14px; font-size: 14px; }
   .segmented button { min-height: 38px; padding: 8px 14px; font-size: 14px; }
-  #conn { min-height: 34px; }
+  #conn, #cpu-pill { min-height: 34px; }
   .keys { display: none; }
 }
 @media (max-width: 600px) {
@@ -638,6 +648,15 @@ main:focus { outline: none; }
 .banner .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: currentColor; }
 .banner.frozen { background: var(--fault-soft); color: var(--fault-ink); }
 .banner.test { background: var(--warn-soft); color: var(--warn-ink); }
+/* The CPU is not in RUN: solid red, the one thing on the page that must not be missed */
+.banner.stop { background: var(--fault); color: #fff; border-bottom-color: transparent; }
+.banner.stop a { color: #fff; text-decoration: underline; text-underline-offset: 2px; white-space: nowrap; }
+html.cpu-stop .topbar { border-bottom: 3px solid var(--fault); }
+#cpu-pill { cursor: pointer; }
+.topbar #cpu-pill { background: var(--fault); color: #fff; letter-spacing: 0.04em; }
+.topbar #cpu-pill:hover { filter: brightness(1.12); }
+.ev-kind.stop { background: var(--fault-soft); color: var(--fault-ink); }
+.ev-kind.run { background: var(--ok-soft); color: var(--ok-ink); }
 html.frozen main#page:not(:has(.offline-page)) { filter: grayscale(1); opacity: 0.55; transition: opacity 0.3s var(--ease), filter 0.3s var(--ease); }
 .eq-why { display: flex; gap: 8px; align-items: flex-start; font-size: 13.5px; font-weight: 600; color: var(--warn-ink); background: var(--warn-soft); border-radius: 12px; padding: 7px 10px; }
 .eq-why svg { width: 16px; height: 16px; flex: none; margin-top: 2px; }
@@ -659,7 +678,7 @@ html.frozen main#page:not(:has(.offline-page)) { filter: grayscale(1); opacity: 
 section.guide-sec { padding-block: 28px; }
 @media (max-width: 600px) { .guide-bar { grid-template-columns: minmax(0, 1fr); } }
 .contact.blocker { max-width: 200px; }
-.contact.blocker .nm { max-width: 196px; overflow: visible; white-space: normal; overflow-wrap: anywhere; text-align: center; }
+.contact.blocker .nm { display: block; -webkit-line-clamp: unset; line-clamp: none; max-width: 196px; overflow: visible; white-space: normal; overflow-wrap: anywhere; text-align: center; }
 
 /* ---------- layout (UX review B) ---------- */
 .stack > *, .card { min-width: 0; }
@@ -716,7 +735,7 @@ html.anon main [data-ask], html.anon #ask-open { display: none; }
 .eq.sel .eq-more { visibility: hidden; }
 /* Program page (rungs and text) */
 .blk-q { margin: 4px 0 6px; font-size: 14px; padding: 8px 12px; border-radius: 999px; }
-.contact.cmp .nm { max-width: 220px; white-space: normal; overflow: visible; overflow-wrap: anywhere; text-align: center; }
+.contact.cmp .nm { display: block; -webkit-line-clamp: unset; line-clamp: none; max-width: 220px; white-space: normal; overflow: visible; overflow-wrap: anywhere; text-align: center; }
 .stmt.graph .gl { display: block; padding: 0 8px; border-radius: 6px; }
 .stmt.graph .gl.cur { background: var(--accent-soft); color: var(--ink); }
 .now-tag { display: inline-block; font-family: var(--font); font-size: 11px; font-weight: 700; color: #fff; background: var(--accent); border-radius: 999px; padding: 1px 8px; margin-right: 8px; vertical-align: 1px; }
@@ -732,6 +751,44 @@ html.anon main [data-ask], html.anon #ask-open { display: none; }
 .why-off ul { margin: 8px 0 0; padding-left: 20px; font-size: 14px; line-height: 1.5; }
 .why-off li { overflow-wrap: anywhere; }
 .why-off .linkbtn { margin-left: 4px; font-size: 13px; }
+/* Program page: only the networks holding back an output, when that filter is on */
+.net-filter { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-bottom: 12px; }
+.net-filter .ok-line { margin: 0; }
+.nets { display: grid; gap: 12px; }
+.nets .rung-card + .rung-card { margin-top: 0; }
+.nets.only-holding .rung-card:not([data-holding]):not(.hl) { display: none; }
+/* A block call: one row per parameter instead of a wall of text */
+.call { margin: 10px 0 4px; }
+.call-h { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin-bottom: 6px; }
+.call-tbl { font-size: 13px; }
+.call-tbl td { vertical-align: top; }
+.call-tbl td.dir { color: var(--muted); width: 1.5em; text-align: center; }
+.call-tbl td.wired { overflow-wrap: anywhere; color: var(--muted); }
+.call-tbl .op { color: var(--ink); white-space: normal; overflow-wrap: anywhere; text-align: left; }
+.call-tbl td.mono { overflow-wrap: anywhere; }
+.nets > * { min-width: 0; }
+/* Phone: one parameter per small block (name, then what it is wired to and its value) instead of a wide table */
+@media (max-width: 600px) {
+  .call-tbl, .call-tbl tbody, .call-tbl tr, .call-tbl td { display: block; width: auto; }
+  .call-tbl tr:first-child { display: none; }
+  .call-tbl tr { padding: 6px 0; border-bottom: 1px solid var(--line); }
+  .call-tbl td { border: 0; padding: 0; }
+  .call-tbl td.dir { display: inline; }
+  .call-tbl td.mono:not(.wired) { display: inline; font-weight: 700; color: var(--ink); }
+  .call-tbl td.wired { margin-top: 2px; }
+}
+/* What goes in and comes out of a block, near the top */
+.pg-io .io-row { display: flex; gap: 10px; align-items: flex-start; margin-top: 10px; }
+.pg-io .io-h { flex: none; width: 2.6em; font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; padding-top: 4px; }
+.pg-io .io-list { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.pg-io .io { display: inline-flex; align-items: center; gap: 2px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); background: var(--bg-alt); font-size: 12px; overflow-wrap: anywhere; }
+/* "State_Value is 5: Ste_Idle is on; the other 7 states are off": neutral, nothing is wrong */
+.state-sum { margin-top: 14px; padding: 12px 16px; border-radius: 14px; background: var(--bg-alt); border: 1px solid var(--line); }
+.state-sum .why-h { display: flex; gap: 8px; align-items: center; font-size: 15px; }
+.state-sum .why-h svg { width: 18px; height: 18px; flex: none; color: var(--accent); }
+.state-sum ul { margin: 8px 0 0; padding-left: 20px; font-size: 14px; line-height: 1.5; }
+.state-sum li { overflow-wrap: anywhere; }
+.state-sum .linkbtn { font-size: inherit; }
 /* Program page: the call tree on the left, plain words first, the code below */
 .blocklist a { padding-top: 5px; padding-bottom: 5px; }
 .blocklist .pl-t { display: flex; flex-direction: column; min-width: 0; flex: 1; line-height: 1.25; }
@@ -1094,6 +1151,7 @@ main#page section.hero .k span { margin-top: 2px; }
    The red "values frozen" banner stays: it is the one people must not miss. */
 .banner.test { display: none; }
 html.test-values .topbar { border-bottom: 3px solid var(--warn); }
+html.cpu-stop.test-values .topbar { border-bottom-color: var(--fault); }
 .rail-who .tl { white-space: normal; line-height: 1.3; }
 @media (min-width: 900px) { main#page section.hero .kpis { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); } }
 /* Ask panel: "Add the key" sits under the text instead of squeezing into a circle beside it (review 2, item 22) */

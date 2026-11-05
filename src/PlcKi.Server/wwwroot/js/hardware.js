@@ -37,7 +37,7 @@
   }
   setInterval(() => {
     const n = PK.current && PK.current.name;
-    if ((n === "plc" || n === "hardware" || n === "alarms") && !document.hidden) loadDiag();
+    if ((n === "plc" || n === "hardware" || n === "alarms" || (n === "alarm" && PK.cpuStop())) && !document.hidden) loadDiag();
   }, 2500);
   const sevCls = { fault: "bad", warning: "warn", maintenance: "warn", info: "info", ok: "ok" };
   const sevText = { fault: "Fault", warning: "Warning", maintenance: "Maintenance", info: "Info", ok: "OK" };
@@ -121,6 +121,13 @@
     const bad = (diag.drives || []).filter((d) => d.state === "Fault" || d.state === "Inhibited");
     if (!diag.problems.length && !bad.length) return "";
     return `<div style="margin-bottom:16px">${problemsCard({ title: "Hardware and drives" })}${bad.map(driveCard).join("")}</div>`;
+  };
+  /** The CPU's own messages (newest first), for the Active alarm page while the CPU is in STOP. null while not read. */
+  let diagAsked = 0;
+  PK.cpuMessages = () => {
+    // Asked from a render: at most one request every few seconds, also when it fails (the interval keeps it fresh)
+    if (!diag) { if (Date.now() - diagAsked > 5000) { diagAsked = Date.now(); loadDiag(); } return null; }
+    return diag.alarmsRead ? diag.messages || [] : null;
   };
   function wireAsk(el) {
     el.querySelectorAll(".diag-zone [data-ask]").forEach((b) => PK.on(b, "click", () => window.PKAsk && window.PKAsk.open(b.dataset.ask)));

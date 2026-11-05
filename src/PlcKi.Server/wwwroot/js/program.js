@@ -133,6 +133,21 @@
   }
 
   /**
+   * A temp of the block, or a parameter of an FC: neither has a place in the PLC's memory between calls, so no read can
+   * find it. Saying so is better than a "?" that looks like a fault. { temp: true } keeps it out of the read list.
+   */
+  function localOf(b, name) {
+    const m = ((b && b.interface) || []).find((x) => x.name === name);
+    if (!m) return null;
+    const sec = String(m.section || "").toLowerCase();
+    const at = { raw: null, symbol: "#" + name, temp: true };
+    if (sec === "temp") return { ...at, text: "temp", label: "temp", why: "Temporary value: it exists only while the block runs, so it can't be read." };
+    if (b.kind === "FC" && /^(input|output|inout|return)$/.test(sec))
+      return { ...at, text: "param", label: "parameter", why: "Parameter of this function: the caller sets it each time it runs, so it has no value of its own to read. Open the caller to see it." };
+    return null;
+  }
+
+  /**
    * operand ("#Out", "#Permit", "\"DB_IO\".X") -> its live value for this instance, or null.
    * want (a Map, optional) collects every symbol it needed that the model does not read, with its type, so the page can ask for it.
    */
@@ -147,6 +162,8 @@
         const first = name.split(".")[0];
         const k = name === first ? constantOf(block, name) : null;
         if (k) return k;
+        const local = localOf(block, first);
+        if (local) return name === first ? local : { ...local, symbol: operand };
         if (inst && inst.wires[first] && typeof inst.wires[first] === "object" && name === first) {
           const w = inst.wires[first];
           const toks = tokenize(w.expr), tree = toks && parseExpr(toks);
@@ -158,6 +175,11 @@
           if (/^NOT\s+/.test(sym)) { negate = true; sym = sym.replace(/^NOT\s+/, ""); }
         } else if (inst) { sym = inst.path + "." + name; type = memberType(block, name); }
         else return null;
+      } else if (/^[A-Za-z_]\w*\.[A-Za-z_]\w*$/.test(operand) && block && String(block.logic || block.source || "").includes(operand.split(".")[0] + "(")) {
+        // Strg_TO_Chars.Cnt: an output pin of an instruction box in the same network, gone once the block has run
+        const [box, pin] = operand.split(".");
+        return { raw: null, text: "pin", symbol: operand, label: "box output", temp: true,
+          why: `Output ${pin} of the ${box} box in this network: it exists only while the block runs, so it can't be read.` };
       }
       let t = vals.get(PK.norm(sym));
       if (!t) {
@@ -175,7 +197,10 @@
 
   const chip = (v) => !v ? "" : typeof v.raw === "boolean"
     ? `<span class="chip ${v.raw ? "t" : "f"}" title="${esc(v.symbol)}">${v.raw ? "1" : "0"}</span>`
-    : `<span class="chip" title="${esc(v.symbol)}">${esc(v.text)}</span>`;
+    : `<span class="chip ${v.temp ? "tmp" : ""}" title="${esc(v.temp ? v.why : v.symbol)}">${esc(v.text)}</span>`;
+
+  /** A signal name that may break after "." and "_" instead of being cut: "Alarms".err<wbr>Pressurization */
+  const nameHtml = (s) => esc(s).replace(/([._])/g, "$1<wbr>");
 
   // ---- SCL with live chips ----
   const OPERAND = /(#[A-Za-z_]\w*(?:\.[A-Za-z_]\w*|\[\d+\])*|"[^"]+"(?:\.(?:[A-Za-z_]\w*|"[^"]+")|\[\d+\])*)/;
@@ -224,6 +249,10 @@
   // ---- LAD-style rungs from boolean statements ----
   const isSignal = (x) => !!x && /^(#|")/.test(x);
   let plainDraw = false;    // true while drawing for another page (rungFor): no buttons, as nothing there answers them
+  let drawBlock = null;     // the block being drawn, set by whoever draws: a call to #inst links to the instance's type
+  // Program page: all networks, or only those holding back an output now (remembered in this browser)
+  let netFilter = "all";
+  try { if (localStorage.getItem("plcki.netFilter") === "holding") netFilter = "holding"; } catch { /* private window */ }
   function tokenize(expr) {
     const re = /\s*(\(|\)|AND\b|OR\b|XOR\b|NOT\b|<>|>=|<=|=|<|>|"[^"]+"(?:\.(?:[A-Za-z_]\w*|"[^"]+")|\[\d+\])*|#?[A-Za-z_][\w.]*(?:\[\d+\])?|T#\w+|-?\d+(?:\.\d+)?)/gy;
     const toks = [];
@@ -279,12 +308,16 @@
       // A comparison names both sides' values: "State_Value = #cSte_Idle (5 = 5)"
       const sides = n.t === "cmp" ? [n.a, n.b].map((x) => (/^-?\d/.test(x) ? x : (resolve(x) || {}).text ?? "?")) : null;
       const shown = sides ? ` (${sides[0]} ${n.op} ${sides[1]})` : live ? " = " + live.text : "";
-      const tip = v == null ? `${label}${sides ? shown : ""}: no live value (not read, or not found in the PLC)` : `${label}${shown}: ${v ? "passes" : "does not pass"}`;
+      // A temp or an FC parameter can never be read: its own look, not the "?" of a value that is missing
+      const local = v == null ? (n.t === "leaf" ? (live && live.temp ? live : null) : [n.a, n.b].map((x) => (/^-?\d/.test(x) ? null : resolve(x))).find((x) => x && x.temp)) : null;
+      const tip = local ? `${label}: ${local.why}`
+        : v == null ? `${label}${sides ? shown : ""}: no live value (not read, or not found in the PLC)` : `${label}${shown}: ${v ? "passes" : "does not pass"}`;
       // A click asks what sets it; a comparison asks about its first signal
       const src = plainDraw ? null : n.t === "cmp" ? [n.a, n.b].find(isSignal) : n.op;
       const attrs = src ? `data-src="${esc(src)}" aria-label="${esc(tip)}. What sets ${esc(clean(src))}?"` : "";
-      return { html: `<${src ? 'button type="button"' : "div"} class="contact ${n.t === "cmp" ? "cmp" : ""} ${v === true ? "on" : v === false ? "off" : "unk"} ${blocker && ctx.coilOff ? "blocker" : ""}" title="${esc(tip)}" ${attrs}>
-          <span class="sym">${sym}${v == null ? `<span class="q" aria-hidden="true">?</span>` : ""}</span><span class="nm">${esc(label.replace(/^#/, ""))}</span></${src ? "button" : "div"}>`, out: power && v === true };
+      const state = v === true ? "on" : v === false ? "off" : local ? "tmp" : "unk";
+      return { html: `<${src ? 'button type="button"' : "div"} class="contact ${n.t === "cmp" ? "cmp" : ""} ${state} ${blocker && ctx.coilOff ? "blocker" : ""}" title="${esc(tip)}" ${attrs}>
+          <span class="sym">${sym}${state === "unk" ? `<span class="q" aria-hidden="true">?</span>` : ""}</span><span class="nm">${nameHtml(label.replace(/^#/, ""))}${local ? `<small class="tmp-tag">${esc(local.label)}</small>` : ""}</span></${src ? "button" : "div"}>`, out: power && v === true };
     }
     if (n.t === "not") {
       const inner = drawNode(n.x, resolve, power, ctx);
@@ -308,6 +341,35 @@
     return { html: `<div class="par ${power && anyPass ? "on" : ""}">${branches.map((b) => `<div class="ser"><span class="wire ${power ? "on" : ""}"></span>${b.html}<span class="wire ${b.out ? "on" : ""}"></span></div>`).join("")}</div>`, out: power && anyPass };
   }
 
+  /** Every contact and comparison of a rung, in order. */
+  function conditions(n, out = []) {
+    if (n.t === "leaf" || n.t === "cmp") out.push(n);
+    else if (n.t === "not") conditions(n.x, out);
+    else n.items.forEach((x) => conditions(x, out));
+    return out;
+  }
+  /** A side of a comparison that never changes: a number, TRUE/FALSE, or a block constant (#cSte_Idle). */
+  const fixed = (x, resolve) => /^[-+]?\d/.test(x) || /^(TRUE|FALSE)$/i.test(x) || ((resolve(x) || {}).label === "constant");
+  /** "State_Value = #cSte_Idle" on its own: one state of a state decoder. Returns the signal that is compared, or null. */
+  function stateSelect(tree, resolve) {
+    if (tree.t !== "cmp" || tree.op !== "=") return null;
+    if (fixed(tree.b, resolve) && !fixed(tree.a, resolve)) return tree.a;
+    if (fixed(tree.a, resolve) && !fixed(tree.b, resolve)) return tree.b;
+    return null;
+  }
+  /**
+   * Is an output that is off expected to be on, so that the contact stopping it is worth pointing at?
+   * Not when the stopper is a state selection (X = constant: the other states are off by design), not for a plain copy
+   * of one signal, and not when nothing else on the rung is asking for it (no normally open contact on, no comparison
+   * that holds): then the output is simply not wanted right now.
+   */
+  function expectedOn(tree, stopper, resolve) {
+    if (stopper.t === "cmp" && stopper.op === "=" && (fixed(stopper.a, resolve) || fixed(stopper.b, resolve))) return false;
+    const all = conditions(tree);
+    if (all.length < 2) return false;
+    return all.some((c) => c !== stopper && !(c.t === "leaf" && (c.neg || /^(TRUE|FALSE)$/i.test(c.op))) && evalNode(c, resolve) === true);
+  }
+
   function rung(lhs, expr, resolve, box, opt = {}) {
     const toks = tokenize(expr);
     const tree = toks && parseExpr(toks);
@@ -317,15 +379,26 @@
     const coilOn = coil && typeof coil.raw === "boolean" ? coil.raw : result;
     // A fault or alarm output that is off is the healthy state: nothing on its rung is "stopping" it
     const faultCoil = !box && /fault|alarm|error|\berr|warn|notready|not_?ok|trip|dev$/i.test(lhs || "");
-    const ctx = { blocked: false, coilOff: coilOn === false && !faultCoil };
+    // Amber means "asked for, but held back". A dry pass finds the first contact that stops the rung; it is only
+    // marked when the output is expected on. An output that is off because nothing asks for it is plain grey.
+    const dry = { blocked: false, coilOff: false };
+    drawNode(tree, resolve, true, dry);
+    const held = coilOn === false && !faultCoil && !!dry.first && expectedOn(tree, dry.first.n, resolve);
+    const ctx = { blocked: false, coilOff: held };
     const body = drawNode(tree, resolve, true, ctx);
-    // A plain ( ) output that is off, and the first contact that stops it: for "Why is it off" at the top
-    if (opt.why && !box && !opt.coil && ctx.coilOff && ctx.first) opt.why.push({ coil: lhs, first: ctx.first, net: opt.net });
+    // A plain ( ) output that is held back, and the first contact that stops it: for "Why is it off" at the top
+    if (opt.why && !box && !opt.coil && held && ctx.first) opt.why.push({ coil: lhs, first: ctx.first, net: opt.net });
+    // One state of a state decoder ("Ste_Idle := State_Value = #cSte_Idle"): summed up in one line, not listed as off
+    const sel = !box && !opt.coil && stateSelect(tree, resolve);
+    if (sel && opt.why && opt.why.states) opt.why.states.push({ signal: sel, value: (resolve(sel) || {}).text, coil: lhs, on: coilOn, net: opt.net });
+    // A coil that is a temp: dotted like a temp contact; its state is the rung's result when that is known
+    const coilCls = coilOn === true ? "on" : coilOn === false ? "off" : coil && coil.temp ? "tmp" : "";
+    const coilTip = `${clean(lhs)}${coil && coil.temp ? ": " + coil.why : coil ? " = " + coil.text : ""}`;
     const end = box
-      ? `<div class="contact ${result ? "on" : result === false ? "off" : ""}"><span class="sym">${esc(box.kind)}</span><span class="nm">${esc(box.name)}${box.pt ? " · " + esc(box.pt) : ""}</span></div>`
-      : plainDraw ? `<div class="contact coil ${coilOn === true ? "on" : coilOn === false ? "off" : ""}" title="${esc(clean(lhs))}${coil ? " = " + esc(coil.text) : ""}"><span class="sym">${opt.coil ? "(" + opt.coil + ")" : "( )"}</span><span class="nm">${esc(lhs.replace(/^#/, ""))}</span></div>`
-      : `<button type="button" class="contact coil ${coilOn === true ? "on" : coilOn === false ? "off" : ""}" data-src="${esc(lhs)}" data-coil
-          title="${esc(clean(lhs))}${coil ? " = " + esc(coil.text) : ""}" aria-label="Output ${esc(clean(lhs))}${coil ? ", " + esc(coil.text) : ""}. Where is it used?"><span class="sym">${opt.coil ? "(" + opt.coil + ")" : "( )"}</span><span class="nm">${esc(lhs.replace(/^#/, ""))}</span></button>`;
+      ? `<div class="contact ${result ? "on" : result === false ? "off" : ""}"><span class="sym">${esc(box.kind)}</span><span class="nm">${nameHtml(box.name)}${box.pt ? " · " + nameHtml(box.pt) : ""}</span></div>`
+      : plainDraw ? `<div class="contact coil ${coilCls}" title="${esc(coilTip)}"><span class="sym">${opt.coil ? "(" + opt.coil + ")" : "( )"}</span><span class="nm">${nameHtml(lhs.replace(/^#/, ""))}</span></div>`
+      : `<button type="button" class="contact coil ${coilCls}" data-src="${esc(lhs)}" data-coil
+          title="${esc(coilTip)}" aria-label="Output ${esc(coilTip)}. Where is it used?"><span class="sym">${opt.coil ? "(" + opt.coil + ")" : "( )"}</span><span class="nm">${nameHtml(lhs.replace(/^#/, ""))}</span></button>`;
     return `<div class="rung ${opt.hl ? "hl" : ""}"><span class="rail"></span><span class="wire on"></span>${body.html}<span class="wire ${body.out ? "on" : ""}"></span>${end}<span class="wire ${body.out ? "on" : ""}"></span><span class="rail"></span></div>`;
   }
 
@@ -369,6 +442,85 @@
     return new RegExp("(^|\\bTHEN\\s+)" + sym + "(?![\\w.\\[])\\s*:=").test(line.trim());
   }
 
+  // ---- block calls as a table: "SequenceProgramTGF_DB"(INIT_SQ := … AND NOT …, Init.X => …); ----
+  const CALL = /^(#[A-Za-z_]\w*|"[^"]+"|[A-Za-z_]\w*)\s*\(/;
+  /** How many brackets are still open at the end of a line (strings and comments skipped). */
+  function depth(line) {
+    let d = 0, q = null;
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i];
+      if (q) { if (c === q) q = null; continue; }
+      if (c === '"' || c === "'") q = c;
+      else if (c === "/" && line[i + 1] === "/") break;
+      else if (c === "(") d++;
+      else if (c === ")") d--;
+    }
+    return d;
+  }
+  /** "A := x, B := f(y, z)" -> ["A := x", "B := f(y, z)"]: commas inside brackets or quotes don't split. */
+  function splitTop(s) {
+    const out = [];
+    let d = 0, q = null, from = 0;
+    for (let i = 0; i < s.length; i++) {
+      const c = s[i];
+      if (q) { if (c === q) q = null; continue; }
+      if (c === '"' || c === "'") q = c;
+      else if (c === "(" || c === "[") d++;
+      else if (c === ")" || c === "]") d--;
+      else if (c === "," && d === 0) { out.push(s.slice(from, i).trim()); from = i + 1; }
+    }
+    out.push(s.slice(from).trim());
+    return out.filter(Boolean);
+  }
+  /** The block a call goes to, as a link when the program has it (an instance DB links to its FB, #inst to its type). */
+  function calleeHtml(name, block) {
+    const bare = name.replace(/^"|"$/g, "");
+    const blocks = (state.program && state.program.blocks) || [];
+    if (name.startsWith("#")) {
+      const m = ((block && block.interface) || []).find((x) => x.name === name.slice(1));
+      const type = m && String(m.datatype || "").replace(/^"|"$/g, "");
+      return blocks.some((b) => b.name === type) ? `<span class="mono">${esc(name)}</span> <a href="${hrefOf(type)}">${esc(type)}</a>` : `<span class="mono">${esc(name)}</span>`;
+    }
+    const b = blocks.find((x) => x.name === bare);
+    if (b) return b.instanceOf ? `<a class="mono" href="${hrefOf(b.instanceOf, [name])}">${esc(name)}</a> <span class="faint small">values of ${esc(b.instanceOf)}</span>` : `<a class="mono" href="${hrefOf(b.name)}">${esc(name)}</a>`;
+    return `<span class="mono">${esc(name)}</span> <span class="faint small">built-in</span>`;
+  }
+  /**
+   * One call statement -> a card with one row per parameter: → inputs (P := expr), ← outputs (Q => target).
+   * The value is the operand's live value, or the result of a TRUE/FALSE expression. null when it is not a plain call.
+   */
+  function callHtml(stmt, resolve, block) {
+    const m = stmt.replace(/\s*\/\/.*$/, "").match(/^(#[A-Za-z_]\w*|"[^"]+"|[A-Za-z_]\w*)\s*\(([\s\S]*)\)\s*;$/);
+    if (!m || depth(stmt) !== 0) return null;
+    const args = m[2].trim() ? splitTop(m[2]) : [];
+    const rows = [];
+    for (const a of args) {
+      const p = a.match(/^([A-Za-z_][\w.]*)\s*(:=|=>)\s*([\s\S]+)$/);
+      if (!p) return null;                       // positional or unusual arguments: leave it as text
+      rows.push({ name: p[1], out: p[2] === "=>", expr: p[3].trim() });
+    }
+    if (!rows.length) return null;
+    const one = new RegExp("^" + OPERAND.source + "$");
+    const value = (expr) => {
+      if (one.test(expr)) return chip(resolve(expr));
+      if (/^[-+]?\d+(\.\d+)?$|^(TRUE|FALSE)$|^T#/i.test(expr)) return "";
+      const toks = tokenize(expr), tree = toks && parseExpr(toks);
+      const v = tree ? evalNode(tree, resolve) : null;
+      return v == null ? "" : chip({ raw: v, text: v ? "TRUE" : "FALSE", symbol: expr });
+    };
+    // A plain operand is shown without its chip (the value has its own column); an expression keeps its chips
+    const wired = (expr) => one.test(expr) ? opHtml(expr) : sclLine(expr, resolve);
+    const comment = (stmt.match(/\/\/\s*(.*)$/) || [])[1];
+    // In or out is only known when the code says so ("Q => x"); a decoded call writes both as ":=", and a wrong arrow
+    // is worse than none
+    const dirs = rows.some((r) => r.out);
+    const dir = (r) => dirs ? `<td class="dir" title="${r.out ? "Output: the block writes it" : "Input: the block reads it"}">${r.out ? "←" : "→"}</td>` : "";
+    return `<div class="call"><div class="call-h"><span class="tag">Call</span>${calleeHtml(m[1], block)}${comment ? `<span class="faint small">${esc(comment)}</span>` : ""}</div>
+      <table class="tbl call-tbl"><tr>${dirs ? `<th aria-label="In or out"></th>` : ""}<th>Parameter</th><th>Wired to</th><th>Now</th></tr>
+      ${rows.map((r) => `<tr>${dir(r)}<td class="mono">${esc(r.name)}</td><td class="mono wired">${wired(r.expr)}</td><td>${value(r.expr)}</td></tr>`).join("")}
+      </table></div>`;
+  }
+
   function netHtml(net, resolve, highlight, curStep, wantNet, why) {
     const parts = [];
     let plain = [];
@@ -380,7 +532,19 @@
       return `<span class="gl ${inCur ? "cur" : ""}">${st && inCur ? `<span class="now-tag">now</span>` : ""}${sclLine(l, resolve)}</span>`;
     };
     const flush = () => { if (plain.length) { parts.push(net.lang === "GRAPH" ? `<div class="stmt graph">${plain.map(graphLine).join("")}</div>` : `<div class="stmt">${plain.map((l) => sclLine(l, resolve)).join("<br>")}</div>`); plain = []; } };
-    for (const line of net.lines) {
+    for (let k = 0; k < net.lines.length; k++) {
+      let line = net.lines[k];
+      // A block call: a table of its parameters instead of a wall of text. One written over several lines is joined
+      // until its brackets close.
+      const head = line.trim().match(CALL);
+      const isTimer = /^#\w+\s*\(\s*IN\s*:=/.test(line.trim());     // a timer is drawn as a box on its rung below
+      if (net.lang !== "GRAPH" && head && !isTimer && !KW.has(head[1].toUpperCase())) {
+        const from = k;
+        while (depth(line) > 0 && k + 1 < net.lines.length) line += " " + net.lines[++k].trim();
+        const call = callHtml(line.trim(), resolve, drawBlock);
+        if (call) { flush(); parts.push(call); continue; }
+        k = from; line = net.lines[k];             // not a plain call: leave its lines as they were
+      }
       const s = line.trim().replace(/\s*\/\/.*$/, "");
       const timer = s.match(/^(#\w+)\s*\(\s*IN\s*:=\s*(.+?),\s*PT\s*:=\s*(.+?)\s*\)\s*;/);
       const assign = s.match(/^(#[\w.]+|"[^"]+"(?:\.(?:\w+|"[^"]+"))*)\s*:=\s*(.+);$/);
@@ -394,7 +558,9 @@
     }
     flush();
     const hl = highlight ? net.lines.some((l) => writes(l, highlight)) : wantNet != null && net.no === String(wantNet);
-    return `<div class="rung-card ${hl ? "hl" : ""}" ${hl ? 'id="hl"' : ""} data-net="${esc(net.no)}">
+    // For the "Holding back now" filter: a network where a contact holds back an output that is asked for
+    const holding = parts.some((p) => /class="contact[^"]*\bblocker\b/.test(p));
+    return `<div class="rung-card ${hl ? "hl" : ""}" ${hl ? 'id="hl"' : ""} data-net="${esc(net.no)}" ${holding ? 'data-holding="1"' : ""}>
       <div class="rung-title">${net.no ? "Network " + esc(net.no) : ""} ${net.lang ? `<span class="tag lang-${esc(net.lang)}">${esc(net.lang)}</span>` : ""}<span class="faint">${esc(net.title)}</span></div>
       ${parts.join("")}</div>`;
   }
@@ -426,6 +592,26 @@
     const t = ((state.model && state.model.tags) || []).find((x) => PK.norm(x.symbol) === sym);
     const label = t && t.label ? t.label : null;
     return label ? `<b>${esc(label)}</b> <span class="mono faint small">${esc(clean(op))}</span>` : `<b>${esc(clean(op))}</b>`;
+  }
+
+  /**
+   * A state decoder (Ste_Aborted := State_Value = 1, Ste_Clearing := State_Value = 2, …) in one line:
+   * "State_Value is 5: Ste_Idle is on; the other 7 states are off." Only for three or more states on one signal.
+   */
+  function statesHtml(states) {
+    const groups = new Map();
+    for (const s of states) { if (!groups.has(s.signal)) groups.set(s.signal, []); groups.get(s.signal).push(s); }
+    const lines = [...groups].filter(([, g]) => g.length >= 3).map(([sig, g]) => {
+      const val = g.find((s) => s.value != null);
+      const on = g.filter((s) => s.on === true);
+      const rest = g.length - on.length;
+      const head = val ? `<b>${esc(clean(sig))} is ${esc(val.value)}</b>: ` : `<b>${esc(clean(sig))}</b> has no live value yet (${g.length} states). `;
+      const body = !val ? "" : on.length
+        ? `${on.map((s) => `<button type="button" class="linkbtn" data-goto-net="${esc(s.net)}">${esc(clean(s.coil))}</button>`).join(", ")} ${on.length > 1 ? "are" : "is"} on; the other ${rest} state${rest === 1 ? " is" : "s are"} off.`
+        : `none of these ${g.length} states is on.`;
+      return `<li>${head}${body}</li>`;
+    });
+    return lines.length ? `<div class="state-sum"><div class="why-h">${icon("list")}<b>State${lines.length > 1 ? "s" : ""} right now</b></div><ul>${lines.join("")}</ul></div>` : "";
   }
 
   function whyHtml(why, resolve, instPath) {
@@ -472,7 +658,7 @@
   }
   const EMPTY = { seqs: [], eqs: [], alarms: [], active: [] };
   /** "alarm" (an alarm set here is on), "blocked" (a device here is asked to run but held back), "run" (a sequence here is in a step), or "". */
-  const ownState = (n) => n.active.length ? "alarm" : n.eqs.some((e) => e.blockedBy) ? "blocked" : n.seqs.some((q) => q.step != null) ? "run" : "";
+  const ownState = (n) => n.active.length ? "alarm" : n.eqs.some((e) => e.blockedBy) ? "blocked" : n.seqs.some((q) => q.step != null) && !PK.cpuStop() ? "run" : "";
   const RANK = { alarm: 3, blocked: 2, run: 1, "": 0 };
 
   /** The call tree from the OBs (Main first): [{ b, depth }], plus blocks no OB calls and the data blocks. */
@@ -546,15 +732,18 @@
 
   // ---- "What it does": plain words first ----
   function seqHtml(q, compact) {
-    const time = q.timeInStep ? ` · ${esc(q.timeInStep)}` : "";
-    const step = q.step != null ? `<span class="pill info">Step ${esc(String(q.step))}${q.stepName ? " · " + esc(q.stepName) : ""}${time}</span>` : `<span class="pill">Not in a step</span>`;
+    // CPU not in RUN: the step is where the program was when it stopped, not what it does now
+    const stop = PK.cpuStop();
+    const time = q.timeInStep && !stop ? ` · ${esc(q.timeInStep)}` : "";
+    const step = q.step != null ? `<span class="pill ${stop ? "" : "info"}">${stop ? "Last step" : "Step"} ${esc(String(q.step))}${q.stepName ? " · " + esc(q.stepName) : ""}${time}</span>` : `<span class="pill">Not in a step</span>`;
     const next = (q.next || []);
     const wait = next.length ? next.map((n, k) => `<p class="pg-wait">${k ? "Or, to" : "To"} go on to step ${esc(String(n.to))}${n.toName ? ` “${esc(n.toName)}”` : ""} it waits for:</p>
         <ul class="conds">${n.conditions.map(PK.cond).join("")}</ul>`).join("") : "";
-    const halted = q.halted ? `<div class="notice red" style="margin-top:10px">${icon("warn")}<div><b>The sequence is halted.</b>${q.haltReasons && q.haltReasons.length ? " " + q.haltReasons.map(esc).join(" ") : ""}</div></div>` : "";
+    const halted = stop ? `<div class="notice red" style="margin-top:10px">${icon("warn")}<div>${esc(q.explanation)}</div></div>`
+      : q.halted ? `<div class="notice red" style="margin-top:10px">${icon("warn")}<div><b>The sequence is halted.</b>${q.haltReasons && q.haltReasons.length ? " " + q.haltReasons.map(esc).join(" ") : ""}</div></div>` : "";
     return `<div class="pg-seq">
-      <div class="row" style="gap:8px 10px;flex-wrap:wrap"><b>${esc(q.name)}</b>${step}${q.halted ? `<span class="pill bad">Halted</span>` : ""}</div>
-      ${q.does ? `<p class="pg-does">${esc(q.does)}</p>` : ""}${halted}${compact ? "" : wait}
+      <div class="row" style="gap:8px 10px;flex-wrap:wrap"><b>${esc(q.name)}</b>${step}${stop ? `<span class="pill bad">Not running</span>` : q.halted ? `<span class="pill bad">Halted</span>` : ""}</div>
+      ${q.does && !stop ? `<p class="pg-does">${esc(q.does)}</p>` : ""}${halted}${compact ? "" : wait}
       ${compact ? "" : `<a class="small" href="#/sequence/${encodeURIComponent(q.id)}">Step chart and timeline ›</a>`}</div>`;
   }
   function eqRow(e) {
@@ -571,6 +760,8 @@
     const parts = [];
     for (const q of n.seqs) parts.push(`<div class="pg-sec"><h3>Sequence in this block</h3>${seqHtml(q)}</div>`);
     if (n.eqs.length) parts.push(`<div class="pg-sec"><h3>Devices it controls</h3><ul class="pg-rows">${n.eqs.map(eqRow).join("")}</ul></div>`);
+    const states = statesHtml(why.states || []);
+    if (states) parts.push(`<div class="pg-sec">${states}</div>`);
     if (why.length) parts.push(`<div class="pg-sec">${whyHtml(why, resolve, inst && inst.path)}</div>`);
     if (n.alarms.length || n.active.length) {
       const on = new Set(n.active.map((a) => a.id));
@@ -741,9 +932,11 @@
           <div style="flex:1;min-width:0"><b>${esc(e.name)}</b><div class="pg-blocked">${esc(e.blockedBy.charAt(0).toUpperCase() + e.blockedBy.slice(1))}</div></div>${where(e.location)}</li>`).join("")}</ul></div>`);
       if (seqs.length) now.push(`<div class="pg-sec"><h3>Sequences</h3>${seqs.map((q) => `<div class="pg-seqrow">${seqHtml(q, false).replace('<div class="pg-seq">', `<div class="pg-seq">${where(q.block)}`)}</div>`).join("")}</div>`);
       const connected = st.connection && st.connection.state === "connected";
+      const stop = PK.cpuStop(st);
       const right = `<div class="card pg-card"><div class="row" style="align-items:baseline"><h2 class="pg-h">Right now</h2><span class="spacer"></span>
           ${connected ? `<span class="pill ok"><span class="dot"></span>Live</span>` : st.connection ? `<span class="pill">${esc(st.connection.state === "snapshot" ? "Test values" : "Not live")}</span>` : ""}</div>
-        ${!alarms.length && !blocked.length ? `<div class="notice green" style="margin:10px 0 4px">${icon("check")}<div>No alarm is on and nothing the program asks for is held back.</div></div>` : ""}
+        ${stop ? `<div class="notice red" style="margin:10px 0 4px">${icon("warn")}<div><b>The PLC is in ${esc(stop.word || "STOP")} ${esc(PK.cpuSince(stop))}: the program is not running.</b> What you see is its last state. <a href="#/plc">PLC page</a></div></div>`
+          : !alarms.length && !blocked.length ? `<div class="notice green" style="margin:10px 0 4px">${icon("check")}<div>No alarm is on and nothing the program asks for is held back.</div></div>` : ""}
         ${now.join("") || (!seqs.length ? `<p class="muted">The machine notes have no sequences to follow.</p>` : "")}</div>`;
 
       // What each part is for: the units Main calls (one per machine section, as a rule), with everything inside them
@@ -829,6 +1022,8 @@
         // The signal is not written in this block (or the decoder wrote it another way): fall back to the network number
         const hl = want && nets.some((n) => n.lines.some((l) => writes(l, want))) ? want : null;
         const why = [];
+        why.states = [];          // the states of state decoders, summed up in one line each (statesHtml)
+        drawBlock = b;
         const netsHtml = nets.map((n) => netHtml(n, resolve, hl || (want && !want.startsWith('"') ? want : null), seq ? seq.step : null, hl ? null : sel.network, why)).join("");
         const trail = sel.alarm ? alarmLine(sel.alarm, b.name) : "";
 
@@ -848,12 +1043,19 @@
         let bodyHtml;
         if (mode === "rungs" && canRungs) {
           const legend = `<div class="legend rung-legend"><span><i class="lg on"></i>Passes power</span><span><i class="lg off"></i>Does not pass</span>
-            <span><i class="lg unk"></i>No live value</span><span><i class="lg blocker"></i>First one that stops the output</span></div>`;
+            <span><i class="lg unk"></i>No live value</span><span><i class="lg tmp"></i>Temp or parameter (never readable)</span><span><i class="lg blocker"></i>Holds back an output that is asked for</span></div>`;
           // From an alarm, its own line says where it is set instead
           const where = trail || (sel.highlight && sel.highlight.startsWith('"')
             ? (hl ? `<div class="notice" style="margin-bottom:12px">${icon("info")}<div>The highlighted rungs write <b>${esc(sel.highlight)}</b>: (S) sets it, (R) resets it, ( ) follows the rung. The values are live; amber marks the first contact that stops a rung.</div></div>`
               : `<div class="notice gold" style="margin-bottom:12px">${icon("info")}<div>${esc(sel.highlight)} is not written in this block${sel.network ? `; network ${esc(sel.network)} is highlighted` : ""}.</div></div>`) : "");
-          bodyHtml = where + legend + netsHtml
+          // Long blocks: show only the networks where something holds back an output that is asked for
+          const nHold = (netsHtml.match(/data-holding="1"/g) || []).length;
+          const only = netFilter === "holding";
+          const filter = nets.length > 3 ? `<div class="net-filter"><div class="segmented" role="group" aria-label="Which networks">
+              <button type="button" data-netf="all" class="${only ? "" : "on"}" aria-pressed="${!only}">All ${nets.length} networks</button>
+              <button type="button" data-netf="holding" class="${only ? "on" : ""}" aria-pressed="${only}">Holding back now · ${nHold}</button></div>
+              ${only && !nHold ? `<p class="ok-line">${icon("check")}<span>Nothing in this block is holding back an output right now.</span></p>` : ""}</div>` : "";
+          bodyHtml = where + filter + legend + `<div class="nets ${only ? "only-holding" : ""}">${netsHtml}</div>`
             + (b.source && !b.logic ? `<p class="faint small" style="margin:12px 0 0">Only the on/off statements of this SCL block are drawn as rungs. <button type="button" class="linkbtn" data-mode="text">Show all of it as text</button>.</p>` : "");
         } else if (canText) {
           const hits = find ? String(text).split(/\r?\n/).filter((l) => l.toLowerCase().includes(find.toLowerCase())).length : 0;
@@ -866,6 +1068,13 @@
         const isDb = /DB$/.test(b.kind);
         const title = plainTitle(b);
         const tagsHtml = window.PKTags ? window.PKTags.blockTagsHtml(text).replace(/<details([^>]*) open>/, "<details$1>") : "";
+        // What goes in and comes out, near the top: one compact chip per signal (type and comment on hover);
+        // the stored values stay in the full table at the bottom
+        const ofSec = (re) => iface.filter((m) => re.test(String(m.section)) && !/^void$/i.test(String(m.datatype)));
+        const ins = ofSec(/^(Input|InOut)$/i), outs = ofSec(/^(Output|Return)$/i);
+        const ioItem = (m) => { const v = resolve("#" + m.name); return `<span class="io" title="${esc(m.datatype + (m.comment ? " · " + m.comment : ""))}"><span class="mono">${nameHtml(m.name)}</span>${v && !v.temp ? chip(v) : ""}</span>`; };
+        const ioRow = (label, list) => list.length ? `<div class="io-row"><span class="io-h">${label}</span><div class="io-list">${list.map(ioItem).join("")}</div></div>` : "";
+        const ioCard = !isDb && (ins.length || outs.length) ? `<div class="card pg-card pg-io"><h2 class="pg-h">Inputs and outputs</h2>${ioRow("In", ins)}${ioRow("Out", outs)}</div>` : "";
         const page = body(crumbs(b.name) + `
             <div class="card pg-card">
               <div class="row" style="gap:10px 12px;flex-wrap:wrap;align-items:center"><h2 class="pg-title">${esc(title || b.name)}${dot(ownState(n))}</h2><span class="spacer"></span>${instPick}</div>
@@ -875,8 +1084,9 @@
               ${b.comment ? `<p class="pg-lede">${esc(b.comment)}</p>` : ""}
               ${isDb ? "" : whatItDoes(b, n, why, resolve, sel.inst, tree.byName)}
             </div>
+            ${ioCard}
             <div class="card pg-card" id="pg-code">
-              <div class="row" style="gap:8px 14px;flex-wrap:wrap;align-items:center"><h2 class="pg-h">${isDb ? "Its values" : "The code"}</h2>${switcher}<span class="faint small">${!switcher ? "" : mode === "rungs" ? "Each network as a rung: green passes power, amber is what stops the output." : "The code as written in TIA, with the live value after each signal."}</span></div>
+              <div class="row" style="gap:8px 14px;flex-wrap:wrap;align-items:center"><h2 class="pg-h">${isDb ? "Its values" : "The code"}</h2>${switcher}<span class="faint small">${!switcher ? "" : mode === "rungs" ? "Each network as a rung: green passes power, amber holds back an output that is asked for." : "The code as written in TIA, with the live value after each signal."}</span></div>
               <div style="margin-top:14px">${bodyHtml}</div>
             </div>
             ${tagsHtml}
@@ -894,9 +1104,16 @@
         page.querySelectorAll("[data-ask]").forEach((b) => b.onclick = () => window.PKAsk && window.PKAsk.open(b.dataset.ask));
         const all = page.querySelector("[data-all-parts]");
         if (all) all.onclick = () => { allParts = !allParts; PK.draw(); };
+        page.querySelectorAll("[data-netf]").forEach((b) => b.onclick = () => {
+          netFilter = b.dataset.netf === "holding" ? "holding" : "all";
+          try { localStorage.setItem("plcki.netFilter", netFilter); } catch { /* private window */ }
+          PK.draw();
+        });
         page.querySelectorAll("[data-goto-net]").forEach((b) => b.onclick = () => {
           const net = b.dataset.gotoNet;
           if (sel.mode !== "rungs") setMode("rungs");
+          // A network the filter hides: show them all, so the jump lands
+          else if (netFilter === "holding" && !page.querySelector(`.rung-card[data-net="${CSS.escape(net)}"][data-holding]`)) { netFilter = "all"; PK.draw(); }
           setTimeout(() => {
             const card = page.querySelector(`.rung-card[data-net="${CSS.escape(net)}"]`);
             if (!card) return;
@@ -914,6 +1131,12 @@
           cf.onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); findAt += e.shiftKey ? -1 : 1; jump(page, findAt); } };
         }
         page.querySelectorAll("[data-src]").forEach((o) => o.onclick = () => explain(o, page));
+        // A rung wider than its card fades on the right until it is scrolled to the end
+        page.querySelectorAll(".rung").forEach((r) => {
+          const edge = () => r.classList.toggle("more-right", r.scrollWidth - r.scrollLeft - r.clientWidth > 4);
+          edge();
+          r.onscroll = edge;
+        });
       },
     };
 
@@ -936,7 +1159,12 @@
     /** Scroll to a place in this block: its rung, or its line in the text (switching to the text when it has no rung). */
     function showHere(page, here) {
       const n = sel.mode === "rungs" && (sel.nets || []).find((x) => x.lines.some(here.hit));
-      if (n) { flash(page.querySelector(`.rung-card[data-net="${CSS.escape(n.no)}"]`)); return; }
+      if (n) {
+        const card = () => page.querySelector(`.rung-card[data-net="${CSS.escape(n.no)}"]`);
+        if (netFilter === "holding" && card() && !card().hasAttribute("data-holding")) { netFilter = "all"; PK.draw(); }
+        flash(card());
+        return;
+      }
       if (sel.mode !== "text") setMode("text");
       setTimeout(() => flash(page.querySelectorAll("#pg-code .code .ln")[here.line - 1]), 60);
     }
@@ -1213,8 +1441,10 @@
     const net = (op && nets.find((n) => n.lines.some((l) => writes(l, op)))) || (network != null && nets.find((n) => n.no === String(network)));
     if (!net) return "";
     plainDraw = true;
+    const was = drawBlock;
+    drawBlock = b;
     try { return netHtml(net, resolve || resolver(inst, b, want), op, null, null, []); }
-    finally { plainDraw = false; }
+    finally { plainDraw = false; drawBlock = was; }
   }
   window.PKProgram = { rungFor, writersOf, whyNotStick, copiesOverwritten };
 
