@@ -445,10 +445,12 @@
       : { k: "Output", v: "not known", st: "off" });
     const fb = e.feedback || [];
     if (fb.length) {
+      // Feedback only counts while the output is on: a closed valve nobody asked to open is not "missing" its open switch
+      const on = e.commanded === true;
       const miss = fb.filter((f) => f.met === false), f = miss[0] || fb[0], v = f.values && f.values[0];
-      const st = !miss.length ? (e.commanded === true ? "ok" : "off") : e.commanded === true ? (look.lvl === "fault" ? "bad" : "warn") : "off";
+      const st = !miss.length ? (on ? "ok" : "off") : on ? (look.lvl === "fault" ? "bad" : "warn") : "off";
       steps.push({ k: "Feedback", v: `${sigName(f.text, e, v)}: ${v ? v.text : f.met ? "yes" : f.met === false ? "no" : "not known"}`, st,
-        mark: f.met === false ? "✗" : f.met ? "✓" : "", note: miss.length > 1 ? `and ${miss.length - 1} more` : "" });
+        mark: on ? (f.met === false ? "✗" : f.met ? "✓" : "") : "", note: on && miss.length > 1 ? `and ${miss.length - 1} more` : "" });
     } else {
       const map = { ok: "ok", idle: "off", info: "off", warn: "warn", blocked: "warn", fault: "bad", bad: "bad" };
       steps.push({ k: "State", v: e.state, st: map[look.lvl] || "off" });
@@ -495,12 +497,12 @@
     const parts = [];
     if (ch.why) {
       const val = ch.why.values && ch.why.values.length ? ch.why.values.map((v) => `${esc(v.label)} <b>${esc(v.text)}</b>`).join(", ") : "";
-      parts.push(`<li class="cc root"><span class="cc-box"><span class="cc-t">${val || esc(cap(ch.why.text))}</span><span class="cc-n">${val ? "needs: " + esc(ch.why.text.charAt(0).toLowerCase() + ch.why.text.slice(1)) : "missing"}</span></span></li>`);
+      parts.push(`<li class="cc cc-root"><span class="cc-box"><span class="cc-t">${val || esc(cap(ch.why.text))}</span><span class="cc-n">${val ? "needs: " + esc(ch.why.text.charAt(0).toLowerCase() + ch.why.text.slice(1)) : "missing"}</span></span></li>`);
     }
-    ch.devices.forEach((e) => parts.push(`<li class="cc dev"><a href="#/plant/devices/${encodeURIComponent(e.id)}"><span class="cc-t">${esc(e.name)}</span><span class="cc-n">${esc(devWord(e))}</span></a></li>`));
+    ch.devices.forEach((e) => parts.push(`<li class="cc cc-dev"><a href="#/plant/devices/${encodeURIComponent(e.id)}"><span class="cc-t">${esc(e.name)}</span><span class="cc-n">${esc(devWord(e))}</span></a></li>`));
     const bySeq = new Map();
     ch.waits.forEach((w) => bySeq.set(w.seq, [...(bySeq.get(w.seq) || []), w.cond]));
-    bySeq.forEach((conds, q) => parts.push(`<li class="cc step"><a href="#/sequence/${encodeURIComponent(q.id)}${q.step != null ? "/" + q.step : ""}"><span class="cc-t">Step ${esc(q.step ?? "?")} can't go on</span><span class="cc-n">${conds.map((c) => esc(c.text)).join("; ")}</span></a></li>`));
+    bySeq.forEach((conds, q) => parts.push(`<li class="cc cc-step"><a href="#/sequence/${encodeURIComponent(q.id)}${q.step != null ? "/" + q.step : ""}"><span class="cc-t">Step ${esc(q.step ?? "?")} can't go on</span><span class="cc-n">${conds.map((c) => esc(c.text)).join("; ")}</span></a></li>`));
     return `<ol class="cchain" aria-label="Cause, root first">${parts.join("")}</ol>`;
   }
   /** A condition line (PK.cond) that also says which blocked device it waits for. */
