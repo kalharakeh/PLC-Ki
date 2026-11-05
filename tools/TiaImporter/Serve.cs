@@ -179,6 +179,40 @@ namespace TiaImporter
                 Reply(ctx, 200, st);
                 return;
             }
+            // Simulated inputs of the PLCSIM CPU ("Hold on PLCSIM" in PLC-Ki). Only this helper's PLCSIM address,
+            // only the input area; PLC-Ki checks the safety rules before it asks. A real PLC is not reachable here.
+            if (req.HttpMethod == "POST" && (path == "/plcsim/input/read" || path == "/plcsim/input/write"))
+            {
+                JsonElement body;
+                using (var r = new StreamReader(req.InputStream, Encoding.UTF8)) body = JsonDocument.Parse(r.ReadToEnd()).RootElement.Clone();
+                if (_plcsimIp == null) throw new InvalidOperationException("Simulated inputs are off: start serve with --plcsim-ip <PLCSIM address>.");
+                if (!string.Equals(Str(body, "ip"), _plcsimIp, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException($"Refused: simulated inputs only on the PLCSIM CPU at {_plcsimIp}, not {Str(body, "ip") ?? "(no address)"}.");
+                var offset = Int(body, "offset") ?? throw new InvalidOperationException("No byte offset given.");
+                var bit = Int(body, "bit");
+                if (offset < 0 || bit is int bb && (bb < 0 || bb > 7)) throw new InvalidOperationException("Not an input address.");
+                Dictionary<string, object> st;
+                if (path.EndsWith("/read"))
+                {
+                    var count = Int(body, "count") ?? 1;
+                    if (count != 1 && count != 2 && count != 4) throw new InvalidOperationException("Read 1, 2 or 4 bytes.");
+                    st = PlcsimControl.ReadInput(_plcsimIp, offset, bit, count);
+                }
+                else
+                {
+                    var hex = Str(body, "data") ?? "";
+                    var data = bit != null ? new byte[0] : Enumerable.Range(0, hex.Length / 2).Select(i => Convert.ToByte(hex.Substring(i * 2, 2), 16)).ToArray();
+                    if (bit == null && data.Length != 1 && data.Length != 2 && data.Length != 4) throw new InvalidOperationException("Write 1, 2 or 4 bytes.");
+                    var log = new StringWriter();
+                    st = PlcsimControl.WriteInput(_plcsimIp, offset, bit, Bool(body, "value"), data, log);
+                    Console.Write(log.ToString());
+                    try { File.AppendAllText(Path.Combine(_packages.FullName, "plcsim-inputs.log"), $"{DateTime.Now:o} {log.ToString().Trim()} from {req.RemoteEndPoint?.Address}\r\n"); }
+                    catch (IOException) { /* log is a courtesy */ }
+                }
+                st["plcsimIp"] = _plcsimIp;
+                Reply(ctx, 200, st);
+                return;
+            }
             if (req.HttpMethod == "GET" && path.StartsWith("/jobs/"))
             {
                 Job job;
@@ -341,6 +375,9 @@ namespace TiaImporter
 
         private static bool Bool(JsonElement e, string name) =>
             e.ValueKind == JsonValueKind.Object && e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.True;
+
+        private static int? Int(JsonElement e, string name) =>
+            e.ValueKind == JsonValueKind.Object && e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out var n) ? n : (int?)null;
 
         private static void Reply(HttpListenerContext ctx, int status, Dictionary<string, object> body)
         {

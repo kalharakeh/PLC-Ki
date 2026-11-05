@@ -108,6 +108,28 @@ public sealed class VmClient
         return text;
     }
 
+    /// <summary>Reads a simulated input of the helper's PLCSIM CPU: a bit, or 1/2/4 bytes. JSON {found, name, state, bit|data}.</summary>
+    public Task<string> ReadPlcsimInputAsync(string ip, int offset, int? bit, int count, CancellationToken ct) =>
+        PlcsimInputAsync("plcsim/input/read", new { ip, offset, bit, count }, ct);
+
+    /// <summary>
+    /// Sets a simulated input of the helper's PLCSIM CPU (Hold on PLCSIM). Only PlcsimInputs calls this, after
+    /// HoldRules allowed it; the helper refuses any address but its own PLCSIM address. JSON of the input read back.
+    /// </summary>
+    public Task<string> WritePlcsimInputAsync(string ip, int offset, int? bit, bool? value, string? data, CancellationToken ct) =>
+        PlcsimInputAsync("plcsim/input/write", new { ip, offset, bit, value, data }, ct);
+
+    private async Task<string> PlcsimInputAsync(string path, object body, CancellationToken ct)
+    {
+        using var content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
+        using var resp = await _http.PostAsync(path, content, ct);
+        var text = await resp.Content.ReadAsStringAsync(ct);
+        if ((int)resp.StatusCode == 404 && text.Contains("Unknown request"))
+            throw new InvalidOperationException("The TIA helper is older than this page: update it (Update-TIA-helper on the TIA PC) to hold simulated inputs.");
+        if (!resp.IsSuccessStatusCode) throw new InvalidOperationException(Error(text));
+        return text;
+    }
+
     /// <summary>Exports a TIA project (.ap20 on the TIA PC) as it is now, under <paramref name="name"/>.</summary>
     public Task<VmResult> ExportProjectAsync(string project, string name, CancellationToken ct) => PostAsync("export", new { project, name }, ct);
 

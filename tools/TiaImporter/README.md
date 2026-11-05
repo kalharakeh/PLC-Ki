@@ -20,6 +20,18 @@ PLC's address to confirm each time (2 minutes, otherwise cancelled); the CPU mus
 is refused, never stopped) and is left in STOP; software only; never through a PLCSIM adapter. Every attempt, also
 refused ones, is added to `real-downloads.log` in the packages folder (`C:\PLCKi\gen`).
 
+Simulated inputs (`serve --plcsim-ip`, for "Hold on PLCSIM" in PLC-Ki): `POST /plcsim/input/read` and
+`POST /plcsim/input/write` read and set one bit or 1/2/4 bytes of the PLCSIM Advanced **input area**, through the
+PLCSIM API, only on the instance with the `--plcsim-ip` address (the caller names it; a mix-up is refused). The output
+and memory areas are never touched, and a real PLC is not reachable through this API. PLC-Ki checks the safety rules
+(never F-I/O or values the safety program uses) before it asks. Every write is added to `plcsim-inputs.log` in the
+packages folder.
+
+Every PLCSIM API call (state, Start/Stop, inputs) has a time limit (3 s for the state, 5 s for inputs, 20 s for
+Start/Stop) and runs one at a time: a PLCSIM call can block for minutes, and `serve` answers one request at a time, so
+without a limit `/status` and everything else would wait behind it. While a call that ran over its limit is still busy,
+new PLCSIM requests are refused at once. Calls slower than 2 s are written to the window with their time.
+
 `import-blocks` loads blocks written by `PlcKi.Server generate` into the project you name, compiles, and writes
 `import-report.json` for the next fix round. It refuses names that already exist in the project, except
 the ones the version says it changes and the ones this same package already loaded into this same project (a version

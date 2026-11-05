@@ -125,6 +125,38 @@ public sealed class ProgramService
         return Regex.IsMatch(line.Trim(), @"(^|\bTHEN\s+)" + before + Regex.Escape(symbol) + after + @"(?![\w.\[])\s*:=(?!.*,\s*$)", RegexOptions.IgnoreCase);
     }
 
+    private static readonly Regex Opener = new(@"\b(IF|CASE|FOR|WHILE|REPEAT)\b", RegexOptions.IgnoreCase);
+    private static readonly Regex Closer = new(@"\bEND_(IF|CASE|FOR|WHILE|REPEAT)\b", RegexOptions.IgnoreCase);
+
+    /// <summary>
+    /// Is the assignment on line <paramref name="index"/> only done when a condition holds: inside an IF, CASE or
+    /// loop, or after THEN on the same line? An unconditional "x := ..." is written each time the block runs, so a
+    /// change from outside is overwritten at once; a conditional one only when its condition is true.
+    /// </summary>
+    public static bool Conditional(IReadOnlyList<string> lines, int index)
+    {
+        static string Code(string l)
+        {
+            l = Regex.Replace(l, @"\(\*.*?\*\)|'[^']*'|""[^""]*""", " ");   // comments on one line, texts, quoted names
+            var c = l.IndexOf("//", StringComparison.Ordinal);
+            return c >= 0 ? l[..c] : l;
+        }
+        if (index < 0 || index >= lines.Count) return false;
+        if (Regex.IsMatch(Code(lines[index]), @"\bTHEN\b", RegexOptions.IgnoreCase)) return true;
+        var depth = 0;
+        var inComment = false;
+        for (var i = 0; i < index; i++)
+        {
+            var l = lines[i];
+            if (inComment) { var e = l.IndexOf("*)", StringComparison.Ordinal); if (e < 0) continue; l = l[(e + 2)..]; inComment = false; }
+            var s = l.IndexOf("(*", StringComparison.Ordinal);
+            if (s >= 0 && l.IndexOf("*)", s, StringComparison.Ordinal) < 0) { l = l[..s]; inComment = true; }
+            var code = Code(l);
+            depth += Opener.Matches(code).Count - Closer.Matches(code).Count;
+        }
+        return depth > 0;
+    }
+
     /// <summary>
     /// Where a signal is used: blocks whose source or decoded logic mention it, with the first lines (read-only text search).
     /// Each line says whether it writes the signal; lines that write it are always included, so "where is it set" can be found.
@@ -140,8 +172,9 @@ public sealed class ProgramService
         {
             var text = b.SclSource ?? b.DecodedLogic;
             if (text == null || text.IndexOf(q, StringComparison.OrdinalIgnoreCase) < 0) continue;
-            var lines = text.Split('\n')
-                .Select((l, i) => (No: i + 1, Text: l.TrimEnd('\r')))
+            var all = text.Split('\n').Select(l => l.TrimEnd('\r')).ToArray();
+            var lines = all
+                .Select((l, i) => (No: i + 1, Text: l))
                 .Where(x => x.Text.Contains(q, StringComparison.OrdinalIgnoreCase))
                 .Select(x => (x.No, x.Text, Writes: Writes(x.Text, q)))
                 .ToList();
@@ -149,7 +182,11 @@ public sealed class ProgramService
             results.Add(new
             {
                 block = b.Name, kind = b.Kind, language = b.Language, count = lines.Count,
-                lines = shown.Select(x => new { no = x.No, text = x.Text.Trim().Length > 160 ? x.Text.Trim()[..157] + "..." : x.Text.Trim(), writes = x.Writes }),
+                lines = shown.Select(x => new
+                {
+                    no = x.No, text = x.Text.Trim().Length > 160 ? x.Text.Trim()[..157] + "..." : x.Text.Trim(), writes = x.Writes,
+                    conditional = x.Writes ? Conditional(all, x.No - 1) : (bool?)null,
+                }),
             });
             if (results.Count >= maxBlocks) break;
         }

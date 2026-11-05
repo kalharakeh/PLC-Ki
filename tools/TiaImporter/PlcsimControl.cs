@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Threading.Tasks;
 
 namespace TiaImporter
 {
@@ -54,14 +56,64 @@ namespace TiaImporter
 
         private static Version Version(string s) => System.Version.TryParse(s, out var v) ? v : new Version(0, 0);
 
-        /// <summary>{found, name, state, ips, cpuType, leds} of the PLCSIM CPU at plcsimIp, or {found=false, error}.</summary>
+        // ---- One PLCSIM API call at a time, each with a time limit ----
+        // A PLCSIM API call can block for minutes (seen on the Helium VM: GET /cpu took about 3 minutes, no error).
+        // serve answers one request at a time, so without a limit every request (also /status) waits behind it.
+        private static readonly object _gate = new object();
+        private static Task _busy;
+        private static string _busyWhat;
+        private static DateTime _busySince;
+
+        /// <summary>
+        /// Runs f on its own thread and waits at most limitMs (then TimeoutException). While a call that ran over its
+        /// limit is still busy in the PLCSIM API, new calls are refused at once instead of queueing behind it.
+        /// Calls slower than 2 s are written to the window with how long they took.
+        /// </summary>
+        private static T Guarded<T>(string what, int limitMs, Func<T> f)
+        {
+            Task<T> t;
+            lock (_gate)
+            {
+                if (_busy != null && !_busy.IsCompleted)
+                    throw new TimeoutException($"PLCSIM has not answered an earlier request yet ({_busyWhat}, {(int)(DateTime.Now - _busySince).TotalSeconds} s ago). Try again in a moment.");
+                var started = DateTime.Now;
+                t = Task.Run(() =>
+                {
+                    try { return f(); }
+                    finally
+                    {
+                        var s = (DateTime.Now - started).TotalSeconds;
+                        if (s > 2) Console.WriteLine($"{DateTime.Now:HH:mm:ss} PLCSIM {what} took {s:0.0} s.");
+                    }
+                });
+                _busy = t;
+                _busyWhat = what;
+                _busySince = started;
+            }
+            try
+            {
+                if (!t.Wait(limitMs)) throw new TimeoutException($"PLCSIM did not answer within {limitMs / 1000} s ({what}).");
+            }
+            catch (AggregateException ex) { throw ex.InnerException ?? ex; }
+            return t.Result;
+        }
+
+        /// <summary>
+        /// {found, name, state, ips, cpuType, leds} of the PLCSIM CPU at plcsimIp, or {found=false, error}. Answers
+        /// within 3 s (PLC-Ki waits 4 s): when PLCSIM is slower, {found=false, error} says so.
+        /// </summary>
         public static Dictionary<string, object> State(string plcsimIp)
         {
             try
             {
-                var inst = Find(plcsimIp, out var error);
-                if (inst == null) return new Dictionary<string, object> { ["found"] = false, ["error"] = error };
-                return Describe(inst);
+                return Guarded("state", 3000, () =>
+                {
+                    var sw = Stopwatch.StartNew();
+                    var inst = Find(plcsimIp, out var error);
+                    if (sw.Elapsed.TotalSeconds > 1) Console.WriteLine($"{DateTime.Now:HH:mm:ss} PLCSIM instance lookup took {sw.Elapsed.TotalSeconds:0.0} s.");
+                    if (inst == null) return new Dictionary<string, object> { ["found"] = false, ["error"] = error };
+                    return Describe(inst);
+                });
             }
             catch (Exception ex)
             {
@@ -70,7 +122,10 @@ namespace TiaImporter
         }
 
         /// <summary>Puts the PLCSIM CPU in RUN ("run") or STOP ("stop"). Returns the new state.</summary>
-        public static Dictionary<string, object> SetMode(string plcsimIp, string mode, TextWriter log)
+        public static Dictionary<string, object> SetMode(string plcsimIp, string mode, TextWriter log) =>
+            Guarded(mode == "run" ? "RUN" : "STOP", 20000, () => SetModeNow(plcsimIp, mode, log));
+
+        private static Dictionary<string, object> SetModeNow(string plcsimIp, string mode, TextWriter log)
         {
             if (mode != "run" && mode != "stop") throw new InvalidOperationException("Mode must be run or stop.");
             var inst = Find(plcsimIp, out var error) ?? throw new InvalidOperationException(error);
@@ -87,6 +142,91 @@ namespace TiaImporter
             catch (TargetInvocationException ex) { throw new InvalidOperationException($"PLCSIM refused {name}: {Inner(ex).Message}"); }
             return Describe(inst);
         }
+
+        /// <summary>
+        /// Reads a simulated input of the PLCSIM CPU at plcsimIp: one bit (bit 0-7) or count bytes (1, 2, 4) from
+        /// byte offset. Returns {found, name, state, bit|data (hex)} or {found=false, error}. Inputs only: the
+        /// output and memory areas are never touched.
+        /// </summary>
+        public static Dictionary<string, object> ReadInput(string plcsimIp, int offset, int? bit, int count) =>
+            Guarded("input read", 5000, () => ReadInputNow(plcsimIp, offset, bit, count));
+
+        private static Dictionary<string, object> ReadInputNow(string plcsimIp, int offset, int? bit, int count)
+        {
+            var inst = Find(plcsimIp, out var error) ?? throw new InvalidOperationException(error);
+            var area = InputArea(inst);
+            var d = new Dictionary<string, object> { ["found"] = true, ["name"] = Get(inst, "Name")?.ToString(), ["state"] = Get(inst, "OperatingState")?.ToString() };
+            if (bit is int b) d["bit"] = ReadBit(area, offset, b);
+            else d["data"] = Hex(ReadBytes(area, offset, count));
+            return d;
+        }
+
+        /// <summary>
+        /// Sets a simulated input of the PLCSIM CPU at plcsimIp: one bit, or the bytes in data (big-endian, as the PLC
+        /// stores them). It stays until it is set again: the CPU copies the simulated inputs into its process image
+        /// at the start of every cycle and never writes them. Returns the input as read back.
+        /// </summary>
+        public static Dictionary<string, object> WriteInput(string plcsimIp, int offset, int? bit, bool? value, byte[] data, TextWriter log)
+        {
+            try { return Guarded("input write", 5000, () => WriteInputNow(plcsimIp, offset, bit, value, data, log)); }
+            catch (TimeoutException ex) when (ex.Message.StartsWith("PLCSIM did not answer"))
+            {
+                throw new TimeoutException("PLCSIM did not confirm the input within 5 s. It may still be set: read it before you try again.");
+            }
+        }
+
+        private static Dictionary<string, object> WriteInputNow(string plcsimIp, int offset, int? bit, bool? value, byte[] data, TextWriter log)
+        {
+            var inst = Find(plcsimIp, out var error) ?? throw new InvalidOperationException(error);
+            var area = InputArea(inst);
+            var what = bit is int b0 ? $"%I{offset}.{b0} := {(value == true ? "TRUE" : "FALSE")}" : $"%IB{offset}..{offset + data.Length - 1} := 16#{Hex(data)}";
+            log.WriteLine($"{DateTime.Now:HH:mm:ss} PLCSIM {Get(inst, "Name")} ({plcsimIp}): input {what}, set by PLC-Ki.");
+            try
+            {
+                if (bit is int b) Call(area, "WriteBit", (uint)offset, (byte)b, value == true);
+                else if (!TryCall(area, "WriteBytes", (uint)offset, data) && !TryCall(area, "WriteBytes", (uint)offset, (uint)data.Length, data))
+                    for (var i = 0; i < data.Length; i++) Call(area, "WriteByte", (uint)(offset + i), data[i]);
+            }
+            catch (TargetInvocationException ex) { throw new InvalidOperationException("PLCSIM refused the input: " + Inner(ex).Message); }
+            return ReadInputNow(plcsimIp, offset, bit, bit != null ? 1 : data.Length);   // inside the same guarded call
+        }
+
+        private static object InputArea(object inst) =>
+            Get(inst, "InputArea") ?? throw new InvalidOperationException("This PLCSIM API has no InputArea, so PLC-Ki cannot set simulated inputs.");
+
+        private static bool ReadBit(object area, int offset, int bit)
+        {
+            try { return (bool)Call(area, "ReadBit", (uint)offset, (byte)bit); }
+            catch (MissingMethodException) { return ((ReadBytes(area, offset, 1)[0] >> bit) & 1) == 1; }
+        }
+
+        private static byte[] ReadBytes(object area, int offset, int count)
+        {
+            try { if (Call(area, "ReadBytes", (uint)offset, (uint)count) is byte[] bytes) return bytes; }
+            catch (MissingMethodException) { /* one at a time below */ }
+            var r = new byte[count];
+            for (var i = 0; i < count; i++) r[i] = Convert.ToByte(Call(area, "ReadByte", (uint)(offset + i)));
+            return r;
+        }
+
+        /// <summary>Calls the public method with this name and as many parameters, converting the numbers to its parameter types.</summary>
+        private static object Call(object target, string name, params object[] args)
+        {
+            var m = target.GetType().GetMethods().FirstOrDefault(x => x.Name == name && x.GetParameters().Length == args.Length
+                && x.GetParameters().Zip(args, (p, a) => p.ParameterType.IsArray == a is Array).All(ok => ok))
+                ?? throw new MissingMethodException(target.GetType().Name, name);
+            var ps = m.GetParameters();
+            var conv = args.Select((a, i) => a is Array || ps[i].ParameterType.IsInstanceOfType(a) ? a : Convert.ChangeType(a, ps[i].ParameterType)).ToArray();
+            return m.Invoke(target, conv);
+        }
+
+        private static bool TryCall(object target, string name, params object[] args)
+        {
+            try { Call(target, name, args); return true; }
+            catch (MissingMethodException) { return false; }
+        }
+
+        private static string Hex(byte[] b) => BitConverter.ToString(b).Replace("-", "");
 
         /// <summary>The instance whose controller has exactly this address; null with the reason otherwise.</summary>
         private static object Find(string plcsimIp, out string error)
@@ -146,7 +286,9 @@ namespace TiaImporter
                 ["cpuType"] = Get(inst, "CPUType")?.ToString(),
                 ["ips"] = (Get(inst, "ControllerIP") as Array)?.Cast<object>().Select(x => x?.ToString()).ToList(),
             };
+            var sw = Stopwatch.StartNew();
             var leds = Leds(inst);
+            if (sw.Elapsed.TotalSeconds > 1) Console.WriteLine($"{DateTime.Now:HH:mm:ss} PLCSIM LED read took {sw.Elapsed.TotalSeconds:0.0} s.");
             if (leds.Count > 0) d["leds"] = leds;
             return d;
         }

@@ -1748,3 +1748,10 @@ section.hero.aa { padding-block: 26px 30px; }
   .vb-plain { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px 10px; }
   .vb-plain .k span { font-size: 11px; }
 }
+
+/* Hold on PLCSIM: the strip of held inputs above every page, and the held list on the Tags page */
+.held-bar { padding-top: 14px; }
+.held-strip { align-items: center; flex-wrap: wrap; }
+.held-strip > div:nth-child(2) { flex: 1 1 260px; min-width: 0; }
+.held-acts { display: flex; gap: 6px; flex: none; }
+.why-stick:empty { display: none; }
