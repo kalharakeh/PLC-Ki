@@ -249,6 +249,10 @@
   // ---- LAD-style rungs from boolean statements ----
   const isSignal = (x) => !!x && /^(#|")/.test(x);
   let plainDraw = false;    // true while drawing for another page (rungFor): no buttons, as nothing there answers them
+  let drawBlock = null;     // the block being drawn, set by whoever draws: a call to #inst links to the instance's type
+  // Program page: all networks, or only those holding back an output now (remembered in this browser)
+  let netFilter = "all";
+  try { if (localStorage.getItem("plcki.netFilter") === "holding") netFilter = "holding"; } catch { /* private window */ }
   function tokenize(expr) {
     const re = /\s*(\(|\)|AND\b|OR\b|XOR\b|NOT\b|<>|>=|<=|=|<|>|"[^"]+"(?:\.(?:[A-Za-z_]\w*|"[^"]+")|\[\d+\])*|#?[A-Za-z_][\w.]*(?:\[\d+\])?|T#\w+|-?\d+(?:\.\d+)?)/gy;
     const toks = [];
@@ -438,6 +442,85 @@
     return new RegExp("(^|\\bTHEN\\s+)" + sym + "(?![\\w.\\[])\\s*:=").test(line.trim());
   }
 
+  // ---- block calls as a table: "SequenceProgramTGF_DB"(INIT_SQ := … AND NOT …, Init.X => …); ----
+  const CALL = /^(#[A-Za-z_]\w*|"[^"]+"|[A-Za-z_]\w*)\s*\(/;
+  /** How many brackets are still open at the end of a line (strings and comments skipped). */
+  function depth(line) {
+    let d = 0, q = null;
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i];
+      if (q) { if (c === q) q = null; continue; }
+      if (c === '"' || c === "'") q = c;
+      else if (c === "/" && line[i + 1] === "/") break;
+      else if (c === "(") d++;
+      else if (c === ")") d--;
+    }
+    return d;
+  }
+  /** "A := x, B := f(y, z)" -> ["A := x", "B := f(y, z)"]: commas inside brackets or quotes don't split. */
+  function splitTop(s) {
+    const out = [];
+    let d = 0, q = null, from = 0;
+    for (let i = 0; i < s.length; i++) {
+      const c = s[i];
+      if (q) { if (c === q) q = null; continue; }
+      if (c === '"' || c === "'") q = c;
+      else if (c === "(" || c === "[") d++;
+      else if (c === ")" || c === "]") d--;
+      else if (c === "," && d === 0) { out.push(s.slice(from, i).trim()); from = i + 1; }
+    }
+    out.push(s.slice(from).trim());
+    return out.filter(Boolean);
+  }
+  /** The block a call goes to, as a link when the program has it (an instance DB links to its FB, #inst to its type). */
+  function calleeHtml(name, block) {
+    const bare = name.replace(/^"|"$/g, "");
+    const blocks = (state.program && state.program.blocks) || [];
+    if (name.startsWith("#")) {
+      const m = ((block && block.interface) || []).find((x) => x.name === name.slice(1));
+      const type = m && String(m.datatype || "").replace(/^"|"$/g, "");
+      return blocks.some((b) => b.name === type) ? `<span class="mono">${esc(name)}</span> <a href="${hrefOf(type)}">${esc(type)}</a>` : `<span class="mono">${esc(name)}</span>`;
+    }
+    const b = blocks.find((x) => x.name === bare);
+    if (b) return b.instanceOf ? `<a class="mono" href="${hrefOf(b.instanceOf, [name])}">${esc(name)}</a> <span class="faint small">values of ${esc(b.instanceOf)}</span>` : `<a class="mono" href="${hrefOf(b.name)}">${esc(name)}</a>`;
+    return `<span class="mono">${esc(name)}</span> <span class="faint small">built-in</span>`;
+  }
+  /**
+   * One call statement -> a card with one row per parameter: → inputs (P := expr), ← outputs (Q => target).
+   * The value is the operand's live value, or the result of a TRUE/FALSE expression. null when it is not a plain call.
+   */
+  function callHtml(stmt, resolve, block) {
+    const m = stmt.replace(/\s*\/\/.*$/, "").match(/^(#[A-Za-z_]\w*|"[^"]+"|[A-Za-z_]\w*)\s*\(([\s\S]*)\)\s*;$/);
+    if (!m || depth(stmt) !== 0) return null;
+    const args = m[2].trim() ? splitTop(m[2]) : [];
+    const rows = [];
+    for (const a of args) {
+      const p = a.match(/^([A-Za-z_][\w.]*)\s*(:=|=>)\s*([\s\S]+)$/);
+      if (!p) return null;                       // positional or unusual arguments: leave it as text
+      rows.push({ name: p[1], out: p[2] === "=>", expr: p[3].trim() });
+    }
+    if (!rows.length) return null;
+    const one = new RegExp("^" + OPERAND.source + "$");
+    const value = (expr) => {
+      if (one.test(expr)) return chip(resolve(expr));
+      if (/^[-+]?\d+(\.\d+)?$|^(TRUE|FALSE)$|^T#/i.test(expr)) return "";
+      const toks = tokenize(expr), tree = toks && parseExpr(toks);
+      const v = tree ? evalNode(tree, resolve) : null;
+      return v == null ? "" : chip({ raw: v, text: v ? "TRUE" : "FALSE", symbol: expr });
+    };
+    // A plain operand is shown without its chip (the value has its own column); an expression keeps its chips
+    const wired = (expr) => one.test(expr) ? opHtml(expr) : sclLine(expr, resolve);
+    const comment = (stmt.match(/\/\/\s*(.*)$/) || [])[1];
+    // In or out is only known when the code says so ("Q => x"); a decoded call writes both as ":=", and a wrong arrow
+    // is worse than none
+    const dirs = rows.some((r) => r.out);
+    const dir = (r) => dirs ? `<td class="dir" title="${r.out ? "Output: the block writes it" : "Input: the block reads it"}">${r.out ? "←" : "→"}</td>` : "";
+    return `<div class="call"><div class="call-h"><span class="tag">Call</span>${calleeHtml(m[1], block)}${comment ? `<span class="faint small">${esc(comment)}</span>` : ""}</div>
+      <table class="tbl call-tbl"><tr>${dirs ? `<th aria-label="In or out"></th>` : ""}<th>Parameter</th><th>Wired to</th><th>Now</th></tr>
+      ${rows.map((r) => `<tr>${dir(r)}<td class="mono">${esc(r.name)}</td><td class="mono wired">${wired(r.expr)}</td><td>${value(r.expr)}</td></tr>`).join("")}
+      </table></div>`;
+  }
+
   function netHtml(net, resolve, highlight, curStep, wantNet, why) {
     const parts = [];
     let plain = [];
@@ -449,7 +532,19 @@
       return `<span class="gl ${inCur ? "cur" : ""}">${st && inCur ? `<span class="now-tag">now</span>` : ""}${sclLine(l, resolve)}</span>`;
     };
     const flush = () => { if (plain.length) { parts.push(net.lang === "GRAPH" ? `<div class="stmt graph">${plain.map(graphLine).join("")}</div>` : `<div class="stmt">${plain.map((l) => sclLine(l, resolve)).join("<br>")}</div>`); plain = []; } };
-    for (const line of net.lines) {
+    for (let k = 0; k < net.lines.length; k++) {
+      let line = net.lines[k];
+      // A block call: a table of its parameters instead of a wall of text. One written over several lines is joined
+      // until its brackets close.
+      const head = line.trim().match(CALL);
+      const isTimer = /^#\w+\s*\(\s*IN\s*:=/.test(line.trim());     // a timer is drawn as a box on its rung below
+      if (net.lang !== "GRAPH" && head && !isTimer && !KW.has(head[1].toUpperCase())) {
+        const from = k;
+        while (depth(line) > 0 && k + 1 < net.lines.length) line += " " + net.lines[++k].trim();
+        const call = callHtml(line.trim(), resolve, drawBlock);
+        if (call) { flush(); parts.push(call); continue; }
+        k = from; line = net.lines[k];             // not a plain call: leave its lines as they were
+      }
       const s = line.trim().replace(/\s*\/\/.*$/, "");
       const timer = s.match(/^(#\w+)\s*\(\s*IN\s*:=\s*(.+?),\s*PT\s*:=\s*(.+?)\s*\)\s*;/);
       const assign = s.match(/^(#[\w.]+|"[^"]+"(?:\.(?:\w+|"[^"]+"))*)\s*:=\s*(.+);$/);
@@ -463,7 +558,9 @@
     }
     flush();
     const hl = highlight ? net.lines.some((l) => writes(l, highlight)) : wantNet != null && net.no === String(wantNet);
-    return `<div class="rung-card ${hl ? "hl" : ""}" ${hl ? 'id="hl"' : ""} data-net="${esc(net.no)}">
+    // For the "Holding back now" filter: a network where a contact holds back an output that is asked for
+    const holding = parts.some((p) => /class="contact[^"]*\bblocker\b/.test(p));
+    return `<div class="rung-card ${hl ? "hl" : ""}" ${hl ? 'id="hl"' : ""} data-net="${esc(net.no)}" ${holding ? 'data-holding="1"' : ""}>
       <div class="rung-title">${net.no ? "Network " + esc(net.no) : ""} ${net.lang ? `<span class="tag lang-${esc(net.lang)}">${esc(net.lang)}</span>` : ""}<span class="faint">${esc(net.title)}</span></div>
       ${parts.join("")}</div>`;
   }
@@ -926,6 +1023,7 @@
         const hl = want && nets.some((n) => n.lines.some((l) => writes(l, want))) ? want : null;
         const why = [];
         why.states = [];          // the states of state decoders, summed up in one line each (statesHtml)
+        drawBlock = b;
         const netsHtml = nets.map((n) => netHtml(n, resolve, hl || (want && !want.startsWith('"') ? want : null), seq ? seq.step : null, hl ? null : sel.network, why)).join("");
         const trail = sel.alarm ? alarmLine(sel.alarm, b.name) : "";
 
@@ -950,7 +1048,14 @@
           const where = trail || (sel.highlight && sel.highlight.startsWith('"')
             ? (hl ? `<div class="notice" style="margin-bottom:12px">${icon("info")}<div>The highlighted rungs write <b>${esc(sel.highlight)}</b>: (S) sets it, (R) resets it, ( ) follows the rung. The values are live; amber marks the first contact that stops a rung.</div></div>`
               : `<div class="notice gold" style="margin-bottom:12px">${icon("info")}<div>${esc(sel.highlight)} is not written in this block${sel.network ? `; network ${esc(sel.network)} is highlighted` : ""}.</div></div>`) : "");
-          bodyHtml = where + legend + netsHtml
+          // Long blocks: show only the networks where something holds back an output that is asked for
+          const nHold = (netsHtml.match(/data-holding="1"/g) || []).length;
+          const only = netFilter === "holding";
+          const filter = nets.length > 3 ? `<div class="net-filter"><div class="segmented" role="group" aria-label="Which networks">
+              <button type="button" data-netf="all" class="${only ? "" : "on"}" aria-pressed="${!only}">All ${nets.length} networks</button>
+              <button type="button" data-netf="holding" class="${only ? "on" : ""}" aria-pressed="${only}">Holding back now · ${nHold}</button></div>
+              ${only && !nHold ? `<p class="ok-line">${icon("check")}<span>Nothing in this block is holding back an output right now.</span></p>` : ""}</div>` : "";
+          bodyHtml = where + filter + legend + `<div class="nets ${only ? "only-holding" : ""}">${netsHtml}</div>`
             + (b.source && !b.logic ? `<p class="faint small" style="margin:12px 0 0">Only the on/off statements of this SCL block are drawn as rungs. <button type="button" class="linkbtn" data-mode="text">Show all of it as text</button>.</p>` : "");
         } else if (canText) {
           const hits = find ? String(text).split(/\r?\n/).filter((l) => l.toLowerCase().includes(find.toLowerCase())).length : 0;
@@ -963,6 +1068,13 @@
         const isDb = /DB$/.test(b.kind);
         const title = plainTitle(b);
         const tagsHtml = window.PKTags ? window.PKTags.blockTagsHtml(text).replace(/<details([^>]*) open>/, "<details$1>") : "";
+        // What goes in and comes out, near the top: one compact chip per signal (type and comment on hover);
+        // the stored values stay in the full table at the bottom
+        const ofSec = (re) => iface.filter((m) => re.test(String(m.section)) && !/^void$/i.test(String(m.datatype)));
+        const ins = ofSec(/^(Input|InOut)$/i), outs = ofSec(/^(Output|Return)$/i);
+        const ioItem = (m) => { const v = resolve("#" + m.name); return `<span class="io" title="${esc(m.datatype + (m.comment ? " · " + m.comment : ""))}"><span class="mono">${nameHtml(m.name)}</span>${v && !v.temp ? chip(v) : ""}</span>`; };
+        const ioRow = (label, list) => list.length ? `<div class="io-row"><span class="io-h">${label}</span><div class="io-list">${list.map(ioItem).join("")}</div></div>` : "";
+        const ioCard = !isDb && (ins.length || outs.length) ? `<div class="card pg-card pg-io"><h2 class="pg-h">Inputs and outputs</h2>${ioRow("In", ins)}${ioRow("Out", outs)}</div>` : "";
         const page = body(crumbs(b.name) + `
             <div class="card pg-card">
               <div class="row" style="gap:10px 12px;flex-wrap:wrap;align-items:center"><h2 class="pg-title">${esc(title || b.name)}${dot(ownState(n))}</h2><span class="spacer"></span>${instPick}</div>
@@ -972,6 +1084,7 @@
               ${b.comment ? `<p class="pg-lede">${esc(b.comment)}</p>` : ""}
               ${isDb ? "" : whatItDoes(b, n, why, resolve, sel.inst, tree.byName)}
             </div>
+            ${ioCard}
             <div class="card pg-card" id="pg-code">
               <div class="row" style="gap:8px 14px;flex-wrap:wrap;align-items:center"><h2 class="pg-h">${isDb ? "Its values" : "The code"}</h2>${switcher}<span class="faint small">${!switcher ? "" : mode === "rungs" ? "Each network as a rung: green passes power, amber holds back an output that is asked for." : "The code as written in TIA, with the live value after each signal."}</span></div>
               <div style="margin-top:14px">${bodyHtml}</div>
@@ -991,9 +1104,16 @@
         page.querySelectorAll("[data-ask]").forEach((b) => b.onclick = () => window.PKAsk && window.PKAsk.open(b.dataset.ask));
         const all = page.querySelector("[data-all-parts]");
         if (all) all.onclick = () => { allParts = !allParts; PK.draw(); };
+        page.querySelectorAll("[data-netf]").forEach((b) => b.onclick = () => {
+          netFilter = b.dataset.netf === "holding" ? "holding" : "all";
+          try { localStorage.setItem("plcki.netFilter", netFilter); } catch { /* private window */ }
+          PK.draw();
+        });
         page.querySelectorAll("[data-goto-net]").forEach((b) => b.onclick = () => {
           const net = b.dataset.gotoNet;
           if (sel.mode !== "rungs") setMode("rungs");
+          // A network the filter hides: show them all, so the jump lands
+          else if (netFilter === "holding" && !page.querySelector(`.rung-card[data-net="${CSS.escape(net)}"][data-holding]`)) { netFilter = "all"; PK.draw(); }
           setTimeout(() => {
             const card = page.querySelector(`.rung-card[data-net="${CSS.escape(net)}"]`);
             if (!card) return;
@@ -1039,7 +1159,12 @@
     /** Scroll to a place in this block: its rung, or its line in the text (switching to the text when it has no rung). */
     function showHere(page, here) {
       const n = sel.mode === "rungs" && (sel.nets || []).find((x) => x.lines.some(here.hit));
-      if (n) { flash(page.querySelector(`.rung-card[data-net="${CSS.escape(n.no)}"]`)); return; }
+      if (n) {
+        const card = () => page.querySelector(`.rung-card[data-net="${CSS.escape(n.no)}"]`);
+        if (netFilter === "holding" && card() && !card().hasAttribute("data-holding")) { netFilter = "all"; PK.draw(); }
+        flash(card());
+        return;
+      }
       if (sel.mode !== "text") setMode("text");
       setTimeout(() => flash(page.querySelectorAll("#pg-code .code .ln")[here.line - 1]), 60);
     }
@@ -1278,8 +1403,10 @@
     const net = (op && nets.find((n) => n.lines.some((l) => writes(l, op)))) || (network != null && nets.find((n) => n.no === String(network)));
     if (!net) return "";
     plainDraw = true;
+    const was = drawBlock;
+    drawBlock = b;
     try { return netHtml(net, resolve || resolver(inst, b, want), op, null, null, []); }
-    finally { plainDraw = false; }
+    finally { plainDraw = false; drawBlock = was; }
   }
   window.PKProgram = { rungFor };
 
