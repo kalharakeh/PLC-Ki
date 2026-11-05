@@ -427,7 +427,8 @@ const PK = (() => {
     const b = $("banner");
     if (!b) return;
     const html = text ? `<span class="dot"></span><span>${esc(text)}${link ? " " + link : ""}</span>` : "";
-    if (b.innerHTML !== html) b.innerHTML = html;
+    // Compared with what was last written, not with innerHTML: the link must not be replaced under a click
+    if (b.dataset.html !== html) { b.innerHTML = html; b.dataset.html = html; }
     b.className = "banner " + kind + (text ? "" : " hidden");
     document.documentElement.classList.toggle("frozen", kind === "frozen");
   }

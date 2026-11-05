@@ -1103,6 +1103,7 @@ main#page section.hero .k span { margin-top: 2px; }
    The red "values frozen" banner stays: it is the one people must not miss. */
 .banner.test { display: none; }
 html.test-values .topbar { border-bottom: 3px solid var(--warn); }
+html.cpu-stop.test-values .topbar { border-bottom-color: var(--fault); }
 .rail-who .tl { white-space: normal; line-height: 1.3; }
 @media (min-width: 900px) { main#page section.hero .kpis { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); } }
 /* Ask panel: "Add the key" sits under the text instead of squeezing into a circle beside it (review 2, item 22) */
