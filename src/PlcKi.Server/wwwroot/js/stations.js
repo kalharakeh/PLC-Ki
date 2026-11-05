@@ -36,6 +36,8 @@ const PKStations = (() => {
 
   const order = { fault: 0, warn: 1, ok: 2 };
   function levelOf(st) {
+    const stop = PK.cpuStop();
+    if (stop) return ["fault", stop.word || "STOP"];
     if (st.alarms.some((a) => a.severity !== "WARNING") || st.equipment.some((e) => e.level === "fault" || e.level === "bad") || st.sequences.some((q) => q.halted))
       return ["fault", st.alarms.length ? "Alarm" : st.sequences.some((q) => q.halted) ? "Halted" : "Fault"];
     if (st.alarms.length || st.equipment.some((e) => e.blockedBy || e.level === "warn"))
@@ -115,7 +117,8 @@ const PKStations = (() => {
     return `<div class="card stack">
       <div class="row" style="gap:8px">${txt ? `<span class="pill ${cls}"><span class="dot"></span>${txt}</span>` : ""}<span class="faint small">${esc(q.name)}${q.timeInStep ? " · " + esc(q.timeInStep) + " in this step" : ""}</span></div>
       <h3>Step ${esc(q.step ?? "?")}: ${esc(q.stepName)}</h3>
-      ${q.halted && q.haltReasons.length ? `<p class="muted small" style="margin:0">Halted: ${esc(q.haltReasons.join("; "))}</p>` : q.does ? `<p class="muted small" style="margin:0">${esc(q.does)}</p>` : ""}
+      ${PK.cpuStop() ? `<p class="small" style="margin:0;color:var(--fault-ink)">${esc(q.explanation)}</p>`
+        : q.halted && q.haltReasons.length ? `<p class="muted small" style="margin:0">Halted: ${esc(q.haltReasons.join("; "))}</p>` : q.does ? `<p class="muted small" style="margin:0">${esc(q.does)}</p>` : ""}
       ${L ? L.stepStrip(q) : ""}
       ${waits.length ? `<p class="muted small" style="margin:6px 0 0">Waiting for</p><ul class="conds">${waits.map((c) => PK.condHeld(c)).join("")}</ul>` : ""}
       <div><a class="btn b small" href="#/plant/sequence/${encodeURIComponent(q.id)}">Step chart ›</a></div></div>`;
@@ -142,7 +145,9 @@ const PKStations = (() => {
     const rest = st.equipment.filter((e) => !problems.includes(e));
     const first = st.alarms[0];
     const rootDev = chains.length && chains[0].devices.find((e) => e.blockedBy);
-    const sub = first ? first.text : rootDev ? `${rootDev.name} is blocked: ${/^needs /.test(rootDev.blockedBy) ? "it " : ""}${rootDev.blockedBy}.`
+    const stop = PK.cpuStop(s);
+    const sub = stop ? `The PLC is in ${stop.word || "STOP"} ${PK.cpuSince(stop)}: the program is not running. The values are its last state.`
+      : first ? first.text : rootDev ? `${rootDev.name} is blocked: ${/^needs /.test(rootDev.blockedBy) ? "it " : ""}${rootDev.blockedBy}.`
       : problems.length ? `${problems[0].name}: ${problems[0].blockedBy || problems[0].state}.`
       : st.sequences[0] ? `Step ${st.sequences[0].step ?? "?"}: ${st.sequences[0].stepName}.` : "No alarm and no device needs attention.";
     const others = stations.filter((x) => x !== st);

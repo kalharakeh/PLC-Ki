@@ -217,6 +217,7 @@
   }
 
   function seqState(q) {
+    if (PK.cpuStop()) return ["Not running", "bad"];
     return q.halted ? ["Halted", "bad"] : q.next.some((n) => n.ready === false) ? ["Waiting", "warn"] : ["Running", "ok"];
   }
 
@@ -229,6 +230,42 @@
   }
 
   // ---------- Active alarm ----------
+  /**
+   * The CPU is not in RUN: that comes first, before any alarm, because nothing else explains a machine that does not
+   * move. The CPU's own messages, what to check, then the alarms that are on (their last state) and the last step.
+   * Nothing here can start the CPU: PLC-Ki never changes its mode.
+   */
+  function stopPage(s, c, seq) {
+    const word = c.word || "STOP";
+    const msgs = PK.cpuMessages ? PK.cpuMessages() : null;
+    const alarms = s.activeAlarms;
+    const sw = c.switch ? String(c.switch).toUpperCase() : "";
+    const todo = [
+      sw ? `The mode switch on the CPU is at ${sw}.` + (/STOP/.test(sw) ? " Someone set it there: find out why before it goes back to RUN." : "")
+        : "Look at the mode switch on the CPU: RUN or STOP.",
+      "Open the CPU's diagnostic buffer in TIA Portal (Online & diagnostics). The newest entry says why it stopped.",
+      "Ask who stopped it: a download or a STOP from TIA or the CPU display, or a fault in the program (cycle time, a missing block, an access error).",
+      "Start it again only when you know why it stopped and the machine is safe to run.",
+    ];
+    const reported = msgs === null ? ""
+      : msgs.length ? `<div class="card"><h3>What the CPU reports</h3><ul class="list">${msgs.map((m) => `<li style="flex-wrap:wrap"><span style="flex:1;min-width:200px"><b style="font-weight:600">${esc(m.text)}</b>${m.info ? `<div class="faint small">${esc(m.info)}</div>` : ""}</span>${m.since ? `<span class="faint small">${esc(PK.when(m.since))}</span>` : ""}</li>`).join("")}</ul></div>`
+      : `<div class="card"><h3>What the CPU reports</h3><p class="muted" style="margin:0">No message from the CPU right now. Its diagnostic buffer in TIA says why it stopped.</p></div>`;
+    return hero({
+      cls: "hero cpu-stop-page",
+      eyebrow: `<span class="pill bad"><span class="dot"></span>PLC in ${esc(word)}${alarms.length ? ` · ${alarms.length} alarm${alarms.length > 1 ? "s" : ""} on` : ""}</span>`,
+      title: `The PLC is in ${esc(word)}: the program is not running.`,
+      sub: esc(`In ${word} ${PK.cpuSince(c)}. What you see on these pages is its last state, not a running machine.`),
+      actions: `<a class="btn" href="#/plc">Open the PLC page</a><button class="btn b" data-ask="The PLC is in ${esc(word)}. What could have stopped it, and what do I check?">Ask</button>`,
+      extra: `<div class="grid two" style="margin-top:26px;align-items:start">
+          <div class="card"><h3>What to check</h3><ol class="fix">${todo.map((t) => `<li style="cursor:default">${esc(t)}</li>`).join("")}</ol></div>
+          ${reported}</div>`,
+    })
+    + (alarms.length ? sec("alt", `<h2>Alarms that are on</h2><p class="sub">As they were when the CPU stopped. Fix the STOP first; some may go when the program runs again.</p>
+        <ul class="list">${alarms.map((a) => `<li><span class="tag ${a.severity === "WARNING" ? "gold" : "red"}">${esc(a.id)}</span>
+          <span style="flex:1;min-width:0"><a href="#/alarms/${encodeURIComponent(a.id)}">${esc(a.text)}</a></span></li>`).join("")}</ul>`) : "")
+    + (seq ? sec(alarms.length ? "" : "alt", `<h2>${esc(seq.name)}</h2><p class="sub">${esc(seq.explanation)}</p>${stepStrip(seq)}`) : "");
+  }
+
   PK.view("alarm", {
     live: true,
     mount() {
@@ -242,6 +279,8 @@
       const alarms = s.activeAlarms;      // first-out first: the server orders them by when they came
       const seq = s.sequences.find((q) => q.halted) || s.sequences[0];
       if (offline()) return offlinePage() + guide();
+      const stop = PK.cpuStop(s);
+      if (stop) return stopPage(s, stop, seq) + guide();
 
       if (!alarms.length) {
         const blocked = blockedOf(s);
@@ -439,12 +478,16 @@
       const waitsFor = main ? main.next.flatMap((n) => n.conditions).filter((c) => c.met === false).map(heldText) : [];
       const badSettings = (s.settings || []).filter((x) => x.valid === false);
       const counts = { devices: attention.length, exchange: s.exchange.length, settings: badSettings.length };
+      // CPU not in RUN: the step is only where the program was when it stopped, and nothing waits for anything
+      const stop = PK.cpuStop(s);
+      const stopWord = stop ? stop.word || "STOP" : "";
 
       const head = hero({
-        eyebrow: main ? `<span class="pill ${stCls}"><span class="dot"></span>${stText}</span>${main.timeInStep ? `<span class="faint">for ${esc(main.timeInStep)}</span>` : ""}<span class="faint">· ${esc(main.name)}</span>` : "",
-        title: main ? `Step ${main.step ?? "?"}: ${esc(main.stepName)}` : esc(s.machine),
-        sub: main ? (main.halted ? esc("Halted: " + (main.haltReasons.join("; ") || "the outputs are off.")) : waitsFor.length ? esc("Waiting for: " + waitsFor.join("; ")) : esc(main.does || "")) : esc(s.summary[0] || ""),
-        actions: `<button class="btn" data-ask="${ask0 ? `Why is alarm ${esc(ask0.id)} on for ${esc(attention[0].name)}, and what do I check?` : attention.length ? `Why is ${esc(attention[0].name)} ${esc(attention[0].blockedBy ? "blocked" : attention[0].state)}, and what do I check?` : "What is the machine doing right now?"}">Ask about it</button>${s.activeAlarms.length ? `<a class="btn b" href="#/alarm">${s.activeAlarms.length} active alarm${s.activeAlarms.length > 1 ? "s" : ""}</a>` : ""}`,
+        eyebrow: main ? `<span class="pill ${stCls}"><span class="dot"></span>${stText}</span>${main.timeInStep && !stop ? `<span class="faint">for ${esc(main.timeInStep)}</span>` : ""}<span class="faint">· ${esc(main.name)}</span>` : "",
+        title: main ? `${stop ? "Last step" : "Step"} ${main.step ?? "?"}: ${esc(main.stepName)}` : esc(s.machine),
+        sub: stop ? esc(`The CPU is in ${stopWord} ${PK.cpuSince(stop)}: the program is not running. The values are its last state.`)
+          : main ? (main.halted ? esc("Halted: " + (main.haltReasons.join("; ") || "the outputs are off.")) : waitsFor.length ? esc("Waiting for: " + waitsFor.join("; ")) : esc(main.does || "")) : esc(s.summary[0] || ""),
+        actions: stop ? `<a class="btn" href="#/alarm">What to check</a><a class="btn b" href="#/plc">PLC page</a>` : `<button class="btn" data-ask="${ask0 ? `Why is alarm ${esc(ask0.id)} on for ${esc(attention[0].name)}, and what do I check?` : attention.length ? `Why is ${esc(attention[0].name)} ${esc(attention[0].blockedBy ? "blocked" : attention[0].state)}, and what do I check?` : "What is the machine doing right now?"}">Ask about it</button>${s.activeAlarms.length ? `<a class="btn b" href="#/alarm">${s.activeAlarms.length} active alarm${s.activeAlarms.length > 1 ? "s" : ""}</a>` : ""}`,
         // Measured values as bars with the interlock limit marked; switches and counters stay as numbers
         extra: (s.overview.length ? (V ? V.valueBars(s.overview.slice(0, 8)) : `<div class="kpis plant-kpis">${s.overview.slice(0, 8).map((v) => `<div class="k"><b>${esc(v.text)}</b><span>${esc(v.label)}</span></div>`).join("")}</div>`) : "")
           + `<nav class="ptabs" aria-label="Plant">${PLANT_TABS.filter(([k]) => (k !== "exchange" || s.exchange.length) && (k !== "settings" || (s.settings || []).length || (H.data && H.data.settings.length)) && (k !== "stations" || stationList.stations.length > 1) && (k !== "sequence" || (state.model && state.model.sequences.length))).map(([k, l]) =>
@@ -462,13 +505,16 @@
               <span class="lv lv-${x.severity === "WARNING" ? "warn" : "fault"}">${esc(x.severity === "WARNING" ? "warning" : "fault")}</span><span class="chev">›</span></a></li>`).join("");
         // A device whose problem is an alarm already listed above is not listed again; a blocked one still is
         const devRows = attention.filter((e) => e.blockedBy || !PK.devLook(e).alarms.length);
-        const nNeeds = devRows.length + s.activeAlarms.length + badSettings.length;
+        const stopRow = stop ? `<li><a class="al" href="#/alarm"><span class="ico">${icon("warn")}</span>
+              <span class="nd-t"><b>PLC in ${esc(stopWord)}</b><span>The program is not running. What to check is on Active alarm.</span></span>
+              <span class="lv lv-fault">${esc(stopWord.toLowerCase())}</span><span class="chev">›</span></a></li>` : "";
+        const nNeeds = devRows.length + s.activeAlarms.length + badSettings.length + (stop ? 1 : 0);
         const settingRows = badSettings.map((x) => `<li><a href="#/plant/settings">
               <span class="ico">${icon("gear")}</span>
               <span class="nd-t"><b>Setting ${esc(x.label)} is ${esc(x.value)}</b><span>${esc(x.problem || "the machine cannot work with this value")}</span></span>
               <span class="lv lv-warn">setting</span><span class="chev">›</span></a></li>`).join("");
         const needs = nNeeds
-          ? `<ul class="needs">${alarmRows}${settingRows}${devRows.map((e) => `<li><a href="#/plant/devices/${encodeURIComponent(e.id)}">
+          ? `<ul class="needs">${stopRow}${alarmRows}${settingRows}${devRows.map((e) => `<li><a href="#/plant/devices/${encodeURIComponent(e.id)}">
               <span class="ico">${icon(PK.kindIcon(e.kind))}</span>
               <span class="nd-t"><b>${esc(e.name)}</b><span>${esc(e.blockedBy ? (/^needs /.test(e.blockedBy) ? "Blocked: it " + e.blockedBy : "Blocked: " + e.blockedBy) : e.explanation || e.state)}</span></span>
               <span class="lv lv-${esc(e.blockedBy ? "warn" : e.level)}">${esc(e.blockedBy ? "blocked" : e.state)}</span><span class="chev">›</span></a></li>`).join("")}</ul>`
@@ -477,14 +523,15 @@
             <div class="row"><h3 style="margin:0">${esc(q.name)}</h3><span class="pill ${seqState(q)[1]}">${seqState(q)[0]}</span><span class="spacer"></span>
               <a class="small" href="#/plant/sequence/${encodeURIComponent(q.id)}">Step chart and timeline ›</a></div>
             ${stepStrip(q)}
-            ${q.does ? `<p style="margin:0"><span class="muted">This step should:</span> ${esc(q.does)}</p>` : ""}
-            ${q.halted && q.haltReasons.length ? `<div class="notice red">${icon("warn")}<div><b>Halted, outputs are off:</b> ${q.haltReasons.map(esc).join("; ")}</div></div>` : ""}
+            ${stop ? `<div class="notice red">${icon("warn")}<div>${esc(q.explanation)}</div></div>`
+              : q.does ? `<p style="margin:0"><span class="muted">This step should:</span> ${esc(q.does)}</p>` : ""}
+            ${q.halted && q.haltReasons.length && !stop ? `<div class="notice red">${icon("warn")}<div><b>Halted, outputs are off:</b> ${q.haltReasons.map(esc).join("; ")}</div></div>` : ""}
             ${q.next.map((n) => `<div><p class="muted small" style="margin:0 0 6px">To go to step ${n.to} "${esc(n.toName)}" it needs</p><ul class="conds">${n.conditions.map((c) => PK.condHeld(c, s)).join("")}</ul></div>`).join("")}
             ${q.limit ? `<p class="faint" style="margin:0">${esc(q.limit)}</p>` : ""}
           </div>`).join("");
         body = sec("", `<div class="plant-cols">
             <div class="stack">
-              <div class="card stack"><div class="row"><h3 style="margin:0">Needs attention</h3>${nNeeds ? `<span class="count ${s.activeAlarms.some((x) => x.severity !== "WARNING") ? "" : "warn"}">${nNeeds}</span>` : ""}<span class="spacer"></span>
+              <div class="card stack"><div class="row"><h3 style="margin:0">Needs attention</h3>${nNeeds ? `<span class="count ${stop || s.activeAlarms.some((x) => x.severity !== "WARNING") ? "" : "warn"}">${nNeeds}</span>` : ""}<span class="spacer"></span>
                 <a class="small" href="#/plant/devices">All devices ›</a></div>${needs}</div>
               ${seqCards}
             </div>
@@ -571,7 +618,7 @@
   let recentOpen = false, recentAll = false;   // the "Recent alarms" strip above the list
   async function loadEvents() {
     eventsAt = Date.now();
-    try { events = await PK.api("GET", "/api/events?kind=alarm&max=30"); } catch { events = events || []; }
+    try { events = await PK.api("GET", "/api/events?kind=alarm,cpu&max=30"); } catch { events = events || []; }
     PK.draw();
   }
   PK.view("alarms", {
@@ -607,6 +654,11 @@
         </li>`;
       }).join("");
       const recent = !events ? `<p class="muted" style="margin:0">Loading…</p>` : events.length ? `<ul class="list events">${events.slice(0, recentAll ? events.length : 4).map((e) => {
+            if (e.kind === "cpu") {
+              const run = /back in RUN/.test(e.text);
+              return `<li><span class="ev-time">${esc(PK.date(e.time, true))}</span><span class="ev-kind ${run ? "run" : "stop"}">${run ? "RUN" : esc((/(?:to|in) ([A-Z]+)/.exec(e.text) || [])[1] || "STOP")}</span>
+                <span style="flex:1;min-width:180px"><a href="#/plc">${esc(e.text)}</a></span></li>`;
+            }
             const mm = /^(\S+) (came|went|was already active|blipped)/.exec(e.text);
             const id = mm && mm[1], kind = mm ? (mm[2] === "went" ? "went" : mm[2] === "came" ? "came" : mm[2] === "blipped" ? "blip" : "start") : "";
             // An alarm that came (or only blipped) has a recording of the seconds before it
@@ -624,6 +676,7 @@
       }) + sec("alt", `<div class="toolbar"><input type="search" id="alarm-search" placeholder="Search by number, text or device" value="${esc(alarmFilter)}" aria-label="Search alarms">
           <div class="segmented" role="group" aria-label="Show">${[["all", "All", m.alarms.length, "Every alarm in the program"], ["active", "Active", s.activeAlarms.length, "On right now"], ["faults", "Faults", faults, "Faults stop the machine"], ["warnings", "Warnings", m.alarms.length - faults, "Warnings do not stop the machine"]]
             .map(([k, l, n, t]) => `<button type="button" class="${alarmKind === k ? "on" : ""} ${k === "active" && n ? "hot" : ""}" data-akind="${k}" aria-pressed="${alarmKind === k}" title="${t}">${l} <b>${n}</b></button>`).join("")}</div></div>
+          ${PK.cpuStop(s) ? `<div class="notice red" style="margin-bottom:16px">${icon("warn")}<div><b>The PLC is in ${esc(PK.cpuStop(s).word || "STOP")}: the program is not running.</b> The alarms below are as they were when it stopped. <a href="#/alarm">What to check</a></div></div>` : ""}
           ${PK.deviceDiagnostics ? `<div class="diag-zone">${PK.deviceDiagnostics()}</div>` : ""}
           <details class="more recent" ${recentOpen ? "open" : ""}><summary><b>Recent alarms</b> <span class="muted small">${events ? `${events.length} since PLC-Ki started watching` : ""}</span></summary>
             <div style="margin-top:10px">${recent}</div></details>

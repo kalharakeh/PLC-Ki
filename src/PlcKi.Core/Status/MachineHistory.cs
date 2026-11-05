@@ -22,6 +22,9 @@ public sealed class MachineHistory
     private readonly int _maxEvents;
     private MachineStatus? _prev;
     private bool _prevHadValues;
+    // The CPU's last known mode: true = not running (STOP...), false = RUN, null = not known yet. A failed mode read
+    // changes nothing here, so a flaky read does not log "back in RUN".
+    private bool? _cpuStopped;
 
     public MachineHistory(TimeSpan? keepValues = null, int maxEvents = 1000)
     {
@@ -47,6 +50,7 @@ public sealed class MachineHistory
             if (_prev == null) events.Add(new MachineEvent(status.Time, "monitor", "PLC-Ki started watching the machine."));
             else events.AddRange(Diff(_prev, status, compareValues: hasValues && _prevHadValues));
             if (hasValues && !_prevHadValues) events.AddRange(Baseline(status));
+            if (CpuEvent(status) is { } ce) events.Add(ce);
             foreach (var e in events)
             {
                 _events.AddLast(e);
@@ -55,6 +59,21 @@ public sealed class MachineHistory
             _prev = status;
             _prevHadValues |= hasValues;
         }
+    }
+
+    /// <summary>"The PLC went to STOP" when the CPU leaves RUN, "The PLC is back in RUN" when it comes back.</summary>
+    private MachineEvent? CpuEvent(MachineStatus b)
+    {
+        if (b.Cpu is not { } cpu || !(cpu.Stopped || cpu.Running)) return null;
+        var was = _cpuStopped;
+        _cpuStopped = cpu.Stopped;
+        if (was == cpu.Stopped || (was == null && !cpu.Stopped)) return null;
+        var word = cpu.Word ?? "STOP";
+        var t = b.Time;
+        if (was == null) return new MachineEvent(t, "cpu", $"The PLC was in {word} when watching started: the program is not running.");
+        return cpu.Stopped
+            ? new MachineEvent(t, "cpu", $"The PLC went to {word}: the program stopped running" + (cpu.Switch is { Length: > 0 } sw ? $" (mode switch at {sw})." : "."))
+            : new MachineEvent(t, "cpu", "The PLC is back in RUN: the program is running again.");
     }
 
     /// <summary>Adds an event that did not come from comparing two reads (a value someone changed from PLC-Ki, an alarm that
@@ -181,13 +200,15 @@ public sealed class MachineHistory
         foreach (var x in a.ActiveAlarms.Where(x => !now.Contains(x.Id)))
             list.Add(new MachineEvent(t, "alarm", $"{x.Id} went: {x.Text}."));
 
+        // Going into or out of STOP clears or brings back every "blocked" at once: that is the CPU mode, logged on its own
+        bool cpuChanged = (a.Cpu?.Stopped ?? false) != (b.Cpu?.Stopped ?? false);
         foreach (var e in b.Equipment)
         {
             var p = a.Equipment.FirstOrDefault(x => x.Id == e.Id);
             if (p == null) continue;
-            if (!IsBlocked(p) && IsBlocked(e))
+            if (!cpuChanged && !IsBlocked(p) && IsBlocked(e))
                 list.Add(new MachineEvent(t, "blocked", e.Explanation));
-            else if (IsBlocked(p) && !IsBlocked(e))
+            else if (!cpuChanged && IsBlocked(p) && !IsBlocked(e))
                 list.Add(new MachineEvent(t, "blocked", $"{e.Name} is no longer blocked: {e.State}."));
             if (p.Commanded != true && e.Commanded == true)
                 list.Add(new MachineEvent(t, "output", $"{e.Name} switched on."));

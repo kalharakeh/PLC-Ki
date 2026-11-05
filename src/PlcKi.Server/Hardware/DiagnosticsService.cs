@@ -79,6 +79,9 @@ public sealed class DiagnosticsService
             alarmsTime = _watch.AlarmsTime,
             valuesTime = _watch.ValuesTime,
             cpuAlarms = alarms?.Count ?? 0,
+            // The CPU's own messages as it words them, newest first: the Active alarm page shows them when the CPU is in STOP
+            messages = (alarms ?? Array.Empty<PlcKi.Core.Diagnostics.CpuAlarm>()).OrderByDescending(m => m.Since ?? DateTimeOffset.MinValue).Take(10)
+                .Select(m => new { text = m.Text, info = m.Info, since = m.Since }).ToList(),
             problems,
             unplaced = problems.Count(p => p.Station == null),
             drives = states,

@@ -26,6 +26,8 @@ public sealed class LiveState
     public MachineStatus? Status => _status;
     /// <summary>The CPU's mode as last read (null when the source cannot tell or never could).</summary>
     public CpuReading? Cpu { get; set; }
+    /// <summary>The CPU's mode with since when, for /api/status (null when not known or not connected).</summary>
+    public CpuModeTracker CpuMode { get; } = new();
     public Snapshot? Snapshot => _snapshot;
     public MachineHistory History { get; }
 
@@ -221,8 +223,16 @@ public sealed class PollingService : BackgroundService
                 if (DateTime.UtcNow - lastCpu > TimeSpan.FromSeconds(2))
                 {
                     lastCpu = DateTime.UtcNow;
-                    try { _state.Cpu = _source.ReadCpu(); }
-                    catch (Exception ex) { _log.LogDebug(ex, "Reading the CPU mode failed."); }
+                    try
+                    {
+                        var r = _state.Cpu = _source.ReadCpu();
+                        _state.CpuMode.Update(r?.State, r?.Switch, r?.Error, r?.Time ?? DateTimeOffset.Now);
+                    }
+                    catch (Exception ex)
+                    {
+                        _log.LogDebug(ex, "Reading the CPU mode failed.");
+                        _state.CpuMode.Update("Unknown", null, ex.Message, DateTimeOffset.Now);
+                    }
                 }
                 ReadDevices(ref lastDrives, ref lastAlarms, ref alarmFailures);
                 Publish(snap, _source.Kind == "snapshot" ? "snapshot" : "connected", null, lastGood, missing);
@@ -235,6 +245,9 @@ public sealed class PollingService : BackgroundService
                 _source.Disconnect();
                 _fast.Break(DateTimeOffset.Now);
                 _devices.Clear();
+                // What the CPU said before the link dropped is no longer true now
+                _state.Cpu = null;
+                _state.CpuMode.Clear();
                 Publish(last, "disconnected", error, lastGood, missing);
                 Capture();
                 continue;
@@ -298,7 +311,8 @@ public sealed class PollingService : BackgroundService
             Math.Max(snap.Errors.Count, missing.Count));
         try
         {
-            _state.Publish(snap, _engine.Evaluate(snap, info));
+            var cpu = state is "connected" or "snapshot" ? _state.CpuMode.Current : null;
+            _state.Publish(snap, _engine.Evaluate(snap, info, cpu));
         }
         catch (Exception ex)
         {
