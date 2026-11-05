@@ -60,6 +60,9 @@ public static class WriteRules
         return plc.PlcTags.FirstOrDefault(t => t.Name.Equals(root, StringComparison.OrdinalIgnoreCase))?.Address;
     }
 
+    /// <summary>How an S7-1500 force behaves (it has no FRCE LED: an active force lights MAINT yellow).</summary>
+    public const string ForceStays = "A force stays until it is removed, also after power off; the CPU shows it with the yellow MAINT LED.";
+
     /// <summary>
     /// On a real PLC, inputs and outputs are not changed: inputs are overwritten from the I/O every cycle,
     /// and an output moves something in the machine. Returns why, or null for memory and data block values.
@@ -69,9 +72,9 @@ public static class WriteRules
         if (string.IsNullOrEmpty(address)) return null;
         var a = address.TrimStart('%').ToUpperInvariant();
         if (a.StartsWith('I') || a.StartsWith('E'))
-            return $"{address} is an input. On a real PLC the I/O overwrites it every cycle, so a change would not stay. Forcing inputs needs TIA Portal with the machine made safe.";
+            return $"{address} is an input. On a real PLC the I/O overwrites it every cycle, so a change would not stay. Forcing inputs needs TIA Portal with the machine made safe. " + ForceStays;
         if (a.StartsWith('Q') || a.StartsWith('A'))
-            return $"{address} is an output: it moves something in the machine. PLC-Ki does not switch real outputs. Use TIA Portal with the machine made safe.";
+            return $"{address} is an output: it moves something in the machine. PLC-Ki does not switch real outputs. Use TIA Portal with the machine made safe. " + ForceStays;
         return null;
     }
 

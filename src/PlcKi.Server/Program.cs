@@ -141,6 +141,7 @@ static async Task<int> RunAppAsync(string[] appArgs, bool probe, JobService jobs
     builder.Services.AddSingleton<DeviceWatch>();
     builder.Services.AddSingleton<PlcKi.Server.Hardware.DiagnosticsService>();
     builder.Services.AddSingleton<PlcWriter>();
+    builder.Services.AddSingleton<PlcsimInputs>();
     builder.Services.AddSingleton(opt.Ask);
     // Manuals, drawings and fault lists (Documents page): per machine and shared, under the data folder
     var docs = new PlcKi.Core.Knowledge.DocumentLibrary(Path.Combine(plant.DataDir, "documents"), model.Name);
@@ -327,6 +328,7 @@ static async Task<int> RunAppAsync(string[] appArgs, bool probe, JobService jobs
     app.MapLink();      // /link/... for PLC-Ki Link on the laptop, /api/admin/link for the Connections page
     PlcKi.Server.Hardware.HardwareEndpoints.MapHardware(app);   // /api/hardware, /api/cpu (PLC page), PLCSIM Start/Stop
     app.MapWrites();    // /api/admin/write: change a value (PLCSIM freely, a real PLC only when allowed and confirmed, never safety)
+    app.MapHolds();     // /api/admin/hold: hold a simulated input on PLCSIM (inputs only, never safety I/O); /api/held for the banner
     PlcKi.Server.Mobile.PhoneEndpoints.MapPhone(app);   // /api/admin/phone-address for the QR labels
     app.MapMemory();    // /api/memory/... machine memory: alarm history and notes (History page)
     app.Lifetime.ApplicationStopped.Register(() => memory.Save());

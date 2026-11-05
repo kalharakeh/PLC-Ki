@@ -7,9 +7,13 @@ namespace PlcKi.Server.Live;
 
 public sealed record WriteRequest(string? Symbol, string? Value, string? Reason, string? Confirm);
 
-/// <summary>One line of the change log (value-changes.jsonl in the data folder): every change, and every refused one.</summary>
+/// <summary>
+/// One line of the change log (value-changes.jsonl in the data folder): every change, and every refused one.
+/// Action: null or "change" (a one-time change), "hold", "release", "release-all" or "changed-outside" (Hold on PLCSIM).
+/// Lines written before holds existed have no Action and read as changes.
+/// </summary>
 public sealed record WriteLogEntry(DateTimeOffset Time, string User, string Plc, string Target, string Symbol, string Value,
-    string? Before, string? After, bool? Held, string? Reason, bool Ok, string? Error);
+    string? Before, string? After, bool? Held, string? Reason, bool Ok, string? Error, string? Action = null, string? Address = null);
 
 /// <summary>
 /// Changing a value in the PLC from the Tags and Program pages. Administrators only (/api/admin).
@@ -153,13 +157,13 @@ public static class WriteEndpoints
 
     private static string LogFile(PlantContext ctx) => Path.Combine(ctx.DataDir, "value-changes.jsonl");
 
-    private static void Append(PlantContext ctx, WriteLogEntry e)
+    internal static void Append(PlantContext ctx, WriteLogEntry e)
     {
         lock (LogLock) File.AppendAllText(LogFile(ctx), JsonSerializer.Serialize(e, Json) + Environment.NewLine);
     }
 
     /// <summary>The newest entries first.</summary>
-    private static List<WriteLogEntry> ReadLog(PlantContext ctx, int max)
+    internal static List<WriteLogEntry> ReadLog(PlantContext ctx, int max)
     {
         string[] lines;
         lock (LogLock) lines = File.Exists(LogFile(ctx)) ? File.ReadAllLines(LogFile(ctx)) : Array.Empty<string>();

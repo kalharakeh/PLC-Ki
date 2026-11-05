@@ -1037,8 +1037,10 @@
     let r = null;
     try { r = await PK.api("GET", "/api/program/search?q=" + encodeURIComponent(sym)); } catch { /* the owner alone */ }
     for (const x of (r && r.results) || []) {
-      if (!(x.lines || []).some((l) => l.writes)) continue;
-      out.push({ block: x.block, path: null, op: sym, place: placeIn(await loadBlock(x.block), sym) });
+      const wl = (x.lines || []).filter((l) => l.writes);
+      if (!wl.length) continue;
+      // conditional: every write in this block is inside an IF/CASE or after THEN (the server tells per line)
+      out.push({ block: x.block, path: null, op: sym, place: placeIn(await loadBlock(x.block), sym), conditional: !wl.some((l) => l.conditional === false) });
     }
     const own = await ownerOf(sym);
     if (own && !out.some((o) => o.block === own.block)) {
@@ -1046,6 +1048,42 @@
       if (p) out.push({ block: own.block, path: own.path, op: own.op, place: p });
     }
     return { writers: out, readers: ((r && r.results) || []).filter((x) => !(x.lines || []).some((l) => l.writes)) };
+  }
+
+  /**
+   * Why a one-time change of a global signal may not stay, as one or two sentences of HTML with links to the code,
+   * or "" when nothing in the program writes it. An unconditional "x := ..." is written each time its block runs;
+   * a write inside IF/CASE only when the condition is true (owner-block writes count as "may", they are not checked).
+   */
+  async function whyNotStick(sym) {
+    const { writers } = await writersOf(sym);
+    if (!writers.length) return "";
+    const link = (w) => placeLink(w.block, w.path, w.place, w.op);
+    const always = writers.filter((w) => w.conditional === false), sometimes = writers.filter((w) => w.conditional !== false);
+    const parts = [];
+    if (always.length) parts.push(`${always.map(link).join(" and ")} ${always.length > 1 ? "write" : "writes"} this every time ${always.length > 1 ? "they run" : "it runs"}, so a change is overwritten at once.`);
+    if (sometimes.length) parts.push(`${sometimes.map(link).join(" and ")} ${sometimes.length > 1 ? "set" : "sets"} this when ${sometimes.length > 1 ? "their conditions are" : "its condition is"} true, so a change may not stay.`);
+    return parts.join(" ");
+  }
+
+  /**
+   * For an input: the tags the program copies it into ("DB_IO".PB_Start := "DI_BluePB";) that other code writes
+   * as well, after the copy (a machine simulator, for example). A held input may then change nothing.
+   */
+  async function copiesOverwritten(sym) {
+    const { readers } = await writersOf(sym);
+    const bare = String(sym).replace(/^"|"$/g, "");
+    const re = new RegExp('^\\s*(.+?)\\s*:=\\s*"?' + reEsc(bare) + '"?\\s*;');
+    const out = [];
+    for (const r of readers) for (const l of r.lines || []) {
+      const m = re.exec(l.text || "");
+      if (!m || m[1].trim().startsWith("#")) continue;   // a copy into a block's own local is not shared
+      const target = m[1].trim();
+      const others = (await writersOf(target)).writers.filter((w) => w.block !== r.block);
+      if (others.length) out.push({ target, from: r.block, writers: others,
+        html: `The program copies it into <b class="mono">${esc(target)}</b> in ${esc(r.block)}, and ${others.map((w) => placeLink(w.block, w.path, w.place, w.op)).join(" and ")} also ${others.length > 1 ? "write" : "writes"} that tag, so the program may not see the held value.` });
+    }
+    return out;
   }
 
   // The tag tables and the hardware, read once, for "an input from the field at %I0.3, on this module"
@@ -1178,7 +1216,7 @@
     try { return netHtml(net, resolve || resolver(inst, b, want), op, null, null, []); }
     finally { plainDraw = false; }
   }
-  window.PKProgram = { rungFor };
+  window.PKProgram = { rungFor, writersOf, whyNotStick, copiesOverwritten };
 
   PK.view("program", program());
   PK.view("logic", alias("rungs"));

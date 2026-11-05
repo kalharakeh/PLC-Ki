@@ -1066,6 +1066,44 @@ const PK = (() => {
     });
   }
 
+  // ---- Hold on PLCSIM: the inputs PLC-Ki holds show as a strip on every page (GET /api/held: PLC-Ki's own list,
+  // no PLCSIM call). It is not the CPU's force list: forces set in TIA Portal are not in it.
+  let held = null;
+  async function loadHeld() {
+    if (!state.user) return;
+    try { held = await api("GET", "/api/held"); } catch { return; }
+    showHeld();
+  }
+  function showHeld() {
+    const bar = $("held-bar");
+    if (!bar) return;
+    const items = (held && held.items) || [];
+    bar.classList.toggle("hidden", !items.length);
+    if (!items.length) { bar.innerHTML = ""; return; }
+    const admin = state.user && state.user.role === "admin";
+    const list = items.slice(0, 3).map((h) => `<b class="mono">${esc(String(h.symbol).replace(/^"|"$/g, ""))}</b> = ${esc(h.value)}`).join(", ")
+      + (items.length > 3 ? `, and ${items.length - 3} more` : "");
+    bar.innerHTML = `<div class="wrap"><div class="notice gold held-strip" role="status">${icon("warn")}
+      <div><b>${items.length === 1 ? "1 input held" : items.length + " inputs held"} on PLCSIM</b>: ${list}. ${items.length === 1 ? "It stays" : "They stay"} until released.</div>
+      ${admin ? `<div class="held-acts"><a class="btn gray small" href="#/tags">Show</a><button type="button" class="btn small" data-release-all>Release all</button></div>` : ""}</div></div>`;
+    const b = bar.querySelector("[data-release-all]");
+    if (b) b.onclick = releaseAll;
+  }
+  /** Puts every held input back to the value it had before its hold (administrators). */
+  async function releaseAll() {
+    const n = ((held && held.items) || []).length;
+    const ok = await confirmSheet({ title: n === 1 ? "Release the held input?" : `Release all ${n} held inputs?`,
+      text: n === 1 ? "PLC-Ki puts the input back to the value it had before the hold." : "PLC-Ki puts each input back to the value it had before the hold.", ok: n === 1 ? "Release" : "Release all" });
+    if (!ok) return;
+    try {
+      const r = await api("POST", "/api/admin/hold/release", { all: true });
+      const bad = r.results.filter((x) => !x.ok);
+      toast(bad.length ? `${bad.length} could not be released: ${bad[0].error}` : "Released. The inputs have their earlier values again.", bad.length ? "error" : undefined);
+    } catch (e) { toast(e.message, "error"); }
+    await loadHeld();
+    window.dispatchEvent(new Event("pk:held-changed"));
+  }
+
   async function start() {
     fillIcons();
     try {
@@ -1116,6 +1154,11 @@ const PK = (() => {
     back.className = "back-bar hidden";
     back.innerHTML = `<div class="wrap"><a class="back-chip" href="#/"><span aria-hidden="true">←</span><span class="back-l"></span></a></div>`;
     $("page").before(back);
+    // Inputs held on PLCSIM: a strip above every page while there are any
+    const heldBar = document.createElement("div");
+    heldBar.id = "held-bar";
+    heldBar.className = "held-bar hidden";
+    back.before(heldBar);
     back.querySelector("a").onclick = (e) => { if (e.button || e.ctrlKey || e.metaKey || e.shiftKey) return; e.preventDefault(); history.back(); };
     document.addEventListener("click", (e) => { if (e.target.closest && e.target.closest("#nav a, .rail-brand, a.mrow[href]")) fromMenu = true; }, true);
     const bar = document.createElement("div");
@@ -1153,8 +1196,9 @@ const PK = (() => {
     pollStatus();
     pollValues();
     pollJobs();
+    if (state.user) { loadHeld(); setInterval(loadHeld, 15000); }
   }
 
   return { AI, dirty: setDirty, get isDirty() { return !!dirty; }, plain, connInfo, connSheet, helpSheet, screenSheet, passwordSheet, setHash, cmd, sec, hero, on, $, esc, icon, fillIcons, kindIcon, api, state, view, go, draw, route, toast, sheet, confirmSheet, cond, md, ago, clock, date, when,
-    loadProgram, blockOf, valueBySymbol, norm, start, get current() { return current; } };
+    loadProgram, blockOf, valueBySymbol, norm, start, loadHeld, releaseAll, get current() { return current; } };
 })();
