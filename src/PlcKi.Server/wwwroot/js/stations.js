@@ -118,7 +118,7 @@ const PKStations = (() => {
       ${q.halted && q.haltReasons.length ? `<p class="muted small" style="margin:0">Halted: ${esc(q.haltReasons.join("; "))}</p>` : q.does ? `<p class="muted small" style="margin:0">${esc(q.does)}</p>` : ""}
       ${L ? L.stepStrip(q) : ""}
       ${waits.length ? `<p class="muted small" style="margin:6px 0 0">Waiting for</p><ul class="conds">${waits.map((c) => PK.condHeld(c)).join("")}</ul>` : ""}
-      <div><a class="btn b small" href="#/sequence/${encodeURIComponent(q.id)}">Step chart ›</a></div></div>`;
+      <div><a class="btn b small" href="#/plant/sequence/${encodeURIComponent(q.id)}">Step chart ›</a></div></div>`;
   }
 
   /** One station on a phone: is it OK, its alarms with the fix, its sequence step, its devices. */
