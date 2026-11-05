@@ -115,6 +115,24 @@
   }
 
   /**
+   * A block constant (#cSte_Idle) is not in the PLC's memory, so it can't be read live: its value is the start value
+   * the export gives it. Plain numbers, TRUE/FALSE, typed literals (INT#5) and hex (16#FF); anything else (T#5s, text) is
+   * shown as written but takes no part in a comparison.
+   */
+  function constantOf(b, name) {
+    const m = ((b && b.interface) || []).find((x) => x.section === "Constant" && x.name === name);
+    if (!m || m.startValue == null || String(m.startValue).trim() === "") return null;
+    const s = String(m.startValue).trim();
+    const out = (raw) => ({ raw, text: typeof raw === "boolean" ? (raw ? "TRUE" : "FALSE") : s, symbol: "#" + name, label: "constant" });
+    if (/^(true|false)$/i.test(s)) return out(/^true$/i.test(s));
+    const lit = s.replace(/^(?:[A-Za-z]+#)(?=[-+\d]|16#|2#|8#)/, "");     // INT#5 -> 5, DINT#16#FF -> 16#FF
+    const radix = lit.match(/^(16|8|2)#([0-9A-Fa-f_]+)$/);
+    if (radix) return out(parseInt(radix[2].replace(/_/g, ""), Number(radix[1])));
+    if (/^[+-]?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(lit)) return out(Number(lit));
+    return out(s);
+  }
+
+  /**
    * operand ("#Out", "#Permit", "\"DB_IO\".X") -> its live value for this instance, or null.
    * want (a Map, optional) collects every symbol it needed that the model does not read, with its type, so the page can ask for it.
    */
@@ -127,6 +145,8 @@
       if (operand.startsWith("#")) {
         const name = operand.slice(1);
         const first = name.split(".")[0];
+        const k = name === first ? constantOf(block, name) : null;
+        if (k) return k;
         if (inst && inst.wires[first] && typeof inst.wires[first] === "object" && name === first) {
           const w = inst.wires[first];
           const toks = tokenize(w.expr), tree = toks && parseExpr(toks);
@@ -256,7 +276,10 @@
       const live = n.t === "leaf" ? resolve(n.op) : null;
       const blocker = power && v === false && !ctx.blocked;
       if (blocker) { ctx.blocked = true; if (!ctx.first) ctx.first = { n, live }; }
-      const tip = v == null ? `${label}: no live value (not read, or not found in the PLC)` : `${label}${live ? " = " + live.text : ""}: ${v ? "passes" : "does not pass"}`;
+      // A comparison names both sides' values: "State_Value = #cSte_Idle (5 = 5)"
+      const sides = n.t === "cmp" ? [n.a, n.b].map((x) => (/^-?\d/.test(x) ? x : (resolve(x) || {}).text ?? "?")) : null;
+      const shown = sides ? ` (${sides[0]} ${n.op} ${sides[1]})` : live ? " = " + live.text : "";
+      const tip = v == null ? `${label}${sides ? shown : ""}: no live value (not read, or not found in the PLC)` : `${label}${shown}: ${v ? "passes" : "does not pass"}`;
       // A click asks what sets it; a comparison asks about its first signal
       const src = plainDraw ? null : n.t === "cmp" ? [n.a, n.b].find(isSignal) : n.op;
       const attrs = src ? `data-src="${esc(src)}" aria-label="${esc(tip)}. What sets ${esc(clean(src))}?"` : "";
