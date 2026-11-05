@@ -751,6 +751,37 @@ html.anon main [data-ask], html.anon #ask-open { display: none; }
 .why-off ul { margin: 8px 0 0; padding-left: 20px; font-size: 14px; line-height: 1.5; }
 .why-off li { overflow-wrap: anywhere; }
 .why-off .linkbtn { margin-left: 4px; font-size: 13px; }
+/* Program page: only the networks holding back an output, when that filter is on */
+.net-filter { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-bottom: 12px; }
+.net-filter .ok-line { margin: 0; }
+.nets { display: grid; gap: 12px; }
+.nets .rung-card + .rung-card { margin-top: 0; }
+.nets.only-holding .rung-card:not([data-holding]):not(.hl) { display: none; }
+/* A block call: one row per parameter instead of a wall of text */
+.call { margin: 10px 0 4px; }
+.call-h { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin-bottom: 6px; }
+.call-tbl { font-size: 13px; }
+.call-tbl td { vertical-align: top; }
+.call-tbl td.dir { color: var(--muted); width: 1.5em; text-align: center; }
+.call-tbl td.wired { overflow-wrap: anywhere; color: var(--muted); }
+.call-tbl .op { color: var(--ink); white-space: normal; overflow-wrap: anywhere; text-align: left; }
+.call-tbl td.mono { overflow-wrap: anywhere; }
+.nets > * { min-width: 0; }
+/* Phone: one parameter per small block (name, then what it is wired to and its value) instead of a wide table */
+@media (max-width: 600px) {
+  .call-tbl, .call-tbl tbody, .call-tbl tr, .call-tbl td { display: block; width: auto; }
+  .call-tbl tr:first-child { display: none; }
+  .call-tbl tr { padding: 6px 0; border-bottom: 1px solid var(--line); }
+  .call-tbl td { border: 0; padding: 0; }
+  .call-tbl td.dir { display: inline; }
+  .call-tbl td.mono:not(.wired) { display: inline; font-weight: 700; color: var(--ink); }
+  .call-tbl td.wired { margin-top: 2px; }
+}
+/* What goes in and comes out of a block, near the top */
+.pg-io .io-row { display: flex; gap: 10px; align-items: flex-start; margin-top: 10px; }
+.pg-io .io-h { flex: none; width: 2.6em; font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; padding-top: 4px; }
+.pg-io .io-list { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.pg-io .io { display: inline-flex; align-items: center; gap: 2px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); background: var(--bg-alt); font-size: 12px; overflow-wrap: anywhere; }
 /* "State_Value is 5: Ste_Idle is on; the other 7 states are off": neutral, nothing is wrong */
 .state-sum { margin-top: 14px; padding: 12px 16px; border-radius: 14px; background: var(--bg-alt); border: 1px solid var(--line); }
 .state-sum .why-h { display: flex; gap: 8px; align-items: center; font-size: 15px; }
