@@ -192,6 +192,57 @@ public class StatusAttentionTests
     }
 
     [Fact]
+    public void Feedback_comes_from_the_ok_state_minus_the_command()
+    {
+        var s = Run("step10-xv101-not-open");
+        var xv101 = s.Equipment.Single(e => e.Id == "XV101");
+        Assert.NotNull(xv101.Feedback);
+        Assert.Equal(new[] { "XV101 open switch: reached", "XV101 closed switch: not reached" }, xv101.Feedback!.Select(f => f.Text));
+        // The valve is closed: open switch not reached, closed switch reached
+        Assert.Equal(new bool?[] { false, false }, xv101.Feedback.Select(f => f.Met));
+        Assert.Equal("not reached", xv101.Feedback[0].Values.Single().Text);
+        var m201 = s.Equipment.Single(e => e.Id == "M201");
+        Assert.Equal("M201 at speed: yes", Assert.Single(m201.Feedback!).Text);
+        // The heater's ok state is its command alone: nothing tells the program it heats
+        Assert.Null(s.Equipment.Single(e => e.Id == "E301").Feedback);
+    }
+
+    [Fact]
+    public void Feedback_from_the_model_wins()
+    {
+        var model = MachineModel.Load(Path.Combine(AppContext.BaseDirectory, "models", "demo-mixing-station.json"));
+        model.Equipment.Single(e => e.Id == "E301").Feedback.Add(new CondDef { Expr = "Temp > 25", Text = "Temperature rising" });
+        var snap = TestData.Snapshot("step30-mix-heat");
+        var s = new StatusEngine(model).Evaluate(snap, new PlcLinkInfo("snapshot", "x", null, snap.Time, 0, 0));
+        Assert.Equal("Temperature rising", Assert.Single(s.Equipment.Single(e => e.Id == "E301").Feedback!).Text);
+    }
+
+    [Fact]
+    public void Blocked_chain_is_linked_root_first()
+    {
+        var s = Run("step30-agitator-blocked");
+        var m201 = s.Equipment.Single(e => e.Id == "M201");
+        var e301 = s.Equipment.Single(e => e.Id == "E301");
+        // E301 waits for "M201 at speed", which belongs to M201; M201 waits for the level, which belongs to no device
+        Assert.Equal("M201", e301.BlockedVia);
+        Assert.Equal("M201", e301.Blocking.Single(b => b.Text.Contains("at speed")).HeldBy);
+        Assert.Null(m201.BlockedVia);
+        Assert.Null(m201.Blocking.Single().HeldBy);
+        // "Temperature reached" can't come while E301 is blocked; "Mixed for at least" has no device behind it
+        var conds = s.Sequences[0].Next.SelectMany(n => n.Conditions).ToList();
+        Assert.Equal("E301", conds.Single(c => c.Text.StartsWith("Temperature reached")).HeldBy);
+        Assert.All(conds.Where(c => !c.Text.StartsWith("Temperature reached")), c => Assert.Null(c.HeldBy));
+    }
+
+    [Fact]
+    public void Running_devices_have_no_chain()
+    {
+        var s = Run("step30-mix-heat");
+        Assert.All(s.Equipment, e => Assert.Null(e.BlockedVia));
+        Assert.All(s.Sequences[0].Next.SelectMany(n => n.Conditions), c => Assert.Null(c.HeldBy));
+    }
+
+    [Fact]
     public void Alarm_ids_sort_naturally()
     {
         var ids = new[] { "A10", "A9", "A2", "B1", "A01" }.OrderBy(x => x, NaturalComparer.Instance).ToArray();

@@ -106,6 +106,7 @@ public sealed class MachineModel
             CheckExpr(e.Request, $"equipment {e.Id} request");
             CheckExpr(e.Command, $"equipment {e.Id} command");
             foreach (var p in e.Permits) { CheckExpr(p.Expr, $"equipment {e.Id} permit"); CheckText(p.Text, $"equipment {e.Id} permit"); }
+            foreach (var f in e.Feedback) { CheckExpr(f.Expr, $"equipment {e.Id} feedback"); CheckText(f.Text, $"equipment {e.Id} feedback"); }
             foreach (var st in e.States) { CheckExpr(st.When, $"equipment {e.Id} state"); CheckText(st.Text, $"equipment {e.Id} state"); }
             foreach (var v in e.Values) CheckTag(v, $"equipment {e.Id}");
         }
@@ -206,6 +207,9 @@ public sealed class EquipmentDef
     public List<StateDef> States { get; set; } = new();
     /// <summary>Extra tag ids to show next to the device.</summary>
     public List<string> Values { get; set; } = new();
+    /// <summary>Optional: what tells the program the device did what its output asked (open switch reached, running
+    /// feedback, at speed). When empty, PLC-Ki takes it from the first "ok" state: its condition minus the command.</summary>
+    public List<CondDef> Feedback { get; set; } = new();
 }
 
 public sealed class StateDef

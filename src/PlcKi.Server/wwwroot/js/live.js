@@ -77,6 +77,35 @@
     return { block, network, symbol: output, href };
   }
 
+  /**
+   * The rung that sets the alarm, drawn by the Program page (PKProgram.rungFor), with the values just before the alarm
+   * came when there is a recording, else live. Drawn in the background every 2 s; render() shows the last drawing.
+   * null while there is none (no program, no rungFor on this build, or the network was not found).
+   */
+  const R = { key: "", html: null, at: 0, busy: false, want: new Map() };
+  function rungHtml(a, where, loc) {
+    if (!where.block || !window.PKProgram || !PKProgram.rungFor) return null;
+    const resolve = window.PKCapture ? PKCapture.atAlarm(a, loc.instance) : null;
+    const key = `${a.id}|${resolve ? "rec" : "live"}`;
+    if (key !== R.key) Object.assign(R, { key, html: null, at: 0, want: new Map() });
+    if (!R.busy && Date.now() - R.at > 2000) {
+      R.busy = true; R.at = Date.now();
+      const want = new Map();
+      PK.loadProgram()
+        .then(() => PKProgram.rungFor({ block: where.block, instance: loc.instance, output: where.symbol, network: where.network, want }, resolve || undefined))
+        .then((h) => {
+          h = String(h || "").replace(/\sid="hl"/, "") || null;     // the page has no #hl of its own to jump to
+          if (key !== R.key) return;
+          R.want = want;
+          if (h !== R.html) { R.html = h; PK.draw(); }
+        })
+        .catch(() => { /* drawn again in 2 s */ })
+        .finally(() => { R.busy = false; });
+    }
+    return R.html;
+  }
+  let histOpen = false;           // "This alarm before" stays open across the redraws
+
   function relatedEquipment(alarm) {
     const loc = parseLoc(alarm.location);
     return ((state.status && state.status.equipment) || []).filter((e) => {
@@ -121,12 +150,7 @@
   function eqCard(e, full) {
     const look = PK.devLook(e);
     const lvl = look.alarms.length ? look.lvl : e.level;      // an alarm on the device colours it; else its own state
-    const permOk = e.permits.every((p) => p.met !== false);
-    const chain = `<div class="chain">
-      <span class="lnk ${e.requested === true ? "" : "off"}">Requested ${e.requested === true ? "yes" : e.requested === false ? "no" : "?"}</span><i>›</i>
-      <span class="lnk ${permOk ? "" : "no"}">Interlocks ${permOk ? "OK" : "blocking"}</span><i>›</i>
-      <span class="lnk ${e.commanded === true ? "" : "off"}">Output ${e.commanded === true ? "on" : e.commanded === false ? "off" : "?"}</span><i>›</i>
-      <span class="lnk ${lvl === "ok" ? "" : lvl === "idle" ? "off" : "no"}">${esc(e.state)}</span></div>`;
+    const chain = PK.devStrip(e);
     // An alarm on this device: name it and open it
     const alarms = look.alarms.map((a) => `<a class="eq-alarm ${a.severity === "WARNING" ? "w" : ""}" href="#/alarms/${encodeURIComponent(a.id)}">${icon("bell")}<span><b>${a.severity === "WARNING" ? "Warning" : "Alarm"} ${esc(a.id)}:</b> ${esc(a.text)}</span><span class="chev">›</span></a>`).join("");
     const vals = e.values.length ? `<div class="kv">${e.values.map((v) => `<span>${esc(v.label)}</span><span class="val">${esc(v.text)}</span>`).join("")}</div>` : "";
@@ -207,7 +231,11 @@
   // ---------- Active alarm ----------
   PK.view("alarm", {
     live: true,
-    mount() { PK.loadProgram().then(PK.draw); PK.draw(); },
+    mount() {
+      // Block members on the rung that the model does not read ("Station".XV101.Out): read them while this page is open
+      if (window.PKTags) PKTags.watch("alarm", () => [...R.want].map(([symbol, type]) => ({ symbol, type })));
+      PK.loadProgram().then(PK.draw); PK.draw();
+    },
     render() {
       const s = state.status;
       if (!s) return waitingPage();
@@ -218,18 +246,24 @@
       if (!alarms.length) {
         const blocked = blockedOf(s);
         const n = blocked.length;
+        // Root first: one chain per group of devices that wait on each other (Level → M201 → E301 → step 30)
+        const chains = PK.causeChains(s);
+        const root = (chains.length && chains[0].devices.find((e) => e.blockedBy)) || blocked[0];
+        const order = chains.flatMap((c) => c.devices).filter((e, i, l) => e.blockedBy && l.indexOf(e) === i);
         return hero({
           eyebrow: n ? `<span class="pill warn"><span class="dot"></span>No alarm · ${n} device${n > 1 ? "s" : ""} blocked</span>` : `<span class="pill ok"><span class="dot"></span>No alarm</span>`,
           title: n ? `No alarm, but ${n === 1 ? "1 device is" : n + " devices are"} blocked.` : "No alarm is active.",
-          sub: esc(n ? blockedLine(blocked[0]) : (seq ? seq.explanation : s.summary[0] || "")),
-          actions: n ? `<button class="btn" data-ask="Why is ${esc(blocked[0].name)} blocked, and what do I check?">Ask why</button><a class="btn b" href="#/plant">See the plant</a>`
+          sub: esc(n ? blockedLine(root) : (seq ? seq.explanation : s.summary[0] || "")),
+          actions: n ? `<button class="btn" data-ask="Why is ${esc(root.name)} blocked, and what do I check?">Ask why</button><a class="btn b" href="#/plant">See the plant</a>`
             : `<a class="btn" href="#/plant">See the plant</a><button class="btn b" data-ask="What is the machine doing right now?">Ask</button>`,
+          extra: n ? `<div class="chains">${chains.map(PK.chainHtml).join("")}</div>` : "",
         }) + (settingsNotice(s) ? sec("", settingsNotice(s)) : "")
         + (window.PKMemory ? PKMemory.unnotedBlock() : "")
-        + (n ? sec("alt", `<h2>Blocked now</h2><p class="sub">The program asks for ${n === 1 ? "this device" : "these devices"}, but ${n === 1 ? "its" : "their"} output stays off.</p>
-            <div class="grid ${n > 1 ? "two" : ""}">${blocked.map((e) => `<div class="card stack">${eqCard(e, true)}</div>`).join("")}</div>`) : "")
+        + (n ? sec("alt", `<h2>Blocked now</h2><p class="sub">The program asks for ${n === 1 ? "this device" : "these devices"}, but ${n === 1 ? "its" : "their"} output stays off. ${n > 1 ? "The cause comes first." : ""}</p>
+            <div class="stack">${order.map((e) => `<div class="aa-dev"><div class="row"><h3 style="margin:0">${esc(e.name)}</h3><span class="spacer"></span><a class="small" href="#/plant/devices/${encodeURIComponent(e.id)}">Details ›</a></div>
+              ${PK.devStrip(e)}</div>`).join("")}</div>`) : "")
         + (seq ? sec(n ? "" : "alt", `<h2>${esc(seq.name)}</h2>${n ? `<p class="sub">${esc(seq.explanation)}</p>` : ""}${stepStrip(seq)}${chartLink(seq)}
-            ${seq.next.length ? `<p class="muted small" style="margin:16px 0 8px">To go on it needs</p><ul class="conds">${seq.next.flatMap((x) => x.conditions).map(cond).join("")}</ul>` : ""}`) : "")
+            ${seq.next.length ? `<p class="muted small" style="margin:16px 0 8px">To go on it needs</p><ul class="conds">${seq.next.flatMap((x) => x.conditions).map((c) => PK.condHeld(c, s)).join("")}</ul>` : ""}`) : "")
         + guide();
       }
 
@@ -251,49 +285,57 @@
           <span class="d"></span>${i === 0 && firstKnown ? "First · " : ""}${esc(x.id)} ${esc(x.text.length > 40 ? x.text.slice(0, 38) + "…" : x.text)}</button>`).join("")}</div>
           ${atStart > 1 ? `<p class="faint small" style="margin:-12px 0 18px">${atStart} alarms were already on when PLC-Ki started watching, so which of those came first is not known.</p>` : ""}` : "";
 
-      const kpis = [
-        ...eqs.slice(0, 2).map((e) => [e.state, e.name, e.level === "ok" ? "ok" : e.level === "idle" ? "" : "bad"]),
-        seq ? [`Step ${seq.step ?? "?"}`, `${seq.name}: ${seq.stepName}${seq.halted ? ", halted" : ""}`, seq.halted ? "bad" : ""] : null,
+      // Four short facts under the alarm: the device's state, the step, how long in it, when the alarm came
+      const facts = [
+        ...eqs.slice(0, 1).map((e) => [e.state, e.name, PK.devLook(e).lvl === "fault" ? "bad" : e.level === "ok" ? "ok" : ""]),
+        seq ? [`Step ${seq.step ?? "?"}${seq.halted ? " halted" : ""}`, `${seq.name}: ${seq.stepName}`, seq.halted ? "bad" : ""] : null,
         seq && seq.timeInStep ? [seq.timeInStep, "in this step"] : null,
         a.since ? [PK.when(a.since), a.atStart ? "already on when PLC-Ki started watching" : "came at"] : null,
       ].filter(Boolean).slice(0, 4);
+      const V = window.PKVis;
+      const rung = rungHtml(a, where, loc);
+      const rec = !!(window.PKCapture && PKCapture.atAlarm(a, loc.instance));
+      const fixList = a.fix.length ? `<ol class="fix">${a.fix.map((f, i) => `<li class="${done.has(i) ? "done" : ""}"><button type="button" class="fix-b" data-fix="${i}" aria-pressed="${done.has(i)}">${esc(f)}</button></li>`).join("")}</ol>`
+        : `<p class="muted">No fix written for this alarm yet. Ask about it.</p>`;
 
-      return sec("hero", `${chips}
-          <div class="eyebrow"><span class="pill ${warn ? "warn" : "bad"}"><span class="dot"></span>${esc(a.severity)} · ${esc(a.id)}</span></div>
+      // Left: the alarm, then straight to the fix. Right: where it is, in the machine and in the program.
+      // On a phone the right column follows the left, so the fix is on the first screen.
+      const main = `<div class="eyebrow"><span class="pill ${warn ? "warn" : "bad"}"><span class="dot"></span>${esc(a.severity)} · ${esc(a.id)}</span></div>
           <h1>${esc(a.text)}</h1>
           ${a.condition ? `<p class="sub">${esc(a.condition)}</p>` : ""}
           ${failed.length ? `<p class="sub"><b>Failed check:</b> ${failed.map((c) => esc(c.text) + (c.values && c.values.length ? ` (now ${c.values.map((v) => esc(v.label) + " " + esc(v.text)).join(", ")})` : "")).join("; ")}</p>` : ""}
           ${settingsNotice(s)}
+          <div class="kpis aa-facts">${facts.map(([v, l, c]) => `<div class="k ${c || ""}"><b>${esc(v)}</b><span>${esc(l)}</span></div>`).join("")}</div>
           <div class="actions"><button class="btn" data-ask="Why is alarm ${esc(a.id)} on, and how do I fix it?">Ask about this alarm</button>
             ${where.block ? `<a class="btn b" href="${esc(where.href)}">Show where it is set</a>` : ""}</div>
-          <div class="kpis" style="margin-top:34px">${kpis.map(([v, l, c]) => `<div class="k ${c || ""}"><b>${esc(v)}</b><span>${esc(l)}</span></div>`).join("")}</div>`)
+          <div class="aa-fix">
+            <div class="card"><h3>Fix it</h3>${fixList}<p class="faint small" style="margin:10px 0 0">Tap a step when it is done. The ticks are only on this screen.</p></div>
+            <div class="card"><h3>Likely causes</h3>${a.causes.length ? `<ol class="causes">${a.causes.map((c, i) => `<li><b>${i + 1}</b><span>${esc(c)}</span></li>`).join("")}</ol>` : `<p class="muted">None written yet.</p>`}</div>
+          </div>
+          ${window.PKMemory ? PKMemory.lastLine(a.id) : ""}
+          ${eqs.map((e) => `<div class="aa-dev"><div class="row"><h3 style="margin:0">${esc(e.name)}</h3><span class="spacer"></span><a class="small" href="#/plant/devices/${encodeURIComponent(e.id)}">Details ›</a></div>${PK.devStrip(e)}</div>`).join("")}`;
 
-        + (window.PKMemory ? sec("", `<h2>This alarm before</h2><p class="sub">From the machine memory: every time PLC-Ki saw this alarm, and what the technicians found.</p>
-            <div class="card">${PKMemory.alarmBlock(a.id)}</div>`) : "")
+      const vals = eqs.flatMap((e) => e.values);
+      const side = `${eqs.length && V ? `<div class="card aa-pic"><div class="row"><h3 style="margin:0">Where in the machine</h3><span class="spacer"></span><a class="small" href="#/plant">Plant ›</a></div>
+            ${V.plantMap(V.around(eqs.map((e) => e.id)), null, eqs.map((e) => e.id))}
+            ${vals.length ? `<div class="kv">${vals.map((v) => `<span>${esc(v.label)}</span><span class="val">${esc(v.text)}</span>`).join("")}</div>` : ""}</div>` : ""}
+          <div class="card aa-sw"><h3>Where it is set</h3>
+            ${where.block ? `<div class="path">${(path || [{ block: where.block }]).map((p) => `<span>${esc(p.block)}${p.instance ? " " + esc(p.instance) : ""}</span>`).join("<i>›</i>")}${where.network ? `<i>›</i><span>Network ${esc(where.network)}</span>` : ""}${where.symbol ? `<i>›</i><span>${esc(where.symbol)}</span>` : ""}</div>` : `<p class="muted small" style="margin:0">${esc(a.location || "No place in the program is known for this alarm.")}</p>`}
+            ${rung ? `<div class="aa-rung">${rung}</div><p class="faint small" style="margin:0">${rec ? "Values just before the alarm came, from the recording. ? means not recorded." : "Values now. They can look normal again after a halt."}</p>` : ""}
+            <div class="row" style="gap:8px">${where.block ? `<a class="btn b small" href="${esc(where.href)}">Open in the program</a>` : links(loc)}${modelFix("alarm:" + a.id)}</div></div>`;
 
+      return sec("hero aa", `${chips}<div class="aa-grid"><div class="aa-main">${main}</div><aside class="aa-side">${side}</aside></div>`)
+        + (window.PKCapture ? PKCapture.alarmSection(a) : "")
         + (checks.length ? sec("", `<h2>What the program checks</h2><p class="sub">The comparisons behind this alarm, ${a.checksAtAlarm ? "with the values from the last read before it came" : "with the values now"}. ✗ is the one that failed.</p>
             <div class="card"><ul class="conds">${checks.map(cond).join("")}</ul></div>`) : "")
-        + (window.PKCapture ? PKCapture.alarmSection(a) : "")
-        + sec("alt", `<h2>Fix it</h2><p class="sub">Work down the list. Tap a step when it is done. The ticks are only on this screen.</p>
-          <div class="grid two">
-            <div class="card">${a.fix.length ? `<ol class="fix">${a.fix.map((f, i) => `<li class="${done.has(i) ? "done" : ""}"><button type="button" class="fix-b" data-fix="${i}" aria-pressed="${done.has(i)}">${esc(f)}</button></li>`).join("")}</ol>` : `<p class="muted">No fix written for this alarm yet. Ask about it.</p>`}</div>
-            <div class="card"><h3>Likely causes</h3>${a.causes.length ? `<ol class="causes">${a.causes.map((c, i) => `<li><b>${i + 1}</b><span>${esc(c)}</span></li>`).join("")}</ol>` : `<p class="muted">None written yet.</p>`}</div>
-          </div>`)
-
         + (typeof PKDocs !== "undefined" ? PKDocs.alarmSection(a, eqs) : "")
-
-        + sec("", `<h2>Where in the machine</h2><p class="sub">${eqs.length ? "The device behind the alarm, and why it is or is not doing its job." : esc(a.location || "No device is linked to this alarm.")}</p>
-          ${eqs.length ? `<div class="grid ${eqs.length > 1 ? "two" : ""}">${eqs.map((e) => `<div class="card stack">${eqCard(e, true)}</div>`).join("")}</div>` : ""}`)
-
-        + sec("dark", `<h2>Where in the software</h2><p class="sub">Where the program sets this alarm, from the main cycle down to the bit.</p>
-          ${where.block ? `<div class="path">${(path || [{ block: where.block }]).map((p) => `<span>${esc(p.block)}${p.instance ? " " + esc(p.instance) : ""}</span>`).join("<i>›</i>")}${where.network ? `<i>›</i><span>Network ${esc(where.network)}</span>` : ""}${where.symbol ? `<i>›</i><span>${esc(where.symbol)}</span>` : ""}</div>` : ""}
-          <p class="muted small" style="margin:14px 0 22px">${esc(a.location || "")}</p>
-          <div class="actions">${where.block ? `<a class="btn white" href="${esc(where.href)}">Show where it is set</a>` : links(loc)}${modelFix("alarm:" + a.id)}</div>`)
-
         + sec("alt", `<h2>What is going on</h2>
           <div class="grid two"><div>${s.summary.map((l) => `<p class="sub" style="margin-bottom:12px">${esc(l)}</p>`).join("")}</div>
           ${seq ? `<div class="card"><h3>${esc(seq.name)}</h3>${stepStrip(seq)}${chartLink(seq)}
-            ${seq.next.length ? `<p class="muted small" style="margin:12px 0 8px">To go on it needs</p><ul class="conds">${seq.next.flatMap((n) => n.conditions).map(cond).join("")}</ul>` : ""}</div>` : ""}</div>`) + guide();
+            ${seq.next.length ? `<p class="muted small" style="margin:12px 0 8px">To go on it needs</p><ul class="conds">${seq.next.flatMap((n) => n.conditions).map((c) => PK.condHeld(c, s)).join("")}</ul>` : ""}</div>` : ""}</div>`)
+        + (window.PKMemory ? sec("", `<details class="more" data-hist ${histOpen ? "open" : ""}><summary><b>This alarm before</b> <span class="muted small">every time PLC-Ki saw it, and what was found</span></summary>
+            <div class="card" style="margin-top:12px">${PKMemory.alarmBlock(a.id)}</div></details>`) : "")
+        + guide();
     },
     after(page) {
       page.querySelectorAll("[data-alarm]").forEach((b) => b.onclick = () => { selectedAlarm = b.dataset.alarm; PK.draw(); });
@@ -304,6 +346,8 @@
         PK.draw();
       });
       if (window.PKCapture) PKCapture.bind(page);
+      const h = page.querySelector("details[data-hist]");
+      if (h) h.ontoggle = () => { histOpen = h.open; };
       bindAsk(page);
       if (window.PKMemory) PKMemory.bind(page);
     },
@@ -388,7 +432,9 @@
       const attention = s.equipment.filter(problemOf).sort((x, y) => rank(x) - rank(y));
       const stationList = stationsNow(s);
       const ask0 = attention[0] && PK.devLook(attention[0]).alarms[0];
-      const waitsFor = main ? main.next.flatMap((n) => n.conditions).filter((c) => c.met === false).map((c) => c.text) : [];
+      // "Temperature reached 60 °C (can't come while Heater E301 is blocked)": a wait that cannot come by itself says so
+      const heldText = (c) => { const d = c.heldBy && s.equipment.find((e) => e.id === c.heldBy); return d ? `${c.text} (can't come while ${d.name} is ${d.blockedBy ? "blocked" : "in fault"})` : c.text; };
+      const waitsFor = main ? main.next.flatMap((n) => n.conditions).filter((c) => c.met === false).map(heldText) : [];
       const badSettings = (s.settings || []).filter((x) => x.valid === false);
       const counts = { devices: attention.length, exchange: s.exchange.length, settings: badSettings.length };
 
@@ -430,7 +476,7 @@
             ${stepStrip(q)}
             ${q.does ? `<p style="margin:0"><span class="muted">This step should:</span> ${esc(q.does)}</p>` : ""}
             ${q.halted && q.haltReasons.length ? `<div class="notice red">${icon("warn")}<div><b>Halted, outputs are off:</b> ${q.haltReasons.map(esc).join("; ")}</div></div>` : ""}
-            ${q.next.map((n) => `<div><p class="muted small" style="margin:0 0 6px">To go to step ${n.to} "${esc(n.toName)}" it needs</p><ul class="conds">${n.conditions.map(cond).join("")}</ul></div>`).join("")}
+            ${q.next.map((n) => `<div><p class="muted small" style="margin:0 0 6px">To go to step ${n.to} "${esc(n.toName)}" it needs</p><ul class="conds">${n.conditions.map((c) => PK.condHeld(c, s)).join("")}</ul></div>`).join("")}
             ${q.limit ? `<p class="faint" style="margin:0">${esc(q.limit)}</p>` : ""}
           </div>`).join("");
         body = sec("", `<div class="plant-cols">

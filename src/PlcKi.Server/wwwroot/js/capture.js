@@ -143,24 +143,42 @@
   }
 
   // ---------- on the Active alarm page ----------
-  /** The section for the alarm shown on the Active alarm page ("" while nothing is known yet). */
-  function alarmSection(a) {
+  /** The recording of the alarm shown on Active alarm, once loaded; null when there is none (yet). */
+  function captureOf(a) {
     const l = needList();
-    if (!l) return "";
-    const head = (sub) => `<h2>The seconds before it came</h2><p class="sub">${sub}</p>`;
-    if (a.atStart) return sec("", head("This alarm was already on when PLC-Ki started watching, so there is no recording of how it came. The next time it comes, every change of the 10 s before it is kept here."));
+    if (!l || a.atStart) return null;
     const info = forAlarm(a.id, a.since);
-    if (!info) {
-      const rec = fast && (fast.recording || []).includes(a.id);
-      return sec("", head(rec ? "Recording the seconds after it came… ready in a moment."
-        : fast && fast.mode === "off" ? "Fast capture is not running." : "No recording of this alarm coming yet."));
-    }
-    const c = detail(info.id);
-    if (!c) return sec("", head("Loading…"));
-    if (c.missing) return "";
-    return sec("", head(`Every change of the machine's tags from ${c.before} s before the alarm to ${c.after} s after${c.mode === "subscription" ? `, sampled every ${c.cycleMs} ms by the PLC` : ", from the normal reads"}.`)
-      + body(c) + `<div class="actions" style="margin-top:14px"><a class="btn b small" href="#/capture/${encodeURIComponent(c.id)}">Open full size</a>
-        <button class="btn b small" data-ask="Look at the seconds before alarm ${esc(a.id)} came (get_alarm_capture). What changed right before it, and what does that say about the cause?">Ask what it shows</button></div>`);
+    const c = info && detail(info.id);
+    return c && !c.missing ? c : null;
+  }
+
+  /** The values just before the alarm came, by symbol, for the rung on Active alarm: operand -> { raw, text, symbol,
+   *  label } like the Program page's resolver. A block's "#member" is read as <instance>.member. null without a recording. */
+  function atAlarm(a, instance) {
+    const c = captureOf(a);
+    if (!c) return null;
+    const by = new Map(c.tracks.map((k) => [PK.norm(k.symbol), k]));
+    return (op) => {
+      const sym = op.startsWith("#") ? (instance ? instance + "." + op.slice(1) : null) : op;
+      const k = sym && by.get(PK.norm(sym));
+      if (!k) return null;
+      const { v, txt } = valueAt(k, -0.0005);
+      return { raw: k.type === "Bool" ? isOn(v) : v, text: txt, symbol: k.symbol, label: k.label };
+    };
+  }
+
+  /** On Active alarm: the seconds before it came as a small chart, only when there is a recording. */
+  function alarmSection(a) {
+    const c = captureOf(a);
+    if (!c) return "";
+    const g = geom(c);
+    const tracks = c.tracks.slice().sort((x, y) => (y.related ? 1 : 0) - (x.related ? 1 : 0)).slice(0, 5);
+    return sec("", `<div class="row" style="margin-bottom:6px"><h2 style="margin:0">The seconds before it came</h2><span class="spacer"></span>
+        <a class="btn b small" href="#/capture/${encodeURIComponent(c.id)}">Open full size</a>
+        <button class="btn b small" data-ask="Look at the seconds before alarm ${esc(a.id)} came (get_alarm_capture). What changed right before it, and what does that say about the cause?">Ask what it shows</button></div>
+      <p class="sub" style="margin-bottom:12px">${esc(c.summary[1] || c.summary[0] || "")}</p>
+      <div class="tr-rows cap-rows cap-mini">${tracks.map((k) => track(k, c, g)).join("")}${axis(c, g)}</div>
+      ${c.tracks.length > tracks.length ? `<p class="faint small" style="margin:8px 0 0">${c.tracks.length - tracks.length} more tags changed. Open full size to see them.</p>` : ""}`);
   }
 
   // ---------- #/capture and #/capture/<id> ----------
@@ -206,5 +224,5 @@
     },
   });
 
-  window.PKCapture = { alarmSection, bind, needList, forAlarm, modeLine };
+  window.PKCapture = { alarmSection, atAlarm, bind, needList, forAlarm, modeLine };
 })();

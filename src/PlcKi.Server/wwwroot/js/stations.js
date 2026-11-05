@@ -86,6 +86,7 @@ const PKStations = (() => {
     const lvl = look.lvl === "blocked" ? "warn" : look.lvl;
     const sym = window.PKVis ? window.PKVis.symbolFor(e.kind, e.id) : icon(PK.kindIcon(e.kind));
     const body = `<div class="st-dev-b">
+        ${PK.devStrip(e)}
         ${e.blockedBy ? `<p class="st-why">${icon("warn")}<span>${esc(e.blockedBy.charAt(0).toUpperCase() + e.blockedBy.slice(1))}</span></p>` : ""}
         ${e.values.length ? `<div class="kv">${e.values.map((v) => `<span>${esc(v.label)}</span><span class="val">${esc(v.text)}</span>`).join("")}</div>` : ""}
         ${e.permits.length ? `<ul class="conds">${e.permits.map(PK.cond).join("")}</ul>` : ""}
@@ -116,7 +117,7 @@ const PKStations = (() => {
       <h3>Step ${esc(q.step ?? "?")}: ${esc(q.stepName)}</h3>
       ${q.halted && q.haltReasons.length ? `<p class="muted small" style="margin:0">Halted: ${esc(q.haltReasons.join("; "))}</p>` : q.does ? `<p class="muted small" style="margin:0">${esc(q.does)}</p>` : ""}
       ${L ? L.stepStrip(q) : ""}
-      ${waits.length ? `<p class="muted small" style="margin:6px 0 0">Waiting for</p><ul class="conds">${waits.map(PK.cond).join("")}</ul>` : ""}
+      ${waits.length ? `<p class="muted small" style="margin:6px 0 0">Waiting for</p><ul class="conds">${waits.map((c) => PK.condHeld(c)).join("")}</ul>` : ""}
       <div><a class="btn b small" href="#/sequence/${encodeURIComponent(q.id)}">Step chart ›</a></div></div>`;
   }
 
@@ -131,10 +132,18 @@ const PKStations = (() => {
         + sec("", overviewGrid(stations));
     }
     const dev = device && st.equipment.find((e) => e.id === device);
-    const problems = st.equipment.filter((e) => { const l = PK.devLook(e, s).lvl; return l !== "ok" && l !== "idle"; });
+    // Blocked devices that wait on each other, root first (Level → M201 → E301 → step 30), when one of them is here
+    const ids = new Set(st.equipment.map((e) => e.id));
+    const chains = PK.causeChains(s).filter((c) => c.devices.some((e) => ids.has(e.id)));
+    const chainOrder = chains.flatMap((c) => c.devices.map((e) => e.id));
+    const rankOf = (e) => { const i = chainOrder.indexOf(e.id); return i < 0 ? 1e6 : i; };
+    const problems = st.equipment.filter((e) => { const l = PK.devLook(e, s).lvl; return l !== "ok" && l !== "idle"; })
+      .sort((x, y) => (PK.devLook(x, s).lvl === "fault" ? -1 : 0) - (PK.devLook(y, s).lvl === "fault" ? -1 : 0) || rankOf(x) - rankOf(y));
     const rest = st.equipment.filter((e) => !problems.includes(e));
     const first = st.alarms[0];
-    const sub = first ? first.text : problems.length ? `${problems[0].name}: ${problems[0].blockedBy || problems[0].state}.`
+    const rootDev = chains.length && chains[0].devices.find((e) => e.blockedBy);
+    const sub = first ? first.text : rootDev ? `${rootDev.name} is blocked: ${/^needs /.test(rootDev.blockedBy) ? "it " : ""}${rootDev.blockedBy}.`
+      : problems.length ? `${problems[0].name}: ${problems[0].blockedBy || problems[0].state}.`
       : st.sequences[0] ? `Step ${st.sequences[0].step ?? "?"}: ${st.sequences[0].stepName}.` : "No alarm and no device needs attention.";
     const others = stations.filter((x) => x !== st);
     return hero({
@@ -146,7 +155,8 @@ const PKStations = (() => {
       extra: `<div class="kpis st-kpis">
         <div class="k ${st.alarms.length ? "bad" : ""}"><b>${st.alarms.length}</b><span>alarm${st.alarms.length === 1 ? "" : "s"}</span></div>
         <div class="k ${problems.length ? "warn" : ""}"><b>${problems.length}</b><span>need${problems.length === 1 ? "s" : ""} attention</span></div>
-        <div class="k"><b>${st.equipment.length}</b><span>device${st.equipment.length === 1 ? "" : "s"}</span></div></div>`,
+        <div class="k"><b>${st.equipment.length}</b><span>device${st.equipment.length === 1 ? "" : "s"}</span></div></div>`
+        + (chains.length && !first ? `<div class="chains">${chains.map(PK.chainHtml).join("")}</div>` : ""),
     })
       + (dev ? sec("", `<h2>${esc(dev.name)}</h2><p class="sub">The device on this label.</p><div class="st-devs">${devRow(dev, true)}</div>`) : "")
       + (st.alarms.length ? sec("", `<h2>Alarms</h2><div class="stack">${st.alarms.map(alarmCard).join("")}</div>`) : "")
