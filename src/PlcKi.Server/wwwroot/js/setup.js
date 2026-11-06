@@ -330,7 +330,7 @@ const PKSetup = (() => {
         <div style="margin-top:22px">${diagram(c)}</div>`)
 
       + PK.sec("alt", `<div class="row" style="align-items:baseline"><h2>The PLC</h2><span class="pill warn">${(c.plcAllowWrites || "").trim() ? "Reads; changes allowed" : "Reads only"}</span></div>
-        <p class="sub">PLC-Ki reads values with the S7 protocol TIA and HMIs use. Administrators can change a value on PLCSIM; on a real PLC only when it is allowed below. Safety values never.</p>
+        <p class="sub">PLC-Ki reads values with the S7 protocol TIA and HMIs use. Administrators can change a value on PLCSIM, safety ones after a warning; on a real PLC only memory and data values, when it is allowed below. F-blocks never.</p>
         <div class="card stack">
         ${choice("plcvia", c.plcVia, [
           { value: "direct", label: "From here", text: "PLC-Ki reads the PLC over the network.", icon: "pc" },
@@ -352,7 +352,7 @@ const PKSetup = (() => {
             <label class="field">Wait for an answer up to <span class="hint">milliseconds; 5000 = 5 seconds</span><input id="timeoutMs" type="number" min="500" max="60000" step="500" value="${c.timeoutMs}"></label>
             <label class="field">Values from<select id="source"><option value="s7" ${c.source === "s7" ? "selected" : ""}>Live PLC</option><option value="snapshot" ${c.source === "snapshot" ? "selected" : ""}>Test file (no PLC)</option></select></label>
             <label class="field">Test file<select id="snapshotFile">${(lists.snapshots || []).map((f) => `<option value="${esc(f.path)}" ${f.path === c.snapshotFile ? "selected" : ""}>${esc(f.label)}</option>`).join("")}</select></label>
-            <label class="field" style="grid-column:1/-1">Real PLCs whose values may be changed<input id="plcAllowWrites" value="${esc(c.plcAllowWrites || "")}" placeholder="empty = never (PLCSIM is always allowed)"><span class="hint">Each change on a real PLC still needs a reason and the PLC address typed again. Inputs, outputs and safety values are never changed. Takes effect without a restart.</span></label>
+            <label class="field" style="grid-column:1/-1">Real PLCs whose values may be changed<input id="plcAllowWrites" value="${esc(c.plcAllowWrites || "")}" placeholder="empty = never (PLCSIM is always allowed)"><span class="hint">Each change on a real PLC still needs a reason and the PLC address typed again. Inputs, outputs and values the safety program reads are never changed on a real PLC. Takes effect without a restart.</span></label>
           </div>
         </details></div>`)
 

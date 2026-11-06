@@ -181,14 +181,13 @@ const PK = (() => {
     if (!ch) return { badge: null, short: null, level: "", text: "" };
     const plc = ch.plc || "the PLC";
     const valuePage = name === "tags" || name === "program";
-    const pen = "Safety values never. Every change is logged.";
     let a;
     if (name === "setup/generator") a = { badge: "Loads blocks here", short: "Blocks", level: "except",
       text: "The block generator on this page loads blocks into PLCSIM, or into a real PLC after two people confirm." };
     else if (valuePage && ch.values === "plcsim") a = { badge: "Can change values here", short: "Can change", level: "except",
-      text: `On this page you can change a value with the pen, on PLCSIM. ${pen}` };
+      text: "On this page you can change a value with the pen, on PLCSIM: inputs, outputs, memory and data values, safety ones after a warning, never F-blocks. Every change is logged." };
     else if (valuePage && ch.values === "real") a = { badge: "Can change values here", short: "Can change", level: "except",
-      text: `On this page you can change a value on the real PLC ${plc} with the pen, after typing a reason and the PLC address. Inputs, outputs and safety values never. Every change is logged.` };
+      text: `On this page you can change memory and data values on the real PLC ${plc} with the pen, after typing a reason and the PLC address; never inputs, outputs or values the safety program reads. Every change is logged.` };
     else if (name === "plc" && ch.startStop) a = { badge: "Can start and stop PLCSIM", short: "Start/Stop", level: "except",
       text: "Start and Stop on this page switch the PLCSIM CPU, after you confirm. A real PLC is never started or stopped." };
     else a = reads("This page only reads the PLC."
