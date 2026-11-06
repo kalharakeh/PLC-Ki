@@ -24,7 +24,8 @@ internal static class PlcsimConfirm
         {
             why = S("plcsimIp") is { } ip ? $"its PLCSIM CPU is at {ip}, not {plc}"
                 : r.ContainsKey("plcsimIp") ? "it has no PLCSIM address"   // the helper answered without one
-                : (S("why") ?? "").Replace("The TIA helper does not answer, so PLC-Ki cannot tell whether this is PLCSIM:", "it does not answer:");
+                : (S("why") ?? "").Replace("The TIA helper does not answer, so PLC-Ki cannot tell whether this is PLCSIM:", "it does not answer:")
+                    .Replace("it does not answer: A task was canceled.", "it did not answer within 4 seconds");   // PlcsimAsync's time limit
         }
         var cpu = live.Cpu;
         var plcState = cpu != null && cpu.Error == null && DateTimeOffset.Now - cpu.Time < TimeSpan.FromSeconds(30) ? cpu.State : null;
