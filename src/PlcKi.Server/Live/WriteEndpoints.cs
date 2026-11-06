@@ -1,28 +1,33 @@
 using System.Text.Json;
 using PlcKi.Core.Status;
 using PlcKi.Plant;
+using PlcKi.Server.Hardware;
 using PlcKi.Server.Jobs;
 
 namespace PlcKi.Server.Live;
 
-public sealed record WriteRequest(string? Symbol, string? Value, string? Reason, string? Confirm);
+public sealed record WriteRequest(string? Symbol, string? Value, string? Reason, string? Confirm, bool? Understood = null);
 
 /// <summary>
 /// One line of the change log (value-changes.jsonl in the data folder): every change, and every refused one.
 /// Action: null or "change" (a one-time change), "hold", "release", "release-all" or "changed-outside" (Hold on PLCSIM).
 /// Lines written before holds existed have no Action and read as changes.
+/// Rule: the row of ChangeRules that allowed it ("plcsim-safety-input", "real-memory", ...); older lines have none.
 /// </summary>
 public sealed record WriteLogEntry(DateTimeOffset Time, string User, string Plc, string Target, string Symbol, string Value,
-    string? Before, string? After, bool? Held, string? Reason, bool Ok, string? Error, string? Action = null, string? Address = null);
+    string? Before, string? After, bool? Held, string? Reason, bool Ok, string? Error, string? Action = null, string? Address = null,
+    string? Rule = null);
 
 /// <summary>
 /// Changing a value in the PLC from the Tags and Program pages. Administrators only (/api/admin).
-///   PLCSIM (the PLC PLC-Ki reads is the TIA helper's PLCSIM CPU): any value, no extra questions.
+/// What may be changed is decided in ChangeRules (shared with Hold); in short:
+///   PLCSIM, confirmed by the TIA helper: inputs, outputs, memory and data block values, also safety inputs and
+///             values the safety program reads, after "I understand" under the warning.
 ///   Real PLC: only when its address is on Settings' "real PLCs whose values may be changed" list, with a reason,
-///             and with the PLC address typed again; never inputs or outputs.
-///   Never: a value the safety program uses, F-blocks and their data (also on PLCSIM), or without a loaded program.
-/// When PLC-Ki cannot tell that the PLC is PLCSIM, it treats it as a real PLC. Every change, and every refused
-/// one, is written to the change log and shows in the machine's events.
+///             and with the PLC address typed again; standard memory and data block values only.
+///   Never: F-blocks and their data (also on PLCSIM), or without a loaded program.
+/// When PLC-Ki cannot confirm that the PLC is PLCSIM, it treats it as a real PLC. Every change, and every refused
+/// one, is written to the change log (with the rule that allowed it) and shows in the machine's events.
 /// </summary>
 public static class WriteEndpoints
 {
@@ -30,15 +35,16 @@ public static class WriteEndpoints
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
     /// <summary>What the page needs before it asks: may this be changed, and how careful must it be.</summary>
-    private sealed record Plan(string Target, string? Refused, string? Address, string? PlcsimWhy, string Plc);
+    private sealed record Plan(string Target, string? Refused, string? Address, string? PlcsimWhy, string Plc, string? Rule = null, string? Warning = null);
 
     public static WebApplication MapWrites(this WebApplication app)
     {
         var api = app.MapGroup("/api/admin/write");     // administrators only (UsePlant)
 
-        api.MapGet("/check", async (string? symbol, PlcKiOptions opt, ProgramService program, TiaConnection tia, SettingsStore settings, CancellationToken ct) =>
+        api.MapGet("/check", async (string? symbol, PlcKiOptions opt, ProgramService program, HardwareService hardware, TiaConnection tia, LiveState live,
+            SettingsStore settings, CancellationToken ct) =>
         {
-            var p = await PlanAsync(symbol ?? "", opt, program, tia, settings, ct);
+            var p = await PlanAsync(symbol ?? "", opt, program, hardware, tia, live, settings, false, ct);
             return Results.Ok(new
             {
                 symbol,
@@ -48,6 +54,8 @@ public static class WriteEndpoints
                 why = p.Refused,
                 address = p.Address,
                 plcsimWhy = p.PlcsimWhy,
+                warning = p.Warning,
+                rule = p.Rule,
                 needsReason = p.Target == "real",
                 needsConfirm = p.Target == "real",
             });
@@ -56,28 +64,29 @@ public static class WriteEndpoints
         // What this PLC-Ki may change right now, for the top bar of every page. Reads only: it asks the same
         // questions as a change would (minus the ones about one tag) and changes nothing.
         //   values: "none" | "plcsim" | "real" (a real PLC on the allow list); startStop: PLCSIM Start/Stop works
-        api.MapGet("/state", async (PlcKiOptions opt, TiaConnection tia, SettingsStore settings, CancellationToken ct) =>
+        api.MapGet("/state", async (PlcKiOptions opt, TiaConnection tia, LiveState live, SettingsStore settings, CancellationToken ct) =>
         {
             var plc = opt.Plc.Address.Trim();
             var plcsim = await PlcKi.Server.Hardware.HardwareEndpoints.PlcsimAsync(opt, tia, false, ct);
-            bool sim = plcsim["applies"] is true;
+            bool sim = (await PlcsimConfirm.CheckAsync(opt, tia, live, false, ct)).NotConfirmed == null;   // confirmed, as a change needs
             string values = !opt.Source.Equals("s7", StringComparison.OrdinalIgnoreCase) || opt.Plc.Via == "link" || plc.Length == 0 ? "none"
                 : sim ? "plcsim" : RealAllowed(settings, plc) ? "real" : "none";
-            return Results.Ok(new { values, startStop = sim && plcsim["found"] is true, plc });
+            return Results.Ok(new { values, startStop = plcsim["applies"] is true && plcsim["found"] is true, plc });
         });
 
-        api.MapPost("", async (WriteRequest req, PlcKiOptions opt, ProgramService program, TiaConnection tia, SettingsStore settings,
-            PlantContext ctx, MachineHistory history, PlcWriter writer, HttpContext http, ILoggerFactory lf, CancellationToken ct) =>
+        api.MapPost("", async (WriteRequest req, PlcKiOptions opt, ProgramService program, HardwareService hardware, TiaConnection tia, LiveState live,
+            SettingsStore settings, PlantContext ctx, MachineHistory history, PlcWriter writer, HttpContext http, ILoggerFactory lf, CancellationToken ct) =>
         {
             var user = http.User.Identity?.Name ?? "?";
             var symbol = (req.Symbol ?? "").Trim();
             var value = (req.Value ?? "").Trim();
             var reason = string.IsNullOrWhiteSpace(req.Reason) ? null : req.Reason.Trim();
             var log = lf.CreateLogger("write");
-            var p = await PlanAsync(symbol, opt, program, tia, settings, ct);
+            var p = await PlanAsync(symbol, opt, program, hardware, tia, live, settings, true, ct);   // fresh: PLCSIM confirmed now
 
             string? refused = p.Refused;
             if (refused == null && value.Length == 0) refused = "Type the new value.";
+            if (refused == null && p.Warning != null && req.Understood != true) refused = p.Warning + " Click \"I understand\" to change it anyway.";
             if (refused == null && p.Target == "real")
             {
                 if (reason == null || reason.Length < 5) refused = "Say why you change this value on a real machine (at least a few words). It goes into the change log.";
@@ -96,7 +105,8 @@ public static class WriteEndpoints
                 var where = p.Target == "plcsim" ? "PLCSIM" : "the real PLC " + p.Plc;
                 log.LogWarning("{User} changed {Symbol} on {Where} from {Before} to {Written} (now {After}). Reason: {Reason}",
                     user, symbol, where, r.Before, r.Written, r.After ?? "?", reason ?? "-");
-                Append(ctx, new WriteLogEntry(DateTimeOffset.Now, user, p.Plc, p.Target, symbol, r.Written, r.Before, r.After, r.Held, reason, true, null));
+                Append(ctx, new WriteLogEntry(DateTimeOffset.Now, user, p.Plc, p.Target, symbol, r.Written, r.Before, r.After, r.Held, reason, true, null,
+                    Address: p.Address, Rule: p.Rule));
                 history.Note(new MachineEvent(DateTimeOffset.Now, "write",
                     $"{user} changed {symbol} from {r.Before} to {r.Written} on {where}" + (r.Held ? "." : $", but the program set it back to {r.After}.")
                     + (reason != null ? $" Reason: {reason}" : "")));
@@ -123,7 +133,8 @@ public static class WriteEndpoints
         return app;
     }
 
-    private static async Task<Plan> PlanAsync(string symbol, PlcKiOptions opt, ProgramService program, TiaConnection tia, SettingsStore settings, CancellationToken ct)
+    private static async Task<Plan> PlanAsync(string symbol, PlcKiOptions opt, ProgramService program, HardwareService hardware, TiaConnection tia,
+        LiveState live, SettingsStore settings, bool fresh, CancellationToken ct)
     {
         var plc = opt.Plc.Address.Trim();
         if (string.IsNullOrWhiteSpace(symbol)) return new("none", "No tag given.", null, null, plc);
@@ -133,21 +144,12 @@ public static class WriteEndpoints
             return new("none", "The PLC is read through PLC-Ki Link. Changing values through Link is not built yet.", null, null, plc);
         if (plc.Length == 0) return new("none", "No PLC address is set yet (Setup, Connections).", null, null, plc);
 
-        var loaded = program.Loaded.Plc;
-        var address = WriteRules.Address(loaded, symbol);
-        var plcsim = await PlcKi.Server.Hardware.HardwareEndpoints.PlcsimAsync(opt, tia, false, ct);
-        var target = plcsim["applies"] is true ? "plcsim" : "real";
-        var plcsimWhy = target == "real" ? plcsim["why"] as string : null;
-
-        if (WriteRules.SafetyReason(loaded, symbol) is { } safety) return new(target, safety, address, plcsimWhy, plc);
-        if (target == "real")
-        {
-            if (!RealAllowed(settings, plc))
-                return new(target, $"{plc} is a real PLC (or PLC-Ki cannot tell that it is PLCSIM), and it is not on the list of real PLCs whose values may be changed. " +
-                    "An administrator can add it under Setup, Connections, More PLC options.", address, plcsimWhy, plc);
-            if (WriteRules.RealIoReason(address) is { } io) return new(target, io, address, plcsimWhy, plc);
-        }
-        return new(target, null, address, plcsimWhy, plc);
+        var (notConfirmed, _) = await PlcsimConfirm.CheckAsync(opt, tia, live, fresh, ct);
+        var target = notConfirmed == null ? ChangeTarget.Plcsim : RealAllowed(settings, plc) ? ChangeTarget.RealAllowed : ChangeTarget.RealNotAllowed;
+        var (hw, source, _) = hardware.Load();
+        var d = ChangeRules.Decide(program.Loaded.Plc, source == "hardware" ? hw : null, symbol, ChangeKind.Change, target, notConfirmed);
+        return new(target == ChangeTarget.Plcsim ? "plcsim" : "real", d.Refused, d.Address,
+            notConfirmed == null ? null : ChangeRules.CannotConfirm(notConfirmed), plc, d.Rule, d.Warning);
     }
 
     /// <summary>Is this real PLC on Settings' list of real PLCs whose values may be changed? (Read live: no restart needed.)</summary>

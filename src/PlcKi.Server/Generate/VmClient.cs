@@ -114,7 +114,7 @@ public sealed class VmClient
 
     /// <summary>
     /// Sets a simulated input of the helper's PLCSIM CPU (Hold on PLCSIM). Only PlcsimInputs calls this, after
-    /// HoldRules allowed it; the helper refuses any address but its own PLCSIM address. JSON of the input read back.
+    /// ChangeRules allowed it; the helper refuses any address but its own PLCSIM address. JSON of the input read back.
     /// </summary>
     public Task<string> WritePlcsimInputAsync(string ip, int offset, int? bit, bool? value, string? data, CancellationToken ct) =>
         PlcsimInputAsync("plcsim/input/write", new { ip, offset, bit, value, data }, ct);

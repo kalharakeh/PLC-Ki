@@ -3,7 +3,7 @@ using PlcKi.Core.Import;
 using PlcKi.Core.Status;
 using Xunit;
 
-/// <summary>"Hold on PLCSIM": PLCSIM only (confirmed by the TIA helper), inputs only, never safety I/O.</summary>
+/// <summary>"Hold on PLCSIM": PLCSIM only (confirmed by the TIA helper), inputs only, safety inputs with a warning.</summary>
 public class HoldRulesTests
 {
     private const string Sim = "192.168.10.10";
@@ -44,38 +44,32 @@ public class HoldRulesTests
         return hw;
     }
 
-    private static string? Hold(string symbol, ExportPlc? plc = null, HardwareConfig? hw = null, string? sim = null) =>
-        HoldRules.Refusal(plc ?? Plant(), hw ?? Hardware(), symbol, sim);
+    private static ChangeDecision Decide(string symbol, ExportPlc? plc = null, HardwareConfig? hw = null, string? notConfirmed = null) =>
+        HoldRules.Decide(plc ?? Plant(), hw ?? Hardware(), symbol, notConfirmed);
+
+    private static string? Hold(string symbol, ExportPlc? plc = null, HardwareConfig? hw = null, string? notConfirmed = null) =>
+        Decide(symbol, plc, hw, notConfirmed).Refused;
 
     [Theory]
     [InlineData("\"DI_BluePB\"")]
     [InlineData("DI_BluePB")]
     [InlineData("\"AI_Pressure\"")]
     [InlineData("\"AI_Flow\"")]
-    public void Plain_inputs_on_plcsim_may_be_held(string symbol) => Assert.Null(Hold(symbol));
-
-    [Fact]
-    public void Not_plcsim_is_refused_whatever_the_value()
+    public void Plain_inputs_on_plcsim_may_be_held(string symbol)
     {
-        var why = HoldRules.PlcsimRefusal(Sim, applies: false, found: false, null, "The PLC at 192.168.10.10 is not the PLCSIM CPU.", null, null);
-        Assert.Contains("PLCSIM only", why);
-        Assert.Equal(why, Hold("\"DI_BluePB\"", sim: why));
+        var d = Decide(symbol);
+        Assert.Null(d.Refused);
+        Assert.Null(d.Warning);
+        Assert.Equal("plcsim-input", d.Rule);
     }
 
     [Fact]
-    public void Same_address_but_no_running_instance_is_refused() =>
-        Assert.Contains("no running PLCSIM instance", HoldRules.PlcsimRefusal(Sim, true, false, null, null, "RUN", null));
-
-    [Fact]
-    public void Run_stop_mismatch_means_maybe_not_the_same_cpu() =>
-        Assert.Contains("may not be the same CPU", HoldRules.PlcsimRefusal(Sim, true, true, "Helium_sim", null, "RUN", "Stop"));
-
-    [Theory]
-    [InlineData("STOP", "Stop")]
-    [InlineData(null, "Run")]
-    [InlineData("Startup", "Run")]
-    public void Confirmed_plcsim_is_accepted(string? plcState, string simState) =>
-        Assert.Null(HoldRules.PlcsimRefusal(Sim, true, true, "Helium_sim", null, plcState, simState));
+    public void Not_confirmed_plcsim_is_refused_whatever_the_value()
+    {
+        var why = Hold("\"DI_BluePB\"", notConfirmed: "its PLCSIM CPU is at 192.168.10.10, not 192.168.0.5");
+        Assert.StartsWith("PLC-Ki can't confirm this is PLCSIM (TIA helper: its PLCSIM CPU is at 192.168.10.10", why);
+        Assert.Contains("PLCSIM only", why);
+    }
 
     [Theory]
     [InlineData("\"DO_Lamp\"", "output")]
@@ -86,29 +80,39 @@ public class HoldRulesTests
     [Fact]
     public void An_unknown_tag_is_named_as_unknown() => Assert.Contains("not in the loaded program", Hold("\"NoSuchTag\""));
 
-    [Fact]
-    public void A_tag_the_safety_program_uses_is_refused() => Assert.Contains("safety program", Hold("\"FDI_Door\""));
+    [Theory]
+    [InlineData("\"FDI_Door\"")]        // on the F-DI and used by the safety program
+    [InlineData("\"DI_OnFModule\"")]    // on the F-DI only
+    public void A_safety_input_may_be_held_with_the_f_input_warning(string symbol)
+    {
+        var d = Decide(symbol);
+        Assert.Null(d.Refused);
+        Assert.Equal(ChangeRules.FInput, d.Warning);
+        Assert.Equal("plcsim-safety-input", d.Rule);
+    }
 
     [Fact]
-    public void A_byte_on_an_f_module_is_refused() => Assert.Contains("F-DI 8x24VDC HF in ET200SP_1", Hold("\"DI_OnFModule\""));
-
-    [Fact]
-    public void A_word_that_overlaps_an_f_module_is_refused()
+    public void A_word_that_overlaps_an_f_module_gets_the_f_input_warning()
     {
         var plc = Plant();
         plc.PlcTags.Add(new ExportPlcTag("AI_Edge", "Int", "%IW19", null, "Inputs"));   // bytes 19 and 20: 20 is on the F-DI
-        Assert.Contains("safety module", Hold("\"AI_Edge\"", plc));
+        Assert.Equal(ChangeRules.FInput, Decide("\"AI_Edge\"", plc).Warning);
     }
 
     [Fact]
-    public void Without_hardware_only_a_program_without_safety_may_hold()
+    public void Without_hardware_a_program_with_safety_warns_that_it_cannot_tell()
     {
-        Assert.Contains("No hardware export", HoldRules.Refusal(Plant(), null, "\"DI_BluePB\"", null));
-        Assert.Null(HoldRules.Refusal(Plant(safety: false), null, "\"DI_BluePB\"", null));
+        var d = HoldRules.Decide(Plant(), null, "\"DI_BluePB\"", null);
+        Assert.Null(d.Refused);
+        Assert.Equal(ChangeRules.Unchecked("input"), d.Warning);
+        Assert.Equal("plcsim-input-unchecked", d.Rule);
+        var plain = HoldRules.Decide(Plant(safety: false), null, "\"DI_BluePB\"", null);
+        Assert.Null(plain.Warning);
+        Assert.Equal("plcsim-input", plain.Rule);
     }
 
     [Fact]
-    public void Without_a_program_nothing_is_held() => Assert.NotNull(HoldRules.Refusal(null, Hardware(), "\"DI_BluePB\"", null));
+    public void Without_a_program_nothing_is_held() => Assert.NotNull(HoldRules.Decide(null, Hardware(), "\"DI_BluePB\"", null).Refused);
 
     [Theory]
     [InlineData("\"DI_Odd\"", "does not fit")]

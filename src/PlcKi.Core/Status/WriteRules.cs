@@ -33,6 +33,20 @@ public static class WriteRules
         if (plc == null) return "No program is loaded, so PLC-Ki cannot check whether this tag belongs to the safety program.";
         var root = Root(symbol);
         if (root.Length == 0) return "No tag given.";
+        if (SafetyBlockReason(plc, symbol) is { } block) return block;
+        if (SafetyUser(plc, symbol) is { } user)
+            return $"{root} is used by the safety program (in {user}). PLC-Ki never changes values the safety program uses.";
+        return null;
+    }
+
+    /// <summary>
+    /// Why this symbol is inside the safety program itself, or null: an F-block or F-DB, the instance DB of an F-FB,
+    /// or an F-runtime / F-I/O system block. These are never changed, on PLCSIM neither.
+    /// </summary>
+    public static string? SafetyBlockReason(ExportPlc plc, string symbol)
+    {
+        var root = Root(symbol);
+        if (root.Length == 0) return null;
         var safety = plc.Blocks.Where(b => b.IsSafety).ToList();
         var eq = StringComparer.OrdinalIgnoreCase;
         if (safety.FirstOrDefault(b => eq.Equals(b.Name, root)) is { } fb)
@@ -40,13 +54,21 @@ public static class WriteRules
         var block = plc.Blocks.FirstOrDefault(b => eq.Equals(b.Name, root));
         if (block?.InstanceOf is { } of && safety.Any(b => eq.Equals(b.Name, of)))
             return $"{root} is the data of the safety block {of}. PLC-Ki never changes safety values.";
-        if (safety.FirstOrDefault(b => b.GlobalNames.Contains(root)) is { } user)
-            return $"{root} is used by the safety program (in {user.Name}). PLC-Ki never changes values the safety program uses.";
         // F-runtime and F-I/O system blocks have names like F00001_..., RTG1SysInfo, F_IO_DB
         if (block != null && (root.StartsWith("F_", StringComparison.OrdinalIgnoreCase) || root.StartsWith("RTG", StringComparison.OrdinalIgnoreCase)
                               || System.Text.RegularExpressions.Regex.IsMatch(root, @"^F\d{4,}")))
             return $"{root} looks like a block of the safety system. PLC-Ki never changes safety values.";
         return null;
+    }
+
+    /// <summary>
+    /// The safety block that uses this standard tag or data block (reads or writes it), or null. Checked by name:
+    /// when the safety program uses one member of a data block, every member of it counts.
+    /// </summary>
+    public static string? SafetyUser(ExportPlc plc, string symbol)
+    {
+        var root = Root(symbol);
+        return root.Length == 0 ? null : plc.Blocks.FirstOrDefault(b => b.IsSafety && b.GlobalNames.Contains(root))?.Name;
     }
 
     /// <summary>The tag-table address of a plain PLC tag ("%I0.3"), or null for data block values.</summary>

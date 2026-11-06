@@ -5,21 +5,21 @@ using PlcKi.Server.Jobs;
 
 namespace PlcKi.Server.Live;
 
-public sealed record HoldRequest(string? Symbol, string? Value, string? Reason);
+public sealed record HoldRequest(string? Symbol, string? Value, string? Reason, bool? Understood = null);
 public sealed record ReleaseRequest(string? Symbol, bool? All);
 
 /// <summary>
 /// "Hold on PLCSIM": an input set through the PLCSIM Advanced API stays until it is set again, unlike a one-time
 /// change of %I, which the next cycle overwrites. This is not a CPU force: TIA's force table does not see it, and
-/// it cannot hold an output. Administrators only (/api/admin/hold); the rules are HoldRules:
-///   PLCSIM only, confirmed by the TIA helper (a running instance at that address, RUN/STOP agreeing);
-///   inputs only; never a value the safety program uses or a byte of an F-module.
+/// it cannot hold an output. Administrators only (/api/admin/hold); the rules are ChangeRules (shared with
+/// "Change a value"): PLCSIM only, confirmed by the TIA helper (a running instance at that address, RUN/STOP
+/// agreeing); inputs only; safety inputs after "I understand" under the warning.
 /// Every hold, release and refusal goes into the change log (value-changes.jsonl) and the machine's events.
 /// GET /api/held (any logged-in user) is the list for the banner on every page.
 /// </summary>
 public static class HoldEndpoints
 {
-    private sealed record Plan(string Plc, string? Refused, IoAddress? Address, string Datatype, string? Instance);
+    private sealed record Plan(string Plc, string? Refused, IoAddress? Address, string Datatype, string? Instance, string? Rule = null, string? Warning = null);
 
     public static WebApplication MapHolds(this WebApplication app)
     {
@@ -51,7 +51,7 @@ public static class HoldEndpoints
             return Results.Ok(new
             {
                 symbol = s, plc = p.Plc, allowed = refused == null, why = refused, address = p.Address?.Text, datatype = p.Datatype,
-                instance = p.Instance, now, held = held == null ? null : new { held.Value, held.Before, held.User, held.Time },
+                instance = p.Instance, now, warning = p.Warning, rule = p.Rule, held = held == null ? null : new { held.Value, held.Before, held.User, held.Time },
             });
         });
 
@@ -90,7 +90,8 @@ public static class HoldEndpoints
             var text = (req.Value ?? "").Trim();
             var reason = string.IsNullOrWhiteSpace(req.Reason) ? null : req.Reason.Trim();
             var p = await PlanAsync(symbol, opt, program, hardware, tia, live, ct);
-            var refused = p.Refused ?? (text.Length == 0 ? "Type the value to hold." : null);
+            var refused = p.Refused ?? (text.Length == 0 ? "Type the value to hold."
+                : p.Warning != null && req.Understood != true ? p.Warning + " Click \"I understand\" to hold it anyway." : null);
             object? value = null;
             if (refused == null)
             {
@@ -108,7 +109,8 @@ public static class HoldEndpoints
                 var shown = WriteRules.Show(value);
                 lf.CreateLogger("hold").LogWarning("{User} holds {Symbol} ({Address}) at {Value} on PLCSIM {Instance} (was {Before}, reads {Now}). Reason: {Reason}",
                     user, symbol, p.Address!.Text, shown, p.Instance, before, now, reason ?? "-");
-                WriteEndpoints.Append(ctx, new WriteLogEntry(DateTimeOffset.Now, user, p.Plc, "plcsim", symbol, shown, before, now, now == shown, reason, true, null, "hold", p.Address.Text));
+                WriteEndpoints.Append(ctx, new WriteLogEntry(DateTimeOffset.Now, user, p.Plc, "plcsim", symbol, shown, before, now, now == shown, reason, true, null, "hold", p.Address.Text,
+                    p.Rule));
                 history.Note(new MachineEvent(DateTimeOffset.Now, "write",
                     $"{user} holds the input {symbol} ({p.Address.Text}) at {shown} on PLCSIM (was {before})." + (reason != null ? $" Reason: {reason}" : "")));
                 return Results.Ok(new { symbol, address = p.Address.Text, before, value = shown, now, instance = p.Instance });
@@ -161,23 +163,10 @@ public static class HoldEndpoints
         if (plc.Length == 0) return new(plc, "No PLC address is set yet (Setup, Connections).", null, "", null);
 
         var loaded = program.Loaded.Plc;
-        var plcsim = await HardwareEndpoints.PlcsimAsync(opt, tia, true, ct);   // fresh, not the 3 s cache
-        string? S(string key) => plcsim.GetValueOrDefault(key) as string;   // keys are there only when they have a value
-        var instance = S("name");
-        var cpu = live.Cpu;
-        var plcState = cpu != null && cpu.Error == null && DateTimeOffset.Now - cpu.Time < TimeSpan.FromSeconds(30) ? cpu.State : null;
-        var applies = plcsim.GetValueOrDefault("applies") is true;
-        var found = plcsim.GetValueOrDefault("found") is true;
-        // The helper answers within 3 s; when PLCSIM is slower it says so in "error" (not "no instance")
-        var simRefusal = applies && !found && S("error") is { Length: > 0 } slow
-            ? "The TIA helper could not read PLCSIM just now: " + slow
-            : HoldRules.PlcsimRefusal(plc, applies, found, instance, S("why"), plcState, S("state"));
-        if (simRefusal == null && S("error") is { Length: > 0 } err) simRefusal = "The TIA helper reports a PLCSIM problem: " + err;
-
+        var (notConfirmed, instance) = await PlcsimConfirm.CheckAsync(opt, tia, live, true, ct);   // fresh, not the 3 s cache
         var (hw, source, _) = hardware.Load();
-        var refused = HoldRules.Refusal(loaded, source == "hardware" ? hw : null, symbol, simRefusal);
+        var d = HoldRules.Decide(loaded, source == "hardware" ? hw : null, symbol, notConfirmed);
         var address = HoldRules.ParseAddress(WriteRules.Address(loaded, symbol));
-        var datatype = loaded?.PlcTags.FirstOrDefault(t => t.Name.Equals(WriteRules.Root(symbol), StringComparison.OrdinalIgnoreCase))?.Datatype ?? "";
-        return new(plc, refused, address, datatype, instance);
+        return new(plc, d.Refused, address, d.Datatype, instance, d.Rule, d.Warning);
     }
 }
