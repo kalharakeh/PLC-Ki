@@ -14,7 +14,7 @@ internal static class PlcsimConfirm
     internal static async Task<(string? NotConfirmed, string? Instance)> CheckAsync(PlcKiOptions opt, TiaConnection tia, LiveState live, bool fresh, CancellationToken ct)
     {
         var plc = opt.Plc.Address.Trim();
-        if (tia.NotSetUp() != null) return ("none is set up, so PLC-Ki cannot ask it", null);
+        if (tia.NotSetUp() is { } setUp) return ("not set up: " + char.ToLowerInvariant(setUp[0]) + setUp[1..].TrimEnd('.'), null);
         var r = await HardwareEndpoints.PlcsimAsync(opt, tia, fresh, ct);
         string? S(string key) => r.GetValueOrDefault(key) as string;   // keys are there only when they have a value
         var applies = r.GetValueOrDefault("applies") is true;
