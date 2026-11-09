@@ -299,7 +299,7 @@
         }) + (settingsNotice(s) ? sec("", settingsNotice(s)) : "")
         + (window.PKMemory ? PKMemory.unnotedBlock() : "")
         + (n ? sec("alt", `<h2>Blocked now</h2><p class="sub">The program asks for ${n === 1 ? "this device" : "these devices"}, but ${n === 1 ? "its" : "their"} output stays off. ${n > 1 ? "The cause comes first." : ""}</p>
-            <div class="stack">${order.map((e) => `<div class="aa-dev"><div class="row"><h3 class="m-0">${esc(e.name)}</h3><span class="spacer"></span><a class="small" href="#/plant/devices/${encodeURIComponent(e.id)}">Details ›</a></div>
+            <div class="stack blocked-now">${order.map((e) => `<div class="aa-dev"><div class="row"><h3 class="m-0">${esc(e.name)}</h3><span class="spacer"></span><a class="small" href="#/plant/devices/${encodeURIComponent(e.id)}">Details ›</a></div>
               ${PK.devStrip(e)}</div>`).join("")}</div>`) : "")
         + (seq ? sec(n ? "" : "alt", `<h2>${esc(seq.name)}</h2>${n ? `<p class="sub">${esc(seq.explanation)}</p>` : ""}${stepStrip(seq)}${chartLink(seq)}
             ${seq.next.length ? `<p class="mt-4 mb-2 muted small">To go on it needs</p><ul class="conds">${seq.next.flatMap((x) => x.conditions).map((c) => PK.condHeld(c, s)).join("")}</ul>` : ""}`) : "")

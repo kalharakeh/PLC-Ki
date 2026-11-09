@@ -977,13 +977,20 @@ const PK = (() => {
     if (/already been opened|project\/library .* cannot be accessed/i.test(m)) return { text: "TIA could not open the project: it is open in TIA Portal.", todo: "Close the project in TIA Portal on the TIA PC (or wait 2 minutes after a crash), then start the job again. Nothing was imported." };
     if (/password|access.?(level|protection|denied|rights)|legitimation|protection/i.test(m)) return { text: "The PLC asks for a password.", todo: "Enter the CPU's access password under Setup, Connections (More PLC options).", op: "Ask an administrator to enter the PLC's access password in PLC-Ki." };
     if (/api key|anthropic/i.test(m)) return { text: "No Claude API key is set.", todo: "Add it under Setup, Settings (Assistant). It starts with sk-ant-." };
-    const http = /Request failed \((\d+)\)/i.exec(m);
-    if (http && http[1] === "403") return { text: "Your login is not allowed to do this.", todo: "", op: "" };
-    if (http && http[1] === "404") return { text: "PLC-Ki could not find that.", todo: "Reload the page. If it stays, it may have been removed." };
-    if (http && +http[1] >= 500) return { text: "PLC-Ki hit a problem doing this.", todo: "Try again. If it keeps happening, the PLC-Ki window on the PC shows what went wrong." };
-    if (http) return { text: "PLC-Ki did not accept this.", todo: "Reload the page and try again." };
     return { text: m, todo: "" };
   }
+  // The server only said a status code (it had no words of its own)
+  function plainHttp(m) {
+    const http = /Request failed \((\d+)\)/i.exec(m);
+    if (!http) return null;
+    if (http[1] === "403") return { text: "Your login is not allowed to do this.", todo: "" };
+    if (http[1] === "404") return { text: "PLC-Ki could not find that.", todo: "Reload the page. If it stays, it may have been removed." };
+    if (+http[1] >= 500) return { text: "PLC-Ki hit a problem doing this.", todo: "Try again. If it keeps happening, the PLC-Ki window on the PC shows what went wrong." };
+    return { text: "PLC-Ki did not accept this.", todo: "Reload the page and try again." };
+  }
+  // plain()'s rules are about reaching the PLC, the TIA helper or Ki. Other messages ("The new password needs at least
+  // 8 characters.", "The PLC refused the value…") are already written for people and must not be rewritten by them.
+  const ABOUT_A_LINK = /failed to fetch|networkerror|load failed|timed out|timeout|within \d+ s|unreachable|no route|host is down|no such host|not known|name or service|connection|connect|tia helper|5090|importer|token|401|already been opened|cannot be accessed|api key|anthropic|legitimation/i;
   // The program export: Hardware, Tags, Documents and Program all read it, and say the same when it is missing
   function plainProgram(m) {
     if (/No program export is set|No program loaded/i.test(m)) return { text: "No PLC program is loaded yet.", todo: "Import it under Setup, Import a program.", op: "Ask an administrator to import the PLC program into PLC-Ki." };
@@ -995,7 +1002,7 @@ const PK = (() => {
   /** plain() for the person looking: operators cannot open Setup, so they read who to ask instead. */
   function plainFor(message, where) {
     const m = String((message && message.message) || message || "");
-    const p = plainProgram(m) || plain(m, where);
+    const p = plainProgram(m) || plainHttp(m) || ((where && where.plc) || ABOUT_A_LINK.test(m) ? plain(m, where) : { text: m, todo: "" });
     const admin = state.user && state.user.role === "admin";
     if (!admin && p.op != null && /Setup/.test(p.todo)) p.todo = p.op;
     return p;
