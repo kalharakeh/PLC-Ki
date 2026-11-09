@@ -625,7 +625,7 @@
         return `<li>${named(w.coil, resolve)} is off because ${because(w.first, resolve, instPath)}.
         ${next}${w.net ? `<button type="button" class="linkbtn" data-goto-net="${esc(w.net)}">Network ${esc(w.net)} ›</button>` : ""}</li>`;
       }).join("")}</ul>
-      ${why.length > MAX ? `<p class="faint small" style="margin:6px 0 0">And ${why.length - MAX} more: look for the amber contacts in the rungs.</p>` : ""}</div>`;
+      ${why.length > MAX ? `<p class="mt-2 mb-0 faint small">And ${why.length - MAX} more: look for the amber contacts in the rungs.</p>` : ""}</div>`;
   }
 
   // ---- what the machine model says about each block: its sequence, devices and alarms ----
@@ -739,20 +739,20 @@
     const next = (q.next || []);
     const wait = next.length ? next.map((n, k) => `<p class="pg-wait">${k ? "Or, to" : "To"} go on to step ${esc(String(n.to))}${n.toName ? ` “${esc(n.toName)}”` : ""} it waits for:</p>
         <ul class="conds">${n.conditions.map(PK.cond).join("")}</ul>`).join("") : "";
-    const halted = stop ? `<div class="notice red" style="margin-top:10px">${icon("warn")}<div>${esc(q.explanation)}</div></div>`
-      : q.halted ? `<div class="notice red" style="margin-top:10px">${icon("warn")}<div><b>The sequence is halted.</b>${q.haltReasons && q.haltReasons.length ? " " + q.haltReasons.map(esc).join(" ") : ""}</div></div>` : "";
+    const halted = stop ? `<div class="mt-3 notice red">${icon("warn")}<div>${esc(q.explanation)}</div></div>`
+      : q.halted ? `<div class="mt-3 notice red">${icon("warn")}<div><b>The sequence is halted.</b>${q.haltReasons && q.haltReasons.length ? " " + q.haltReasons.map(esc).join(" ") : ""}</div></div>` : "";
     return `<div class="pg-seq">
       <div class="row" style="gap:8px 10px;flex-wrap:wrap"><b>${esc(q.name)}</b>${step}${stop ? `<span class="pill bad">Not running</span>` : q.halted ? `<span class="pill bad">Halted</span>` : ""}</div>
       ${q.does && !stop ? `<p class="pg-does">${esc(q.does)}</p>` : ""}${halted}${compact ? "" : wait}
       ${compact ? "" : `<a class="small" href="#/sequence/${encodeURIComponent(q.id)}">Step chart and timeline ›</a>`}</div>`;
   }
   function eqRow(e) {
-    return `<li><span class="ico">${icon(PK.kindIcon(e.kind))}</span><div style="flex:1;min-width:0">
+    return `<li><span class="ico">${icon(PK.kindIcon(e.kind))}</span><div class="grow min0">
         <a href="#/plant/devices/${encodeURIComponent(e.id)}"><b>${esc(e.name)}</b></a> <span class="faint small mono">${esc(e.id)}</span>
         ${e.blockedBy ? `<div class="pg-blocked">${esc(e.blockedBy.charAt(0).toUpperCase() + e.blockedBy.slice(1))}</div>` : ""}</div>
       <span class="lv lv-${esc(e.level)}">${esc(e.state)}</span></li>`;
   }
-  const alarmRow = (a, on) => `<li><span class="pg-sev ${on ? "on" : ""}">${esc(a.id)}</span><div style="flex:1;min-width:0">
+  const alarmRow = (a, on) => `<li><span class="pg-sev ${on ? "on" : ""}">${esc(a.id)}</span><div class="grow min0">
       <a href="#/alarms/${encodeURIComponent(a.id)}">${esc(a.text)}</a>${on && a.condition ? `<div class="faint small">${esc(a.condition)}</div>` : ""}</div>
       ${on ? `<span class="pill bad">On now</span>` : ""}</li>`;
 
@@ -767,14 +767,14 @@
       const on = new Set(n.active.map((a) => a.id));
       const off = n.alarms.filter((a) => !on.has(a.id));
       parts.push(`<div class="pg-sec"><h3>Alarms it sets</h3>
-        ${n.active.length ? `<ul class="pg-rows">${n.active.map((a) => alarmRow(a, true)).join("")}</ul>` : `<p class="muted small" style="margin:0 0 6px">None of them is on now.</p>`}
+        ${n.active.length ? `<ul class="pg-rows">${n.active.map((a) => alarmRow(a, true)).join("")}</ul>` : `<p class="mt-0 mb-2 muted small">None of them is on now.</p>`}
         ${off.length ? `<details class="more pg-more"><summary>${n.active.length ? "The other " : off.length > 1 ? "All " : "The "}${off.length} alarm${off.length > 1 ? "s" : ""} it can set</summary><ul class="pg-rows">${off.map((a) => alarmRow(a, false)).join("")}</ul></details>` : ""}</div>`);
     }
     if (!parts.length) {
       const path = callPath(byName, b.name);
       const parent = path && path.length > 1 ? path[path.length - 2] : null;
-      parts.push(`<div class="pg-sec"><p class="muted" style="margin:0">PLC-Ki's notes on the machine don't mention this block: it runs no sequence, controls no known device and sets no known alarm${parent ? `. It is part of <a href="${hrefOf(parent)}">${esc(parent)}</a>` : ""}. The code below shows what it does.</p>
-        <button type="button" class="btn b small" style="margin-top:10px" data-ask="Explain in plain words what PLC block ${esc(b.name)} does, and what it is doing right now.">Explain this block in plain words</button></div>`);
+      parts.push(`<div class="pg-sec"><p class="m-0 muted">PLC-Ki's notes on the machine don't mention this block: it runs no sequence, controls no known device and sets no known alarm${parent ? `. It is part of <a href="${hrefOf(parent)}">${esc(parent)}</a>` : ""}. The code below shows what it does.</p>
+        <button type="button" class="mt-3 btn b small" data-ask="Explain in plain words what PLC block ${esc(b.name)} does, and what it is doing right now.">Explain this block in plain words</button></div>`);
     }
     return parts.join("");
   }
@@ -836,7 +836,7 @@
     }
     if (!parts.length) return "";
     const missing = t.symbol && !t.latch.length ? ` <span class="faint">PLC-Ki did not find the block that writes <span class="mono">${esc(t.symbol)}</span>.</span>` : "";
-    return `<div class="notice alarm-trail" style="margin-bottom:12px">${icon("info")}<div><a href="#/alarms/${encodeURIComponent(t.id)}"><b>${esc(t.id)}</b></a> · ${parts.join(" · ")}.${missing}</div></div>`;
+    return `<div class="mb-3 notice alarm-trail">${icon("info")}<div><a href="#/alarms/${encodeURIComponent(t.id)}"><b>${esc(t.id)}</b></a> · ${parts.join(" · ")}.${missing}</div></div>`;
   }
 
   function program() {
@@ -927,16 +927,16 @@
       const where = (loc) => { const b = PK.blockOf(loc); return b && tree.byName.has(b) ? `<a class="pg-where" href="${hrefOf(b)}">${esc(b)} ›</a>` : ""; };
       const now = [];
       if (alarms.length) now.push(`<div class="pg-sec"><h3>Alarms on now</h3><ul class="pg-rows">${alarms.map((a) => `<li><span class="pg-sev on">${esc(a.id)}</span>
-          <div style="flex:1;min-width:0"><a href="#/alarms/${encodeURIComponent(a.id)}">${esc(a.text)}</a></div>${where(a.location)}</li>`).join("")}</ul></div>`);
+          <div class="grow min0"><a href="#/alarms/${encodeURIComponent(a.id)}">${esc(a.text)}</a></div>${where(a.location)}</li>`).join("")}</ul></div>`);
       if (blocked.length) now.push(`<div class="pg-sec"><h3>Held back</h3><ul class="pg-rows">${blocked.map((e) => `<li><span class="ico">${icon(PK.kindIcon(e.kind))}</span>
-          <div style="flex:1;min-width:0"><b>${esc(e.name)}</b><div class="pg-blocked">${esc(e.blockedBy.charAt(0).toUpperCase() + e.blockedBy.slice(1))}</div></div>${where(e.location)}</li>`).join("")}</ul></div>`);
+          <div class="grow min0"><b>${esc(e.name)}</b><div class="pg-blocked">${esc(e.blockedBy.charAt(0).toUpperCase() + e.blockedBy.slice(1))}</div></div>${where(e.location)}</li>`).join("")}</ul></div>`);
       if (seqs.length) now.push(`<div class="pg-sec"><h3>Sequences</h3>${seqs.map((q) => `<div class="pg-seqrow">${seqHtml(q, false).replace('<div class="pg-seq">', `<div class="pg-seq">${where(q.block)}`)}</div>`).join("")}</div>`);
       const connected = st.connection && st.connection.state === "connected";
       const stop = PK.cpuStop(st);
       const right = `<div class="card pg-card"><div class="row" style="align-items:baseline"><h2 class="pg-h">Right now</h2><span class="spacer"></span>
           ${connected ? `<span class="pill ok"><span class="dot"></span>Live</span>` : st.connection ? `<span class="pill">${esc(st.connection.state === "snapshot" ? "Test values" : "Not live")}</span>` : ""}</div>
-        ${stop ? `<div class="notice red" style="margin:10px 0 4px">${icon("warn")}<div><b>The PLC is in ${esc(stop.word || "STOP")} ${esc(PK.cpuSince(stop))}: the program is not running.</b> What you see is its last state. <a href="#/plc">PLC page</a></div></div>`
-          : !alarms.length && !blocked.length ? `<div class="notice green" style="margin:10px 0 4px">${icon("check")}<div>No alarm is on and nothing the program asks for is held back.</div></div>` : ""}
+        ${stop ? `<div class="mt-3 mb-1 notice red">${icon("warn")}<div><b>The PLC is in ${esc(stop.word || "STOP")} ${esc(PK.cpuSince(stop))}: the program is not running.</b> What you see is its last state. <a href="#/plc">PLC page</a></div></div>`
+          : !alarms.length && !blocked.length ? `<div class="mt-3 mb-1 notice green">${icon("check")}<div>No alarm is on and nothing the program asks for is held back.</div></div>` : ""}
         ${now.join("") || (!seqs.length ? `<p class="muted">The machine notes have no sequences to follow.</p>` : "")}</div>`;
 
       // What each part is for: the units Main calls (one per machine section, as a rule), with everything inside them
@@ -958,9 +958,9 @@
           ${chips.length ? `<div class="row" style="gap:6px;flex-wrap:wrap;margin-top:auto;padding-top:8px">${chips.join("")}</div>` : ""}</a>`;
       };
       const partsHtml = parts.length ? `<div class="card pg-card"><h2 class="pg-h">The parts of the program</h2>
-          <p class="muted small" style="margin:4px 0 14px">What Main calls, in the order the PLC runs them, with the sequences, devices and alarms inside each. Open one to see it explained, with the code and live values.</p>
+          <p class="mt-1 mb-4 muted small">What Main calls, in the order the PLC runs them, with the sequences, devices and alarms inside each. Open one to see it explained, with the code and live values.</p>
           <div class="pg-parts">${shown.map(card).join("")}</div>
-          ${parts.length > MAX ? `<button type="button" class="btn b small" style="margin-top:14px" data-all-parts>${allParts ? "Show fewer" : `Show all ${parts.length}`}</button>` : ""}</div>` : "";
+          ${parts.length > MAX ? `<button type="button" class="mt-4 btn b small" data-all-parts>${allParts ? "Show fewer" : `Show all ${parts.length}`}</button>` : ""}</div>` : "";
       return right + partsHtml;
     }
 
@@ -978,10 +978,10 @@
         if (!state.program) {
           if (state.programError) return PK.hero({ title: "No program loaded yet.",
             sub: "This page explains the PLC program in plain words, with live values, once PLC-Ki has read it from a TIA archive. " + (state.user && state.user.role === "admin"
-              ? "Import it under Setup, Program: it takes a few minutes." : "An administrator imports it under Setup, Program."),
-            extra: `<p class="faint small" style="margin-top:14px">${esc(state.programError)}</p>`,
+              ? "Import it under Setup, Import a program: it takes a few minutes." : "Ask an administrator to import it into PLC-Ki."),
+            extra: `<details class="pk-detail mt-3"><summary>Details</summary><code>${esc(state.programError)}</code></details>`,
             actions: state.user && state.user.role === "admin" ? `<a class="btn" href="#/setup/program">Import the program</a>` : "" });
-          return PK.hero({ title: "Loading the program…" });
+          return PK.hero({ title: "Program" }) + PK.sec("", PK.ui.loading("cards", { rows: 4, label: "Loading the program" }));
         }
         if (params.join("/") !== (sel ? sel.params.join("/") : "") && loading == null) select(params);
         const p = state.program;
@@ -993,13 +993,13 @@
         const picked = sel && !sel.overview;
         const body = (inner) => head + PK.sec("alt", `<div class="split ${picked ? "has-sel" : ""}"><nav class="blocklist" aria-label="Program blocks">${list(tree, roll)}</nav><div class="stack">${inner}</div></div>`);
         if (!sel || sel.overview || sel.error) watchList = [];
-        if (!sel) return body(`<div class="card"><p class="muted">Loading…</p></div>`);
+        if (!sel) return body(`<div class="card">${PK.ui.loading("table", { rows: 6 })}</div>`);
         if (sel.overview) return body(overview(tree, idx, roll));
         const crumbs = (name) => {
           const path = callPath(tree.byName, name) || [name];
           return `<nav class="crumbs" aria-label="Where this block sits"><a href="#/program">Program</a>${path.map((n, k) => ` <i>›</i> ${k === path.length - 1 ? `<b>${esc(n)}</b>` : `<a href="${hrefOf(n)}">${esc(n)}</a>`}`).join("")}</nav>`;
         };
-        if (sel.error) return body(crumbs(sel.name) + `<div class="notice red">${icon("warn")}<div>${esc(sel.error)}</div></div>`);
+        if (sel.error) return body(crumbs(sel.name) + PK.ui.error(sel.error));
         const b = sel.block;
         const asked = new Map();
         const resolve = resolver(sel.inst, b, asked);
@@ -1043,20 +1043,20 @@
             <span><i class="lg unk"></i>No live value</span><span><i class="lg tmp"></i>Temp or parameter (never readable)</span><span><i class="lg blocker"></i>Holds back an output that is asked for</span></div>`;
           // From an alarm, its own line says where it is set instead
           const where = trail || (sel.highlight && sel.highlight.startsWith('"')
-            ? (hl ? `<div class="notice" style="margin-bottom:12px">${icon("info")}<div>The highlighted rungs write <b>${esc(sel.highlight)}</b>: (S) sets it, (R) resets it, ( ) follows the rung. The values are live; amber marks the first contact that stops a rung.</div></div>`
-              : `<div class="notice gold" style="margin-bottom:12px">${icon("info")}<div>${esc(sel.highlight)} is not written in this block${sel.network ? `; network ${esc(sel.network)} is highlighted` : ""}.</div></div>`) : "");
+            ? (hl ? `<div class="mb-3 notice">${icon("info")}<div>The highlighted rungs write <b>${esc(sel.highlight)}</b>: (S) sets it, (R) resets it, ( ) follows the rung. The values are live; amber marks the first contact that stops a rung.</div></div>`
+              : `<div class="mb-3 notice gold">${icon("info")}<div>${esc(sel.highlight)} is not written in this block${sel.network ? `; network ${esc(sel.network)} is highlighted` : ""}.</div></div>`) : "");
           // Long blocks: show only the networks where something holds back an output that is asked for
           const nHold = (netsHtml.match(/data-holding="1"/g) || []).length;
           const only = netFilter === "holding";
           const filter = nets.length > 3 ? `<div class="net-filter">${PK.ui.choice("Which networks", [{ label: `All ${nets.length} networks`, on: !only, data: { "data-netf": "all" } }, { label: `Holding back now · ${nHold}`, on: only, data: { "data-netf": "holding" } }])}
               ${only && !nHold ? `<p class="ok-line">${icon("check")}<span>Nothing in this block is holding back an output right now.</span></p>` : ""}</div>` : "";
           bodyHtml = where + filter + legend + `<div class="nets ${only ? "only-holding" : ""}">${netsHtml}</div>`
-            + (b.source && !b.logic ? `<p class="faint small" style="margin:12px 0 0">Only the on/off statements of this SCL block are drawn as rungs. <button type="button" class="linkbtn" data-mode="text">Show all of it as text</button>.</p>` : "");
+            + (b.source && !b.logic ? `<p class="mt-3 mb-0 faint small">Only the on/off statements of this SCL block are drawn as rungs. <button type="button" class="linkbtn" data-mode="text">Show all of it as text</button>.</p>` : "");
         } else if (canText) {
           const hits = find ? String(text).split(/\r?\n/).filter((l) => l.toLowerCase().includes(find.toLowerCase())).length : 0;
           bodyHtml = trail + `<div class="findbar"><input type="search" id="code-find" placeholder="Find in this block" aria-label="Find in this block" value="${esc(find)}">
               <span class="faint small" aria-live="polite">${find ? (hits ? `${hits} line${hits > 1 ? "s" : ""} · Enter for the next` : "Not in this block") : ""}</span></div>` + codeHtml(text, resolve, want, find, sel.line)
-            + `<p class="faint small" style="margin:10px 0 0">Click a signal to see what sets it.</p>`;
+            + `<p class="mt-3 mb-0 faint small">Click a signal to see what sets it.</p>`;
         } else bodyHtml = `<p class="muted">No code in this block (data only). Its fields are listed below.</p>`;
 
         const iface = (b.interface || []).filter((m) => m.section !== "Temp" && m.section !== "Constant");
@@ -1082,11 +1082,11 @@
             ${ioCard}
             <div class="card pg-card" id="pg-code">
               <div class="row" style="gap:8px 14px;flex-wrap:wrap;align-items:center"><h2 class="pg-h">${isDb ? "Its values" : "The code"}</h2>${switcher}<span class="faint small">${!switcher ? "" : mode === "rungs" ? "Each network as a rung: green passes power, amber holds back an output that is asked for." : "The code as written in TIA, with the live value after each signal."}</span></div>
-              <div style="margin-top:14px">${bodyHtml}</div>
+              <div class="mt-4">${bodyHtml}</div>
             </div>
             ${tagsHtml}
             ${iface.length ? `<div class="card"><details class="more" style="border:0;margin:0;padding:0" ${!text ? "open" : ""}><summary>Inputs, outputs and stored values (${iface.length})</summary>
-              <table class="tbl iface" style="margin-top:8px"><tr><th>Name</th><th>Section</th><th>Type</th><th>Now</th><th>Comment</th></tr>
+              <table class="mt-2 tbl iface"><tr><th>Name</th><th>Section</th><th>Type</th><th>Now</th><th>Comment</th></tr>
               ${iface.map((m) => { const v = resolve("#" + m.name); return `<tr><td>${esc(m.name)}</td><td class="muted">${esc(m.section)}</td><td class="mono">${esc(m.datatype)}</td><td>${v ? chip(v) : ""}</td><td class="muted">${esc(m.comment || "")}</td></tr>`; }).join("")}
               </table></details></div>` : ""}`);
         // Everything drawn above asked for its value: rungs or text first, then the interface table
@@ -1142,7 +1142,7 @@
       el.dataset.busy = "1";
       let r;
       try { r = coil ? { html: await usesOf(op, ctx) } : await sourceOf(op, ctx); }
-      catch (e) { r = { html: `<p class="muted">${esc(e.message)}</p>` }; }
+      catch (e) { r = { html: PK.ui.error(e) }; }
       delete el.dataset.busy;
       if (r.here) { showHere(page, r.here); return; }
       const v = resolver(sel.inst, sel.block)(op);
@@ -1342,7 +1342,7 @@
     }
     if (!parts.length) parts.push(`<p class="muted">Nothing in the program sets it. It comes from outside the program: an input, the HMI or another device.</p>`);
     const others = onScreen ? readers.filter((x) => x.block !== onScreen) : [];   // not inside an input's answer: it would only repeat the caller
-    if (others.length) parts.push(`<p class="small muted" style="margin-top:12px">Also read in ${others.slice(0, 8).map((x) => `<a href="${esc(hrefOf(x.block, ["as-text"]))}" data-close>${esc(x.block)}</a>`).join(", ")}${others.length > 8 ? ` and ${others.length - 8} more` : ""}.</p>`);
+    if (others.length) parts.push(`<p class="mt-3 small muted">Also read in ${others.slice(0, 8).map((x) => `<a href="${esc(hrefOf(x.block, ["as-text"]))}" data-close>${esc(x.block)}</a>`).join(", ")}${others.length > 8 ? ` and ${others.length - 8} more` : ""}.</p>`);
     return { parts, readers };
   }
 
@@ -1382,7 +1382,7 @@
       const g = typeof w === "string" ? w.replace(/^NOT\s+/, "") : null;
       if (g && g.startsWith('"')) {
         const a = await globalAnswer(g, null);
-        parts.push(`<p class="small muted" style="margin:12px 0 4px">And <span class="mono">${esc(g)}</span>:</p>` + (a.here ? `<p>Set in ${placeLink(b.name, null, a.here, g)}.</p>` : a.parts.join("")));
+        parts.push(`<p class="mt-3 mb-1 small muted">And <span class="mono">${esc(g)}</span>:</p>` + (a.here ? `<p>Set in ${placeLink(b.name, null, a.here, g)}.</p>` : a.parts.join("")));
       }
       return { html: parts.join("") };
     }

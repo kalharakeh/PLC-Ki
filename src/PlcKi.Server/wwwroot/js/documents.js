@@ -34,12 +34,12 @@ const PKDocs = (() => {
     const open = f.documentId ? `<a class="btn b small" href="${fileUrl(f.documentId, f.page)}" target="_blank" rel="noopener">Open page ${f.page}</a>` : "";
     const list = (title, xs) => xs && xs.length ? `<h3>${title}</h3><ol class="causes">${xs.map((c, i) => `<li><b>${i + 1}</b><span>${esc(c)}</span></li>`).join("")}</ol>` : "";
     return `<div class="card doc-fault">
-        <div class="row" style="gap:8px;align-items:baseline;flex-wrap:nowrap"><span class="tag ${f.generalKnowledge ? "" : "blue"}" style="flex:none">${esc(f.code)}</span><b style="flex:1">${esc(f.title)}</b></div>
-        ${f.meaning ? `<p style="margin:0">${esc(f.meaning)}</p>` : ""}
+        <div class="row" style="gap:8px;align-items:baseline;flex-wrap:nowrap"><span class="no-shrink tag ${f.generalKnowledge ? "" : "blue"}">${esc(f.code)}</span><b class="grow">${esc(f.title)}</b></div>
+        ${f.meaning ? `<p class="m-0">${esc(f.meaning)}</p>` : ""}
         ${list("Cause", f.causes)}${list(f.generalKnowledge ? "What to check" : "", f.generalKnowledge ? f.checks : [])}${list("Remedy", f.fixes)}
         ${!f.causes.length && !f.fixes.length && f.details ? `<p class="small doc-details">${esc(f.details)}</p>` : ""}
         ${f.safety ? `<div class="notice gold small">${icon("warn")}<span>${esc(f.safety)}</span></div>` : ""}
-        <div class="row"><span class="faint small" style="flex:1">${f.generalKnowledge ? "General knowledge, built into PLC-Ki. Confirm on the device." : "From " + esc(f.source)}</span>${open}</div>
+        <div class="row"><span class="grow faint small">${f.generalKnowledge ? "General knowledge, built into PLC-Ki. Confirm on the device." : "From " + esc(f.source)}</span>${open}</div>
       </div>`;
   }
 
@@ -59,7 +59,7 @@ const PKDocs = (() => {
     return `<li class="doc-row">
         <span class="ico">${icon(d.kind === "drawing" ? "drawing" : d.kind === "faults" ? "list" : "book")}</span>
         <div class="doc-row-t"><b>${esc(stem(d.file))}</b> ${st}<div class="faint small">${facts}</div>
-          ${d.note ? `<div class="small muted" style="margin-top:4px">${esc(d.note)}</div>` : ""}</div>
+          ${d.note ? `<div class="mt-1 small muted">${esc(d.note)}</div>` : ""}</div>
         <div class="row" style="gap:6px;flex-wrap:nowrap">
           <a class="btn b small" href="${fileUrl(d.id)}" target="_blank" rel="noopener">Open</a>
           ${isAdmin() ? `<button class="btn gray small" type="button" data-edit="${esc(d.id)}" aria-label="Change ${esc(d.file)}">Change</button>` : ""}
@@ -67,15 +67,15 @@ const PKDocs = (() => {
   }
 
   function group(title, sub, items, empty) {
-    return `<div class="card"><h3 style="margin-top:0">${title}</h3><p class="muted small" style="margin:-4px 0 10px">${sub}</p>
-      ${items.length ? `<ul class="doc-list">${items.map(docRow).join("")}</ul>` : `<p class="muted" style="margin:0">${empty}</p>`}</div>`;
+    return `<div class="card"><h3 class="mt-0">${title}</h3><p class="muted small" style="margin:-4px 0 10px">${sub}</p>
+      ${items.length ? `<ul class="doc-list">${items.map(docRow).join("")}</ul>` : `<p class="m-0 muted">${empty}</p>`}</div>`;
   }
 
   function resultsHtml() {
     if (!query.trim()) return "";
     if (searching && !results) return `<p class="muted">Searching…</p>`;
     if (!results) return "";
-    if (results.error) return `<div class="notice red">${esc(results.error)}</div>`;
+    if (results.error) return PK.ui.error(results.error);
     const f = results.faults || [], p = results.pages || [];
     if (!f.length && !p.length) return `<p class="muted">Nothing found for “${esc(query)}”.${lib && lib.items.length ? " Try other words, or the code as the device shows it." : " No documents are added yet."}</p>`;
     return `${f.length ? `<h3>Fault code</h3><div class="grid ${f.length > 1 ? "two" : ""}">${f.map(faultCard).join("")}</div>` : ""}
@@ -83,8 +83,8 @@ const PKDocs = (() => {
   }
 
   function pageHtml() {
-    if (!lib) return PK.hero({ title: "Loading…" });
-    if (lib.error) return PK.hero({ title: "Documents", sub: esc(lib.error) });
+    if (!lib) return PK.hero({ title: "Documents" }) + PK.sec("", PK.ui.loading("cards", { rows: 3 }));
+    if (lib.error) return PK.hero({ title: "Documents" }) + PK.sec("", PK.ui.error(lib.error, { level: "warn" }));
     const mine = lib.items.filter((d) => d.scope === "machine"), shared = lib.items.filter((d) => d.scope === "shared");
     const builtIn = (lib.builtIn || []).reduce((n, k) => n + k.entries, 0);
     const admin = isAdmin();
@@ -100,8 +100,8 @@ const PKDocs = (() => {
       + (query.trim() ? PK.sec("", resultsHtml()) : "")
       + PK.sec("alt", `
         ${admin ? `<div class="dropzone" id="doc-drop" tabindex="0" role="button" aria-label="Add documents">${icon("import")}
-            <div style="font-weight:600;margin-top:6px">Drop manuals, drawings or fault lists here, or click to choose</div>
-            <div class="small" style="margin-top:4px">PDF, or a fault list as CSV (code; text; cause; remedy). Several at once is fine.</div>
+            <div class="semibold mt-2">Drop manuals, drawings or fault lists here, or click to choose</div>
+            <div class="mt-1 small">PDF, or a fault list as CSV (code; text; cause; remedy). Several at once is fine.</div>
             <input type="file" id="doc-file" accept=".pdf,.csv,.tsv,.txt,.md" multiple class="hidden"></div>` : ""}
         <div class="grid two" style="margin-top:${admin ? 22 : 0}px">
           ${group("For this machine", `Only for ${esc(lib.machine)}: its drawings, the leak detector or robot manual of this station.`, mine,
@@ -109,9 +109,9 @@ const PKDocs = (() => {
           ${group("For every machine", "Shared by all machines on this PLC-Ki, such as the SINAMICS list manual.", shared,
             admin ? "None yet. Choose “Every machine” when adding a manual you use everywhere." : "None yet.")}
         </div>
-        <div class="card" style="margin-top:22px"><div class="row" style="align-items:flex-start">
+        <div class="mt-5 card"><div class="row" style="align-items:flex-start">
           <span class="ico doc-bi">${icon("shield")}</span>
-          <div style="flex:1"><b>Built in</b><div class="muted small">${builtIn} entries of general knowledge: Siemens CPU, PROFINET, module, safety and SINAMICS drive messages, FANUC robot alarms and IO-Link events. Your own manuals come first when both know a code.</div></div></div>
+          <div class="grow"><b>Built in</b><div class="muted small">${builtIn} entries of general knowledge: Siemens CPU, PROFINET, module, safety and SINAMICS drive messages, FANUC robot alarms and IO-Link events. Your own manuals come first when both know a code.</div></div></div>
           ${admin ? `<details class="doc-folders"><summary>Copy files in instead</summary>
             <p class="small muted">PLC-Ki also reads files you copy into these folders on this PC. Press Look for new files after copying.</p>
             <p class="small"><b>This machine</b><br><code>${esc(lib.folders.machine)}</code></p>
@@ -125,12 +125,12 @@ const PKDocs = (() => {
 
   function settingsForm({ title, kind, scope, device, scopeFixed, okText, extra = "" }) {
     return `<h2>${esc(title)}</h2>
-      ${scopeFixed ? "" : `<p class="muted small" style="margin:0 0 6px">For</p>${PK.ui.choice("For", [["machine", "This machine"], ["shared", "Every machine"]].map(([k, l]) => ({ label: l, on: scope === k, data: { "data-v": k } })), { data: { "data-g": "scope" } })}`}
-      <p class="muted small" style="margin:14px 0 6px">What it is</p>${PK.ui.choice("What it is", KINDS.map(([k, l]) => ({ label: l, on: k === kind, data: { "data-v": k } })), { data: { "data-g": "kind" } })}
-      <label class="field" style="margin-top:14px">Device or maker (helps find the right manual)
+      ${scopeFixed ? "" : `<p class="mt-0 mb-2 muted small">For</p>${PK.ui.choice("For", [["machine", "This machine"], ["shared", "Every machine"]].map(([k, l]) => ({ label: l, on: scope === k, data: { "data-v": k } })), { data: { "data-g": "scope" } })}`}
+      <p class="mt-4 mb-2 muted small">What it is</p>${PK.ui.choice("What it is", KINDS.map(([k, l]) => ({ label: l, on: k === kind, data: { "data-v": k } })), { data: { "data-g": "kind" } })}
+      <label class="mt-4 field">Device or maker (helps find the right manual)
         <input type="text" id="doc-device" placeholder="e.g. SINAMICS G120, FANUC R-30iB, Inficon LDS3000" value="${esc(device || "")}" maxlength="120"></label>
       ${extra}
-      <div class="row end" style="margin-top:18px"><button class="btn gray" data-close>Cancel</button><button class="btn" data-ok>${esc(okText)}</button></div>`;
+      <div class="mt-4 row end"><button class="btn gray" data-close>Cancel</button><button class="btn" data-ok>${esc(okText)}</button></div>`;
   }
   function bindSegments(el) {
     el.querySelectorAll("[data-g]").forEach((g) => g.querySelectorAll("button").forEach((b) => b.onclick = () => {
@@ -146,7 +146,7 @@ const PKDocs = (() => {
     const s = PK.sheet(settingsForm({
       title: files.length === 1 ? `Add ${names[0]}` : `Add ${files.length} documents`,
       kind: guessKind(names[0]), scope: "machine", okText: "Add",
-      extra: files.length > 1 ? `<p class="faint small" style="margin:10px 0 0">${names.map(esc).join(" · ")}</p>` : "",
+      extra: files.length > 1 ? `<p class="mt-3 mb-0 faint small">${names.map(esc).join(" · ")}</p>` : "",
     }));
     bindSegments(s.el);
     s.el.querySelector("[data-ok]").onclick = async () => {
@@ -185,8 +185,8 @@ const PKDocs = (() => {
     const d = lib.items.find((x) => x.id === id);
     if (!d) return;
     const s = PK.sheet(settingsForm({ title: stem(d.file), kind: d.kind, device: d.device, scopeFixed: true, okText: "Save",
-      extra: `<p class="faint small" style="margin:10px 0 0">${d.scope === "shared" ? "For every machine" : "For this machine"}. To move it, remove it and add it again.</p>
-        <div class="row" style="margin-top:14px"><button class="btn red small" type="button" data-remove>Remove from PLC-Ki</button></div>` }));
+      extra: `<p class="mt-3 mb-0 faint small">${d.scope === "shared" ? "For every machine" : "For this machine"}. To move it, remove it and add it again.</p>
+        <div class="mt-4 row"><button class="btn red small" type="button" data-remove>Remove from PLC-Ki</button></div>` }));
     bindSegments(s.el);
     s.el.querySelector("[data-ok]").onclick = async () => {
       try { await api("PATCH", "/api/admin/documents/" + encodeURIComponent(id), { kind: segValue(s.el, "kind"), device: s.el.querySelector("#doc-device").value }); s.close(); toast("Saved."); }
@@ -249,7 +249,7 @@ const PKDocs = (() => {
     return PK.sec("", `<h2>From the manuals</h2><p class="sub">${tags ? `Where ${esc(tags.split(",").join(", "))} appears in the drawings and manuals` : "Fault codes and pages in the documents that fit this alarm"}. Open a page to read it in full.</p>
       ${r.faults.length ? `<div class="grid ${r.faults.length > 1 ? "two" : ""}">${r.faults.map(faultCard).join("")}</div>` : ""}
       ${r.pages.length ? `<div class="card doc-hits" style="margin-top:${r.faults.length ? 18 : 0}px">${r.pages.map(pageHit).join("")}</div>` : ""}
-      <div class="row" style="margin-top:14px"><a class="btn b small" href="#/documents/search/${encodeURIComponent(a.text)}">Search all documents</a></div>`);
+      <div class="mt-4 row"><a class="btn b small" href="#/documents/search/${encodeURIComponent(a.text)}">Search all documents</a></div>`);
   }
 
   return { alarmSection, faultCard };

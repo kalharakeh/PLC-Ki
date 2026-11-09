@@ -101,11 +101,11 @@
 
   function confirmVersionSheet(j, version) {
     const pkg = j.outputs && j.outputs.package;
-    g.sheet = PK.sheet(`<span class="eyebrow" style="color:var(--fault)">Real PLC · step 1 of 2</span>
+    g.sheet = PK.sheet(`<span class="fg-fault eyebrow">Real PLC · step 1 of 2</span>
       <h2>Did you review ${esc(version)}?</h2>
-      <p class="muted" style="margin:0">It compiles in TIA. Before it goes to a real PLC, read what ${AI} wrote and look at the blocks in TIA Portal.
+      <p class="m-0 muted">It compiles in TIA. Before it goes to a real PLC, read what ${AI} wrote and look at the blocks in TIA Portal.
         Then type <b>${esc(version)}</b> to go on. Anything else stops here and nothing is downloaded.</p>
-      <details class="more"><summary>${AI}'s notes (REVIEW.md)</summary><div class="md" data-review>Loading…</div></details>
+      <details class="more"><summary>${AI}'s notes (REVIEW.md)</summary><div class="md" data-review>${PK.ui.loading("lines")}</div></details>
       <input id="cv-text" autocomplete="off" spellcheck="false" placeholder="Type ${esc(version)}" style="font-family:var(--mono);font-size:18px">
       <div class="row end"><button class="btn gray" data-no>Stop, don't download</button><button class="btn red" data-yes disabled>Download to the real PLC</button></div>`, { dismiss: false });
     const el = g.sheet.el, input = el.querySelector("#cv-text"), yes = el.querySelector("[data-yes]");
@@ -125,13 +125,13 @@
 
   function confirmAtTiaSheet(j, seconds) {
     const since = j.waitingSince ? new Date(j.waitingSince).getTime() : Date.now();
-    g.sheet = PK.sheet(`<span class="eyebrow" style="color:var(--fault)">Real PLC · step 2 of 2</span>
+    g.sheet = PK.sheet(`<span class="fg-fault eyebrow">Real PLC · step 2 of 2</span>
       <h2>Now at the TIA PC.</h2>
-      <p class="muted" style="margin:0">Someone at the TIA PC types the PLC's address in the <b>PLC-Ki TIA helper</b> window. Only addresses on that PC's allow-list are accepted,
+      <p class="m-0 muted">Someone at the TIA PC types the PLC's address in the <b>PLC-Ki TIA helper</b> window. Only addresses on that PC's allow-list are accepted,
         and the CPU must be in STOP. If nobody confirms in time, nothing is downloaded.</p>
       <div class="countdown" data-left>2:00</div>
       <div class="progress"><div data-bar style="width:100%;background:var(--fault)"></div></div>
-      <p class="faint small" style="margin:0">This closes by itself when the TIA PC answers.</p>`, { dismiss: false });
+      <p class="m-0 faint small">This closes by itself when the TIA PC answers.</p>`, { dismiss: false });
     const el = g.sheet.el, left = el.querySelector("[data-left]"), bar = el.querySelector("[data-bar]");
     const tick = () => {
       if (!el.isConnected) return;
@@ -162,9 +162,9 @@
     }).join("<i>›</i>");
     const fix = stage === "fix" ? `<span class="tl now">Fixing, round ${esc(arg || "")}</span>` : "";
     const waiting = j.state === "running" && j.waiting
-      ? `<div class="notice red" style="margin-top:12px">${icon("warn")}<div style="flex:1"><b>Waiting for a person.</b> ${j.waiting.startsWith("confirm-version") ? "Confirm the version you reviewed." : "Confirm the PLC address at the TIA PC."}</div>
+      ? `<div class="mt-3 notice red">${icon("warn")}<div class="grow"><b>Waiting for a person.</b> ${j.waiting.startsWith("confirm-version") ? "Confirm the version you reviewed." : "Confirm the PLC address at the TIA PC."}</div>
           <button class="btn red small" data-reopen>Open</button></div>` : "";
-    return `<div class="timeline" style="margin-top:12px">${pills}${fix ? "<i>›</i>" + fix : ""}</div>${waiting}`;
+    return `<div class="mt-3 timeline">${pills}${fix ? "<i>›</i>" + fix : ""}</div>${waiting}`;
   }
 
   function choice(name, current, options) {
@@ -173,7 +173,7 @@
   }
 
   /** One numbered step of the form. */
-  const gstep = (n, title, body, hint = "") => `<div class="gstep"><div class="gstep-n">${n}</div><div class="gstep-b"><h4>${title}</h4>${hint ? `<p class="hint" style="margin:0 0 10px">${hint}</p>` : ""}${body}</div></div>`;
+  const gstep = (n, title, body, hint = "") => `<div class="gstep"><div class="gstep-n">${n}</div><div class="gstep-b"><h4>${title}</h4>${hint ? `<p class="mt-0 mb-3 hint">${hint}</p>` : ""}${body}</div></div>`;
 
   /** The Change-it button: an empty box imports the latest version again, without Ki. */
   const runLabel = (request) => {
@@ -195,10 +195,10 @@
       : `<input id="g-project" value="${esc(f.project)}" placeholder="C:\\Users\\…\\MyProject.ap20" aria-label="TIA project"><span class="hint">${g.projectsError ? "Type the full path: the TIA PC did not list its projects." : "Looking for projects on the TIA PC…"}</span>`;
     const realAllowed = g.tia && g.tia.realAllowed && g.tia.realAllowed.length;
     const dl = f.download === "plcsim"
-      ? `<div class="grid two" style="margin-top:12px"><label class="field">PLCSIM address<input id="g-plcAddress" value="${esc(f.plcAddress)}" placeholder="${esc((g.tia && g.tia.plcsimIp) || "e.g. 192.168.0.10")}"><span class="hint">Empty: the TIA PC's PLCSIM address.</span></label>
+      ? `<div class="mt-3 grid two"><label class="field">PLCSIM address<input id="g-plcAddress" value="${esc(f.plcAddress)}" placeholder="${esc((g.tia && g.tia.plcsimIp) || "e.g. 192.168.0.10")}"><span class="hint">Empty: the TIA PC's PLCSIM address.</span></label>
           <label class="field">Watch for (seconds)<input id="g-watch" type="number" min="5" max="600" value="${f.watch}"><span class="hint">PLC-Ki reads the new blocks while they run.</span></label></div>`
       : f.download === "real"
-        ? `<div class="notice red" style="margin-top:12px">${icon("shield")}<div><b>A real PLC needs two people to confirm.</b> When it compiles, you type the version here after reviewing it.
+        ? `<div class="mt-3 notice red">${icon("shield")}<div><b>A real PLC needs two people to confirm.</b> When it compiles, you type the version here after reviewing it.
             Then someone at the TIA PC types the PLC address in the PLC-Ki TIA helper window (2 minutes). Only addresses on that PC's allow-list work, the CPU must be in STOP,
             it is tried once (no fixing loop), and every step is logged. The CPU stays in STOP afterwards.
             ${g.tia ? (realAllowed ? `<br>Allowed on the TIA PC: <b>${esc(g.tia.realAllowed.join(", "))}</b>.` : `<br><b>No address is allowed on the TIA PC yet.</b> At the TIA PC, run Setup-TIA-helper again and enter the PLC's address as allowed for real downloads.`) : ""}</div></div>`
@@ -213,7 +213,7 @@
           ${change ? "" : `<label class="field">Package name<input id="g-name" value="${esc(f.name)}" placeholder="${esc(suggested)}" autocomplete="off" spellcheck="false"><span class="hint">Optional. Empty: <b data-suggest>${esc(suggested)}</b>, made from your words.</span></label>`}
           <label class="field">TIA project${projectField}</label>
         </div>
-        <div class="row" style="margin-top:12px"><div style="flex:1"><b style="font-weight:600">Fit into the current program</b><div class="muted small">${AI} sees the imported program: its types, tags and blocks.${g.settings && g.settings.export ? "" : " (No program imported yet.)"}</div></div>
+        <div class="mt-3 row"><div class="grow"><b class="semibold">Fit into the current program</b><div class="muted small">${AI} sees the imported program: its types, tags and blocks.${g.settings && g.settings.export ? "" : " (No program imported yet.)"}</div></div>
           <label class="switch"><input type="checkbox" id="g-useContext" ${f.useContext ? "checked" : ""}><span></span></label></div>`),
       gstep(3, "After it compiles", choice("dl", f.download, [
         { value: "none", icon: "tia", label: "Stop in TIA", text: "Import and compile only. You download yourself." },
@@ -223,14 +223,14 @@
     ];
     return `<div class="card stack gen-form">
       ${steps.join("")}
-      <details class="more"><summary>More options</summary><div class="stack" style="margin-top:12px">
+      <details class="more"><summary>More options</summary><div class="mt-3 stack">
         <div class="grid two">
           <label class="field">PLC in the project<input id="g-plc" value="${esc(f.plc)}" placeholder="Empty: the only PLC"></label>
           <label class="field">Change existing blocks or tags<input id="g-edit" value="${esc(f.edit)}" placeholder="FB_Mixer, FC_Valves, XV101_ZSO"><span class="hint">Only these may be overwritten. Tags: address, type or comment, standard tags only (never the safety program's). Needs "Fit into the current program".</span></label>
           <label class="field">Fixing rounds<input id="g-rounds" type="number" min="0" max="6" value="${f.rounds}"><span class="hint">How often ${AI} fixes compile or run problems on its own.</span></label>
           <label class="field">How hard ${AI} thinks<select id="g-effort">${["low", "medium", "high", "max"].map((x) => `<option ${f.effort === x ? "selected" : ""}>${x}</option>`).join("")}</select></label>
         </div>
-        <div class="row"><div style="flex:1"><b style="font-weight:600">SCL only</b><div class="muted small">No LAD or GRAPH, only SCL blocks.</div></div>
+        <div class="row"><div class="grow"><b class="semibold">SCL only</b><div class="muted small">No LAD or GRAPH, only SCL blocks.</div></div>
           <label class="switch"><input type="checkbox" id="g-sclOnly" ${f.sclOnly ? "checked" : ""}><span></span></label></div>
       </div></details>
       <div class="gen-go"><button class="btn big ${f.download === "real" ? "red" : ""}" data-run ${running ? "disabled" : ""}>${icon("play")}<span data-runlabel>${running ? "A job is running" : change ? runLabel(f.request) : f.download === "real" ? "Generate (real PLC)" : "Generate"}</span></button>
@@ -243,7 +243,7 @@
   /** Left: start something new, or pick a package made before. */
   function listHtml() {
     const pk = g.packages;
-    const items = !pk ? `<li class="muted small">Loading…</li>`
+    const items = !pk ? `<li>${PK.ui.loading("list", { rows: 3 })}</li>`
       : !pk.length ? `<li>${PK.ui.empty({ icon: "file", title: "Nothing generated yet.", text: "What you start appears here.", cls: "small" })}</li>`
       : pk.map((p) => `<li><button type="button" class="gen-item ${g.open === p.name ? "on" : ""}" data-open="${esc(p.name)}" aria-pressed="${g.open === p.name}">
           <span class="gi-top"><b>${esc(p.name)}</b>${running(p.name) ? `<span class="pill info"><span class="dot"></span>Running</span>` : p.state ? `<span class="pill ${stateCls(p.state)}">${esc(p.state)}</span>` : ""}</span>
@@ -273,21 +273,21 @@
     : "Check that TIA Portal and the TIA helper run on the TIA PC and the project opens there, then import again.";
 
   function reportHtml(r) {
-    if (!r) return `<p class="muted small" style="margin:0">Not imported into TIA yet.</p>`;
+    if (!r) return `<p class="m-0 muted small">Not imported into TIA yet.</p>`;
     const failed = r.fileErrors.find((e) => e.file === "(import)");
     if (failed) return `<div class="notice red">${icon("warn")}<div><b>TIA could not open the project, so nothing was imported or compiled.</b>
-        <p class="small" style="margin:6px 0 0">${esc(importHint(failed.error))}</p>
-        <details class="more" style="margin-top:8px"><summary>What TIA said</summary><p class="small" style="margin:6px 0 0">${esc(failed.error)}</p></details></div></div>
-      ${r.project ? `<p class="faint small" style="margin:8px 0 0">Project: <span class="mono">${esc(r.project)}</span></p>` : ""}`;
+        <p class="mt-2 mb-0 small">${esc(importHint(failed.error))}</p>
+        <details class="mt-2 more"><summary>What TIA said</summary><p class="mt-2 mb-0 small">${esc(failed.error)}</p></details></div></div>
+      ${r.project ? `<p class="mt-2 mb-0 faint small">Project: <span class="mono">${esc(r.project)}</span></p>` : ""}`;
     const [label, cls] = reportState(r);
     return `<div class="kv">
         <span>Compile</span><b><span class="pill ${cls}">${esc(label)}</span> ${r.errorCount} errors, ${r.warningCount} warnings</b>
         ${r.project ? `<span>Project</span><b class="mono">${esc(r.project)}</b>` : ""}
         ${r.download ? `<span>Download</span><b>${esc(r.download)}</b>` : ""}
       </div>
-      ${r.fileErrors.length ? `<div class="notice red" style="margin-top:10px">${icon("warn")}<div><b>TIA refused ${r.fileErrors.length === 1 ? "a file" : r.fileErrors.length + " files"}</b><ul class="small" style="margin:6px 0 0">${r.fileErrors.map((e) => `<li><b>${esc(e.file || "")}</b> ${esc(e.error || "")}</li>`).join("")}</ul></div></div>` : ""}
+      ${r.fileErrors.length ? `<div class="mt-3 notice red">${icon("warn")}<div><b>TIA refused ${r.fileErrors.length === 1 ? "a file" : r.fileErrors.length + " files"}</b><ul class="mt-2 mb-0 small">${r.fileErrors.map((e) => `<li><b>${esc(e.file || "")}</b> ${esc(e.error || "")}</li>`).join("")}</ul></div></div>` : ""}
       ${r.messages.length ? `<details class="more"><summary>Compiler messages (${r.messages.length})</summary><ul class="small">${r.messages.map((m) => `<li>${esc([m.state, m.path, m.description].filter(Boolean).join(" · "))}</li>`).join("")}</ul></details>` : ""}
-      ${r.runtime.length ? `<div class="notice gold" style="margin-top:10px">${icon("warn")}<div><b>While it ran in PLCSIM</b><ul class="small" style="margin:6px 0 0">${r.runtime.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div></div>` : ""}`;
+      ${r.runtime.length ? `<div class="mt-3 notice gold">${icon("warn")}<div><b>While it ran in PLCSIM</b><ul class="mt-2 mb-0 small">${r.runtime.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div></div>` : ""}`;
   }
 
   /** "What Ki did": the blocks and tags a version made, changed or removed, in plain sentences, plus TIA's verdict. */
@@ -319,7 +319,7 @@
     if (!j || j.state === "running" || !g.detail || !j.outputs || g.detail.name !== j.outputs.package) return "";
     const made = [...(j.log || "").matchAll(/Wrote (v\d{3})/g)].map((m) => m[1]).pop();
     const v = made && g.detail.versions.find((x) => x.folder === made);
-    return v ? `<div style="margin-top:14px">${summaryHtml(v, `What ${AI} did in ${v.folder}`, true)}</div>` : "";
+    return v ? `<div class="mt-4">${summaryHtml(v, `What ${AI} did in ${v.folder}`, true)}</div>` : "";
   }
 
   /** The versions of the picked package, newest first. */
@@ -331,13 +331,13 @@
         <div class="grid two" style="margin-top:14px;align-items:start">
           <div class="stack">
             ${summaryHtml(v, `What ${AI} did`)}
-            ${v.request ? `<div><span class="eyebrow">Asked for</span><p style="margin:4px 0 0">${esc(v.request)}</p></div>` : ""}
-            <div><span class="eyebrow">In TIA</span><div style="margin-top:6px">${reportHtml(v.report)}</div></div>
-            ${v.problems && v.problems.length ? `<div class="notice gold">${icon("warn")}<div><b>The offline check still found</b><ul class="small" style="margin:6px 0 0">${v.problems.map((p) => `<li>${esc(p)}</li>`).join("")}</ul></div></div>` : ""}
-            <div><span class="eyebrow">Files</span><div class="row" style="margin-top:6px">${v.files.map((f) => `<button class="tag ${g.file && g.file.version === v.folder && g.file.file === f ? "on" : ""}" data-file="${esc(f)}" data-ver="${esc(v.folder)}">${esc(f)}${v.added.includes(f) ? " · new" : v.changed.includes(f) ? " · changed" : ""}</button>`).join("")}</div></div>
-            ${v.replaces && v.replaces.length ? `<p class="faint small" style="margin:0">May overwrite: ${esc(v.replaces.join(", "))}</p>` : ""}
+            ${v.request ? `<div><span class="eyebrow">Asked for</span><p class="mt-1 mb-0">${esc(v.request)}</p></div>` : ""}
+            <div><span class="eyebrow">In TIA</span><div class="mt-2">${reportHtml(v.report)}</div></div>
+            ${v.problems && v.problems.length ? `<div class="notice gold">${icon("warn")}<div><b>The offline check still found</b><ul class="mt-2 mb-0 small">${v.problems.map((p) => `<li>${esc(p)}</li>`).join("")}</ul></div></div>` : ""}
+            <div><span class="eyebrow">Files</span><div class="mt-2 row">${v.files.map((f) => `<button class="tag ${g.file && g.file.version === v.folder && g.file.file === f ? "on" : ""}" data-file="${esc(f)}" data-ver="${esc(v.folder)}">${esc(f)}${v.added.includes(f) ? " · new" : v.changed.includes(f) ? " · changed" : ""}</button>`).join("")}</div></div>
+            ${v.replaces && v.replaces.length ? `<p class="m-0 faint small">May overwrite: ${esc(v.replaces.join(", "))}</p>` : ""}
           </div>
-          <div>${v.review ? `<span class="eyebrow">${AI}'s notes</span><div class="md" style="margin-top:6px">${PK.md(v.review)}</div>` : ""}</div>
+          <div>${v.review ? `<span class="eyebrow">${AI}'s notes</span><div class="mt-2 md">${PK.md(v.review)}</div>` : ""}</div>
         </div>
         ${g.file && g.file.version === v.folder ? `<div class="code" style="margin-top:14px;max-height:480px;overflow:auto"><pre style="margin:0;padding:14px 16px">${esc(g.file.text)}</pre></div>` : ""}
       </details>`).join("")}</div>`;
@@ -349,14 +349,14 @@
   }
   function packageHtml() {
     if (!g.open) return `<div class="gen-head"><div><span class="eyebrow">New package</span><h2>New blocks</h2>
-        <p class="muted small" style="margin:0">Describe the blocks in three steps. Each later change is saved as a new version; the old ones stay.</p></div></div>${formHtml()}`;
+        <p class="m-0 muted small">Describe the blocks in three steps. Each later change is saved as a new version; the old ones stay.</p></div></div>${formHtml()}`;
     const d = g.detail;
     const p = (g.packages || []).find((x) => x.name === g.open) || {};
-    const meta = d ? [`${d.versions.length} version${d.versions.length === 1 ? "" : "s"}`, d.plc ? "PLC " + d.plc : "", d.context ? "fitted into " + d.context.split(/[\\/]/).pop() : ""].filter(Boolean).join(" · ") : "Loading…";
+    const meta = d ? [`${d.versions.length} version${d.versions.length === 1 ? "" : "s"}`, d.plc ? "PLC " + d.plc : "", d.context ? "fitted into " + d.context.split(/[\\/]/).pop() : ""].filter(Boolean).join(" · ") : "";
     const tabs = PK.ui.tabs("Package", [["versions", "Versions"], ["change", "Change it"]].map(([k, l]) => ({ label: l, on: g.tab === k, data: { "data-tab": k } })));
-    return `<div class="gen-head"><div style="min-width:0"><span class="eyebrow">Package${p.state ? ` <span class="pill ${stateCls(p.state)}">${esc(p.state)}</span>` : ""}</span><h2>${esc(g.open)}</h2>
-        <p class="muted small" style="margin:0">${esc(meta)}</p></div>${tabs}</div>
-      ${g.tab === "change" ? formHtml() : d ? versionsHtml(d) : `<div class="card"><p class="muted" style="margin:0">Loading…</p></div>`}`;
+    return `<div class="gen-head"><div class="min0"><span class="eyebrow">Package${p.state ? ` <span class="pill ${stateCls(p.state)}">${esc(p.state)}</span>` : ""}</span><h2>${esc(g.open)}</h2>
+        <p class="m-0 muted small">${esc(meta)}</p></div>${tabs}</div>
+      ${g.tab === "change" ? formHtml() : d ? versionsHtml(d) : `<div class="card">${PK.ui.loading("table", { rows: 3 })}</div>`}`;
   }
 
   PK.view("setup/generator", {
@@ -388,7 +388,7 @@
       const chips = `<div class="row gen-status">${tiaChip}
           <span class="pill">PLCSIM ${t && t.plcsimIp ? esc(t.plcsimIp) : "not set"}</span>
           <span class="pill ${t && t.realAllowed && t.realAllowed.length ? "warn" : ""}">Real PLCs allowed: ${t && t.realAllowed ? t.realAllowed.length : "none"}</span></div>`;
-      const tiaNote = t && !t.ok ? `<div class="notice gold" style="margin-top:12px">${icon("info")}<div style="flex:1"><b>TIA Portal is not reachable.</b> ${esc(t.message || "")}</div><a class="btn gold small" href="#/setup/connections">Connections</a></div>` : "";
+      const tiaNote = t && !t.ok ? `<div class="mt-3 notice gold">${icon("info")}<div class="grow"><b>TIA Portal is not reachable.</b> ${esc(t.message || "")}</div><a class="btn gold small" href="#/setup/connections">Connections</a></div>` : "";
       return PK.hero({ cls: "hero compact", title: "Block generator",
           sub: `${AI}, PLC-Ki's block writer, turns plain words into PLC blocks. TIA Portal compiles them, and problems go back to ${AI} until it is clean. Nothing reaches a real PLC without two people confirming.`,
           extra: chips + tiaNote })

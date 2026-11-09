@@ -36,7 +36,7 @@ const PKSetup = (() => {
   function restartBar(el) {
     if (!info || !info.restartNeeded) return "";
     const diff = runDiff();
-    return `<div class="notice gold" style="align-items:center">${icon("info")}<div style="flex:1"><b>Saved, not in use yet.</b> PLC-Ki runs with the settings it started with and uses the saved ones after a restart.
+    return `<div class="notice gold" style="align-items:center">${icon("info")}<div class="grow"><b>Saved, not in use yet.</b> PLC-Ki runs with the settings it started with and uses the saved ones after a restart.
       ${diff.length ? `<br><span class="small">${diff.map(esc).join(" · ")}</span>` : ""}
       ${info.canRestart ? "" : " Stop PLC-Ki (Ctrl+C in its window) and start it again."}</div>
       ${info.canRestart ? `<button class="btn gold small" data-restart>Apply now</button>` : ""}</div>`;
@@ -189,7 +189,7 @@ const PKSetup = (() => {
       <div class="progress indet"><div></div></div>${line ? `<p class="latest" title="${line}"><span>Latest</span>${line}</p>` : ""}</div>`;
     return `<div class="jobprog"><div class="top"><span class="pct">${p.pct}%</span><span class="phase">${esc(p.phase)}</span><span class="time">${time}</span></div>
       <div class="progress"><div style="width:${p.pct}%"></div></div>
-      <p class="muted small" style="margin:0">${esc(p.hint)}</p>
+      <p class="m-0 muted small">${esc(p.hint)}</p>
       ${/blocks \d+\//.test(line) || !line ? "" : `<p class="latest" title="${line}"><span>Latest</span>${line}</p>`}</div>`;
   }
 
@@ -203,7 +203,7 @@ const PKSetup = (() => {
         ${job.state === "running" ? `<button class="btn red-tinted small" data-stop="${esc(job.id)}">${icon("stop")}Stop</button>` : actions}</div>
       ${extra}
       ${job.state === "running" ? progressHtml(job, lastLine) : ""}
-      ${["failed", "problems", "stopped"].includes(job.state) ? (() => { const p = jobProblem(job); return `<div class="notice ${job.state === "failed" ? "red" : "gold"}" style="margin-top:12px">${icon("warn")}<div><b>${esc(p.text)}</b>${p.todo ? `<br>${esc(p.todo)}` : ""}</div></div>`; })() : ""}
+      ${["failed", "problems", "stopped"].includes(job.state) ? (() => { const p = jobProblem(job); return `<div class="mt-3 notice ${job.state === "failed" ? "red" : "gold"}">${icon("warn")}<div><b>${esc(p.text)}</b>${p.todo ? `<br>${esc(p.todo)}` : ""}</div></div>`; })() : ""}
       <details class="more" ${job.state === "failed" ? "open" : ""}><summary>Log</summary>
         <div class="joblog" data-log>${esc(job.log || "")}</div></details>
     </div>`;
@@ -293,7 +293,7 @@ const PKSetup = (() => {
           <label class="field">PLCSIM address (downloads for testing)<input id="tiaPlcsimIp" value="${esc(c.tiaPlcsimIp)}" placeholder="e.g. 192.168.0.10, empty = no PLCSIM downloads"></label>
           <label class="field">Real PLCs that may be loaded<input id="tiaAllowReal" value="${esc(c.tiaAllowReal)}" placeholder="empty = never"><span class="hint">Each download is still confirmed by typing the address in the TiaImporter window, with the CPU in STOP.</span></label>
         </div>
-        <div class="row" style="margin-top:12px"><button class="btn b small" data-start-helper>${tiaStatus && tiaStatus.helperRunning ? "Restart" : "Start"} the TIA helper</button></div>`
+        <div class="mt-3 row"><button class="btn b small" data-start-helper>${tiaStatus && tiaStatus.helperRunning ? "Restart" : "Start"} the TIA helper</button></div>`
       : c.tiaMode === "remote" ? `
         <div class="grid two">
           <label class="field">TIA PC address<input id="tiaUrl" value="${esc(c.tiaUrl)}" placeholder="http://192.168.0.20:5090"></label>
@@ -301,7 +301,7 @@ const PKSetup = (() => {
           <label class="field">TIA project for generated blocks<input id="tiaProject" value="${esc(c.tiaProject)}" placeholder="path on the TIA PC, e.g. C:\\Users\\Software\\Documents\\Automation\\…\\.ap20"></label>
         </div>
         <details class="more" ${tiaStatus && !tiaStatus.ok ? "open" : ""}><summary>How to set up the TIA helper on the VM</summary>
-          <ol class="howto" style="margin-top:12px">
+          <ol class="mt-3 howto">
             <li><b>Once, put the newest PLC-Ki on the VM</b> in <code>C:\\PLCKi\\PLC-Ki</code>: copy the PLC-Ki folder from this PC. If it was downloaded there with git, this line in Command Prompt updates it:${PK.cmd("On the VM", "cd /d C:\\PLCKi\\PLC-Ki && git pull")}</li>
             <li><b>Once, double-click <code>Setup-TIA-helper</code></b> in <code>C:\\PLCKi\\PLC-Ki\\tools\\TiaImporter</code>. It asks for the token and the PLCSIM address,
               opens the port, and starts the helper.</li>
@@ -312,7 +312,7 @@ const PKSetup = (() => {
       : `<div class="grid two">
           <label class="field">TIA project for generated blocks<input id="tiaProject" value="${esc(c.tiaProject)}" placeholder="path on the laptop, e.g. C:\\Users\\you\\Documents\\Automation\\…\\.ap20"><span class="hint">Can also be chosen on the Block generator page.</span></label>
         </div>
-        <p class="muted small" style="margin:0">PLC-Ki Link starts the TIA helper on the laptop (see PLC-Ki Link below). PLCSIM and real-PLC downloads are allowed there, on the laptop's command.</p>`;
+        <p class="m-0 muted small">PLC-Ki Link starts the TIA helper on the laptop (see PLC-Ki Link below). PLCSIM and real-PLC downloads are allowed there, on the laptop's command.</p>`;
 
     const tiaPlain = tiaStatus && !tiaStatus.ok ? PK.plain(tiaStatus.message) : null;
     const tiaMsg = !tiaStatus ? `<span class="pill">Checking…</span>`
@@ -326,7 +326,7 @@ const PKSetup = (() => {
           New here? <a href="#/setup/start">Get started</a> walks you through it.`,
         extra: `${restartBar()}
         ${choice("preset", preset, Object.entries(presets).map(([k, p]) => ({ value: k, label: p.title, text: p.text, icon: p.icon, })))}
-        <div style="margin-top:22px">${diagram(c)}</div>` })
+        <div class="mt-5">${diagram(c)}</div>` })
 
       + PK.sec("alt", `<div class="row" style="align-items:baseline"><h2>The PLC</h2><span class="pill warn">${(c.plcAllowWrites || "").trim() ? "Reads; changes allowed" : "Reads only"}</span></div>
         <p class="sub">PLC-Ki reads values with the S7 protocol TIA and HMIs use. Administrators can change a value on PLCSIM, safety ones after a warning; on a real PLC only memory and data values, when it is allowed below. F-blocks never.</p>
@@ -342,9 +342,9 @@ const PKSetup = (() => {
         </div>
         ${c.plcVia === "link" ? "" : `<div class="row"><button class="btn b small" data-test-plc>Test the address</button>
           ${plcTest ? `<span class="pill ${plcTest.ok ? "ok" : "bad"}"><span class="dot"></span>${esc(plcTest.ok ? plcTest.message : PK.plain(plcTest.message, { plc: conn.address }).text)}</span>` : ""}</div>
-          ${plcTest && !plcTest.ok && PK.plain(plcTest.message).todo ? `<p class="muted small" style="margin:0">${esc(PK.plain(plcTest.message, { plc: conn.address }).todo)}</p>` : ""}`}
-        <details class="more" style="margin-top:0"><summary>More PLC options</summary>
-          <div class="grid three" style="margin-top:12px">
+          ${plcTest && !plcTest.ok && PK.plain(plcTest.message).todo ? `<p class="m-0 muted small">${esc(PK.plain(plcTest.message, { plc: conn.address }).todo)}</p>` : ""}`}
+        <details class="mt-0 more"><summary>More PLC options</summary>
+          <div class="mt-3 grid three">
             <label class="field">Security<select id="security">${["Auto", "Tls", "LegacyChallenge"].map((x) => `<option ${c.security === x ? "selected" : ""}>${x}</option>`).join("")}</select></label>
             <label class="field">Read the PLC every <span class="hint">milliseconds; 1000 = once a second</span><input id="pollMs" type="number" min="100" max="60000" step="100" value="${c.pollMs}"></label>
             <label class="field">Fast capture: the PLC sends every change, sampled every <span class="hint">milliseconds; 100 is a good start, 0 = off. Used for the seconds before each alarm.</span><input id="fastMs" type="number" min="0" max="10000" step="10" value="${c.fastMs ?? 100}"></label>
@@ -370,7 +370,7 @@ const PKSetup = (() => {
       + (c.plcVia === "link" || c.tiaMode === "link" ? linkHtml(c) : "");
   }
 
-  const saveRow = `<div class="actions" style="margin-top:28px"><button class="btn big" data-save>Save</button><span class="muted small" id="save-msg"></span></div>`;
+  const saveRow = `<div class="mt-6 actions"><button class="btn big" data-save>Save</button><span class="muted small" id="save-msg"></span></div>`;
 
   /** PLC-Ki Link: the laptop that reaches the PLC and has TIA connects out to this server. */
   function linkHtml(c) {
@@ -386,11 +386,11 @@ const PKSetup = (() => {
     const key = linkKey || "<the key>";
     const server = location.origin;
     const cmd = `cd /d %USERPROFILE%\\Downloads\\PLC-Ki && dotnet run --project src\\PlcKi.Server -- link --server ${server} --key ${key}${c.tiaMode === "link" ? ` --tia "C:\\PLCKi\\PLC-Ki\\tools\\TiaImporter\\bin\\Release\\net48\\TiaImporter.exe"` : ""}`;
-    return PK.sec("dark", `<span class="eyebrow">PLC-Ki Link</span><h2 style="margin-top:6px">Your laptop, connected out.</h2>
+    return PK.sec("dark", `<span class="eyebrow">PLC-Ki Link</span><h2 class="mt-2">Your laptop, connected out.</h2>
       <p class="sub">A small program on the laptop that reaches the PLC${c.tiaMode === "link" ? " and has TIA" : ""}. It only connects out to this server, so no firewall or VPN changes on the plant side.
         It reads the PLC read-only${c.tiaMode === "link" ? " and carries the TIA work to the laptop's TIA" : ""}.</p>
-      <div class="row" style="margin-top:6px">${state}${plc}${tia}</div>
-      <div class="steps col" style="margin-top:26px">
+      <div class="mt-2 row">${state}${plc}${tia}</div>
+      <div class="mt-5 steps col">
         <div class="step ${l && l.hasKey ? "done" : "now"}"><span class="n">1</span><div><b>Save this setup, then make a key</b>
           <p class="small" style="margin:6px 0 10px;opacity:.8">The key lets the laptop in. It is shown once; a new key replaces the old one.</p>
           <div class="row">${saveRow.replace('style="margin-top:28px"', "")}<button class="btn white small" data-link-key>${l && l.hasKey ? "Make a new key" : "Make a key"}</button>
@@ -398,7 +398,7 @@ const PKSetup = (() => {
         <div class="step ${l && l.connected ? "done" : l && l.hasKey ? "now" : ""}"><span class="n">2</span><div><b>On the laptop, start Link</b>
           <p class="small" style="margin:6px 0 10px;opacity:.8">In a Command Prompt, in the PLC-Ki folder (a clone of the repository, as on your PC). Leave the window open${c.tiaMode === "link" ? "; it opens the TIA helper's window too" : ""}.</p>
           ${PK.cmd("On the laptop", cmd)}
-          <div class="row" style="margin-top:10px">
+          <div class="mt-3 row">
             ${c.tiaMode === "link" ? `<span class="small" style="opacity:.8">Add <code>--plcsim-ip &lt;address&gt;</code> for PLCSIM tests, <code>--allow-real &lt;address&gt;</code> only if blocks may go to a real PLC.</span>` : ""}</div></div></div>
         <div class="step ${l && l.connected ? "done" : ""}"><span class="n">3</span><div><b>Back here, it turns green</b>
           <p class="small" style="margin:6px 0 0;opacity:.8">The status above shows the laptop, the PLC and TIA within a few seconds.</p></div></div>
@@ -442,11 +442,11 @@ const PKSetup = (() => {
       clearInterval(linkTimer);
       linkTimer = setInterval(async () => { if (conn && (conn.plcVia === "link" || conn.tiaMode === "link")) { const was = linkStatus && linkStatus.connected; await loadLink(); PK.draw(); if (linkStatus && linkStatus.connected && !was) checkTia(); } }, 3000);
       loadLink();
-      try { await loadSettings(); conn = { ...settings }; } catch (e) { PK.$("page").innerHTML = `<div class="notice red">${esc(e.message)}</div>`; return; }
+      try { await loadSettings(); conn = { ...settings }; } catch (e) { PK.$("page").innerHTML = PK.sec("", PK.ui.error(e)); return; }
       PK.draw();
       checkTia();
     },
-    render() { return conn ? connectionsHtml() : PK.hero({ title: "Loading…" }); },
+    render() { return conn ? connectionsHtml() : PK.hero({ cls: "hero compact", before: setupNav("connections"), title: "Connections" }) + PK.sec("", PK.ui.loading("cards", { rows: 3 })); },
     after(page) {
       bindRestart(page);
       const keep = () => { readConn(page); trackConn(); };
@@ -516,13 +516,13 @@ const PKSetup = (() => {
     const list = fresh.projects || [];
     const known = list.some((x) => x.path === fresh.project);
     const opts = (known || !fresh.project ? [] : [{ path: fresh.project, name: fresh.project.split(/[\\/]/).pop() }]).concat(list);
-    return `<div class="card stack" style="margin-bottom:22px">
-      <div class="row"><span class="ico">${icon("import")}</span><h3 style="margin:0;flex:1">Changed the program in TIA? Refresh it</h3></div>
-      <p class="muted" style="margin:0">PLC-Ki shows the code, tags and addresses of the program it last read${pr ? `: <b>${esc(pr.project)}</b>${pr.exportedAt ? `, read ${PK.date(pr.exportedAt)}` : ""}` : ""}.
+    return `<div class="mb-5 card stack">
+      <div class="row"><span class="ico">${icon("import")}</span><h3 class="m-0 grow">Changed the program in TIA? Refresh it</h3></div>
+      <p class="m-0 muted">PLC-Ki shows the code, tags and addresses of the program it last read${pr ? `: <b>${esc(pr.project)}</b>${pr.exportedAt ? `, read ${PK.date(pr.exportedAt)}` : ""}` : ""}.
         After changes in TIA (new addresses, edited blocks), read the project again. About a minute; Ki is not used, so it costs nothing. Alarms and steps stay as they are.
         If TIA Portal has the project open, it is read from there (TIA asks once to allow access).</p>
       ${fresh.error ? `<div class="notice gold">${icon("warn")}<div>Cannot list the TIA projects: ${esc(fresh.error)} Check Connections.</div></div>`
-        : `<div class="row"><label class="field" style="flex:1;margin:0">TIA project<select id="fresh-project">${opts.map((x) => `<option value="${esc(x.path)}" ${x.path === fresh.project ? "selected" : ""}>${esc(x.name)}  ·  ${esc(x.path)}</option>`).join("")}</select></label>
+        : `<div class="row"><label class="grow m-0 field">TIA project<select id="fresh-project">${opts.map((x) => `<option value="${esc(x.path)}" ${x.path === fresh.project ? "selected" : ""}>${esc(x.name)}  ·  ${esc(x.path)}</option>`).join("")}</select></label>
           <button class="btn" data-refresh ${running || !fresh.project ? "disabled" : ""}>Refresh from TIA</button></div>`}
       ${imp.job && imp.job.kind === "refresh" ? jobCard(imp.job) : ""}
     </div>`;
@@ -585,22 +585,22 @@ const PKSetup = (() => {
     };
     const fileRow = (kind) => (x) => `<li class="click ${ch && ch.path === x.path ? "sel" : ""}" data-choose="${kind}" data-path="${esc(x.path)}">
         <span class="ico">${icon(kind === "archive" ? "file" : "import")}</span>
-        <span style="flex:1"><b style="font-weight:600">${esc(x.name)}</b><div class="faint">${(x.size / 1048576).toFixed(1)} MB · ${PK.date(x.time)}</div></span><span class="chev">›</span></li>`;
+        <span class="grow"><b class="semibold">${esc(x.name)}</b><div class="faint">${(x.size / 1048576).toFixed(1)} MB · ${PK.date(x.time)}</div></span><span class="chev">›</span></li>`;
     const earlier = f && (f.archives.length || f.exports.length) ? `<details class="more" ${ch ? "" : "open"}><summary>Earlier files (${f.archives.length + f.exports.length})</summary>
-        <ul class="list" style="margin-top:10px">${f.exports.map(fileRow("export")).join("")}${f.archives.map(fileRow("archive")).join("")}</ul></details>` : "";
+        <ul class="mt-3 list">${f.exports.map(fileRow("export")).join("")}${f.archives.map(fileRow("archive")).join("")}</ul></details>` : "";
 
     const exp = imp.exportInfo;
-    const plcPick = exp && exp.plcs.length ? `<div class="tiles" style="margin:0 0 14px">${exp.plcs.map((p) => `<div class="tile pick ${imp.plc === p.name ? "on" : ""}" data-plc="${esc(p.name)}">
+    const plcPick = exp && exp.plcs.length ? `<div class="mt-0 mb-4 tiles">${exp.plcs.map((p) => `<div class="tile pick ${imp.plc === p.name ? "on" : ""}" data-plc="${esc(p.name)}">
         <div class="label">${esc(p.cpu || "PLC")}</div><div class="value">${esc(p.name)}</div><div class="faint">${p.blocks} blocks · ${p.tags} tags · ${(p.languages || []).join(", ")}</div></div>`).join("")}</div>` : "";
 
     const mi = imp.modelInfo;
     const review = mi ? (mi.ok ? `${PK.ui.tiles([["Tags", mi.tags], ["Steps", mi.steps], ["Devices", mi.equipment], ["Alarms", mi.alarms]].map(([label, value]) => ({ value, label })))}
-        <p style="margin:12px 0 0"><b>${esc(mi.name)}</b>${mi.description ? " · " + esc(mi.description) : ""}</p>
-        ${imp.job && imp.job.state === "problems" ? `<div class="notice gold" style="margin-top:10px">${icon("warn")}<div>Ki left some problems (see the log). PLC-Ki will not start with this model until they are fixed. Build it again, or ask for help with the log.</div></div>` : ""}
-        <div class="row" style="margin-top:14px"><button class="btn" data-use ${imp.job && imp.job.state === "problems" ? "disabled" : ""}>Use this program</button></div>`
-      : `<div class="notice red">${icon("warn")}<div>${esc(mi.error)}</div></div>`) : "";
+        <p class="mt-3 mb-0"><b>${esc(mi.name)}</b>${mi.description ? " · " + esc(mi.description) : ""}</p>
+        ${imp.job && imp.job.state === "problems" ? `<div class="mt-3 notice gold">${icon("warn")}<div>Ki left some problems (see the log). PLC-Ki will not start with this model until they are fixed. Build it again, or ask for help with the log.</div></div>` : ""}
+        <div class="mt-4 row"><button class="btn" data-use ${imp.job && imp.job.state === "problems" ? "disabled" : ""}>Use this program</button></div>`
+      : PK.ui.error(mi.error)) : "";
 
-    const step = (n, title, text, body) => `<div class="step ${stepCls(n)}"><div class="n">${stepCls(n) === "done" ? "✓" : n}</div><h3>${title}</h3><p style="margin-bottom:14px">${text}</p>${body}</div>`;
+    const step = (n, title, text, body) => `<div class="step ${stepCls(n)}"><div class="n">${stepCls(n) === "done" ? "✓" : n}</div><h3>${title}</h3><p class="mb-4">${text}</p>${body}</div>`;
     return PK.hero({ cls: "hero compact", before: setupNav("program"), title: "Import a program",
         sub: `Give PLC-Ki the TIA archive. It reads every block, and Ki writes the plain-English model of steps, devices, alarms, causes and fixes, once.`,
         extra: `${restartBar()}
@@ -611,9 +611,9 @@ const PKSetup = (() => {
           { html: `<span class="k-file">${esc((cur.export || "none").split(/[\\/]/).pop())}</span>`, label: "program file" }])}` })
       + PK.sec("alt", `${PKModel.html()}${refreshHtml()}<div class="steps col">
         ${step(1, "Choose the program", "A TIA archive (.zap20), a program export (.zip) made earlier, or a Beckhoff TwinCAT 3 project (.tnzip, or the project folder zipped).", `
-          <div class="dropzone" id="drop">${icon("import", "")}<div style="font-weight:600;margin-top:6px">Drop the file here, or click to choose it</div>
+          <div class="dropzone" id="drop">${icon("import", "")}<div class="semibold mt-2">Drop the file here, or click to choose it</div>
             <input type="file" id="file" accept=".zap20,.zap19,.zap18,.zap17,.zap16,.zip,.tnzip" class="hidden"></div>
-          ${ch ? `<p style="margin:12px 0 0">Chosen: <b>${esc(ch.name)}</b> <span class="tag ${isArchive ? "gold" : "blue"}">${isArchive ? "TIA archive" : "program export"}</span></p>` : ""}
+          ${ch ? `<p class="mt-3 mb-0">Chosen: <b>${esc(ch.name)}</b> <span class="tag ${isArchive ? "gold" : "blue"}">${isArchive ? "TIA archive" : "program export"}</span></p>` : ""}
           ${earlier}`)}
         ${step(2, "Export it with TIA Portal", "Only for archives. TIA opens it in the background on the TIA PC (see Connections) and exports every block. The archive is not changed.",
           (isArchive ? `<button class="btn" data-export ${jobRunning ? "disabled" : ""}>Export with TIA</button>` : `<span class="faint">${ch ? "Not needed: this is already an export." : "Waiting for a file."}</span>`)
@@ -622,11 +622,11 @@ const PKSetup = (() => {
           ch && !isArchive ? `${plcPick}
             <div class="row"><span class="small muted">Effort</span>${PK.ui.choice("Effort", ["medium", "high", "max"].map((e) => ({ label: e, on: imp.effort === e, data: { "data-effort": e } })))}
               <label class="check small"><input type="checkbox" id="compare" ${imp.compare ? "checked" : ""}>Compare with the current model</label></div>
-            <div class="row" style="margin-top:14px"><button class="btn" data-build ${jobRunning || (exp && exp.plcs.length > 1 && !imp.plc) ? "disabled" : ""}>Build the model</button>
+            <div class="mt-4 row"><button class="btn" data-build ${jobRunning || (exp && exp.plcs.length > 1 && !imp.plc) ? "disabled" : ""}>Build the model</button>
               ${exp && exp.plcs.length > 1 && !imp.plc ? `<span class="faint">Choose the PLC first.</span>` : ""}</div>` + (imp.job && imp.job.kind === "import" ? jobCard(imp.job) : "") : `<span class="faint">Needs a program export.</span>`)}
         ${step(4, "Check it and use it", "What Ki found. Use it, and PLC-Ki restarts with this machine.", review || `<span class="faint">The result shows here.</span>`)}
         </div>
-        ${imp.job && !["export", "import", "refresh"].includes(imp.job.kind) ? `<div style="margin-top:22px">${jobCard(imp.job)}</div>` : ""}`);
+        ${imp.job && !["export", "import", "refresh"].includes(imp.job.kind) ? `<div class="mt-5">${jobCard(imp.job)}</div>` : ""}`);
   }
 
   PK.view("setup/program", {
@@ -640,7 +640,7 @@ const PKSetup = (() => {
       PK.draw();
     },
     leave() { PKModel.stop(); if (imp.unfollow) { imp.unfollow(); imp.unfollow = null; } },
-    render() { return imp.files ? programHtml() : PK.hero({ title: "Loading…" }); },
+    render() { return imp.files ? programHtml() : PK.hero({ cls: "hero compact", before: setupNav("program"), title: "Import a program" }) + PK.sec("", PK.ui.loading("cards", { rows: 3 })); },
     after(page) {
       bindRestart(page);
       PKModel.bind(page);
@@ -723,32 +723,32 @@ const PKSetup = (() => {
   const isoDay = (d) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
   function storageHtml() {
     if (!storage) return "";
-    if (storage.error) return PK.sec("", `<h2>Storage</h2><div class="notice red">${esc(storage.error)}</div>`);
+    if (storage.error) return PK.sec("", `<h2>Storage</h2>${PK.ui.error(storage.error)}`);
     const d = storage.disk, l = storage.limits;
     const today = isoDay(new Date()), monthAgo = isoDay(new Date(Date.now() - 30 * 864e5));
     const rows = storage.rows.map((r) => {
       const exp = r.kind === "production" && r.count ? `<button class="btn plain small" data-prod-csv>CSV</button>`
         : EXPORT[r.kind] && r.count ? `<a class="btn plain small" href="${EXPORT[r.kind][0]}" download>${EXPORT[r.kind][1]}</a>` : "";
-      const clr = r.clear ? `<button class="btn plain small" style="color:var(--fault)" data-clear="${esc(r.kind)}">Clear</button>` : "";
-      return `<tr><td><b style="font-weight:600">${esc(r.title)}</b><div class="muted small">${esc(r.what)}</div></td>
+      const clr = r.clear ? `<button class="fg-fault btn plain small" data-clear="${esc(r.kind)}">Clear</button>` : "";
+      return `<tr><td><b class="semibold">${esc(r.title)}</b><div class="muted small">${esc(r.what)}</div></td>
         <td class="small">${r.where === "memory" ? "Memory" : `Disk<div class="faint mono" style="overflow-wrap:anywhere">${esc(r.folder || "")}</div>`}</td>
-        <td class="small" style="white-space:nowrap">${esc(r.countText)}${r.bytes != null && r.where === "disk" ? `<div class="faint">${size(r.bytes)}</div>` : ""}</td>
-        <td class="small" style="white-space:nowrap">${r.oldest ? esc(PK.date(r.oldest, r.kind !== "production")) : "–"}</td>
+        <td class="nowrap small">${esc(r.countText)}${r.bytes != null && r.where === "disk" ? `<div class="faint">${size(r.bytes)}</div>` : ""}</td>
+        <td class="nowrap small">${r.oldest ? esc(PK.date(r.oldest, r.kind !== "production")) : "–"}</td>
         <td class="small">${esc(r.limit)}</td>
-        <td style="white-space:nowrap">${exp}${clr}</td></tr>`;
+        <td class="nowrap">${exp}${clr}</td></tr>`;
     }).join("");
     const last = storage.lastPrune
       ? `Limits last applied ${esc(PK.date(storage.lastPrune))}: ${storage.lastRemoved.length ? storage.lastRemoved.map((x) => esc(x.text)).join("; ") + " removed." : "nothing was over them."}`
       : "Limits are applied when PLC-Ki starts and once a day.";
     return PK.sec("", `<h2 id="storage">Storage</h2><p class="sub">What PLC-Ki keeps on this PC, how much, and for how long.</p>
-      ${d.warning ? `<div class="notice red" style="margin-bottom:14px">${icon("info")}<div>${esc(d.warning)}</div></div>` : ""}
-      <p class="small" style="margin:0 0 12px">Data folder: <span class="mono">${esc(storage.dataDir)}</span>${d.total ? ` · ${size(d.free)} free of ${size(d.total)} (${Math.round(d.free / d.total * 100)} %)` : ""}</p>
+      ${d.warning ? `<div class="mb-4 notice red">${icon("info")}<div>${esc(d.warning)}</div></div>` : ""}
+      <p class="mt-0 mb-3 small">Data folder: <span class="mono">${esc(storage.dataDir)}</span>${d.total ? ` · ${size(d.free)} free of ${size(d.total)} (${Math.round(d.free / d.total * 100)} %)` : ""}</p>
       <div style="overflow-x:auto"><table class="tbl"><tr><th>What</th><th>Where</th><th>How much</th><th>Oldest</th><th>Kept</th><th></th></tr>${rows}</table></div>
       <div class="row" data-prod-range hidden style="gap:10px;margin-top:10px;flex-wrap:wrap;align-items:end">
         <label class="field" style="max-width:180px">Production log from<input type="date" id="pr-from" value="${monthAgo}"></label>
         <label class="field" style="max-width:180px">to<input type="date" id="pr-to" value="${today}"></label>
         <a class="btn small" data-prod-dl href="#" download>Download CSV</a></div>
-      <h3 style="margin-top:26px">Limits</h3>
+      <h3 class="mt-5">Limits</h3>
       <div class="grid three">${LIMITS.map(([k, t, unit, hint]) => `<label class="field">${t} <span class="hint">${unit}</span>
         <input id="lim-${k}" type="number" min="1" value="${l[k]}"><span class="hint">${hint}</span></label>`).join("")}</div>
       <div class="row" style="gap:12px;margin-top:10px;align-items:center"><button class="btn" data-save-limits>Save limits</button>
@@ -766,7 +766,7 @@ const PKSetup = (() => {
     page.querySelectorAll("[data-clear]").forEach((b) => b.onclick = async () => {
       const r = storage.rows.find((x) => x.kind === b.dataset.clear);
       if (!r || !(await PK.confirmSheet({ title: `Clear the ${r.title.toLowerCase()}?`,
-        text: `<p style="margin-top:0">This deletes ${esc(r.clear)}</p><p><b>It cannot be undone.</b> Export it first if you may need it. The change log notes that you cleared it.</p>`,
+        text: `<p class="mt-0">This deletes ${esc(r.clear)}</p><p><b>It cannot be undone.</b> Export it first if you may need it. The change log notes that you cleared it.</p>`,
         ok: "Delete", danger: true }))) return;
       b.disabled = true;
       try { const x = await api("POST", "/api/admin/storage/clear", { kind: r.kind }); toast(`Cleared: ${x.text}.`); }
@@ -781,7 +781,7 @@ const PKSetup = (() => {
         // Tighter limits remove data now: say exactly what, and ask first
         const dry = await api("PUT", "/api/admin/storage/limits", { limits, dryRun: true });
         if (dry.removed.length && !(await PK.confirmSheet({ title: "Save these limits?",
-          text: `<p style="margin-top:0">They remove now:</p><ul>${dry.removed.map((x) => `<li>${esc(x.text)}${x.bytes ? ` (${size(x.bytes)})` : ""}</li>`).join("")}</ul><p><b>This cannot be undone.</b></p>`,
+          text: `<p class="mt-0">They remove now:</p><ul>${dry.removed.map((x) => `<li>${esc(x.text)}${x.bytes ? ` (${size(x.bytes)})` : ""}</li>`).join("")}</ul><p><b>This cannot be undone.</b></p>`,
           ok: "Save and remove", danger: true }))) { save.disabled = false; return; }
         const done = await api("PUT", "/api/admin/storage/limits", { limits, dryRun: false });
         toast(done.removed.length ? "Saved. Removed: " + done.removed.map((x) => x.text).join("; ") + "." : "Saved.");
@@ -801,10 +801,10 @@ const PKSetup = (() => {
       PK.draw();
     },
     render() {
-      if (!settings) return PK.hero({ title: "Loading…" });
+      if (!settings) return PK.hero({ cls: "hero compact", before: setupNav("settings"), title: "Settings" }) + PK.sec("", PK.ui.loading("cards", { rows: 3 }));
       const s = settings;
       const keyText = { settings: "A key is saved here.", environment: "A key is already set on this PC (outside PLC-Ki). A key entered here replaces it.", none: "No key yet: the Ask box stays off until you add one." }[info.apiKey];
-      const sw = (id, on, title, text) => `<div class="row"><div style="flex:1"><b style="font-weight:600">${title}</b><div class="muted small">${text}</div></div><label class="switch"><input type="checkbox" id="${id}" ${on ? "checked" : ""}><span></span></label></div>`;
+      const sw = (id, on, title, text) => `<div class="row"><div class="grow"><b class="semibold">${title}</b><div class="muted small">${text}</div></div><label class="switch"><input type="checkbox" id="${id}" ${on ? "checked" : ""}><span></span></label></div>`;
       return PK.hero({ cls: "hero compact", before: setupNav("settings"), title: "Settings",
         sub: `The machine model, the assistant, and who can open PLC-Ki from where.`,
         extra: `${restartBar()}` })
@@ -821,19 +821,19 @@ const PKSetup = (() => {
             ${sw("publicView", s.publicView, "Viewing without login", "For a screen on the line. Setup still needs an administrator.")}
             <label class="field" style="max-width:200px">Port<input id="port" type="number" value="${s.port}">${runNote("port")}</label></div>
         </div>
-        <div class="actions" style="margin-top:24px"><button class="btn big" data-save-settings>Save</button><span class="muted small">Saves Machine, Assistant and Access. Logins below save on their own.</span></div>`)
+        <div class="mt-5 actions"><button class="btn big" data-save-settings>Save</button><span class="muted small">Saves Machine, Assistant and Access. Logins below save on their own.</span></div>`)
         + storageHtml()
         + PK.sec("", `<h2>Logins</h2><p class="sub">Operators see every machine page. Administrators also see Setup.</p>
           <ul class="list logins">${(users || []).map((u) => `<li><span class="ico">${icon("user")}</span>
-            <span style="flex:1"><b style="font-weight:600">${esc(u.name)}</b>${state.user && u.name === state.user.name ? " (you)" : ""}<div class="faint">${u.role === "admin" ? "Administrator" : "Operator"}</div></span>
+            <span class="grow"><b class="semibold">${esc(u.name)}</b>${state.user && u.name === state.user.name ? " (you)" : ""}<div class="faint">${u.role === "admin" ? "Administrator" : "Operator"}</div></span>
             <span class="li-acts">${state.user && u.name !== state.user.name ? `<button class="btn plain small" data-role="${esc(u.name)}" data-to="${u.role === "admin" ? "operator" : "admin"}">Make ${u.role === "admin" ? "operator" : "administrator"}</button>
-              <button class="btn plain small" data-pw="${esc(u.name)}">New password</button><button class="btn plain small" style="color:var(--fault)" data-del="${esc(u.name)}">Delete</button>` : `<button class="btn plain small" data-pw-own>Change my password</button>`}</span></li>`).join("")}</ul>
-          <h3 style="margin-top:26px">Add a login</h3>
+              <button class="btn plain small" data-pw="${esc(u.name)}">New password</button><button class="fg-fault btn plain small" data-del="${esc(u.name)}">Delete</button>` : `<button class="btn plain small" data-pw-own>Change my password</button>`}</span></li>`).join("")}</ul>
+          <h3 class="mt-5">Add a login</h3>
           <div class="grid three"><label class="field">Name<input id="nu-name" autocomplete="off"></label>
             <label class="field">Password <span class="hint">at least 8 characters</span><input id="nu-pw" type="password" autocomplete="new-password"></label>
             <label class="field">Role<select id="nu-role"><option value="operator">Operator: sees the machine pages</option><option value="admin">Administrator: also Setup</option></select></label></div>
-          <div class="row end" style="margin-top:10px"><button class="btn" data-add-user>Add login</button></div>
-          <p class="faint" style="margin:16px 0 0">Data folder: ${esc(info.dataDir)}</p>`);
+          <div class="mt-3 row end"><button class="btn" data-add-user>Add login</button></div>
+          <p class="mt-4 mb-0 faint">Data folder: ${esc(info.dataDir)}</p>`);
     },
     after(page) {
       bindRestart(page);

@@ -92,7 +92,7 @@ const PKStations = (() => {
         ${e.blockedBy ? `<p class="st-why">${icon("warn")}<span>${esc(e.blockedBy.charAt(0).toUpperCase() + e.blockedBy.slice(1))}</span></p>` : ""}
         ${e.values.length ? `<div class="kv">${e.values.map((v) => `<span>${esc(v.label)}</span><span class="val">${esc(v.text)}</span>`).join("")}</div>` : ""}
         ${e.permits.length ? `<ul class="conds">${e.permits.map(PK.cond).join("")}</ul>` : ""}
-        ${!e.blockedBy && e.explanation ? `<p class="muted small" style="margin:0">${esc(e.explanation)}</p>` : ""}
+        ${!e.blockedBy && e.explanation ? `<p class="m-0 muted small">${esc(e.explanation)}</p>` : ""}
         <div class="row"><a class="btn b small" href="#/plant/devices/${encodeURIComponent(e.id)}">Open on the Plant page</a></div></div>`;
     return `<details class="st-dev lv-${esc(lvl)}" data-dev="${esc(e.id)}" ${open ? "open" : ""}>
       <summary><span class="pm-sym">${sym}</span><span class="st-dev-n"><b>${esc(e.name)}</b><small>${esc(e.id)}${e.kind ? " · " + esc(e.kind) : ""}</small></span>
@@ -102,11 +102,11 @@ const PKStations = (() => {
   function alarmCard(a) {
     const warn = a.severity === "WARNING";
     return `<div class="card st-alarm ${warn ? "warning" : ""}">
-      <div class="row" style="gap:8px"><span class="pill ${warn ? "warn" : "bad"}"><span class="dot"></span>${esc(a.severity)} · ${esc(a.id)}</span>${a.since ? `<span class="faint small">${a.atStart ? "on since PLC-Ki started" : "since " + esc(PK.when(a.since))}</span>` : ""}</div>
+      <div class="gap-2 row"><span class="pill ${warn ? "warn" : "bad"}"><span class="dot"></span>${esc(a.severity)} · ${esc(a.id)}</span>${a.since ? `<span class="faint small">${a.atStart ? "on since PLC-Ki started" : "since " + esc(PK.when(a.since))}</span>` : ""}</div>
       <h3>${esc(a.text)}</h3>
-      ${a.condition ? `<p class="muted small" style="margin:0">${esc(a.condition)}</p>` : ""}
+      ${a.condition ? `<p class="m-0 muted small">${esc(a.condition)}</p>` : ""}
       ${a.fix.length ? `<details class="st-fix"><summary>How to fix it (${a.fix.length} step${a.fix.length > 1 ? "s" : ""})</summary><ol class="plainlist">${a.fix.map((f) => `<li>${esc(f)}</li>`).join("")}</ol>
-        ${a.causes.length ? `<p class="muted small" style="margin:8px 0 0"><b>Likely causes:</b> ${a.causes.map(esc).join("; ")}</p>` : ""}</details>` : ""}
+        ${a.causes.length ? `<p class="mt-2 mb-0 muted small"><b>Likely causes:</b> ${a.causes.map(esc).join("; ")}</p>` : ""}</details>` : ""}
       <div class="row"><a class="btn small" href="#/alarms/${encodeURIComponent(a.id)}">Open the alarm</a><button class="btn b small" data-ask="Why is alarm ${esc(a.id)} on, and how do I fix it?">Ask</button></div></div>`;
   }
 
@@ -115,12 +115,12 @@ const PKStations = (() => {
     const [txt, cls] = L ? L.seqState(q) : ["", ""];
     const waits = q.next.flatMap((n) => n.conditions).filter((c) => c.met === false);
     return `<div class="card stack">
-      <div class="row" style="gap:8px">${txt ? `<span class="pill ${cls}"><span class="dot"></span>${txt}</span>` : ""}<span class="faint small">${esc(q.name)}${q.timeInStep ? " · " + esc(q.timeInStep) + " in this step" : ""}</span></div>
+      <div class="gap-2 row">${txt ? `<span class="pill ${cls}"><span class="dot"></span>${txt}</span>` : ""}<span class="faint small">${esc(q.name)}${q.timeInStep ? " · " + esc(q.timeInStep) + " in this step" : ""}</span></div>
       <h3>Step ${esc(q.step ?? "?")}: ${esc(q.stepName)}</h3>
-      ${PK.cpuStop() ? `<p class="small" style="margin:0;color:var(--fault-ink)">${esc(q.explanation)}</p>`
-        : q.halted && q.haltReasons.length ? `<p class="muted small" style="margin:0">Halted: ${esc(q.haltReasons.join("; "))}</p>` : q.does ? `<p class="muted small" style="margin:0">${esc(q.does)}</p>` : ""}
+      ${PK.cpuStop() ? `<p class="m-0 ink-fault small">${esc(q.explanation)}</p>`
+        : q.halted && q.haltReasons.length ? `<p class="m-0 muted small">Halted: ${esc(q.haltReasons.join("; "))}</p>` : q.does ? `<p class="m-0 muted small">${esc(q.does)}</p>` : ""}
       ${L ? L.stepStrip(q) : ""}
-      ${waits.length ? `<p class="muted small" style="margin:6px 0 0">Waiting for</p><ul class="conds">${waits.map((c) => PK.condHeld(c)).join("")}</ul>` : ""}
+      ${waits.length ? `<p class="mt-2 mb-0 muted small">Waiting for</p><ul class="conds">${waits.map((c) => PK.condHeld(c)).join("")}</ul>` : ""}
       <div><a class="btn b small" href="#/plant/sequence/${encodeURIComponent(q.id)}">Step chart ›</a></div></div>`;
   }
 
@@ -168,8 +168,8 @@ const PKStations = (() => {
       + (st.sequences.length ? sec("", `<h2>Sequence</h2><div class="stack">${st.sequences.map(seqCard).join("")}</div>`) : "")
       + (st.equipment.length ? sec("", `<h2>Devices</h2><p class="sub">${problems.length ? "Needs attention first. " : ""}Tap one for its values and interlocks.</p>
           <div class="st-devs">${[...problems, ...rest].filter((e) => e !== dev).map((e) => devRow(e, false)).join("")}</div>`) : "")
-      + sec("", `${machineAlarms.length ? `<div class="notice gold" style="margin-bottom:18px">${icon("warn")}<div>${machineAlarms.length} more alarm${machineAlarms.length > 1 ? "s" : ""} on the machine, not tied to one station. <a href="#/alarm">See them</a></div></div>` : ""}
-          ${others.length ? `<h2>Other stations</h2>${overviewGrid(others)}` : ""}<p class="faint small" style="margin-top:18px">Live from the PLC, updated every second. PLC-Ki only reads: nothing here changes the machine.</p>`);
+      + sec("", `${machineAlarms.length ? `<div class="mb-4 notice gold">${icon("warn")}<div>${machineAlarms.length} more alarm${machineAlarms.length > 1 ? "s" : ""} on the machine, not tied to one station. <a href="#/alarm">See them</a></div></div>` : ""}
+          ${others.length ? `<h2>Other stations</h2>${overviewGrid(others)}` : ""}<p class="mt-4 faint small">Live from the PLC, updated every second. PLC-Ki only reads: nothing here changes the machine.</p>`);
   }
 
   function overviewGrid(stations) {
@@ -251,7 +251,7 @@ const PKStations = (() => {
   function label(t, b) {
     const url = b.replace(/\/+$/, "") + "/" + t.hash;
     let code;
-    try { code = PKQR.svg(url, { label: "QR code for " + t.title }); } catch (e) { code = `<div class="notice red">${esc(e.message)}</div>`; }
+    try { code = PKQR.svg(url, { label: "QR code for " + t.title }); } catch (e) { code = PK.ui.error(e); }
     return `<figure class="qr-label">${code}<figcaption><small>${esc(t.sub || "")}</small><b>${esc(t.title)}</b><span class="qr-hint">Scan for live status and alarms</span><span class="qr-url">${esc(url)}</span></figcaption></figure>`;
   }
 
@@ -263,7 +263,7 @@ const PKStations = (() => {
     },
     render() {
       const s = state.status;
-      if (!s) return hero({ title: "Loading…" });
+      if (!s) return hero({ title: "Station", extra: PK.ui.loading("tiles", { rows: 3 }) }) + PK.sec("", PK.ui.loading("cards", { rows: 3 }));
       const all = targets();
       if (!picked) picked = new Set(all.filter((t) => !t.device).map((t) => t.id));
       const b = base();
@@ -280,14 +280,14 @@ const PKStations = (() => {
             ${phoneErr ? `<div class="notice gold">${icon("warn")}<div>${esc(phoneErr)}</div></div>` : ""}
             <div class="qr-bases">${choices.map((c) => `<label class="qr-base"><input type="radio" name="qrbase" value="${esc(c.url)}" ${c.url === b ? "checked" : ""}><span><b>${esc(c.url)}</b><small>${esc(c.text)}</small></span></label>`).join("")}
               <label class="qr-base"><input type="radio" name="qrbase" value="" ${choices.some((c) => c.url === b) ? "" : "checked"}><span><b>Another address</b><input id="qr-own" type="text" inputmode="url" placeholder="http://plc-ki.plant.local:5080" value="${choices.some((c) => c.url === b) ? "" : esc(b)}"></span></label></div>
-            <p class="faint small" style="margin:0">The phone must be on a network that reaches this PC (plant Wi-Fi). Open the address on a phone once to check. People log in once on each phone, unless <i>Viewing without login</i> is on.</p></div>
+            <p class="m-0 faint small">The phone must be on a network that reaches this PC (plant Wi-Fi). Open the address on a phone once to check. People log in once on each phone, unless <i>Viewing without login</i> is on.</p></div>
           <div class="card stack"><h3>2. Which labels</h3>
-            <div class="row" style="gap:8px"><button class="btn b small" data-sel="stations">Stations only</button><button class="btn b small" data-sel="all">Everything</button><button class="btn b small" data-sel="none">None</button></div>
+            <div class="gap-2 row"><button class="btn b small" data-sel="stations">Stations only</button><button class="btn b small" data-sel="all">Everything</button><button class="btn b small" data-sel="none">None</button></div>
             <div class="qr-picks">${box(all[0])}${[...groups].map(([k, list]) => `<div class="qr-grp">${list.map(box).join("")}</div>`).join("")}</div>
             <h3>3. Size</h3>
             ${PK.ui.choice("Label size", [["small", "Small, 4 across"], ["medium", "Medium, 3 across"], ["large", "Large, 2 across"]].map(([k, l]) => ({ label: l, on: size === k, data: { "data-size": k } })))}
           </div></div>
-          <div class="actions" style="margin-top:22px"><button class="btn big" data-print ${chosen.length ? "" : "disabled"}>Print ${chosen.length} label${chosen.length === 1 ? "" : "s"}</button><span class="muted small">Print on sticker paper, or laminate. Labels that are older than a new program import still work while the station keeps its name.</span></div>`)
+          <div class="mt-5 actions"><button class="btn big" data-print ${chosen.length ? "" : "disabled"}>Print ${chosen.length} label${chosen.length === 1 ? "" : "s"}</button><span class="muted small">Print on sticker paper, or laminate. Labels that are older than a new program import still work while the station keeps its name.</span></div>`)
         + PK.sec("qr-sec", `<div class="qr-sheet qr-${size}">${chosen.map((t) => label(t, b)).join("")}</div>`);
     },
     after(page) {
@@ -318,7 +318,7 @@ const PKStations = (() => {
   });
 
   /** The station cards, with a note for alarms not tied to one station (also the Plant › Stations tab). */
-  const grid = (stations, machineAlarms = []) => (machineAlarms.length ? `<div class="notice gold" style="margin-bottom:18px">${icon("warn")}<div>${machineAlarms.length} alarm${machineAlarms.length > 1 ? "s" : ""} not tied to one station. <a href="#/alarm">See them</a></div></div>` : "") + overviewGrid(stations);
+  const grid = (stations, machineAlarms = []) => (machineAlarms.length ? `<div class="mb-4 notice gold">${icon("warn")}<div>${machineAlarms.length} alarm${machineAlarms.length > 1 ? "s" : ""} not tied to one station. <a href="#/alarm">See them</a></div></div>` : "") + overviewGrid(stations);
 
   return { list, keyOf, href, grid };
 })();

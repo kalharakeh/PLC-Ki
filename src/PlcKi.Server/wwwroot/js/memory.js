@@ -55,7 +55,7 @@
     const s = PK.sheet(`<h2>${o.went ? "What caused it, what fixed it?" : "Note on this alarm"}</h2>
       <p class="muted" style="margin:-4px 0 14px">${sevTag(o.severity, o.alarmId)} ${esc(o.text)}<br>
         <span class="small">Came ${esc(PK.when(o.came))}${o.went ? `, went after ${esc(dur(o))}` : ", still on"}${o.steps && o.steps.length ? ` · ${esc(o.steps[0])}` : ""}</span></p>
-      <form class="stack" style="gap:14px" data-note-form>
+      <form class="gap-4 stack" data-note-form>
         <label class="field">Cause <span class="hint">what was wrong at the machine</span>
           <input type="text" id="n-cause" maxlength="1000" value="${esc(n.cause || "")}" placeholder="e.g. dirty light barrier B23" autocomplete="off"></label>
         ${causeIdeas.length ? `<div class="chips" data-ideas="n-cause" aria-label="Causes noted before or listed for this alarm">${causeIdeas.map((c) => `<button type="button">${esc(c)}</button>`).join("")}</div>` : ""}
@@ -64,7 +64,7 @@
         ${fixIdeas.length ? `<div class="chips" data-ideas="n-fix" aria-label="Fixes used before">${fixIdeas.map((c) => `<button type="button">${esc(c)}</button>`).join("")}</div>` : ""}
         <label class="field">Anything else <span class="hint">optional: parts used, who to call, what to watch</span>
           <textarea id="n-text" maxlength="1000" rows="2">${esc(n.text || "")}</textarea></label>
-        <p class="muted small" id="n-err" role="alert" style="margin:0;color:var(--fault-ink)"></p>
+        <p class="m-0 ink-fault muted small" id="n-err" role="alert"></p>
         <div class="row end">${o.note ? `<button type="button" class="btn plain" data-clear>Remove note</button>` : ""}<button type="button" class="btn gray" data-close>Cancel</button><button type="submit" class="btn">Save note</button></div>
       </form>`);
     const f = s.el.querySelector("[data-note-form]");
@@ -119,14 +119,14 @@
         <span><b>${h.last7Days}</b> in 7 days</span><span><b>${h.last30Days}</b> in 30 days</span>
         ${h.averageDuration ? `<span><b>${esc(h.averageDuration)}</b> on average</span>` : ""}
         <span><b>${esc(h.downtime30Days)}</b> on in 30 days</span></div>` : "";
-    const causes = h.causes.length ? `<h3 style="margin-top:16px">Causes noted before</h3><ol class="causes small">${h.causes.slice(0, compact ? 2 : 4).map((c, i) =>
+    const causes = h.causes.length ? `<h3 class="mt-4">Causes noted before</h3><ol class="causes small">${h.causes.slice(0, compact ? 2 : 4).map((c, i) =>
       `<li><b>${c.count}×</b><span>${esc(c.cause)}${c.lastFix ? `<span class="muted"> · fix: ${esc(c.lastFix)}</span>` : ""}</span></li>`).join("")}</ol>` : "";
     const list = past.length ? `<ul class="mem-list">${past.slice(0, compact ? 3 : 5).map((o) => occLine(o)).join("")}</ul>` : "";
     return `<p class="mem-insight">${icon("clock")}<span>${esc(h.insight)}</span></p>${nums}
       ${open && !compact ? `<div class="row" style="margin:12px 0 4px;gap:10px;flex-wrap:wrap"><button type="button" class="btn small" data-note="${esc(open.id)}">${open.note ? "Edit the note on this one" : "Note cause and fix"}</button>
         <span class="muted small">${open.note ? "Noted by " + esc(open.note.by) : "When you have found it, write it down: PLC-Ki shows it the next time."}</span></div>` : ""}
-      ${causes}${list ? `<h3 style="margin-top:16px">${compact ? "Last times" : "Last times it was on"}</h3>${list}` : ""}
-      ${h.total > 0 ? `<a class="btn plain small" href="#/history/${encodeURIComponent(id)}" style="margin-top:8px">All ${h.total} in History</a>` : ""}`;
+      ${causes}${list ? `<h3 class="mt-4">${compact ? "Last times" : "Last times it was on"}</h3>${list}` : ""}
+      ${h.total > 0 ? `<a class="mt-2 btn plain small" href="#/history/${encodeURIComponent(id)}">All ${h.total} in History</a>` : ""}`;
   }
 
   /**
@@ -204,7 +204,7 @@
     const size = (r) => (rankBy === "downtime" ? r.downtimeMinutes : r.count) || 0;
     const max = rows && rows.length ? Math.max(...rows.map(size), 0.01) : 1;
     const seg = PK.ui.choice("Rank by", [["count", "Most often"], ["downtime", "Longest on"]].map(([k, l]) => ({ label: l, on: rankBy === k, href: "#/history/ranking/" + k })));
-    const list = !rows ? `<p class="muted">Loading…</p>` : rows.length ? `<ul class="list mem-top">${rows.map((r) => `<li class="click" data-hist="${esc(r.alarmId)}" tabindex="0">
+    const list = !rows ? PK.ui.loading("list") : rows.length ? `<ul class="list mem-top">${rows.map((r) => `<li class="click" data-hist="${esc(r.alarmId)}" tabindex="0">
           ${sevTag(r.severity, r.alarmId)}
           <span class="mem-top-t"><b>${esc(r.text)}</b><span class="mem-bar" aria-hidden="true"><i style="width:${Math.max(4, Math.round(size(r) / max * 100))}%" class="${r.severity === "WARNING" ? "w" : ""}"></i></span>
             <span class="muted small">${r.topCause ? "Most noted cause: " + esc(r.topCause) + " · " : ""}last ${esc(PK.when(r.last))}</span></span>
@@ -212,13 +212,13 @@
       : PK.ui.empty({ title: "No alarm in this window.", text: "PLC-Ki records every alarm that comes while it watches the machine." });
     return sec("", `<div class="toolbar">${seg}</div>
       <p class="sub">${rankBy === "downtime" ? "The alarms that were on longest in total" : "The alarms that came most often"}, in the last ${esc(windowName())}. Tap one for its own history.</p>${list}
-      <p class="faint small" style="margin-top:14px">The shift report and OEE are on <a href="#/reports">Reports</a>.</p>`);
+      <p class="mt-4 faint small">The shift report and OEE are on <a href="#/reports">Reports</a>.</p>`);
   }
 
   function eventsHtml() {
     if (!events || !events.length) return "";
-    return `<details class="more" style="margin-top:18px"><summary><b>PLC and connection</b> <span class="muted small">${events.length} since PLC-Ki started</span></summary>
-      <ul class="list events" style="margin-top:10px">${events.map((e) => {
+    return `<details class="mt-4 more"><summary><b>PLC and connection</b> <span class="muted small">${events.length} since PLC-Ki started</span></summary>
+      <ul class="mt-3 list events">${events.map((e) => {
         const ok = /back in RUN|\bback\b|again/i.test(e.text);
         const word = e.kind === "cpu" ? (ok ? "RUN" : (/(?:to|in) ([A-Z]+)/.exec(e.text) || [])[1] || "STOP") : ok ? "Back" : "Lost";
         return `<li><span class="ev-time">${esc(PK.date(e.time, true))}</span><span class="ev-kind ${ok ? "run" : "stop"}">${esc(word)}</span>
@@ -280,8 +280,8 @@
         <div class="toolbar"><input type="search" id="mem-q" placeholder="Search alarm, cause, fix, step or name" value="${esc(q)}" aria-label="Search History">
           <label class="check"><input type="checkbox" id="mem-unnoted" ${onlyUnnoted ? "checked" : ""}> Only without a note</label>
           <a class="btn b small" href="/api/memory/export.csv?${csv}" download>${icon("download")} Download for Excel</a></div>
-        ${!rows ? `<p class="muted">Loading…</p>` : rows.length ? `<ul class="mem-list card">${rows.map((o) => occLine(o, { showAlarm: !def })).join("")}</ul>
-          ${logData.total > rows.length ? `<button type="button" class="btn plain small" data-more style="margin-top:10px">Show more (${logData.total - rows.length} older)</button>` : ""}`
+        ${!rows ? `<div class="card">${PK.ui.loading("list")}</div>` : rows.length ? `<ul class="mem-list card">${rows.map((o) => occLine(o, { showAlarm: !def })).join("")}</ul>
+          ${logData.total > rows.length ? `<button type="button" class="mt-3 btn plain small" data-more>Show more (${logData.total - rows.length} older)</button>` : ""}`
           : PK.ui.empty({ icon: "search", title: q || onlyUnnoted ? "Nothing matches." : "Nothing recorded in this window yet.", text: q || onlyUnnoted ? "Try fewer words or a longer time window." : "Alarms are recorded from the moment PLC-Ki watches the machine." })}
         ${def ? "" : eventsHtml()}`);
 

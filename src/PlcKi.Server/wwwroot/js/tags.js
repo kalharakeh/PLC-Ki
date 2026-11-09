@@ -95,12 +95,12 @@
   function live(t) {
     const v = W.values[t.symbol];
     if (!v) return `<span class="faint">…</span>`;
-    if (v.error) return `<span class="faint small" style="white-space:nowrap" title="${esc(v.error)}">not read</span>`;
+    if (v.error) return `<span class="nowrap faint small" title="${esc(v.error)}">not read</span>`;
     if (v.value === "True" || v.value === "False") v.value = v.value === "True";
-    if (v.value === true || v.value === false) return `<span class="chip ${v.value ? "t" : "f"}" style="margin:0">${v.value ? "TRUE" : "FALSE"}</span>`;
+    if (v.value === true || v.value === false) return `<span class="m-0 chip ${v.value ? "t" : "f"}">${v.value ? "TRUE" : "FALSE"}</span>`;
     if (v.value == null) return `<span class="faint">…</span>`;
     const n = typeof v.value === "number" ? (Number.isInteger(v.value) ? String(v.value) : v.value.toFixed(3).replace(/0+$/, "").replace(/\.$/, "")) : String(v.value);
-    return `<span class="chip" style="margin:0">${esc(t.type === "Time" && typeof v.value === "number" ? n + " ms" : n)}</span>`;
+    return `<span class="m-0 chip">${esc(t.type === "Time" && typeof v.value === "number" ? n + " ms" : n)}</span>`;
   }
 
   function tablesHtml(q) {
@@ -113,13 +113,13 @@
       more += tags.length - take.length; rows += take.length;
       shown.push(...take);
       if (!take.length) return "";
-      return `<div class="card"><h3 style="margin:0 0 6px">${esc(tb.name)} <span class="faint small">${tags.length} tag${tags.length > 1 ? "s" : ""}</span></h3>
+      return `<div class="card"><h3 class="mt-0 mb-2">${esc(tb.name)} <span class="faint small">${tags.length} tag${tags.length > 1 ? "s" : ""}</span></h3>
         <div class="tbl-wrap"><table class="tbl tags-tbl"><tr><th>Name</th><th>Address</th><th>Type</th><th>Now</th><th>Comment</th></tr>
         ${take.map((t) => `<tr><td class="mono">${esc(t.name)}</td><td class="mono">${esc(t.address || "")}</td><td class="mono muted">${esc(t.datatype)}</td><td>${now(t)}</td><td class="muted">${esc(t.comment || "")}</td></tr>`).join("")}
         </table></div></div>`;
     }).join("");
     const none = query.trim() ? `No tag matches “${esc(query)}”.` : "This program export has no PLC tag tables.";
-    return (html || `<div class="card"><p class="muted" style="margin:0">${none}</p></div>`)
+    return (html || `<div class="card"><p class="m-0 muted">${none}</p></div>`)
       + (more ? `<p class="faint small">${more} more tag${more > 1 ? "s" : ""} not shown. Search to narrow the list.</p>` : "");
   }
 
@@ -129,9 +129,9 @@
       || `<p class="faint small" style="padding:8px 10px">${q ? "No data block matches." : "This program export has no data blocks."}</p>`;
     let right;
     shown = [];
-    if (!db) right = `<div class="card"><p class="muted" style="margin:0">${data.dbs.length ? "Loading…" : "This program export has no data blocks."}</p></div>`;
-    else if (dbError) right = `<div class="notice red">${icon("warn")}<div>${esc(dbError)}</div></div>`;
-    else if (!dbData) right = `<div class="card"><p class="muted" style="margin:0">Loading…</p></div>`;
+    if (!db) right = `<div class="card">${data.dbs.length ? PK.ui.loading("table") : PK.ui.empty({ icon: "file", title: "This program has no data blocks.", cls: "small" })}</div>`;
+    else if (dbError) right = PK.ui.error(dbError);
+    else if (!dbData) right = `<div class="card">${PK.ui.loading("table")}</div>`;
     else {
       const vq = valQuery.trim().toLowerCase();
       const vals = dbData.values.filter((t) => match(vq, t.symbol, t.comment, t.datatype));
@@ -145,11 +145,11 @@
         <div class="row"><h2 style="margin:0;font-size:24px">${esc(dbData.db)}</h2><span class="tag">${dbData.number != null ? "DB " + dbData.number : ""}</span>
           ${dbData.instanceOf ? `<span class="faint small">instance of <a href="#/program/${encodeURIComponent(dbData.instanceOf)}">${esc(dbData.instanceOf)}</a></span>` : ""}
           <span class="spacer"></span><a class="btn plain small" href="#/program/${encodeURIComponent(dbData.db)}">Show in the program ›</a></div>
-        ${startWhy && startWhy.db === dbData.db ? `<p class="small" style="margin:8px 0 0">${icon("bell")} Opened here because of ${esc(startWhy.why)}.</p>` : ""}
-        ${dbData.title || dbData.comment ? `<p class="muted" style="margin:8px 0 0">${esc([dbData.title, dbData.comment].filter(Boolean).join(" · "))}</p>` : ""}
-        <div class="row" style="margin-top:10px;gap:12px"><input type="search" id="val-q" placeholder="Find a value" aria-label="Find a value" value="${esc(valQuery)}" style="max-width:300px">
+        ${startWhy && startWhy.db === dbData.db ? `<p class="mt-2 mb-0 small">${icon("bell")} Opened here because of ${esc(startWhy.why)}.</p>` : ""}
+        ${dbData.title || dbData.comment ? `<p class="mt-2 mb-0 muted">${esc([dbData.title, dbData.comment].filter(Boolean).join(" · "))}</p>` : ""}
+        <div class="mt-3 gap-3 row"><input type="search" id="val-q" placeholder="Find a value" aria-label="Find a value" value="${esc(valQuery)}" style="max-width:300px">
           <span class="faint small">Optimized data blocks have no fixed addresses: values are read by name.${nModel ? ` <span class="tag blue">model</span> marks the ${nModel} value${nModel === 1 ? "" : "s"} the machine model explains.` : ""}</span></div>
-        <div class="tbl-wrap"><table class="tbl tags-tbl" style="margin-top:10px"><tr><th>Value</th><th>Type</th><th>Now</th><th>Comment</th></tr>
+        <div class="tbl-wrap"><table class="mt-3 tbl tags-tbl"><tr><th>Value</th><th>Type</th><th>Now</th><th>Comment</th></tr>
         ${take.map((t) => `<tr><td class="mono">${esc(short(t.symbol))}${mark(t)}</td><td class="mono muted">${esc(t.datatype)}</td><td>${now(t)}</td><td class="muted">${esc(t.comment || "")}</td></tr>`).join("")}
         </table></div>
         ${vals.length > take.length ? `<p class="faint small">Showing the first ${take.length} of ${vals.length} values.</p>` : ""}
@@ -176,7 +176,7 @@
     blockShown = rows;
     if (!rows.length) return "";
     return `<div class="card"><details class="more" style="border:0;margin:0;padding:0" open><summary>Tags in this block (${rows.length})</summary>
-      <table class="tbl tags-tbl" style="margin-top:8px"><tr><th>Tag</th><th>Address</th><th>Type</th><th>Now</th><th>Comment</th></tr>
+      <table class="mt-2 tbl tags-tbl"><tr><th>Tag</th><th>Address</th><th>Type</th><th>Now</th><th>Comment</th></tr>
       ${rows.map((t) => `<tr><td class="mono">${dbLink(t.symbol)}</td><td class="mono">${esc(t.address || "")}</td><td class="mono muted">${esc(t.datatype || "")}</td><td>${now(t)}</td><td class="muted">${esc(t.comment || "")}</td></tr>`).join("")}
       </table></details></div>`;
   }
@@ -216,8 +216,8 @@
       const head = PK.hero({ cls: "hero compact", title: "Tags",
         sub: "Every tag of the PLC tag tables with its address, and every value of the data blocks, read live from the PLC."
           + (PK.state.user && PK.state.user.role === "admin" ? " Change a value with the pen: on PLCSIM (safety values after a warning), on a real PLC only memory and data values, when allowed and confirmed." : "") });
-      if (dataError) return head + PK.sec("", `<div class="notice gold">${icon("warn")}<div>${esc(dataError)}</div></div>`);
-      if (!data) return head + PK.sec("", `<p class="muted">Loading…</p>`);
+      if (dataError) return head + PK.sec("", PK.ui.error(dataError, { level: "warn" }));
+      if (!data) return head + PK.sec("", PK.ui.loading("table", { rows: 8 }));
       const q = query.trim().toLowerCase();
       const nTags = data.tables.reduce((n, t) => n + t.tags.length, 0);
       // First draw with data: open the data block of the current problem; else the first tab that has something in it
@@ -230,7 +230,7 @@
       // The data blocks tab always shows one: the first, when none is picked
       if (tab === "dbs" && !db && data.dbs.length) openDb(data.dbs[0].name);
       const status = W.connection && W.connection !== "connected"
-        ? `<div class="notice gold" style="margin-bottom:14px">${icon("warn")}<div>${W.connection === "snapshot" ? "PLC-Ki runs on test values, so tags outside the machine model show no value." : "PLC-Ki is not reading the PLC right now, so there are no live values."}</div></div>` : "";
+        ? `<div class="mb-4 notice gold">${icon("warn")}<div>${W.connection === "snapshot" ? "PLC-Ki runs on test values, so tags outside the machine model show no value." : "PLC-Ki is not reading the PLC right now, so there are no live values."}</div></div>` : "";
       const bar = PK.ui.toolbar({
           left: PK.ui.choice("Show", [{ label: `Tag tables · ${nTags}`, on: tab === "tables", data: { "data-tab": "tables" } }, { label: `Data blocks · ${data.dbs.length}`, on: tab === "dbs", data: { "data-tab": "dbs" } }]),
           search: { id: "tag-q", placeholder: tab === "tables" ? "Find a tag, address or comment" : "Find a data block", label: "Find", value: query },

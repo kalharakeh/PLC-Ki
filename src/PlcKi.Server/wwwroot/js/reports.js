@@ -106,7 +106,7 @@
   }
 
   function lossTable(losses, total) {
-    if (!losses.length) return `<p class="muted" style="margin:0">No stops or waiting time recorded.</p>`;
+    if (!losses.length) return `<p class="m-0 muted">No stops or waiting time recorded.</p>`;
     const max = Math.max(...losses.map((l) => l.minutes), 0.01);
     return `<table class="tbl rp-loss"><tr><th>Why it was not running</th><th class="num">Times</th><th class="num">Time</th></tr>
       ${losses.map((l) => `<tr><td><span class="sw" style="background:${(STATE[l.state] || [])[1]}"></span>${l.alarm ? `<a href="#/alarms/${encodeURIComponent(l.alarm)}">${esc(l.why)}</a>` : esc(l.why || STATE[l.state][0])}
@@ -115,14 +115,14 @@
   }
 
   function faultTable(faults, withFix) {
-    if (!faults.length) return `<p class="muted" style="margin:0">No alarms in this time.</p>`;
+    if (!faults.length) return `<p class="m-0 muted">No alarms in this time.</p>`;
     return `<table class="tbl rp-faults"><tr><th>Alarm</th><th class="num">Times</th><th class="num">Total</th><th class="num">Longest</th></tr>
       ${faults.map((f) => `<tr><td><a href="#/alarms/${encodeURIComponent(f.id)}"><b>${esc(f.id)}</b></a> ${esc(f.text)}
           ${f.stillOn ? `<span class="pill bad"><span class="dot"></span>on now</span>` : ""}
           <div class="faint">${[f.severity === "FAULT" ? "Fault" : f.severity === "WARNING" ? "Warning" : f.severity, f.location, "last " + PK.when(f.last)].filter(Boolean).map(esc).join(" · ")}</div>
           ${withFix && (f.causes.length || f.fix.length) ? `<details class="more rp-fix"><summary>Likely causes and fix</summary>
-            ${f.causes.length ? `<p class="small" style="margin:8px 0 4px"><b>Likely causes</b></p><ul class="plainlist small">${f.causes.map((c) => `<li>${esc(c)}</li>`).join("")}</ul>` : ""}
-            ${f.fix.length ? `<p class="small" style="margin:8px 0 4px"><b>Fix</b></p><ol class="plainlist small">${f.fix.map((c) => `<li>${esc(c)}</li>`).join("")}</ol>` : ""}</details>` : ""}</td>
+            ${f.causes.length ? `<p class="mt-2 mb-1 small"><b>Likely causes</b></p><ul class="plainlist small">${f.causes.map((c) => `<li>${esc(c)}</li>`).join("")}</ul>` : ""}
+            ${f.fix.length ? `<p class="mt-2 mb-1 small"><b>Fix</b></p><ol class="plainlist small">${f.fix.map((c) => `<li>${esc(c)}</li>`).join("")}</ol>` : ""}</details>` : ""}</td>
         <td class="num">${f.count}${f.count >= 3 ? `<div class="faint rp-rep">repeats</div>` : ""}</td><td class="num">${mins(f.minutes)}</td><td class="num">${mins(f.longestMinutes)}</td></tr>`).join("")}</table>`;
   }
 
@@ -151,12 +151,12 @@
 
   function shiftPage() {
     const x = r.shift;
-    if (!x) return PK.sec("tight rp", `<p class="muted">${r.err ? esc(r.err) : "Making the report…"}</p>`);
+    if (!x) return PK.sec("tight rp", r.err ? PK.ui.error(r.err) : PK.ui.loading("tiles", { label: "Making the report" }));
     const t = x.totals, o = x.oee, p = x.parts, m = x.maint;
     const watched = t.running + t.idle + t.down;
     const title = `${esc(x.shift)} shift, ${esc(dayName(x.day))}`;
     const status = x.inProgress ? `<span class="pill info"><span class="dot"></span>Running now · so far</span>` : `<span class="pill">Finished</span>`;
-    const head = `<div class="rp-head"><div><div class="eyebrow">${status}<span class="faint">${hm(x.from)}–${hm(x.to)} · ${esc(x.machine)}</span></div><h2 style="margin:0">${title}</h2></div></div>`;
+    const head = `<div class="rp-head"><div><div class="eyebrow">${status}<span class="faint">${hm(x.from)}–${hm(x.to)} · ${esc(x.machine)}</span></div><h2 class="m-0">${title}</h2></div></div>`;
 
     const empty = watched < 0.5;
     const kpis = empty ? `<div class="notice gold">${icon("info")}<div>PLC-Ki has no values for this shift${t.noLink > 0.5 ? " (no PLC connection)" : ""}. It records while it runs and is connected to the PLC.</div></div>`
@@ -182,8 +182,8 @@
         <span>Running between faults (MTBF)</span><span>${mins(m.mtbfMinutes)}</span>
         <span>No PLC connection</span><span>${mins(t.noLink)}</span></div></div>`;
     const losses = `<div class="card"><h3>Biggest losses</h3>${lossTable(x.losses, t.idle + t.down + t.noLink)}</div>`;
-    const faults = `<div class="card"><h3>Alarms in this shift</h3>${faultTable(x.faults, true)}<p class="faint small no-print" style="margin:10px 0 0">Every past alarm, with what fixed it: <a href="#/history">History</a>.</p></div>`;
-    const ask = PK.state.user ? `<div class="row no-print" style="margin-top:6px"><button class="btn b small" type="button" data-rpask>${icon("chat")}<span>Ask ${PK.AI} for a handover note</span></button></div>` : "";
+    const faults = `<div class="card"><h3>Alarms in this shift</h3>${faultTable(x.faults, true)}<p class="mt-3 mb-0 faint small no-print">Every past alarm, with what fixed it: <a href="#/history">History</a>.</p></div>`;
+    const ask = PK.state.user ? `<div class="mt-2 row no-print"><button class="btn b small" type="button" data-rpask>${icon("chat")}<span>Ask ${PK.AI} for a handover note</span></button></div>` : "";
     return PK.sec("tight rp", shiftPicker(x) + head + kpis + `<div class="rp-grid">${time}<div class="grid two rp-two">${parts}${maint}</div><div class="grid two rp-two">${losses}${faults}</div></div>` + notes(x.notes) + ask);
   }
 
@@ -194,7 +194,7 @@
       left: PK.ui.choice("Time range", [[1, "24 h"], [7, "7 days"], [30, "30 days"], [365, "1 year"]].map(([d, l]) => ({ label: l, on: r.days === d, data: { "data-days": d } }))),
       right: `<a class="btn gray small" href="/api/reports/faults.csv?days=${r.days}" download>${icon("download")}<span>Download for Excel</span></a>
       <button class="btn gray small" type="button" data-print>${icon("file")}<span>Print or PDF</span></button>` });
-    if (!x) return PK.sec("tight rp", range + `<p class="muted">${r.err ? esc(r.err) : "Making the summary…"}</p>`);
+    if (!x) return PK.sec("tight rp", range + (r.err ? PK.ui.error(r.err) : PK.ui.loading("tiles", { label: "Making the summary" })));
     const t = x.totals, m = x.maint;
     const kpis = kpiRow([
       kpi(mins(t.down), "Down by faults", `${m.stops} stop${m.stops === 1 ? "" : "s"}`, t.down > 0 ? "bad" : "ok"),
@@ -205,8 +205,8 @@
     const shifts = x.shifts.length ? `<table class="tbl rp-shifts"><tr><th>Shift</th><th class="num">OEE</th><th class="num">Avail.</th><th class="num">Parts</th><th class="num">Down</th><th>Biggest loss</th></tr>
       ${x.shifts.map((s) => `<tr><td><a href="#/reports/shift/${s.day}/${s.shiftIndex}">${esc(dayName(s.day))}, ${esc(s.shift)}</a>${s.inProgress ? ` <span class="tag blue">now</span>` : ""}</td>
         <td class="num"><b class="rp-oee ${oeeCls(s.oee)}">${pct(s.oee)}</b></td><td class="num">${pct(s.availability)}</td><td class="num">${s.parts}</td><td class="num">${mins(s.downMinutes)}</td>
-        <td class="faint">${esc(s.topLoss || "")}</td></tr>`).join("")}</table>` : `<p class="muted" style="margin:0">No shift recorded yet.</p>`;
-    return PK.sec("tight rp", range + `<div class="rp-head"><div><div class="eyebrow"><span class="faint">${esc(PK.date(x.from, false))} to now · ${esc(x.machine)}</span></div><h2 style="margin:0">Summary for maintenance</h2></div></div>`
+        <td class="faint">${esc(s.topLoss || "")}</td></tr>`).join("")}</table>` : `<p class="m-0 muted">No shift recorded yet.</p>`;
+    return PK.sec("tight rp", range + `<div class="rp-head"><div><div class="eyebrow"><span class="faint">${esc(PK.date(x.from, false))} to now · ${esc(x.machine)}</span></div><h2 class="m-0">Summary for maintenance</h2></div></div>`
       + kpis + `<div class="rp-grid"><a class="card plink no-print" href="#/history/ranking/downtime"><span class="ico">${icon("clock")}</span><span><b>Which alarms cost the most time</b><span class="muted small">${x.faults.length ? `${x.faults.length} different alarm${x.faults.length === 1 ? "" : "s"} in this time. History ranks them by how long they were on, with what fixed them.` : "History ranks past alarms by how long they were on, with what fixed them."}</span></span><span class="chev">›</span></a>
       <div class="card"><h3>Why it was not running</h3>${lossTable(x.losses, t.idle + t.down + t.noLink)}</div>
       <div class="card"><h3>Shifts</h3><div class="tbl-wrap">${shifts}</div></div></div>` + notes(x.notes));
@@ -215,7 +215,7 @@
   // ---- settings ----
   function settingsPage() {
     const c = r.cfg;
-    if (!c) return PK.sec("tight rp", `<p class="muted">${r.err ? esc(r.err) : "Loading…"}</p>`);
+    if (!c) return PK.sec("tight rp", r.err ? PK.ui.error(r.err) : PK.ui.loading("tiles"));
     const admin = PK.state.user && PK.state.user.role === "admin";
     const s = r.draft || c.settings;
     const dis = admin ? "" : "disabled";
@@ -231,12 +231,12 @@
         <td>${admin && s.shifts.length > 1 ? `<button class="btn gray small" type="button" data-shdel="${i}" aria-label="Remove shift">${icon("x")}</button>` : ""}</td></tr>`).join("");
     const sugg = c.counters.filter((t) => t.suggest);
     return PK.sec("tight rp", `<div class="grid two rp-two">
-      <div class="card stack"><h3 style="margin:0">Shifts</h3>
-        <p class="muted small" style="margin:0">An end before the start runs past midnight. Planned stops (breaks, cleaning) are not counted as lost time.</p>
+      <div class="card stack"><h3 class="m-0">Shifts</h3>
+        <p class="m-0 muted small">An end before the start runs past midnight. Planned stops (breaks, cleaning) are not counted as lost time.</p>
         <div class="rp-shtbl"><table class="tbl"><tr><th>Name</th><th>Start</th><th>End</th><th>Planned stops, min</th><th></th></tr>${rows}</table></div>
         ${admin ? `<div class="row"><button class="btn gray small" type="button" data-shadd>${icon("plus")}<span>Add a shift</span></button></div>` : ""}
       </div>
-      <div class="card stack"><h3 style="margin:0">Parts and cycles</h3>
+      <div class="card stack"><h3 class="m-0">Parts and cycles</h3>
         <label class="field">Good part counter<select data-f="goodCountTag" ${dis}>${counterOpts(s.goodCountTag, "good")}</select>
           <span class="hint">A tag that goes up by one per part. Without one, every finished cycle counts as one part.${sugg.length ? " ★ looks like a counter." : ""}</span></label>
         <label class="field">Reject counter<select data-f="badCountTag" ${dis}>${counterOpts(s.badCountTag, "bad")}</select>
@@ -246,7 +246,7 @@
         <label class="field">Ideal cycle time, seconds<input type="number" min="0" step="0.1" data-f="idealCycleSeconds" value="${s.idealCycleSeconds ?? ""}" placeholder="Empty: the fastest cycles PLC-Ki has seen" ${dis}>
           <span class="hint">The fastest the machine can make one part, for Performance.</span></label>
       </div></div>
-      <div class="card stack" style="margin-top:18px"><h3 style="margin:0">How PLC-Ki counts</h3>
+      <div class="mt-4 card stack"><h3 class="m-0">How PLC-Ki counts</h3>
         <ul class="plainlist small">
           <li><b>Running</b>: a sequence is past its first step and no fault alarm is on. With no sequences in the model, a device switched on.</li>
           <li><b>Down</b>: a fault alarm is on. The reason is the alarm that came first.</li>
@@ -254,9 +254,9 @@
           <li><b>No PLC connection</b> and <b>Not watched</b> (PLC-Ki was off) are left out of OEE.</li>
           <li><b>OEE</b> = Availability (running ÷ planned time) × Performance (ideal cycle × parts ÷ running time) × Quality (good ÷ all parts).</li>
         </ul>
-        <p class="faint small" style="margin:0">Recorded in ${esc(c.folder)}, one small file per day.</p>
+        <p class="m-0 faint small">Recorded in ${esc(c.folder)}, one small file per day.</p>
       </div>
-      ${admin ? `<div class="row end" style="margin-top:18px"><button class="btn" type="button" data-rpsave ${r.saving ? "disabled" : ""}>${r.saving ? "Saving…" : "Save"}</button></div>` : ""}`);
+      ${admin ? `<div class="mt-4 row end"><button class="btn" type="button" data-rpsave ${r.saving ? "disabled" : ""}>${r.saving ? "Saving…" : "Save"}</button></div>` : ""}`);
   }
 
   async function save() {

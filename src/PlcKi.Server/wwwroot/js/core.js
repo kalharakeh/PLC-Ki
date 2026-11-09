@@ -125,6 +125,29 @@ const PK = (() => {
         `<div class="k ${t.state || ""}"${t.title ? ` title="${esc(t.title)}"` : ""}><b>${t.html != null ? t.html : esc(t.value)}</b><span>${esc(t.label)}</span>${t.note ? `<span class="k-note">${esc(t.note)}</span>` : ""}</div>`).join("")}</div>`;
     },
     /** Nothing to show: an icon, one bold line, what it means or what to do, an optional button. */
+    /** While data comes: grey placeholders in the shape of what will be there, so nothing jumps (item 34).
+     *  shape: "lines" (text), "list" (rows with an icon), "table", "cards", "tiles" (numbers), "chart" (a drawing or plot). */
+    loading(shape = "lines", { rows = 4, label = "Loading" } = {}) {
+      const b = (cls) => `<span class="sk-b ${cls}"></span>`;
+      const n = (f) => Array.from({ length: rows }, f).join("");
+      const inner = {
+        lines: () => b("w90") + b("w75") + b("w50"),
+        list: () => n(() => `<span class="sk-row">${b("sk-ico")}<span class="sk-col">${b("w60")}${b("w40 thin")}</span></span>`),
+        table: () => b("w100 thin") + n(() => b("w100")),
+        cards: () => n(() => `<span class="sk-card">${b("w60")}${b("w90 thin")}${b("w75 thin")}</span>`),
+        tiles: () => n(() => `<span class="sk-tile">${b("w50 big")}${b("w75 thin")}</span>`),
+        chart: () => b("sk-chart"),
+      }[shape] || (() => b("w90"));
+      return `<div class="sk sk-${shape}" role="status" aria-busy="true"><span class="sr">${esc(label)}…</span>${inner()}</div>`;
+    },
+    /** Something went wrong: what happened and what to do, in plain words; the system's own text folded under "Details".
+     *  level "warn" for "not there yet" (no program loaded), "bad" for a failure. */
+    error(message, { level = "bad", action = "" } = {}) {
+      const raw = String((message && message.message) || message || "");
+      const p = plainFor(raw);
+      return `<div class="notice ${level === "warn" ? "gold" : "red"} pk-error" role="alert">${icon("warn")}<div><b>${esc(p.text)}</b>${p.todo ? ` ${esc(p.todo)}` : ""}
+        ${p.text !== raw ? `<details class="pk-detail"><summary>Details</summary><code>${esc(raw)}</code></details>` : ""}${action ? `<div class="row mt-2">${action}</div>` : ""}</div></div>`;
+    },
     empty({ icon: ic = "check", title, text = "", action = "", cls = "" }) {
       return `<div class="empty ${cls}">${icon(ic)}<b>${title}</b>${text ? `<span>${text}</span>` : ""}${action}</div>`;
     },
@@ -365,7 +388,8 @@ const PK = (() => {
     if (!current || !current.view.render) return;
     let html;
     try { html = current.view.render(current.params); }
-    catch (e) { html = `<div class="notice red">${icon("warn")}<div>This page hit a problem: ${esc(e.message)}</div></div>`; console.error(e); }
+    catch (e) { html = sec("", `<div class="notice red" role="alert">${icon("warn")}<div><b>This page hit a problem.</b> Reload the page. If it happens again, tell an administrator what you clicked.
+      <details class="pk-detail"><summary>Details</summary><code>${esc(e.message)}</code></details></div></div>`); console.error(e); }
     if (html === lastHtml) return;
     const page = $("page");
     const y = window.scrollY;
@@ -576,11 +600,11 @@ const PK = (() => {
   function passwordSheet(forName) {
     const own = !forName;
     const s = sheet(`<h2>${own ? "Change my password" : "New password for " + esc(forName)}</h2>
-      <form class="stack" style="gap:12px" data-pw-form>
+      <form class="gap-3 stack" data-pw-form>
         ${own ? `<label class="field">Current password<input type="password" id="pw-cur" autocomplete="current-password" required></label>` : ""}
         <label class="field">New password <span class="hint">at least 8 characters</span><input type="password" id="pw-new" autocomplete="new-password" minlength="8" required ${own ? "" : "autofocus"}></label>
         <label class="field">New password again<input type="password" id="pw-rep" autocomplete="new-password" required></label>
-        <p class="muted small" id="pw-err" role="alert" style="margin:0;color:var(--fault-ink)"></p>
+        <p class="m-0 ink-fault muted small" id="pw-err" role="alert"></p>
         <div class="row end"><button type="button" class="btn gray" data-close>Cancel</button><button type="submit" class="btn">Set password</button></div>
       </form>`);
     const f = s.el.querySelector("[data-pw-form]");
@@ -627,12 +651,12 @@ const PK = (() => {
       <span><b>${esc(title)}</b><br><span class="muted small">${esc(ok ? text : why)}</span></span></label>`;
     const notHere = "Not possible on this connection: the browser allows it only on the PLC-Ki PC itself (localhost) or over https.";
     const s = sheet(`<span class="eyebrow">This screen</span><h2>Alarm sound and screen</h2>
-      <p class="muted" style="margin:0">Only for this browser on this device. Nothing here changes the machine.</p>
-      <div class="stack" style="gap:12px">
+      <p class="m-0 muted">Only for this browser on this device. Nothing here changes the machine.</p>
+      <div class="gap-3 stack">
         ${row("sound", "Beep when a new alarm comes", "A short tone: three beeps for a fault, one for a warning. Leave this page open in a tab.", true, "")}
         ${row("notify", "Show a notice when a new alarm comes", "A message from the browser, also when PLC-Ki is in a background tab.", canNotify, notHere)}
         ${row("awake", "Keep this screen on", "For a screen on the line: the display does not go dark while this page is open.", canWake, notHere)}
-        <div class="opt-row" style="cursor:default"><span style="flex:1"><b>Screen colours</b><br><span class="muted small">Dark suits a wall screen in a bright hall.</span></span>
+        <div class="opt-row" style="cursor:default"><span class="grow"><b>Screen colours</b><br><span class="muted small">Dark suits a wall screen in a bright hall.</span></span>
           ${ui.choice("Screen colours", [["auto", "Like this PC"], ["light", "Light"], ["dark", "Dark"]].map(([k, l]) => ({ label: l, on: themeChoice() === k, data: { "data-theme-set": k } })))}</div>
       </div>
       <div class="row end"><button class="btn plain" type="button" data-test-beep>Test the beep</button><button class="btn" data-close>Done</button></div>`);
@@ -765,13 +789,20 @@ const PK = (() => {
 
   // ---- small UI helpers ----
   let toastTimer;
+  /** A short message at the bottom. An error (text or Error) is said in plain words with what to do (item 33). */
   function toast(text, kind) {
+    if (kind === "error") {
+      const p = plainFor(text);
+      if (p.text !== String((text && text.message) || text)) console.warn("PLC-Ki:", (text && text.message) || text);   // the original, for whoever debugs
+      text = p.todo ? `${p.text} ${p.todo}` : p.text;
+    }
     const t = $("toast");
     t.textContent = text;
     t.classList.toggle("err", kind === "error");
     t.classList.add("on");
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => t.classList.remove("on"), kind === "error" ? 7000 : 3200);
+    // Long enough to read: 7 s for an error, a little more for a long one
+    toastTimer = setTimeout(() => t.classList.remove("on"), kind === "error" ? Math.min(14000, 7000 + String(text).length * 30) : 3200);
   }
 
   /**
@@ -948,6 +979,34 @@ const PK = (() => {
     if (/api key|anthropic/i.test(m)) return { text: "No Claude API key is set.", todo: "Add it under Setup, Settings (Assistant). It starts with sk-ant-." };
     return { text: m, todo: "" };
   }
+  // The server only said a status code (it had no words of its own)
+  function plainHttp(m) {
+    const http = /Request failed \((\d+)\)/i.exec(m);
+    if (!http) return null;
+    if (http[1] === "403") return { text: "Your login is not allowed to do this.", todo: "" };
+    if (http[1] === "404") return { text: "PLC-Ki could not find that.", todo: "Reload the page. If it stays, it may have been removed." };
+    if (+http[1] >= 500) return { text: "PLC-Ki hit a problem doing this.", todo: "Try again. If it keeps happening, the PLC-Ki window on the PC shows what went wrong." };
+    return { text: "PLC-Ki did not accept this.", todo: "Reload the page and try again." };
+  }
+  // plain()'s rules are about reaching the PLC, the TIA helper or Ki. Other messages ("The new password needs at least
+  // 8 characters.", "The PLC refused the value…") are already written for people and must not be rewritten by them.
+  const ABOUT_A_LINK = /failed to fetch|networkerror|load failed|timed out|timeout|within \d+ s|unreachable|no route|host is down|no such host|not known|name or service|connection|connect|tia helper|5090|importer|token|401|already been opened|cannot be accessed|api key|anthropic|legitimation/i;
+  // The program export: Hardware, Tags, Documents and Program all read it, and say the same when it is missing
+  function plainProgram(m) {
+    if (/No program export is set|No program loaded/i.test(m)) return { text: "No PLC program is loaded yet.", todo: "Import it under Setup, Import a program.", op: "Ask an administrator to import the PLC program into PLC-Ki." };
+    if (/Cannot read the program export/i.test(m)) return { text: "PLC-Ki cannot read the program file.", todo: "Import the program again under Setup, Import a program.", op: "Ask an administrator to import the PLC program again." };
+    if (/program export has no PLC/i.test(m)) return { text: "The imported program has no PLC in it.", todo: "Import the program again and choose the PLC.", op: "Ask an administrator to import the PLC program again." };
+    if (/is not in the program export/i.test(m)) return { text: m.replace(/program export/i, "loaded program"), todo: "The program may have changed since it was imported. Import it again under Setup, Import a program.", op: "The program may have changed. Ask an administrator to import it again." };
+    return null;
+  }
+  /** plain() for the person looking: operators cannot open Setup, so they read who to ask instead. */
+  function plainFor(message, where) {
+    const m = String((message && message.message) || message || "");
+    const p = plainProgram(m) || plainHttp(m) || ((where && where.plc) || ABOUT_A_LINK.test(m) ? plain(m, where) : { text: m, todo: "" });
+    const admin = state.user && state.user.role === "admin";
+    if (!admin && p.op != null && /Setup/.test(p.todo)) p.todo = p.op;
+    return p;
+  }
 
   /** What the PLC connection state means, for the pill sheet and empty pages. Operators cannot open Setup, so they read who to ask. */
   function connInfo() {
@@ -974,10 +1033,10 @@ const PK = (() => {
     const admin = state.user && state.user.role === "admin";
     const a = access();
     sheet(`<span class="pill ${i.level}" style="align-self:flex-start;justify-self:start"><span class="dot"></span>${{ ok: "Connected", bad: "Not connected", warn: "Waiting", info: "Test values" }[i.level]}</span>
-      <h2>${esc(i.title)}</h2>${i.text ? `<p class="muted" style="margin:0">${esc(i.text)}</p>` : ""}
-      ${a.text ? `<p class="${a.level === "real" ? "notice gold" : "muted"}" style="margin:0">${esc(a.text)}</p>` : ""}
+      <h2>${esc(i.title)}</h2>${i.text ? `<p class="m-0 muted">${esc(i.text)}</p>` : ""}
+      ${a.text ? `<p class="m-0 ${a.level === "real" ? "notice gold" : "muted"}">${esc(a.text)}</p>` : ""}
       ${i.todo ? `<div class="notice ${i.level === "bad" ? "red" : "gold"}">${icon("info")}<div><b>What to do</b><br>${esc(i.todo)}</div></div>` : ""}
-      ${i.detail ? `<details class="more"><summary>Technical detail</summary><p class="faint small" style="margin:8px 0 0">${esc(i.detail)}</p></details>` : ""}
+      ${i.detail ? `<details class="more"><summary>Technical detail</summary><p class="mt-2 mb-0 faint small">${esc(i.detail)}</p></details>` : ""}
       <div class="row end">${admin && i.level !== "ok" ? `<a class="btn b" href="#/setup/connections" data-close>Open Connections</a>` : ""}<button class="btn" data-close>Done</button></div>`);
   }
 
@@ -1124,12 +1183,12 @@ const PK = (() => {
     const [title, intro, tips] = HELP[name] || HELP.alarm;
     const admin = state.user && state.user.role === "admin";
     const a = access(name);
-    const h = sheet(`<span class="eyebrow">Help</span><h2>${esc(title)}</h2><p class="muted" style="margin:0">${esc(intro)}</p>
+    const h = sheet(`<span class="eyebrow">Help</span><h2>${esc(title)}</h2><p class="m-0 muted">${esc(intro)}</p>
       <ul class="plainlist">${tips.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>
-      ${a.text ? `<p class="small" style="margin:0">${esc(a.text)}</p>` : ""}
-      <p class="faint small" style="margin:0">The light at the top right shows the PLC connection; click it for what it means. Ask answers questions about the machine on every page.</p>
-      <p class="faint small" style="margin:0"><button type="button" class="linkbtn" data-screen>Alarm sound and screen</button>: beep or show a notice when an alarm comes, keep a line screen on.</p>
-      <p class="faint small keys" style="margin:0"><kbd>Ctrl K</kbd> search · <kbd>?</kbd> this help · <kbd>/</kbd> ask Ki · <kbd>Esc</kbd> close</p>
+      ${a.text ? `<p class="m-0 small">${esc(a.text)}</p>` : ""}
+      <p class="m-0 faint small">The light at the top right shows the PLC connection; click it for what it means. Ask answers questions about the machine on every page.</p>
+      <p class="m-0 faint small"><button type="button" class="linkbtn" data-screen>Alarm sound and screen</button>: beep or show a notice when an alarm comes, keep a line screen on.</p>
+      <p class="m-0 faint small keys"><kbd>Ctrl K</kbd> search · <kbd>?</kbd> this help · <kbd>/</kbd> ask Ki · <kbd>Esc</kbd> close</p>
       <div class="row end">${admin && name !== "setup/start" ? `<a class="btn b" href="#/setup/start" data-close>Get started</a>` : ""}<button class="btn" data-close>Done</button></div>`);
     h.el.querySelector("[data-screen]").onclick = () => { h.close(); screenSheet(); };
   }
