@@ -91,8 +91,9 @@ const PK = (() => {
   // Page building blocks: sections with a centred column on one calm background. The old "alt" and "dark"
   // band colours are dropped here, so every page reads as one work surface with cards (UX review 2).
   const sec = (cls, html) => `<section class="${cls.replace(/\b(alt|dark)\b/g, "").replace(/\s+/g, " ").trim()}"><div class="wrap">${html}</div></section>`;
-  const hero = ({ eyebrow = "", title, sub = "", actions = "", cls = "hero", extra = "", extra0 = "" }) =>
-    sec(cls, `${eyebrow ? `<div class="eyebrow">${eyebrow}</div>` : ""}<h1>${title}</h1>${sub ? `<p class="sub">${sub}</p>` : ""}${extra0}${actions ? `<div class="actions">${actions}</div>` : ""}${extra}`);
+  /** The one page header: (before, e.g. a row of sub-pages) eyebrow, a plain title, one line under it, the main actions. */
+  const hero = ({ eyebrow = "", title, sub = "", actions = "", cls = "hero", extra = "", extra0 = "", before = "" }) =>
+    sec(cls, `${before}${eyebrow ? `<div class="eyebrow">${eyebrow}</div>` : ""}<h1>${title}</h1>${sub ? `<p class="sub">${sub}</p>` : ""}${extra0}${actions ? `<div class="actions">${actions}</div>` : ""}${extra}`);
 
   function view(name, def) { views[name] = def; }
 
@@ -102,6 +103,15 @@ const PK = (() => {
     if (parts[0] === "setup") return { name: "setup/" + (parts[1] || "connections"), params: parts.slice(2) };
     return { name: parts[0] || "alarm", params: parts.slice(1) };
   }
+
+  // Pages that moved keep their old addresses (bookmarks, notes, QR labels): Hardware is PLC › Racks and I/O,
+  // the alarm recordings and the fault ranking are History tabs. #/sequence leads to Plant › Sequence (visuals.js).
+  const MOVED = [
+    [/^#\/hardware(?=\/|$)/, "#/plc/racks"],
+    [/^#\/capture(?=\/|$)/, "#/history/recordings"],
+    [/^#\/reports\/faults(?:\/.*)?$/, "#/history/ranking/downtime"],
+  ];
+  const movedTo = (hash) => { for (const [re, to] of MOVED) if (re.test(hash)) return hash.replace(re, to); return null; };
 
   function go(hash) { if (location.hash !== hash) location.hash = hash; else route(); }
 
@@ -129,6 +139,8 @@ const PK = (() => {
 
   function route() {
     setDirty(null);
+    const moved = movedTo(location.hash);
+    if (moved) history.replaceState(history.state, "", moved);
     const leftHash = shownHash;
     shownHash = location.hash;
     let { name, params } = parseRoute();
@@ -188,7 +200,7 @@ const PK = (() => {
       text: "On this page you can change a value with the pen, on PLCSIM: inputs, outputs, memory and data values, safety ones after a warning, never F-blocks. Every change is logged." };
     else if (valuePage && ch.values === "real") a = { badge: "Can change values here", short: "Can change", level: "except",
       text: `On this page you can change memory and data values on the real PLC ${plc} with the pen, after typing a reason and the PLC address; never inputs, outputs or values the safety program reads. Every change is logged.` };
-    else if (name === "plc" && ch.startStop) a = { badge: "Can start and stop PLCSIM", short: "Start/Stop", level: "except",
+    else if (name === "plc" && ch.startStop && !["racks", "diagnostics"].includes((current && current.params[0]) || "")) a = { badge: "Can start and stop PLCSIM", short: "Start/Stop", level: "except",
       text: "Start and Stop on this page switch the PLCSIM CPU, after you confirm. A real PLC is never started or stopped." };
     else a = reads("This page only reads the PLC."
       + (ch.values === "plcsim" ? " On Tags and Program, administrators can change values on PLCSIM."
@@ -234,7 +246,9 @@ const PK = (() => {
     if (name === "alarm") { const al = (state.status && state.status.activeAlarms) || []; if (al.length) label = al[0].id; }
     else if (name === "plant" && p[0] === "devices" && p[1]) label = p[1];
     else if (name === "tags" && p[0] === "db" && p[1]) label = p[1];
-    else if (["alarms", "program", "sequence", "hardware", "station"].includes(name) && p[0]) label = p[0];
+    else if (name === "plc" && p[0] === "racks" && p[1]) label = p[1];
+    else if (name === "history" && p[0] && !["ranking", "recordings"].includes(p[0])) label = p[0] + " history";
+    else if (["alarms", "program", "sequence", "station"].includes(name) && p[0]) label = p[0];
     return label.length > 28 ? label.slice(0, 27) + "…" : label;
   }
   function showBack() {
@@ -953,11 +967,6 @@ const PK = (() => {
       "The seconds before it came: every change of the machine's tags in the 10 s before the alarm, recorded much finer than the normal reads. Short pulses (amber) are signals the once-a-second reads would miss.",
       "This alarm before: how often it came, how long it stayed, and the cause and fix technicians noted last time. When you have found the cause, tap Note cause and fix so the next person sees it.",
       "Ask about this alarm: Claude looks at the live values, the last minutes, the machine memory and the program, and says why it is on and what to check."]],
-    capture: ["Alarm recordings", "The seconds before each alarm came, recorded from every change the PLC sends (usually sampled every 100 ms).", [
-      "Each row is one tag that changed. Blue bars show when a signal was on; amber marks a short pulse, shorter than one normal read. Number values are drawn as lines. The red line is the moment the alarm came.",
-      "● marks the tags in the alarm's own check. The list at the top says in words what changed last before the alarm.",
-      "A Blip is an alarm that went again faster than one normal read: the alarm list may never have shown it, but it is recorded here.",
-      "Nothing changes on the PLC for this: PLC-Ki asks the CPU to send changes, the same way an HMI does. The last 100 recordings are kept, also after a restart."]],
     plant: ["Plant", "What the machine is doing now. The top shows the step, what it waits for and the key values; the tabs below hold the rest.", [
       "Overview: Needs attention lists active alarms and blocked or faulted devices first; tap one to go to it. Below it the sequence: the blue step is where it is now, red means halted, ✓ is met, ✗ is missing.",
       "The machine at a glance: every device as a symbol. Green runs, grey is off, a dashed amber edge means the program asks for it but an interlock blocks it, red is a fault. Tap one to open it on Devices.",
@@ -970,11 +979,14 @@ const PK = (() => {
       "The blue step is where it is now. Its conditions are live: ✓ is met, ✗ is missing. Tap any step for what it does."]],
     alarms: ["Alarms", "Every alarm the program can raise, active or not, with its meaning, where it is set, likely causes and the fix.", [
       "Search by number, text or device. Active alarms are at the top.",
-      "Click an alarm to open its causes and fix. Red tags are faults (they stop the machine), gold tags are warnings."]],
-    history: ["Alarm history", "The machine memory: every alarm PLC-Ki saw on this machine, with what it was doing then and what the technicians found and did.", [
-      "Happens most: the alarms that came most often in the chosen window, with how long they were on in total. Tap one for its own history.",
+      "Click an alarm to open its causes and fix. Red tags are faults (they stop the machine), gold tags are warnings.",
+      "Past alarms, what fixed them and the seconds before each one are in History."]],
+    history: ["History", "The one place for past alarms: every alarm PLC-Ki saw on this machine, what it was doing then, and what the technicians found and did.", [
+      "The time window at the top (24 h, 7 days, 30 days, 1 year) applies to Log and Ranking.",
+      "Log: every alarm that came, newest first. Waiting for a note lists alarms of the last 12 hours that nobody wrote anything for yet. PLC and connection lists when the CPU stopped or the link to the PLC dropped.",
       "What fixed it? After an alarm goes, write down the cause and the fix in one line. The next time it comes, the Active alarm page and Ask show it first: \"last time it was a dirty sensor\".",
-      "Waiting for a note: alarms of the last 12 hours that nobody wrote anything for yet.",
+      "Ranking: the alarms that came most often, or that were on longest in total. Tap one for its own history.",
+      "Recordings: the seconds before each alarm came, from every change the PLC sends (usually sampled every 100 ms). Amber marks a short pulse the normal reads would miss; a Blip is an alarm that went again before a normal read saw it. The last 100 are kept.",
       "Download for Excel: the log as a file for the maintenance team. The history is kept on this PC in the PLC-Ki data folder and survives restarts."]],
     program: ["Program", "Every block of the PLC program with live values, as rungs or as text.", [
       "Pick a block on the left. At the top, \"Why outputs are off right now\" names each output that is off and the signal that stops it.",
@@ -987,22 +999,19 @@ const PK = (() => {
       "Tag tables: every tag with its address (%I, %Q, %M), type and comment. Search by name, address or comment.",
       "Data blocks: pick one on the left to see all its values. Optimized blocks have no addresses; values are read by name.",
       "Up to 300 rows are read live at a time, about once a second."]],
-    plc: ["PLC monitor", "The CPU as it looks on the machine: its mode, its LEDs and a display with what PLC-Ki reads.", [
-      "Operating mode: RUN, STOP or STARTUP as the CPU reports it, with the position of the mode switch where the CPU tells it.",
-      "The picture is drawn from the CPU's order number. Use the keys under the display, or the buttons below it, to page through Overview, Diagnostics, Settings and Modules.",
+    plc: ["PLC", "The PLC in three tabs: the CPU, its racks with every input and output, and what it reports.", [
+      "CPU: RUN, STOP or STARTUP as the CPU reports it, with the position of the mode switch where the CPU tells it. The picture is drawn from the order number; page through its display with the keys under it.",
       "Start and Stop work only when PLC-Ki reads the PLCSIM CPU of the TIA helper, and only for administrators. You confirm first. A real PLC is never started or stopped from PLC-Ki.",
-      "ERROR and MAINT come from PLCSIM where it tells them; on a real CPU they are not read and stay dark here."]],
-    reports: ["Reports", "Shift report with OEE, and a fault summary for maintenance, from what PLC-Ki records while it watches the machine.", [
+      "ERROR and MAINT come from PLCSIM where it tells them; on a real CPU they are not read and stay dark here.",
+      "Racks and I/O: pick a device at the top (PLC, I/O stations, drives, robots), then tap a module for its channels. Channels are matched to the PLC tags by address, so you see the tag, its comment and the live value.",
+      "If only the CPU shows, the program export has no hardware yet: Read the hardware from TIA (administrators) takes a minute or two and changes nothing else.",
+      "Diagnostics: what the CPU reports for PROFINET devices, modules, channels and drives, read live, with what it means and what to check."]],
+    reports: ["Reports", "Shift report with OEE, and a summary for maintenance, from what PLC-Ki records while it watches the machine.", [
       "Shift report: OEE and its three parts, a bar of where the time went (running, waiting, down by a fault, no PLC connection), parts made, the biggest losses and the alarms of that shift.",
-      "Fault summary: the alarms with the most down time first, how often they came, likely causes and the fix, and every shift's OEE. Pick today, 7 or 30 days.",
-      "Spreadsheet downloads a CSV for Excel; Print or PDF prints the page.",
+      "Summary: down time, average repair time (MTTR), running time between faults (MTBF), why the machine was not running, and every shift's OEE, over 24 h, 7 days, 30 days or 1 year. Which alarms cost the most time is in History, Ranking.",
+      "Download for Excel saves a CSV file; Print or PDF prints the page.",
       "PLC-Ki records only while it runs and reads the PLC. Time it was off or without connection is shown and left out of OEE.",
       "Settings (administrators): shift times, planned stops, the part and reject counters and the ideal cycle time. Without a counter every finished sequence cycle counts as one part."]],
-    hardware: ["Hardware", "Every rack and module of the TIA project, with each input and output, its tag and its live value.", [
-      "Pick a device at the top (PLC, I/O stations, drives, robots), then tap a module in the rack for its channels.",
-      "Each module is drawn from its order number: width, LEDs and channel count as on the real device. Devices from other makers show as a plain box.",
-      "Channels are matched to the PLC tags by address (%I10.3, %IW256), so you see the tag name, its comment and the live value.",
-      "If only the CPU shows, the program export has no hardware yet: Read the hardware from TIA (administrators) takes a minute or two and changes nothing else."]],
     "setup/start": ["Get started", "Sets PLC-Ki up one question at a time. You can come back here any time.", [
       "Each step is saved when you press Continue. Skip what you don't need now: TIA Portal is only needed to import a program or build blocks.",
       "At the end, Apply restarts PLC-Ki with the new settings (a few seconds)."]],
@@ -1092,8 +1101,11 @@ const PK = (() => {
       ? `<li><a class="mrow${on ? " on" : ""}" ${attrs}${on ? ' aria-current="page"' : ""}>${inner}<span class="mrow-go" data-icon="chevron"></span></a></li>`
       : `<li><button type="button" class="mrow" ${attrs}>${inner}</button></li>`;
     const item = (ic, text, sub) => `<span class="mrow-i" data-icon="${ic}"></span><span class="mrow-t">${esc(text)}${sub ? `<small>${esc(sub)}</small>` : ""}</span>`;
-    const pageRows = pages.map((a) => row(item(a.querySelector(".ti").dataset.icon, label(a), a.title.includes(":") ? a.title.split(":")[1].trim().replace(/^./, (c) => c.toUpperCase()) : ""),
-      `href="${a.getAttribute("href")}" data-close`, a.classList.contains("active"))).join("");
+    const pageRow = (a) => row(item(a.querySelector(".ti").dataset.icon, label(a), a.title.includes(":") ? a.title.split(":")[1].trim().replace(/^./, (c) => c.toUpperCase()) : ""),
+      `href="${a.getAttribute("href")}" data-close`, a.classList.contains("active"));
+    // The same groups as the side menu (Find out, Over time, Admin), each with a small heading
+    const groups = [...new Set(pages.map((a) => a.dataset.group || ""))];
+    const pageLists = groups.map((g) => `${g ? `<h3 class="more-group">${esc(g)}</h3>` : ""}<ul class="mlist" aria-label="${esc(g || "Pages")}">${pages.filter((a) => (a.dataset.group || "") === g).map(pageRow).join("")}</ul>`).join("");
     const acct = [
       row(item("sound", "Alarm sound and screen"), 'data-m="screen"'),
       row(item("moon", darkNow() ? "Light screen" : "Dark screen"), 'data-m="theme"'),
@@ -1102,7 +1114,7 @@ const PK = (() => {
     ].join("");
     const who = state.user ? `<p class="faint small more-who">${esc(state.user.name)} · ${state.user.role === "admin" ? "administrator" : "operator"}</p>` : "";
     const s = sheet(`<div class="more-head"><h2>More</h2><button class="btn plain small" type="button" data-close>Done</button></div>
-      <ul class="mlist" aria-label="Pages">${pageRows}</ul>
+      ${pageLists}
       ${who}<ul class="mlist" aria-label="Account">${acct}</ul>`);
     s.el.classList.add("more-sheet");
     s.el.addEventListener("click", (e) => {

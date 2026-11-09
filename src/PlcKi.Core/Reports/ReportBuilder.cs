@@ -258,10 +258,14 @@ public sealed class ReportBuilder
     public FaultReport Faults(int days, DateTimeOffset now)
     {
         var cfg = _settings();
-        days = Math.Clamp(days, 1, 92);
+        // A rolling window, the same as History's: 24 h is the last 24 hours, 1 year the last 365 days
+        days = Math.Clamp(days, 1, 366);
+        var from = now.AddDays(-days);
         var today = DateOnly.FromDateTime(now.ToLocalTime().DateTime);
-        var firstDay = today.AddDays(1 - days);
-        var from = Local(firstDay.ToDateTime(TimeOnly.MinValue));
+        // The shift table lists the shifts of the last month at most, so a year stays quick to make
+        var firstDay = DateOnly.FromDateTime(from.ToLocalTime().DateTime);
+        var shiftsCut = firstDay < today.AddDays(-30);
+        if (shiftsCut) firstDay = today.AddDays(-30);
         var records = _log.Records(from, now);
         var timeline = Timeline(records, from, now, now);
         var totals = Totals(timeline);
@@ -284,6 +288,7 @@ public sealed class ReportBuilder
         if (_alarms == null) notes.Add("Alarm history is not available, so only the downtime reasons are listed.");
         else if (known == null || known > from) notes.Add(known == null ? "No alarms recorded yet." : $"Alarms are known since {known.Value.ToLocalTime():d MMM HH:mm}.");
         if (totals.Off > 1) notes.Add($"PLC-Ki was not watching for {Mins(totals.Off)} of this time.");
+        if (shiftsCut) notes.Add("The shift table lists the shifts of the last 31 days.");
         return new FaultReport(_model.Name, from, now, totals, Maint(timeline, totals), Losses(timeline, 15), Faults(from, now),
             rows.OrderByDescending(r => r.From).ToList(), known, notes);
     }

@@ -130,6 +130,24 @@ public class MemoryTests : IDisposable
     }
 
     [Fact]
+    public void Ranks_by_count_or_by_down_time()
+    {
+        // A01 came three times for a minute each; A02 once, for half an hour
+        Directory.CreateDirectory(_dir);
+        var file = Path.Combine(_dir, "memory.json");
+        var t0 = DateTimeOffset.Now.AddHours(-3);
+        var occ = new List<AlarmOccurrence>();
+        for (int i = 0; i < 3; i++)
+            occ.Add(new AlarmOccurrence { Id = "a" + i, AlarmId = "A01", Text = "Short", Severity = "FAULT", Came = t0.AddMinutes(i * 10), Went = t0.AddMinutes(i * 10 + 1) });
+        occ.Add(new AlarmOccurrence { Id = "b", AlarmId = "A02", Text = "Long", Severity = "FAULT", Came = t0.AddHours(1), Went = t0.AddHours(1).AddMinutes(30) });
+        File.WriteAllText(file, System.Text.Json.JsonSerializer.Serialize(new { version = 1, occurrences = occ }, AlarmMemory.FileJson));
+        var mem = new AlarmMemory(file);
+
+        Assert.Equal(new[] { "A01", "A02" }, mem.Top(t0.AddMinutes(-1), DateTimeOffset.Now).Select(r => r.AlarmId));
+        Assert.Equal(new[] { "A02", "A01" }, mem.Top(t0.AddMinutes(-1), DateTimeOffset.Now, byDowntime: true).Select(r => r.AlarmId));
+    }
+
+    [Fact]
     public void First_occurrence_says_so()
     {
         var mem = new AlarmMemory(null);

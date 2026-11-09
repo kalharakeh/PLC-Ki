@@ -190,6 +190,21 @@ public class ReportTests
     }
 
     [Fact]
+    public void Summary_windows_are_rolling_and_reach_a_year()
+    {
+        var cfg = new ReportSettings();
+        var log = new ProductionLog(TestData.Model, null, () => cfg);
+        var b = new ReportBuilder(TestData.Model, log, null, () => cfg);
+        var now = DateTimeOffset.Now;
+        // "24 h" is the last 24 hours, not since midnight; "1 year" is not cut to 92 days
+        Assert.Equal(now.AddDays(-1), b.Faults(1, now).From);
+        var year = b.Faults(365, now);
+        Assert.Equal(now.AddDays(-365), year.From);
+        Assert.Contains(year.Notes, n => n.Contains("last 31 days"));
+        Assert.DoesNotContain(b.Faults(7, now).Notes, n => n.Contains("last 31 days"));
+    }
+
+    [Fact]
     public void Settings_reject_bad_times()
     {
         var s = new ReportSettings();

@@ -273,7 +273,7 @@ const PKStations = (() => {
       const groups = new Map();
       all.filter((t) => t.id !== "all").forEach((t) => groups.set(t.station, [...(groups.get(t.station) || []), t]));
       const box = (t) => `<label class="qr-pick"><input type="checkbox" data-pick="${esc(t.id)}" ${picked.has(t.id) ? "checked" : ""}><span>${esc(t.title)}</span></label>`;
-      return PK.sec("hero compact no-print", `${nav}<h1>QR labels</h1><p class="sub">Print a label for each station (and, if you like, each device) and stick it on the machine. Scanning it with a phone opens that station's live status and alarms.</p>`)
+      return PK.hero({ cls: "hero compact no-print", before: nav, title: "QR labels", sub: `Print a label for each station (and, if you like, each device) and stick it on the machine. Scanning it with a phone opens that station's live status and alarms.` })
         + PK.sec("no-print", `<div class="grid two">
           <div class="card stack"><h3>1. The address phones use</h3>
             ${phone && !phone.listensToOthers ? `<div class="notice gold">${icon("warn")}<div><b>Phones cannot open PLC-Ki yet.</b> It only answers this PC. Turn on <i>Other computers may open PLC-Ki</i> in <a href="#/setup/settings">Settings</a>, then Apply.</div></div>` : ""}

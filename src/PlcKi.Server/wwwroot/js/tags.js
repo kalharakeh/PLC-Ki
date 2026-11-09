@@ -174,7 +174,7 @@
     leave() { shown = []; },
     render(params) {
       if (params[0] === "db" && params[1] && params[1] !== db) { tab = "dbs"; query = ""; openDb(params[1]); }
-      const head = PK.hero({ cls: "hero compact", title: "Tags and data blocks, live.",
+      const head = PK.hero({ cls: "hero compact", title: "Tags",
         sub: "Every tag of the PLC tag tables with its address, and every value of the data blocks, read live from the PLC."
           + (PK.state.user && PK.state.user.role === "admin" ? " Change a value with the pen: on PLCSIM (safety values after a warning), on a real PLC only memory and data values, when allowed and confirmed." : "") });
       if (dataError) return head + PK.sec("", `<div class="notice gold">${icon("warn")}<div>${esc(dataError)}</div></div>`);

@@ -1,6 +1,9 @@
-// PLC page (the CPU as it looks on the machine: mode, LEDs, display; Start/Stop for the PLCSIM CPU only) and
-// Hardware page (every rack and module of the TIA project, drawn from its order number, with each channel's
-// address, tag and live value). Drawings are in devices.js.
+// PLC page, three tabs:
+//   CPU (#/plc): the CPU as it looks on the machine: mode, LEDs, display; Start/Stop for the PLCSIM CPU only.
+//   Racks and I/O (#/plc/racks/<station>/<slot>): every rack and module of the TIA project, drawn from its order
+//     number, with each channel's address, tag and live value.
+//   Diagnostics (#/plc/diagnostics): what the CPU reports for devices, modules and channels, and each drive.
+// The old Hardware addresses (#/hardware/...) lead to Racks and I/O (core.js). Drawings are in devices.js.
 "use strict";
 
 (() => {
@@ -26,7 +29,7 @@
   }
   setInterval(() => {
     const n = PK.current && PK.current.name;
-    if ((n === "plc" || n === "hardware") && !document.hidden) loadCpu();
+    if (n === "plc" && !document.hidden) loadCpu();
   }, 2000);
 
   // ---- drive and PROFINET diagnostics: what the CPU reports per station/module, and each drive's state ----
@@ -37,7 +40,7 @@
   }
   setInterval(() => {
     const n = PK.current && PK.current.name;
-    if ((n === "plc" || n === "hardware" || n === "alarms" || (n === "alarm" && PK.cpuStop())) && !document.hidden) loadDiag();
+    if ((n === "plc" || n === "alarms" || (n === "alarm" && PK.cpuStop())) && !document.hidden) loadDiag();
   }, 2500);
   const sevCls = { fault: "bad", warning: "warn", maintenance: "warn", info: "info", ok: "ok" };
   const sevText = { fault: "Fault", warning: "Warning", maintenance: "Maintenance", info: "Info", ok: "OK" };
@@ -55,7 +58,7 @@
   }
 
   function problemItem(p) {
-    const where = p.station ? `<a href="#/hardware/${encodeURIComponent(p.station)}${p.slot != null ? "/" + encodeURIComponent(p.slot) : ""}">${esc(p.station)}${p.module ? " · " + esc(p.module) : p.slot != null ? " · slot " + esc(p.slot) : ""}</a>` : `<span class="faint">Device not found in the hardware</span>`;
+    const where = p.station ? `<a href="#/plc/racks/${encodeURIComponent(p.station)}${p.slot != null ? "/" + encodeURIComponent(p.slot) : ""}">${esc(p.station)}${p.module ? " · " + esc(p.module) : p.slot != null ? " · slot " + esc(p.slot) : ""}</a>` : `<span class="faint">Device not found in the hardware</span>`;
     return `<li style="flex-wrap:wrap;align-items:flex-start">
       <span class="pill ${sevCls[p.severity] || ""}"><span class="dot"></span>${esc(sevText[p.severity] || p.severity)}</span>
       <span style="flex:1;min-width:220px"><b style="font-weight:600">${esc(p.text)}</b>
@@ -65,7 +68,7 @@
       <button class="btn b small" data-ask="${esc(`The PLC reports "${p.text}"${p.station ? " for " + p.station : ""}. What does it mean here, what is affected, and how do I fix it?`)}">Ask</button></li>`;
   }
 
-  // The list of what the CPU reports, for the Hardware and Alarms pages
+  // The list of what the CPU reports, for the PLC page (Diagnostics, Racks and I/O) and the Alarms page
   function problemsCard(opts) {
     opts = opts || {};
     const d = diag;
@@ -95,7 +98,7 @@
       <table class="tbl" style="margin-top:6px"><tr><th>Value</th><th>Tag</th><th>Now</th></tr>${vals.map((v) => `<tr><td>${esc(v.label)}</td><td class="mono small">${esc(v.from)}</td>
         <td>${v.error ? `<span class="faint small" title="${esc(v.error)}">not read</span>` : v.value === true || v.value === false ? `<span class="chip ${v.value ? "t" : "f"}" style="margin:0">${v.value ? "TRUE" : "FALSE"}</span>` : v.value == null ? "…" : `<span class="chip" style="margin:0">${esc(v.value)}</span>`}</td></tr>`).join("")}</table></details>` : "";
     return `<div class="card drive-card">
-      <div class="row" style="gap:10px;align-items:baseline;flex-wrap:wrap"><h3 style="margin:0">${dr.station ? `<a href="#/hardware/${encodeURIComponent(dr.station)}">${esc(dr.name)}</a>` : esc(dr.name)}</h3>
+      <div class="row" style="gap:10px;align-items:baseline;flex-wrap:wrap"><h3 style="margin:0">${dr.station ? `<a href="#/plc/racks/${encodeURIComponent(dr.station)}">${esc(dr.name)}</a>` : esc(dr.name)}</h3>
         <span class="muted small">${esc([dr.title, dr.orderNumber, dr.ip].filter(Boolean).join(" · "))}</span><span class="spacer"></span>
         <span class="pill ${cls}"><span class="dot"></span>${esc(driveText[dr.state] || dr.state)}</span></div>
       ${dr.text ? `<p style="margin:8px 0 0">${esc(dr.text)}</p>` : ""}
@@ -139,7 +142,7 @@
   let watchAt = null;
   let watched = [];
   setInterval(async () => {
-    if (!PK.current || PK.current.name !== "hardware" || !watched.length || document.hidden) return;
+    if (!PK.current || PK.current.name !== "plc" || !watched.length || document.hidden) return;
     try {
       const r = await PK.api("POST", "/api/watch", { symbols: watched.map((c) => ({ symbol: c.symbol, type: c.modelType || null })) });
       for (const [k, v] of Object.entries(r.values || {})) {
@@ -269,14 +272,11 @@
   }
   let busy = null;
 
-  PK.view("plc", {
-    live: true,
-    mount() { loadHw(); loadCpu(); loadDiag(); PK.loadProgram().then(() => PK.draw()); PK.draw(); },
+  // ---------------------------------------------------------------- CPU tab
+  const cpuTab = {
     render() {
-      const head = PK.hero({ cls: "hero compact", title: "PLC monitor.",
-        sub: "The CPU as it looks on the machine: its mode, LEDs and display, read live. Start and Stop work on the PLCSIM CPU only." });
       const c = cpu;
-      if (!c) return head + PK.sec("", `<p class="muted">${cpuError ? esc(cpuError) : "Reading the CPU…"}</p>`);
+      if (!c) return PK.sec("", `<p class="muted">${cpuError ? esc(cpuError) : "Reading the CPU…"}</p>`);
       const mode = modeOf(c);
       const leds = ledsOf(c, mode);
       const m = plcCpuModule();
@@ -315,15 +315,15 @@
       ];
       const info = `<div class="card"><div class="kpis plc-kpis">${tiles.map(([v, l, cls]) => `<div class="k ${cls || ""}"><b>${esc(v)}</b><span>${esc(l)}</span></div>`).join("")}</div>
         ${leds.real ? "" : `<p class="faint small" style="margin:14px 0 0">RUN/STOP follows the mode the CPU reports. ERROR and MAINT are not read from this CPU, so they stay dark here even when the real LEDs are lit.</p>`}
-        <div class="row" style="margin-top:14px"><a class="btn b small" href="#/hardware">${icon("cpu")}Show the whole rack</a></div></div>`;
-      const devProblems = diag && diag.problems && diag.problems.length ? `<div class="diag-zone" style="margin-top:16px">${problemsCard()}</div>` : "";
+        <div class="row" style="margin-top:14px"><a class="btn b small" href="#/plc/racks">${icon("rack")}Racks and I/O</a>${diag && diag.problems && diag.problems.length
+          ? `<a class="btn small" href="#/plc/diagnostics">${icon("warn")}${diag.problems.length} reported in Diagnostics</a>` : ""}</div></div>`;
 
       const pageBtns = `<div class="segmented plc-pages" role="group" aria-label="Display page">${PAGES.map((p, i) => `<button type="button" data-page="${i}" class="${i === page ? "on" : ""}">${p}</button>`).join("")}</div>`;
       const left = `<div class="card plc-dev"><div class="plc-dev-pic">${dev}</div>${m.display !== false && (m.family || "s7-1500") === "s7-1500" ? pageBtns : ""}
         <p class="faint small" style="margin:10px 0 0;text-align:center">Drawn from the order number${m.orderNumber ? " " + esc(m.orderNumber) : ""}. The display mirrors what PLC-Ki reads; it is not a copy of the real screen.</p></div>`;
       const notice = c.connection && c.connection !== "connected" && c.connection !== "snapshot" && !(sim.applies && sim.found)
         ? `<div class="notice gold" style="margin-bottom:16px">${icon("warn")}<div>PLC-Ki is not reading the PLC right now, so the mode and LEDs are not live.</div></div>` : "";
-      return head + PK.sec("", notice + `<div class="plc-grid">${left}<div class="stack">${modeCard}${info}</div></div>` + devProblems);
+      return PK.sec("", notice + `<div class="plc-grid">${left}<div class="stack">${modeCard}${info}</div></div>`);
     },
     after(el) {
       el.querySelectorAll("[data-mode]").forEach((b) => PK.on(b, "click", () => switchMode(b.dataset.mode)));
@@ -341,9 +341,9 @@
         PK.on(k, "keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); act(); } });
       });
     },
-  });
+  };
 
-  // ---------------------------------------------------------------- Hardware page
+  // ---------------------------------------------------------------- Racks and I/O: state and helpers
   let stationName = null, slotSel = null, job = null, jobMsg = "";
   const kindLabel = { plc: "PLC", io: "I/O station", other: "Device" };
   const famLabel = { "s7-1500": "S7-1500", "s7-1200": "S7-1200", et200sp: "ET 200SP", et200mp: "ET 200MP", other: "" };
@@ -436,7 +436,7 @@
       ${scope ? `<span class="faint small">${scope}</span>` : ""}</div>`;
     const modCol = !!q;
     const table = rows.length ? `<table class="tbl hw-ch"><tr><th>Ch</th>${modCol ? "<th>Module</th>" : ""}<th>Address</th><th>Tag</th><th>Now</th><th>Comment</th></tr>
-      ${shown.map((c) => `<tr><td class="mono">${c.io === "Output" ? "Q" : "I"}${c.n}</td>${modCol ? `<td><a href="#/hardware/${encodeURIComponent(st.name)}/${encodeURIComponent(c.mod.slot ?? "")}" data-goslot="${esc(c.mod.slot ?? "")}">${esc(c.mod.slot ?? "")} · ${esc(c.mod.title || c.mod.name)}</a></td>` : ""}<td class="mono">${esc(c.address)}</td>
+      ${shown.map((c) => `<tr><td class="mono">${c.io === "Output" ? "Q" : "I"}${c.n}</td>${modCol ? `<td><a href="#/plc/racks/${encodeURIComponent(st.name)}/${encodeURIComponent(c.mod.slot ?? "")}" data-goslot="${esc(c.mod.slot ?? "")}">${esc(c.mod.slot ?? "")} · ${esc(c.mod.title || c.mod.name)}</a></td>` : ""}<td class="mono">${esc(c.address)}</td>
         <td class="mono">${c.tag ? `<a href="#/tags">${esc(c.tag)}</a>` : `<span class="faint">—</span>`}</td><td>${channelValue(c)}</td><td class="muted">${esc(c.comment || "")}</td></tr>`).join("")}</table>`
       : `<p class="muted" style="margin:10px 0 0">${q ? "No channel matches." : filter === "on" ? "No input or output of this module is on right now." : "No channel of this module has a tag."}</p>`;
     const more = rows.length > shown.length ? `<button type="button" class="btn plain small" data-chall>Show all ${rows.length}</button>`
@@ -445,7 +445,7 @@
   }
 
   function networkCard() {
-    const rows = hw.stations.map((s) => `<tr data-st="${esc(s.name)}" class="${s.name === stationName ? "on" : ""}"><td><a href="#/hardware/${encodeURIComponent(s.name)}">${esc(s.name)}</a></td>
+    const rows = hw.stations.map((s) => `<tr data-st="${esc(s.name)}" class="${s.name === stationName ? "on" : ""}"><td><a href="#/plc/racks/${encodeURIComponent(s.name)}">${esc(s.name)}</a></td>
       <td>${esc(kindLabel[s.kind] || s.kind)}${famLabel[s.family] ? " · " + famLabel[s.family] : ""}</td><td class="mono">${esc(s.ips.join(", ") || "—")}</td>
       <td class="mono muted">${esc(s.pnName || "")}</td><td class="muted">${esc(s.controlsIoSystem ? "controls " + s.controlsIoSystem : s.ioSystem || "")}</td>
       <td class="muted">${s.modules.length}</td><td>${(() => { const sev = diag && diag.stations && diag.stations[s.name]; return sev ? `<span class="pill ${sevCls[sev]}"><span class="dot"></span>${esc(sevText[sev])}</span>` : `<span class="faint">—</span>`; })()}</td></tr>`).join("");
@@ -453,10 +453,8 @@
       <div class="tbl-wrap"><table class="tbl"><tr><th>Device</th><th>Kind</th><th>IP address</th><th>PROFINET name</th><th>IO system</th><th>Modules</th><th>Status</th></tr>${rows}</table></div></div>`;
   }
 
-  PK.view("hardware", {
-    live: true,
-    mount(el, params) { loadHw(); loadCpu(); loadDiag(); stationName = params[0] || null; slotSel = params[1] != null ? params[1] : null; PK.draw(); },
-    leave() { watched = []; },
+  // ---------------------------------------------------------------- Racks and I/O tab
+  const racksTab = {
     onJobs(jobs) {
       if (!job) return;
       const j = jobs.find((x) => x.id === job);
@@ -468,13 +466,11 @@
     },
     render(params) {
       if (params[0] && params[0] !== stationName) { stationName = params[0]; slotSel = params[1] ?? null; }
-      const head = PK.hero({ cls: "hero compact", title: "Hardware.",
-        sub: "Every rack and module of the TIA project, drawn from its order number, with each input and output, its tag and its live value." });
-      if (hwError) return head + PK.sec("", `<div class="notice gold">${icon("warn")}<div>${esc(hwError)}</div></div>`);
-      if (!hw) return head + PK.sec("", `<p class="muted">Loading…</p>`);
+      if (hwError) return PK.sec("", `<div class="notice gold">${icon("warn")}<div>${esc(hwError)}</div></div>`);
+      if (!hw) return PK.sec("", `<p class="muted">Loading…</p>`);
       const admin = PK.state.user && PK.state.user.role === "admin";
       const st = hw.stations.find((s) => s.name === stationName) || hw.stations.find((s) => s.name === hw.plcStation) || hw.stations[0];
-      if (!st) return head + PK.sec("", `<div class="notice gold">${icon("warn")}<div>The project has no devices.</div></div>`);
+      if (!st) return PK.sec("", `<div class="notice gold">${icon("warn")}<div>The project has no devices.</div></div>`);
       stationName = st.name;
       const mods = st.modules.filter((m) => (m.widthMm || 0) > 0 || m.family === "other");
       let idx = slotSel != null ? mods.findIndex((m) => String(m.slot) === String(slotSel)) : -1;
@@ -489,7 +485,7 @@
             ${jobMsg ? `<div class="small" style="margin-top:6px">${esc(jobMsg)}</div>` : ""}<div class="row" style="margin-top:10px">${readBtn}</div></div></div>`
         : jobMsg ? `<div class="notice" style="margin-bottom:16px">${icon("info")}<div>${esc(jobMsg)}</div></div>` : "";
 
-      const picker = hw.stations.length > 1 ? `<div class="hw-stations" role="tablist" aria-label="Devices">${hw.stations.map((s) => `<a role="tab" aria-selected="${s.name === st.name}" class="hw-st ${s.name === st.name ? "on" : ""}" href="#/hardware/${encodeURIComponent(s.name)}">
+      const picker = hw.stations.length > 1 ? `<div class="hw-stations" role="tablist" aria-label="Devices">${hw.stations.map((s) => `<a role="tab" aria-selected="${s.name === st.name}" class="hw-st ${s.name === st.name ? "on" : ""}" href="#/plc/racks/${encodeURIComponent(s.name)}">
           <b>${stationBadge(s.name)}${esc(s.name)}</b><span>${esc([kindLabel[s.kind], famLabel[s.family]].filter(Boolean).join(" · "))}${s.ips[0] ? " · " + esc(s.ips[0]) : ""}</span></a>`).join("")}</div>` : "";
 
       const mode = modeOf(cpu);
@@ -503,10 +499,9 @@
         <p class="faint small" style="margin:6px 0 0">Tap a module for its channels. Channel LEDs: green is on, grey is off, dim is no live value (no tag, or not read). Pictures are drawn from the order number, not photos.</p></div>`;
       const detail = sel ? moduleCard(sel, st) : "";
       // The PLC's station shows everything the CPU reports and every drive; another station only its own
-      const diagZone = `<div class="diag-zone">${st.kind === "plc" ? problemsCard() + drivesSection(null)
-        : problemsCard({ title: `Reported for ${esc(st.name)}`, station: st.name }) + drivesSection(st.name)}</div>`;
+      const diagZone = `<div class="diag-zone">${problemsCard({ title: `Reported for ${esc(st.name)}`, station: st.name }) + drivesSection(st.name)}</div>`;
       const meta = `<p class="faint small" style="margin:14px 0 0">${esc(hw.project || "")}${hw.exportedAt ? " · read from TIA " + esc(PK.date(hw.exportedAt)) : ""}</p>`;
-      return head + PK.sec("", notice + picker + rackCard + detail + diagZone + networkCard() + meta);
+      return PK.sec("", notice + picker + rackCard + detail + diagZone + networkCard() + meta);
     },
     after(el) {
       el.querySelectorAll("[data-read]").forEach((b) => PK.on(b, "click", readHardware));
@@ -522,12 +517,49 @@
           const mods = st.modules.filter((m) => (m.widthMm || 0) > 0 || m.family === "other");
           const m = mods[+g.dataset.mod];
           slotSel = m.slot != null ? String(m.slot) : null;
-          PK.setHash(`#/hardware/${encodeURIComponent(stationName)}${slotSel != null ? "/" + encodeURIComponent(slotSel) : ""}`);
+          PK.setHash(`#/plc/racks/${encodeURIComponent(stationName)}${slotSel != null ? "/" + encodeURIComponent(slotSel) : ""}`);
           PK.draw();
         };
         PK.on(g, "click", pick);
         PK.on(g, "keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); } });
       });
     },
+  };
+
+  // ---------------------------------------------------------------- Diagnostics tab
+  const diagTab = {
+    render() {
+      const drives = drivesSection(null);
+      return PK.sec("", `<div class="diag-zone">${problemsCard()}${drives || (diag ? `<p class="faint small" style="margin:14px 0 0">No drive in the program is read by PLC-Ki.</p>` : "")}</div>`);
+    },
+    after(el) { wireAsk(el); },
+  };
+
+  // ---------------------------------------------------------------- the PLC page: one header, three tabs
+  const TABS = [["cpu", "CPU", cpuTab, "The CPU as it looks on the machine: its mode, LEDs and display, read live. Start and Stop work on the PLCSIM CPU only."],
+    ["racks", "Racks and I/O", racksTab, "Every rack and module of the TIA project, drawn from its order number, with each input and output, its tag and its live value."],
+    ["diagnostics", "Diagnostics", diagTab, "What the CPU reports for PROFINET devices, modules, channels and drives. Read live from the CPU."]];
+  const tabOf = (params) => TABS.find((t) => t[0] === (params || [])[0]) || TABS[0];
+  /** What follows the tab in the address: #/plc/racks/<station>/<slot> gives [station, slot]. */
+  const rest = (params) => (TABS.some((t) => t[0] === (params || [])[0]) ? params.slice(1) : []);
+
+  PK.view("plc", {
+    live: true,
+    mount(el, params) {
+      loadHw(); loadCpu(); loadDiag(); PK.loadProgram().then(() => PK.draw());
+      if (tabOf(params)[0] === "racks") { const r = rest(params); stationName = r[0] || null; slotSel = r[1] != null ? r[1] : null; }
+      PK.draw();
+    },
+    leave() { watched = []; },
+    onJobs(jobs) { racksTab.onJobs(jobs); },
+    render(params) {
+      const [k, , tab, sub] = tabOf(params);
+      if (k !== "racks") watched = [];
+      const nProblems = diag && diag.problems ? diag.problems.length : 0;
+      const nav = `<nav class="ptabs" aria-label="PLC">${TABS.map(([id, label]) => `<a href="#/plc${id === "cpu" ? "" : "/" + id}" class="${id === k ? "on" : ""}" ${id === k ? 'aria-current="page"' : ""}>${label}${id === "diagnostics" && nProblems ? ` <span class="count warn">${nProblems}</span>` : ""}</a>`).join("")}</nav>`;
+      const head = PK.hero({ cls: "hero compact", title: "PLC", sub, extra: nav });
+      return head + tab.render(rest(params));
+    },
+    after(el, params) { const t = tabOf(params)[2]; if (t.after) t.after(el, rest(params)); },
   });
 })();

@@ -614,13 +614,6 @@
   let openAlarm = null;
   let deepLink = null;          // #/alarms/A02: opened once, then scrolled to
   let scrollToAlarm = null;
-  let events = null, eventsAt = 0;
-  let recentOpen = false, recentAll = false;   // the "Recent alarms" strip above the list
-  async function loadEvents() {
-    eventsAt = Date.now();
-    try { events = await PK.api("GET", "/api/events?kind=alarm,cpu&max=30"); } catch { events = events || []; }
-    PK.draw();
-  }
   PK.view("alarms", {
     live: true,
     leave() { deepLink = null; },
@@ -629,8 +622,6 @@
       if (!s || !m) return waitingPage();
       const want = PK.current && PK.current.params[0];
       if (want && want !== deepLink) { deepLink = want; openAlarm = want; alarmKind = "all"; alarmFilter = ""; scrollToAlarm = want; }
-      if (Date.now() - eventsAt > 5000) loadEvents();
-      if (window.PKCapture) PKCapture.needList();
       const active = new Set(s.activeAlarms.map((a) => a.id));
       const q = alarmFilter.toLowerCase();
       const kindOk = { all: () => true, active: (a) => active.has(a.id), faults: (a) => a.severity !== "WARNING", warnings: (a) => a.severity === "WARNING" }[alarmKind] || (() => true);
@@ -653,22 +644,6 @@
             </div>${window.PKMemory ? `<div class="mem-in-row"><h3>This alarm before</h3>${PKMemory.alarmBlock(a.id, { compact: true })}</div>` : ""}` : ""}
         </li>`;
       }).join("");
-      const recent = !events ? `<p class="muted" style="margin:0">Loading…</p>` : events.length ? `<ul class="list events">${events.slice(0, recentAll ? events.length : 4).map((e) => {
-            if (e.kind === "cpu") {
-              const run = /back in RUN/.test(e.text);
-              return `<li><span class="ev-time">${esc(PK.date(e.time, true))}</span><span class="ev-kind ${run ? "run" : "stop"}">${run ? "RUN" : esc((/(?:to|in) ([A-Z]+)/.exec(e.text) || [])[1] || "STOP")}</span>
-                <span style="flex:1;min-width:180px"><a href="#/plc">${esc(e.text)}</a></span></li>`;
-            }
-            const mm = /^(\S+) (came|went|was already active|blipped)/.exec(e.text);
-            const id = mm && mm[1], kind = mm ? (mm[2] === "went" ? "went" : mm[2] === "came" ? "came" : mm[2] === "blipped" ? "blip" : "start") : "";
-            // An alarm that came (or only blipped) has a recording of the seconds before it
-            const cap = id && (kind === "came" || kind === "blip") && window.PKCapture ? PKCapture.forAlarm(id, e.time) : null;
-            return `<li><span class="ev-time">${esc(PK.date(e.time, true))}</span><span class="ev-kind ${kind === "blip" ? "start" : kind}">${{ came: "Came", went: "Went", start: "Already on", blip: "Blip" }[kind] || ""}</span>
-              <span style="flex:1;min-width:180px">${id ? `<a href="#/alarms/${encodeURIComponent(id)}">${esc(id)}</a> ` : ""}${esc(id ? e.text.replace(/^\S+ (came|went|was already active when watching started|blipped):?\s*/, "") : e.text)}</span>
-              ${cap ? `<a class="btn plain small" href="#/capture/${encodeURIComponent(cap.id)}">Seconds before</a>` : ""}</li>`;
-          }).join("")}</ul>${events.length > 4 ? `<button type="button" class="btn plain small" data-recent style="margin-top:8px">${recentAll ? "Show fewer" : `Show all ${events.length}`}</button>` : ""}
-            <a class="btn plain small" href="#/capture" style="margin-top:8px">Alarm recordings: the seconds before each alarm</a>`
-        : `<p class="muted" style="margin:0">No alarm came or went since PLC-Ki started watching.</p>`;
       // The counts live in the filter buttons: one row to read and to click, no second row of the same numbers
       return hero({
         title: "Alarms",
@@ -678,8 +653,7 @@
             .map(([k, l, n, t]) => `<button type="button" class="${alarmKind === k ? "on" : ""} ${k === "active" && n ? "hot" : ""}" data-akind="${k}" aria-pressed="${alarmKind === k}" title="${t}">${l} <b>${n}</b></button>`).join("")}</div></div>
           ${PK.cpuStop(s) ? `<div class="notice red" style="margin-bottom:16px">${icon("warn")}<div><b>The PLC is in ${esc(PK.cpuStop(s).word || "STOP")}: the program is not running.</b> The alarms below are as they were when it stopped. <a href="#/alarm">What to check</a></div></div>` : ""}
           ${PK.deviceDiagnostics ? `<div class="diag-zone">${PK.deviceDiagnostics()}</div>` : ""}
-          <details class="more recent" ${recentOpen ? "open" : ""}><summary><b>Recent alarms</b> <span class="muted small">${events ? `${events.length} since PLC-Ki started watching` : ""}</span></summary>
-            <div style="margin-top:10px">${recent}</div></details>
+          <a class="card plink alarms-past" href="#/history"><span class="ico">${icon("clock")}</span><span><b>Past alarms</b><span class="muted small">What came and went, what fixed it, and the seconds before each alarm: in History.</span></span><span class="chev">›</span></a>
           ${rows ? `<ul class="list">${rows}</ul>` : `<div class="nomatch">${alarmKind === "active" && !q ? `${icon("check")}<b>No alarm is active.</b><span>The machine reports no fault or warning right now.</span>`
             : `${icon("search")}<b>No alarm matches.</b><span>Search by the alarm number (like ${esc((m.alarms[0] || {}).id || "A101")}), a word from the text, or a device tag.</span>`}
             ${q || alarmKind !== "all" ? `<button class="btn b small" data-areset>Show all alarms</button>` : ""}</div>`}`);
@@ -690,10 +664,6 @@
       if (!inp) return;
       inp.oninput = () => { alarmFilter = inp.value; PK.draw(); };
       page.querySelectorAll("[data-akind]").forEach((b) => b.onclick = () => { alarmKind = b.dataset.akind; PK.draw(); });
-      const rc = page.querySelector("details.recent");
-      if (rc) rc.ontoggle = () => { recentOpen = rc.open; };
-      const ra = page.querySelector("[data-recent]");
-      if (ra) ra.onclick = () => { recentAll = !recentAll; PK.draw(); };
       const ar = page.querySelector("[data-areset]");
       if (ar) ar.onclick = () => { alarmFilter = ""; alarmKind = "all"; PK.draw(); };
       page.querySelectorAll("[data-open]").forEach((li) => {

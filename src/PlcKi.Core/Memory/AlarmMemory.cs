@@ -350,7 +350,8 @@ public sealed class AlarmMemory
     }
 
     /// <summary>The alarms that happened most in the window, with their downtime.</summary>
-    public List<AlarmRank> Top(DateTimeOffset from, DateTimeOffset now, int max = 10)
+    /// <summary>The alarms of a window ranked by how often they came, or (byDowntime) by how long they were on in total.</summary>
+    public List<AlarmRank> Top(DateTimeOffset from, DateTimeOffset now, int max = 10, bool byDowntime = false)
     {
         List<AlarmOccurrence> list;
         lock (_lock) list = _items.Where(o => o.Came >= from || (o.Went ?? now) >= from).Select(o => o.Copy()).ToList();
@@ -361,7 +362,7 @@ public sealed class AlarmMemory
                 return new AlarmRank(g.Key, latest.Text, latest.Severity, g.Count(), down, latest.Came,
                     g.Count(o => o.Note != null), Causes(g).FirstOrDefault()?.Cause);
             })
-            .OrderByDescending(r => r.Count).ThenByDescending(r => r.Downtime).Take(max).ToList();
+            .OrderByDescending(r => byDowntime ? r.Downtime.Ticks : r.Count).ThenByDescending(r => byDowntime ? r.Count : r.Downtime.Ticks).Take(max).ToList();
     }
 
     private static List<CauseCount> Causes(IEnumerable<AlarmOccurrence> list) =>
