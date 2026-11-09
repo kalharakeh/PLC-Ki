@@ -42,8 +42,12 @@ public sealed class ProgramService
             _allTags = null;
             _loaded = next;
         }
+        Reloaded?.Invoke();
         return null;
     }
+
+    /// <summary>Another export is shown now (Refresh from TIA).</summary>
+    public event Action? Reloaded;
 
     private (ProgramExport?, ExportPlc?, string?) Load() => Load(_path);
 

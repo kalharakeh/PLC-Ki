@@ -12,6 +12,13 @@ namespace PlcKi.Server.Live;
 /// Read-only: the driver's write gate (WriteEnabled) stays false, and this app calls no write or CPU start/stop API
 /// (tests/PlcKi.Tests/ReadOnlyTests.cs checks the compiled app for that).
 /// Used from the polling thread only, so the async calls are awaited synchronously.
+///
+/// Two connections at most: the polling connection (model tags, fast capture, CPU mode) and, while a page asks for more,
+/// the extra-values connection (ExtraReader). One rule holds for both: a client that faulted is never used again. The
+/// driver marks a client Faulted after a timeout or a broken answer but leaves its connection open, and the next call on
+/// that client silently opens a new one without closing the old (S7CommPlusClient.EnsureConnectedCoreAsync, driver 6.1
+/// and 6.2). That is how PLC-Ki once ended up holding 5 connections to one PLC. So after any failure that leaves the
+/// client not connected, it is disconnected here and the polling loop reconnects, with the reason in the log and History.
 /// </summary>
 public sealed class S7CommPlusSource : IPlcSource
 {
@@ -22,7 +29,12 @@ public sealed class S7CommPlusSource : IPlcSource
     private readonly HashSet<string> _fastIds = new(StringComparer.Ordinal);
     private S7CommPlusClient? _client;
     private readonly List<(TagDef Def, PlcTag Tag)> _tags = new();
+    private readonly ExtraReader<PlcTag> _extras;
+    private LookupBudget? _budget;
     private const int LookupFailuresBeforeGivingUp = 3;
+    /// <summary>Lookups for extra symbols per poll, and the time after which no new one starts.</summary>
+    private const int MaxLookupsPerRead = 30;
+    private static readonly TimeSpan LookupTime = TimeSpan.FromMilliseconds(1500);
 
     /// <param name="fast">Where the subscription puts every change; null = no subscription (probe, PLC-Ki Link).</param>
     public S7CommPlusSource(PlcOptions opt, ILogger log, FastRecorder? fast = null)
@@ -30,6 +42,50 @@ public sealed class S7CommPlusSource : IPlcSource
         _opt = opt;
         _log = log;
         _fast = fast;
+        _extras = new ExtraReader<PlcTag>(() => new S7ExtraLink(Options(ExtrasSecurity()), _log), _log);
+    }
+
+    /// <summary>Why the polling connection was last closed (null when it never was).</summary>
+    public string? LastDropReason { get; private set; }
+
+    /// <summary>The program changed (Refresh from TIA): forget which extra symbols exist and the CPU's text lists. Any thread.</summary>
+    public void ForgetProgram()
+    {
+        _extras.ForgetProgram();
+        _textListsStale = true;
+    }
+
+    private S7CommPlusClientOptions Options(S7CommPlusSecurityMode security) => new()
+    {
+        Address = _opt.Address,
+        Password = Environment.GetEnvironmentVariable("PLCKI_PLC_PASSWORD") ?? _opt.Password ?? "",
+        Username = _opt.Username ?? "",
+        ConnectTimeout = TimeSpan.FromMilliseconds(_opt.TimeoutMs),
+        RequestTimeout = TimeSpan.FromMilliseconds(_opt.TimeoutMs),
+        AutoReconnect = false,          // the polling loop reconnects
+        // WriteEnabled is left at its default (false): PLC-Ki is read-only. The tests forbid setting it.
+        SecurityMode = security,
+        Logger = _log,
+    };
+
+    /// <summary>The extra-values connection logs in the way the polling one did, so it does not try TLS first every time.</summary>
+    private S7CommPlusSecurityMode ExtrasSecurity() =>
+        NegotiatedSecurity != null && Enum.TryParse<S7CommPlusSecurityMode>(NegotiatedSecurity, out var m) ? m : ParseSecurity(_opt.Security);
+
+    /// <summary>
+    /// Runs a call on the polling connection. When it fails and the client is no longer connected, the connection is closed
+    /// here (never used again, see the class comment) and an IOException with the reason goes to the polling loop.
+    /// </summary>
+    private T Main<T>(string what, Func<S7CommPlusClient, T> call)
+    {
+        var client = _client ?? throw new IOException("Not connected.");
+        try { return call(client); }
+        catch (Exception ex) when (!client.IsConnected)
+        {
+            var why = $"{what} failed: {Describe(ex)}";
+            Disconnect(why);
+            throw new IOException(why, ex);
+        }
     }
 
     /// <summary>Model tags the PLC sends changes for (the subscription); the reads cover the rest.</summary>
@@ -49,28 +105,16 @@ public sealed class S7CommPlusSource : IPlcSource
 
     public Dictionary<string, string> Connect(IReadOnlyList<TagDef> tags, S7CommPlusSecurityMode security)
     {
-        Disconnect();
-        var password = Environment.GetEnvironmentVariable("PLCKI_PLC_PASSWORD") ?? _opt.Password ?? "";
-        var options = new S7CommPlusClientOptions
-        {
-            Address = _opt.Address,
-            Password = password,
-            Username = _opt.Username ?? "",
-            ConnectTimeout = TimeSpan.FromMilliseconds(_opt.TimeoutMs),
-            RequestTimeout = TimeSpan.FromMilliseconds(_opt.TimeoutMs),
-            AutoReconnect = false,          // the polling loop reconnects
-            // WriteEnabled is left at its default (false): PLC-Ki is read-only. The tests forbid setting it.
-            SecurityMode = security,
-            Logger = _log,
-        };
-        var client = new S7CommPlusClient(options);
+        Disconnect(null);
+        var client = new S7CommPlusClient(Options(security));
+        S7Connections.Track(client, "polling", _log);
         try
         {
             client.ConnectAsync().GetAwaiter().GetResult();
         }
         catch (Exception ex)
         {
-            try { client.DisposeAsync().AsTask().GetAwaiter().GetResult(); } catch { /* ignore */ }
+            Close(client);
             throw new IOException($"Connection to {_opt.Address} failed ({security}): {Describe(ex)}", ex);
         }
         // The client keeps its own copy of the options; read the mode it actually used from there
@@ -87,6 +131,14 @@ public sealed class S7CommPlusSource : IPlcSource
             }
             catch (Exception ex)
             {
+                // A lookup that faulted the client (timeout, broken answer): stop, close it, and let the loop retry later.
+                // Looking up the next tag on it would open a second connection and leave this one open.
+                if (!client.IsConnected)
+                {
+                    Close(client);
+                    _tags.Clear();
+                    throw new IOException($"Connection to {_opt.Address} dropped while looking up {def.Symbol}: {Describe(ex)}", ex);
+                }
                 missing[def.Id] = $"symbol {def.Symbol}: {Describe(ex)}";
                 // When the first lookups all fail, the PLC is refusing lookups as such (the driver drops the
                 // session and logs in again for each one). Stop here, so the polling loop waits before it retries.
@@ -97,14 +149,28 @@ public sealed class S7CommPlusSource : IPlcSource
         if (_tags.Count == 0 && tags.Count > 0)
         {
             var why = WhyNoTags(client, tags) ?? "the PLC answered no tag lookup. First error: " + (missing.Values.FirstOrDefault() ?? "none");
-            try { client.DisposeAsync().AsTask().GetAwaiter().GetResult(); } catch { /* ignore */ }
+            Close(client);
             throw new PlcProgramException($"Connected to {_opt.Address}, but {why}");
         }
         _client = client;
         _log.LogInformation("Connected to {Address} ({Security}): {Found} of {Total} tags found.",
             _opt.Address, NegotiatedSecurity, _tags.Count, tags.Count);
         if (_fast != null) Subscribe(client);
+        if (!client.IsConnected)
+        {
+            var why = "making the fast-capture subscription broke the connection: " + (_subscriptionProblem ?? "no reason given");
+            Disconnect(why);
+            throw new IOException(why);
+        }
         return missing;
+    }
+
+    private void Close(S7CommPlusClient c)
+    {
+        try { c.DisconnectAsync().GetAwaiter().GetResult(); }
+        catch (Exception ex) { _log.LogDebug(ex, "Disconnect error ignored."); }
+        try { c.DisposeAsync().AsTask().GetAwaiter().GetResult(); }
+        catch (Exception ex) { _log.LogDebug(ex, "Dispose error ignored."); }
     }
 
     // ---------- fast data: a subscription, like an HMI's ----------
@@ -112,6 +178,8 @@ public sealed class S7CommPlusSource : IPlcSource
     // Nothing changes on the PLC side (no trace, no extra block). It runs next to the normal reads; when it cannot be
     // made (old firmware, too many tags, a PLC that refuses it), the normal reads carry on and feed the recording.
     private const int TagsPerSubscription = 200;
+    private DateTimeOffset _noSubscriptionUntil = DateTimeOffset.MinValue;
+    private string? _subscriptionProblem;
     private readonly Queue<double> _skews = new();
     private double _skewMs;
 
@@ -122,6 +190,12 @@ public sealed class S7CommPlusSource : IPlcSource
         if (_opt.FastMs <= 0)
         {
             fast.SetMode("reads", _opt.PollMs, "switched off in the settings (Fast capture).");
+            return;
+        }
+        if (DateTimeOffset.Now < _noSubscriptionUntil)
+        {
+            fast.SetMode("reads", _opt.PollMs, "the last try to make the subscription broke the connection (" + _subscriptionProblem +
+                "). It is tried again at " + _noSubscriptionUntil.ToString("HH:mm") + ".");
             return;
         }
         var cycle = (ushort)Math.Clamp(_opt.FastMs, 10, 10_000);
@@ -154,6 +228,14 @@ public sealed class S7CommPlusSource : IPlcSource
             {
                 firstError ??= Describe(ex);
                 _log.LogWarning("Fast capture: the PLC refused a subscription for {Count} tags: {Error}", chunk.Count, Describe(ex));
+                if (!client.IsConnected)
+                {
+                    // The failed subscription faulted the connection: the polling loop reconnects, without fast capture
+                    // for a while, so this does not turn into a reconnect loop
+                    _noSubscriptionUntil = DateTimeOffset.Now.AddMinutes(10);
+                    _subscriptionProblem = Describe(ex);
+                    break;
+                }
             }
         }
         if (_subs.Count > 0)
@@ -256,19 +338,22 @@ public sealed class S7CommPlusSource : IPlcSource
 
     public Snapshot Read()
     {
-        var client = _client ?? throw new InvalidOperationException("Not connected.");
+        if (_client == null) throw new InvalidOperationException("Not connected.");
+        // A new lookup allowance for this poll (ReadSymbols, for the pages), and close the extra connection when no page asks
+        _budget = new LookupBudget(MaxLookupsPerRead, LookupTime);
+        _extras.CloseIfIdle();
         var snap = new Snapshot { Time = DateTimeOffset.Now };
         if (_tags.Count == 0) return snap;
 
+        // Any failure here means the polling connection is not usable: close it whether or not the driver still calls it connected
         S7CommPlusBatchResult<S7CommPlusTagReadResult> result;
-        try
-        {
-            result = client.ReadAsync(_tags.Select(t => t.Tag).ToList()).GetAwaiter().GetResult();
-        }
+        try { result = Main("Reading the model tags", c => c.ReadAsync(_tags.Select(t => t.Tag).ToList()).GetAwaiter().GetResult()); }
+        catch (IOException) { throw; }
         catch (Exception ex)
         {
-            Disconnect();
-            throw new IOException($"Read failed: {Describe(ex)}", ex);
+            var why = $"Reading the model tags failed: {Describe(ex)}";
+            Disconnect(why);
+            throw new IOException(why, ex);
         }
 
         for (int i = 0; i < _tags.Count; i++)
@@ -292,40 +377,62 @@ public sealed class S7CommPlusSource : IPlcSource
         return snap;
     }
 
-    /// <summary>Operating mode and mode switch (a read; the driver's mode change is never called, see ReadOnlyTests).</summary>
+    /// <summary>
+    /// Operating mode and mode switch (a read; the driver's mode change is never called, see ReadOnlyTests).
+    /// A failed read gives "Unknown"; when it cost the connection, an IOException goes to the polling loop instead.
+    /// </summary>
     public CpuReading? ReadCpu()
     {
-        var client = _client;
-        if (client == null) return null;
+        if (_client == null) return null;
         try
         {
-            var st = client.GetCpuStateAsync(CancellationToken.None).GetAwaiter().GetResult();
+            var st = Main("Reading the CPU mode", c => c.GetCpuStateAsync(CancellationToken.None).GetAwaiter().GetResult());
             return new CpuReading(st.OperatingState.ToString(), string.IsNullOrWhiteSpace(st.StateSwitch) ? null : st.StateSwitch, DateTimeOffset.Now);
         }
+        catch (IOException) when (_client == null) { throw; }
         catch (Exception ex)
         {
             return new CpuReading("Unknown", null, DateTimeOffset.Now, Describe(ex));
         }
     }
 
-    // Text lists turn "@2%t#519K@" in system diagnostic texts into words; loaded once per connection
+    // Text lists turn "@2%t#519K@" in system diagnostic texts into words. They belong to the program, so they are kept
+    // across reconnects; loaded once (again after a failure 10 minutes later, or when the program changed)
     private S7CommPlusTextListCatalog? _textLists;
-    private bool _textListsTried;
+    private DateTimeOffset _textListsNext = DateTimeOffset.MinValue;
+    private volatile bool _textListsStale;
 
-    /// <summary>The CPU's active alarms with their texts (English when the CPU has it). Read-only.</summary>
+    /// <summary>
+    /// The CPU's active alarms with their texts (English when the CPU has it). Read-only. Read over the extra-values
+    /// connection: the alarm and text-list services answer slowly on some CPUs, and a timeout there must not cost the
+    /// polling connection.
+    /// </summary>
     public IReadOnlyList<PlcKi.Core.Diagnostics.CpuAlarm>? ReadCpuAlarms()
     {
-        var client = _client;
-        if (client == null) return null;
-        if (!_textListsTried)
+        if (_client == null) return null;
+        if (_textListsStale) { _textListsStale = false; _textLists = null; _textListsNext = DateTimeOffset.MinValue; }
+        if (_textLists == null && DateTimeOffset.Now >= _textListsNext)
         {
-            _textListsTried = true;
-            try { _textLists = client.GetTextListsAsync().GetAwaiter().GetResult(); }
+            _textListsNext = DateTimeOffset.Now.AddMinutes(10);
+            try
+            {
+                _textLists = _extras.Run("loading the CPU's text lists", l => ((S7ExtraLink)l).Client.GetTextListsAsync().GetAwaiter().GetResult(), out var why);
+                if (why != null)
+                {
+                    // The extra-values connection was not there: try again soon, not in 10 minutes
+                    _textListsNext = DateTimeOffset.Now.AddSeconds(30);
+                    _log.LogDebug("No text lists from the CPU yet: {Why}", why);
+                }
+            }
             catch (Exception ex) { _log.LogDebug(ex, "No text lists from the CPU; diagnostic texts may show placeholders."); }
         }
-        var alarms = _textLists != null
-            ? client.GetActiveAlarmsAsync(_textLists).GetAwaiter().GetResult()
-            : client.GetActiveAlarmsAsync().GetAwaiter().GetResult();
+        var texts0 = _textLists;
+        var alarms = _extras.Run("reading the CPU's alarm list", l =>
+        {
+            var c = ((S7ExtraLink)l).Client;
+            return texts0 != null ? c.GetActiveAlarmsAsync(texts0).GetAwaiter().GetResult() : c.GetActiveAlarmsAsync().GetAwaiter().GetResult();
+        }, out var error);
+        if (alarms == null) throw new IOException(error ?? "The alarm list could not be read.");
         var list = new List<PlcKi.Core.Diagnostics.CpuAlarm>();
         foreach (var a in alarms)
         {
@@ -347,68 +454,35 @@ public sealed class S7CommPlusSource : IPlcSource
         return list;
     }
 
-    /// <summary>Lookups for the Tags page, kept while connected: symbol -> tag, or why it cannot be read.</summary>
-    private readonly Dictionary<string, (PlcTag? Tag, string? Error)> _extra = new();
-    private const int MaxLookupsPerRead = 30;
-
+    /// <summary>
+    /// Symbols outside the model (Tags, Program and Hardware pages), over the extra-values connection. A name the PLC does not
+    /// have says "Not on the PLC" and is not asked again for a while, reconnects included (ExtraReader).
+    /// </summary>
     public Dictionary<string, (object? Value, string? Error)> ReadSymbols(IReadOnlyList<TagDef> symbols)
     {
-        var result = new Dictionary<string, (object?, string?)>();
-        var client = _client;
-        if (client == null) { foreach (var s in symbols) result[s.Symbol] = (null, "Not connected to the PLC."); return result; }
-
-        var readable = new List<(TagDef Def, PlcTag Tag)>();
-        int lookups = 0;
-        foreach (var def in symbols)
-        {
-            if (!_extra.TryGetValue(def.Symbol, out var found))
-            {
-                // Each lookup is a round trip (a failed one can even cost a new login): a few per poll, so the
-                // model tags keep their pace; the rest follow in the next polls
-                if (++lookups > MaxLookupsPerRead) continue;
-                try { found = (client.GetTagBySymbolAsync(def.Symbol).GetAwaiter().GetResult(), null); }
-                catch (Exception ex) { found = (null, "Not found on the PLC: " + Describe(ex)); }
-                _extra[def.Symbol] = found;
-            }
-            if (found.Tag != null) readable.Add((def, found.Tag)); else result[def.Symbol] = (null, found.Error);
-        }
-        if (readable.Count == 0) return result;
-
-        var read = client.ReadAsync(readable.Select(r => r.Tag).ToList()).GetAwaiter().GetResult();
-        for (int i = 0; i < readable.Count; i++)
-        {
-            var (def, tag) = readable[i];
-            var item = i < read.Items.Count ? read.Items[i] : default;
-            if (!item.IsSuccess || (tag.Quality & PlcTagQC.TAG_QUALITY_MASK) != PlcTagQC.TAG_QUALITY_GOOD)
-            {
-                result[def.Symbol] = (null, $"read error 0x{item.ItemError:X}");
-                continue;
-            }
-            object? raw = tag.GetType().GetProperty("Value")?.GetValue(tag);
-            object? value;
-            try { value = def.Type is "Bool" or "Real" or "DInt" or "Int" or "Time" ? TagValue.Normalize(def, raw) : raw?.ToString(); }
-            catch { value = raw?.ToString(); }
-            result[def.Symbol] = (value, null);
-        }
-        return result;
+        if (_client == null) return symbols.ToDictionary(s => s.Symbol, _ => ((object?)null, (string?)"Not connected to the PLC."));
+        return _extras.Read(symbols, _budget ??= new LookupBudget(MaxLookupsPerRead, LookupTime));
     }
 
-    public void Disconnect()
+    public void Disconnect() => Disconnect(null);
+
+    /// <summary>Closes both connections and the subscriptions. What was learned about the program is kept.</summary>
+    private void Disconnect(string? why)
     {
         StopSubscriptions();
-        _extra.Clear();
-        _textLists = null;
-        _textListsTried = false;
+        _extras.Close();
         var c = _client;
         _client = null;
         if (c == null) return;
-        try { c.DisconnectAsync().GetAwaiter().GetResult(); }
-        catch (Exception ex) { _log.LogDebug(ex, "Disconnect error ignored."); }
-        try { c.DisposeAsync().AsTask().GetAwaiter().GetResult(); }
-        catch (Exception ex) { _log.LogDebug(ex, "Dispose error ignored."); }
+        if (why != null)
+        {
+            LastDropReason = why;
+            _log.LogWarning("Closing the PLC connection to {Address}: {Why}", _opt.Address, why);
+        }
+        Close(c);
     }
 
-    public void Dispose() => Disconnect();
+    public void Dispose() => Disconnect(null);
 
     /// <summary>Exception message plus inner messages, which usually hold the useful part.</summary>
     private static string Describe(Exception ex)

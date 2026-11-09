@@ -133,10 +133,12 @@ public sealed class PollingService : BackgroundService
     private readonly DeviceWatch _devices;
     private readonly FastRecorder _fast;
     private readonly AlarmCaptureBook _captures;
+    private readonly LinkGrace _grace;
 
     public PollingService(IPlcSource source, StatusEngine engine, LiveState state, PlcKiOptions opt, ILogger<PollingService> log, WatchList watch, DeviceWatch devices,
         FastRecorder fast, AlarmCaptureBook captures)
     {
+        _grace = new LinkGrace(LinkGrace.WindowFor(opt.Plc.PollMs));
         _devices = devices;
         _watch = watch;
         _fast = fast;
@@ -190,6 +192,7 @@ public sealed class PollingService : BackgroundService
                 {
                     // A PLC without the right program will not change in 2 s: wait the longest, and say it once
                     if (ex is PlcProgramException) backoffMs = 30_000;
+                    _grace.Lost(DateTimeOffset.Now, ex.Message);
                     if (ex.Message != error)
                         _log.LogWarning("{Error} Retrying every {Delay} s.", ex.Message, backoffMs / 1000);
                     else
@@ -213,6 +216,10 @@ public sealed class PollingService : BackgroundService
                 }
                 last = snap;
                 lastGood = snap.Time;
+                var readMs = (DateTime.UtcNow - started).TotalMilliseconds;
+                if (_grace.DownSince is { } down)
+                    _log.LogInformation("PLC connection back after {Seconds:0.0} s (drop {Drops} since start).", (snap.Time - down).TotalSeconds, _grace.Drops);
+                var bridged = _grace.Good(snap.Time);
                 _fast.AddSnapshot(snap, _source.FastTagIds);
                 var extra = _watch.Current();
                 if (extra.Count > 0)
@@ -228,19 +235,26 @@ public sealed class PollingService : BackgroundService
                         var r = _state.Cpu = _source.ReadCpu();
                         _state.CpuMode.Update(r?.State, r?.Switch, r?.Error, r?.Time ?? DateTimeOffset.Now);
                     }
-                    catch (Exception ex)
+                    // A mode read that cost the connection is a drop like a failed read: handled below
+                    catch (Exception ex) when (_source.IsConnected)
                     {
                         _log.LogDebug(ex, "Reading the CPU mode failed.");
                         _state.CpuMode.Update("Unknown", null, ex.Message, DateTimeOffset.Now);
                     }
                 }
                 ReadDevices(ref lastDrives, ref lastAlarms, ref alarmFailures);
+                if (!_source.IsConnected) throw new IOException("The PLC connection closed during this read.");
                 Publish(snap, _source.Kind == "snapshot" ? "snapshot" : "connected", null, lastGood, missing);
+                if (bridged != null) _state.History.Note(bridged);
                 Capture();
+                var totalMs = (DateTime.UtcNow - started).TotalMilliseconds;
+                if (totalMs > Math.Max(2 * _opt.Plc.PollMs, 2000))
+                    _log.LogInformation("Slow poll: {Total:0} ms (model tags {Read:0} ms, pages and diagnostics {Rest:0} ms).", totalMs, readMs, totalMs - readMs);
             }
             catch (Exception ex)
             {
                 error = ex.Message;
+                _grace.Lost(DateTimeOffset.Now, ex.Message);
                 _log.LogWarning("Read from {Address} failed: {Error}", _source.Address, ex.Message);
                 _source.Disconnect();
                 _fast.Break(DateTimeOffset.Now);
@@ -307,6 +321,10 @@ public sealed class PollingService : BackgroundService
 
     private void Publish(Snapshot snap, string state, string? error, DateTimeOffset? lastGood, Dictionary<string, string> missing)
     {
+        // A drop that is still within the grace shows as connected (values at most a few seconds old); History gets it anyway
+        var shown = _grace.Shown(state, DateTimeOffset.Now);
+        if (shown != state) error = null;
+        state = shown;
         var info = new PlcLinkInfo(state, _source.Address, error, lastGood, _engine.Model.Tags.Count,
             Math.Max(snap.Errors.Count, missing.Count));
         try
