@@ -1086,7 +1086,7 @@ const PK = (() => {
       ${a.text ? `<p class="small" style="margin:0">${esc(a.text)}</p>` : ""}
       <p class="faint small" style="margin:0">The light at the top right shows the PLC connection; click it for what it means. Ask answers questions about the machine on every page.</p>
       <p class="faint small" style="margin:0"><button type="button" class="linkbtn" data-screen>Alarm sound and screen</button>: beep or show a notice when an alarm comes, keep a line screen on.</p>
-      <p class="faint small keys" style="margin:0"><kbd>?</kbd> this help · <kbd>/</kbd> ask a question · <kbd>Esc</kbd> close</p>
+      <p class="faint small keys" style="margin:0"><kbd>Ctrl K</kbd> search · <kbd>?</kbd> this help · <kbd>/</kbd> ask Ki · <kbd>Esc</kbd> close</p>
       <div class="row end">${admin && name !== "setup/start" ? `<a class="btn b" href="#/setup/start" data-close>Get started</a>` : ""}<button class="btn" data-close>Done</button></div>`);
     h.el.querySelector("[data-screen]").onclick = () => { h.close(); screenSheet(); };
   }

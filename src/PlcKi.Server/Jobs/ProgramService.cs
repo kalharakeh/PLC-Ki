@@ -240,6 +240,25 @@ public sealed class ProgramService
     }
 
     /// <summary>
+    /// For the search box: PLC tags and data block values whose name or comment contains the words (read-only).
+    /// Each value says its data block, so the result can open it on the Tags page.
+    /// </summary>
+    public object FindTags(string? query, int max = 40)
+    {
+        var (_, plc, error) = _loaded.Value;
+        var q = (query ?? "").Trim();
+        if (plc == null) return new { available = false, error, values = Array.Empty<object>() };
+        if (q.Length < 2) return new { available = true, error = (string?)null, values = Array.Empty<object>() };
+        bool Hit(params string?[] xs) => xs.Any(x => x != null && x.Contains(q, StringComparison.OrdinalIgnoreCase));
+        var tags = plc.PlcTags.Where(t => Hit(t.Name, t.Address, t.Comment))
+            .Select(t => new { db = (string?)null, table = (string?)t.Table, symbol = $"\"{t.Name}\"", address = t.Address, datatype = t.Datatype, comment = t.Comment });
+        var dbs = new HashSet<string>(plc.Blocks.Where(b => b.Kind is "GlobalDB" or "InstanceDB" or "GVL" or "PRG").Select(b => b.Name));
+        var values = AllTags(plc).Where(t => dbs.Contains(t.Source) && Hit(t.Symbol, t.Comment))
+            .Select(t => new { db = (string?)t.Source, table = (string?)null, symbol = t.Symbol, address = (string?)null, datatype = t.Datatype, comment = t.Comment });
+        return new { available = true, error = (string?)null, values = values.Concat(tags).Take(max) };
+    }
+
+    /// <summary>
     /// The HMI panels in the export, for the Settings tab: every value an operator sets on a screen (where, the text
     /// next to it, the PLC symbol, its type for live reading), the buttons that set PLC values, and for each model
     /// setting where it is on the panel (matched by PLC symbol).

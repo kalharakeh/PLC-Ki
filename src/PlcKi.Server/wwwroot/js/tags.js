@@ -54,6 +54,39 @@
 
   const match = (q, ...xs) => !q || xs.some((x) => String(x || "").toLowerCase().includes(q));
 
+  /** The data blocks named in a text: "FB_Valve, instance \"Station\".XV101" gives ["Station"]. */
+  const dbsIn = (text) => [...String(text || "").matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+  /**
+   * Where Tags starts: the data block of the first active alarm (where the model says it comes from, then its own
+   * tag), else the device picked on Plant, else nothing (the first block). { name, why } or null.
+   */
+  function problemDb() {
+    const m = state.model, s = state.status;
+    if (!m || !data) return null;
+    const known = new Set(data.dbs.map((d) => d.name));
+    const tagSym = (id) => { const t = id && m.tags.find((x) => x.id === id); return t ? t.symbol : ""; };
+    for (const a of (s && s.activeAlarms) || []) {
+      const def = m.alarms.find((x) => x.id === a.id) || a;
+      const hit = [...dbsIn(def.location), ...dbsIn(tagSym(def.tag))].find((n) => known.has(n));
+      if (hit) return { name: hit, why: `alarm ${a.id}` };
+    }
+    const devId = window.PKLive && PKLive.selectedDevice();
+    const dev = devId && m.equipment.find((e) => e.id === devId);
+    if (dev) {
+      const hit = [...dbsIn(dev.location), ...dbsIn(tagSym(dev.command)), ...dbsIn(tagSym(dev.request))].find((n) => known.has(n));
+      if (hit) return { name: hit, why: dev.name };
+    }
+    return null;
+  }
+  let startWhy = "";      // "alarm A02": why this data block was opened first, said above its values
+
+  /** Values that are in the machine model (normalized symbol -> its label), marked in the data block table. */
+  function modelSymbols() {
+    const map = new Map();
+    for (const t of (state.model && state.model.tags) || []) map.set(PK.norm(t.symbol), t.label || t.id);
+    return map;
+  }
+
   /** The live value plus, for administrators, the button that changes it. */
   const now = (t) => `<span class="row" style="gap:4px;flex-wrap:nowrap">${live(t)}${window.PKWrite ? PKWrite.button(t) : ""}</span>`;
   /** The value shown for a symbol, as the change sheet's "now". */
@@ -81,9 +114,9 @@
       shown.push(...take);
       if (!take.length) return "";
       return `<div class="card"><h3 style="margin:0 0 6px">${esc(tb.name)} <span class="faint small">${tags.length} tag${tags.length > 1 ? "s" : ""}</span></h3>
-        <table class="tbl tags-tbl"><tr><th>Name</th><th>Address</th><th>Type</th><th>Now</th><th>Comment</th></tr>
+        <div class="tbl-wrap"><table class="tbl tags-tbl"><tr><th>Name</th><th>Address</th><th>Type</th><th>Now</th><th>Comment</th></tr>
         ${take.map((t) => `<tr><td class="mono">${esc(t.name)}</td><td class="mono">${esc(t.address || "")}</td><td class="mono muted">${esc(t.datatype)}</td><td>${now(t)}</td><td class="muted">${esc(t.comment || "")}</td></tr>`).join("")}
-        </table></div>`;
+        </table></div></div>`;
     }).join("");
     const none = query.trim() ? `No tag matches “${esc(query)}”.` : "This program export has no PLC tag tables.";
     return (html || `<div class="card"><p class="muted" style="margin:0">${none}</p></div>`)
@@ -96,7 +129,7 @@
       || `<p class="faint small" style="padding:8px 10px">${q ? "No data block matches." : "This program export has no data blocks."}</p>`;
     let right;
     shown = [];
-    if (!db) right = `<div class="card"><p class="muted" style="margin:0">Pick a data block on the left to see its values live.</p></div>`;
+    if (!db) right = `<div class="card"><p class="muted" style="margin:0">${data.dbs.length ? "Loading…" : "This program export has no data blocks."}</p></div>`;
     else if (dbError) right = `<div class="notice red">${icon("warn")}<div>${esc(dbError)}</div></div>`;
     else if (!dbData) right = `<div class="card"><p class="muted" style="margin:0">Loading…</p></div>`;
     else {
@@ -105,16 +138,20 @@
       const take = vals.slice(0, MAX_ROWS);
       shown = take;
       const short = (s) => s.startsWith(`"${dbData.db}".`) ? s.slice(dbData.db.length + 3) : s;
+      const inModel = modelSymbols();
+      const nModel = dbData.values.filter((t) => inModel.has(PK.norm(t.symbol))).length;
+      const mark = (t) => { const l = inModel.get(PK.norm(t.symbol)); return l ? ` <span class="tag blue in-model" title="In the machine model: ${esc(l)}">model</span>` : ""; };
       right = `<div class="card">
         <div class="row"><h2 style="margin:0;font-size:24px">${esc(dbData.db)}</h2><span class="tag">${dbData.number != null ? "DB " + dbData.number : ""}</span>
           ${dbData.instanceOf ? `<span class="faint small">instance of <a href="#/program/${encodeURIComponent(dbData.instanceOf)}">${esc(dbData.instanceOf)}</a></span>` : ""}
           <span class="spacer"></span><a class="btn plain small" href="#/program/${encodeURIComponent(dbData.db)}">Show in the program ›</a></div>
+        ${startWhy && startWhy.db === dbData.db ? `<p class="small" style="margin:8px 0 0">${icon("bell")} Opened here because of ${esc(startWhy.why)}.</p>` : ""}
         ${dbData.title || dbData.comment ? `<p class="muted" style="margin:8px 0 0">${esc([dbData.title, dbData.comment].filter(Boolean).join(" · "))}</p>` : ""}
         <div class="row" style="margin-top:10px;gap:12px"><input type="search" id="val-q" placeholder="Find a value" aria-label="Find a value" value="${esc(valQuery)}" style="max-width:300px">
-          <span class="faint small">Optimized data blocks have no fixed addresses: values are read by name.</span></div>
-        <table class="tbl tags-tbl" style="margin-top:10px"><tr><th>Value</th><th>Type</th><th>Now</th><th>Comment</th></tr>
-        ${take.map((t) => `<tr><td class="mono">${esc(short(t.symbol))}</td><td class="mono muted">${esc(t.datatype)}</td><td>${now(t)}</td><td class="muted">${esc(t.comment || "")}</td></tr>`).join("")}
-        </table>
+          <span class="faint small">Optimized data blocks have no fixed addresses: values are read by name.${nModel ? ` <span class="tag blue">model</span> marks the ${nModel} value${nModel === 1 ? "" : "s"} the machine model explains.` : ""}</span></div>
+        <div class="tbl-wrap"><table class="tbl tags-tbl" style="margin-top:10px"><tr><th>Value</th><th>Type</th><th>Now</th><th>Comment</th></tr>
+        ${take.map((t) => `<tr><td class="mono">${esc(short(t.symbol))}${mark(t)}</td><td class="mono muted">${esc(t.datatype)}</td><td>${now(t)}</td><td class="muted">${esc(t.comment || "")}</td></tr>`).join("")}
+        </table></div>
         ${vals.length > take.length ? `<p class="faint small">Showing the first ${take.length} of ${vals.length} values.</p>` : ""}
         ${!vals.length ? `<p class="muted">No readable values in this data block.</p>` : ""}</div>`;
     }
@@ -167,7 +204,9 @@
     live: false,
     mount(el, params) {
       load();
-      if (params[0] === "db" && params[1]) { tab = "dbs"; openDb(params[1]); }
+      startWhy = "";
+      if (params[0] === "db" && params[1]) { tab = "dbs"; tabChosen = true; openDb(params[1]); }
+      else tabChosen = false;   // #/tags: start where the problem is (render picks it once the tags are read)
       // Draw now: when the tags were already read (an earlier visit, or the Program page), load() has nothing to wait for
       PK.draw();
     },
@@ -181,8 +220,15 @@
       if (!data) return head + PK.sec("", `<p class="muted">Loading…</p>`);
       const q = query.trim().toLowerCase();
       const nTags = data.tables.reduce((n, t) => n + t.tags.length, 0);
-      // First time the data is shown: open the first tab that has something in it
-      if (!tabChosen) { tabChosen = true; if (!nTags && data.dbs.length) tab = "dbs"; }
+      // First draw with data: open the data block of the current problem; else the first tab that has something in it
+      if (!tabChosen) {
+        tabChosen = true;
+        const p = problemDb();
+        if (p) { tab = "dbs"; startWhy = { db: p.name, why: p.why }; PK.setHash("#/tags/db/" + encodeURIComponent(p.name)); openDb(p.name); }
+        else if (!nTags && data.dbs.length) tab = "dbs";
+      }
+      // The data blocks tab always shows one: the first, when none is picked
+      if (tab === "dbs" && !db && data.dbs.length) openDb(data.dbs[0].name);
       const status = W.connection && W.connection !== "connected"
         ? `<div class="notice gold" style="margin-bottom:14px">${icon("warn")}<div>${W.connection === "snapshot" ? "PLC-Ki runs on test values, so tags outside the machine model show no value." : "PLC-Ki is not reading the PLC right now, so there are no live values."}</div></div>` : "";
       const bar = `<div class="row" style="gap:12px;margin-bottom:16px;flex-wrap:wrap">

@@ -689,5 +689,5 @@
     },
   });
 
-  window.PKLive = { parseLoc, alarmWhere, bindAsk, stepStrip, seqState };
+  window.PKLive = { parseLoc, alarmWhere, bindAsk, stepStrip, seqState, selectedDevice: () => selectedEq };
 })();

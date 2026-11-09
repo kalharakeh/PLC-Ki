@@ -45,9 +45,10 @@
       <span class="pill info hidden" id="job-pill"></span>
       <span class="ro hidden" id="ro-badge"></span>
       <span class="clock" id="clock" aria-hidden="true"></span>
+      <button class="tb-btn" id="search-open" type="button" aria-label="Search" title="Search the machine (Ctrl+K)"><span class="ti" data-icon="search"></span><span class="tb-t">Search</span><kbd>Ctrl K</kbd></button>
       <button class="tb-btn" id="theme-btn" type="button" aria-label="Dark or light screen" title="Dark or light screen"><span class="ti" data-icon="moon"></span></button>
       <button class="tb-btn" id="help-open" type="button" aria-label="Help for this page" title="Help for this page (key ?)"><span class="ti" data-icon="help"></span><span class="tb-t">Help</span><kbd>?</kbd></button>
-      <button class="btn small" id="ask-open" type="button" title="Ask Ki about the machine (key /)">Ask Ki<kbd>/</kbd></button>
+      <button class="btn small" id="ask-open" type="button" title="Ask Ki about the machine (key /)">Ask<span class="ask-ki"> Ki</span><kbd>/</kbd></button>
     </div>
   </header>
   <div class="banner hidden" id="banner" role="status" aria-live="polite"></div>
@@ -100,6 +101,7 @@
   <script src="js/start.js"></script>
   <script src="js/generator.js"></script>
   <script src="js/ask.js"></script>
+  <script src="js/search.js"></script>
   <script>PK.start();</script>
 </body>
 </html>

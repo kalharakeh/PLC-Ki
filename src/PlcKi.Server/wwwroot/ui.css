@@ -1143,7 +1143,10 @@ main#page section.hero .k span { margin-top: 2px; }
   .ro .ro-s { display: inline; }
   .topbar #job-pill .jp-t { display: none; }
   .topbar #job-pill .jp-s { display: inline; }
-  .tb-btn { padding: 0 7px; }
+  .tb-btn { padding: 0 5px; }
+  /* Room for the machine name next to Search, Help and Ask */
+  .ask-ki { display: none; }
+  .topbar #ask-open { padding: 6px 11px; }
   footer.foot .foot-acct { display: inline; }
   main#page section:first-child { padding-top: 16px; }
 }
@@ -1758,3 +1761,20 @@ section.hero.aa { padding-block: 26px 30px; }
 .held-acts { display: flex; gap: 6px; flex: none; }
 .why-stick:empty { display: none; }
 .alarms-past { margin-bottom: 16px; padding: 12px 16px; }
+
+/* Search (Ctrl+K): the box, then the results grouped like the More sheet */
+.search-sheet { max-height: min(86vh, 760px); }
+.sr-box { display: flex; align-items: center; gap: 10px; padding: 0 14px; border: 1px solid var(--line-strong); border-radius: 12px; background: var(--field); }
+.sr-box:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.sr-box > svg { width: 18px; height: 18px; flex: none; color: var(--muted); }
+.sr-box input { flex: 1; min-width: 0; border: 0; background: none; box-shadow: none; padding: 12px 0; font-size: 16px; outline: none; }
+#sr-results { display: flex; flex-direction: column; gap: 12px; }
+.sr-row { position: relative; display: flex; align-items: center; gap: 12px; min-height: 46px; padding: 7px 14px; color: var(--ink); text-decoration: none !important; }
+.sr-row.on { background: var(--accent-soft); }
+.sr-row .pill { flex: none; }
+.sr-title { overflow-wrap: anywhere; }
+.sr-title.mono { font-family: var(--mono); font-size: 13.5px; }
+.sr-row small { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.mlist li + li .sr-row::before { content: ""; position: absolute; left: 54px; right: 0; top: 0; height: 1px; background: var(--line); }
+.sr-hint, .sr-wait { margin: 4px 4px 0; }
+@media (max-width: 1100px) { #search-open kbd { display: none; } }
