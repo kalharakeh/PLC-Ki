@@ -68,6 +68,7 @@ public sealed class AlarmMemory
 {
     /// <summary>An alarm back within this time after it went counts as the same occurrence.</summary>
     public static readonly TimeSpan Flicker = TimeSpan.FromSeconds(10);
+    /// <summary>The default limit (Setup › Settings › Storage can change it).</summary>
     public const int MaxOccurrences = 20_000;
     public const int MaxNoteLength = 1000;
 
@@ -100,6 +101,8 @@ public sealed class AlarmMemory
     }
 
     public string? Machine { get; }
+    /// <summary>At most this many occurrences are kept. Occurrences with a note are never removed by this limit.</summary>
+    public int Max { get; private set; } = MaxOccurrences;
     /// <summary>Set when the file on disk could not be read at start.</summary>
     public string? LoadError { get; }
 
@@ -196,14 +199,54 @@ public sealed class AlarmMemory
         AlsoActive = s.ActiveAlarms.Where(x => x.Id != a.Id).Select(x => x.Id).Take(10).ToList(),
     };
 
-    private void Trim()
+    private void Trim() => TrimLocked(Max, dryRun: false);
+
+    /// <summary>The oldest occurrences without a note, beyond the limit. Notes are the valuable part: they are never removed here.</summary>
+    private int TrimLocked(int max, bool dryRun)
     {
-        if (_items.Count <= MaxOccurrences) return;
-        // Drop the oldest occurrences nobody wrote a note for first: notes are the valuable part
-        int extra = _items.Count - MaxOccurrences;
-        foreach (var o in _items.Where(o => o.Note == null && o.Went != null).Take(extra).ToList()) _items.Remove(o);
-        if (_items.Count > MaxOccurrences) _items.RemoveRange(0, _items.Count - MaxOccurrences);
+        if (_items.Count <= max) return 0;
+        var drop = _items.Where(o => o.Note == null && o.Went != null).Take(_items.Count - max).ToList();
+        if (!dryRun) foreach (var o in drop) _items.Remove(o);
+        return drop.Count;
     }
+
+    /// <summary>Sets the limit and removes what is over it now (oldest first, never noted ones). Returns how many were (or would be) removed.</summary>
+    public int Prune(int max, bool dryRun = false)
+    {
+        int n;
+        lock (_lock)
+        {
+            if (!dryRun) Max = Math.Max(1, max);
+            n = TrimLocked(Math.Max(1, max), dryRun);
+            if (n > 0 && !dryRun) _dirty = true;
+        }
+        if (n > 0 && !dryRun) Save();
+        return n;
+    }
+
+    /// <summary>
+    /// Clears the memory on an administrator's confirmed request: every occurrence that has ended and has no note.
+    /// Occurrences with a note stay (the technicians' knowledge), and so do alarms still on. Returns how many went.
+    /// </summary>
+    public int Clear()
+    {
+        int n;
+        lock (_lock)
+        {
+            n = _items.RemoveAll(o => o.Went != null && o.Note == null);
+            if (n > 0) _dirty = true;
+        }
+        if (n > 0) Save();
+        return n;
+    }
+
+    /// <summary>When the oldest occurrence came, and how many have a note.</summary>
+    public (DateTimeOffset? Oldest, int Noted) Stats()
+    {
+        lock (_lock) return (_items.Count == 0 ? null : _items.Min(o => o.Came), _items.Count(o => o.Note != null));
+    }
+
+    public string? FilePath => _file;
 
     /// <summary>Writes the file now if anything changed (atomic: temp file, then rename).</summary>
     public void Save(DateTimeOffset? now = null)

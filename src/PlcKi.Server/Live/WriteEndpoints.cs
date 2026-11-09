@@ -1,5 +1,6 @@
 using System.Text.Json;
 using PlcKi.Core.Status;
+using PlcKi.Core.Storage;
 using PlcKi.Plant;
 using PlcKi.Server.Hardware;
 using PlcKi.Server.Jobs;
@@ -31,7 +32,6 @@ public sealed record WriteLogEntry(DateTimeOffset Time, string User, string Plc,
 /// </summary>
 public static class WriteEndpoints
 {
-    private static readonly object LogLock = new();
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
     /// <summary>What the page needs before it asks: may this be changed, and how careful must it be.</summary>
@@ -157,24 +157,32 @@ public static class WriteEndpoints
         (settings.Current().PlcAllowWrites ?? "").Split(new[] { ',', ';', ' ' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Contains(plc, StringComparer.OrdinalIgnoreCase);
 
-    private static string LogFile(PlantContext ctx) => Path.Combine(ctx.DataDir, "value-changes.jsonl");
+    /// <summary>The change log: value-changes.jsonl in the data folder, with its older files next to it (see JsonLinesLog).</summary>
+    public static JsonLinesLog ChangeLog(string dataDir) => JsonLinesLog.For(Path.Combine(dataDir, "value-changes.jsonl"));
 
-    internal static void Append(PlantContext ctx, WriteLogEntry e)
-    {
-        lock (LogLock) File.AppendAllText(LogFile(ctx), JsonSerializer.Serialize(e, Json) + Environment.NewLine);
-    }
+    public static void Append(PlantContext ctx, WriteLogEntry e) => Append(ctx.DataDir, e);
 
-    /// <summary>The newest entries first.</summary>
-    internal static List<WriteLogEntry> ReadLog(PlantContext ctx, int max)
+    public static void Append(string dataDir, WriteLogEntry e) =>
+        ChangeLog(dataDir).Append(JsonSerializer.Serialize(e, Json), e.Time);
+
+    /// <summary>The newest entries first, across the live file and the older (rotated) ones.</summary>
+    public static List<WriteLogEntry> ReadLog(PlantContext ctx, int max) => ReadLog(ctx.DataDir, max);
+
+    public static List<WriteLogEntry> ReadLog(string dataDir, int max)
     {
-        string[] lines;
-        lock (LogLock) lines = File.Exists(LogFile(ctx)) ? File.ReadAllLines(LogFile(ctx)) : Array.Empty<string>();
         var list = new List<WriteLogEntry>();
-        for (int i = lines.Length - 1; i >= 0 && list.Count < max; i--)
+        foreach (var line in ChangeLog(dataDir).NewestFirst())
         {
-            try { if (JsonSerializer.Deserialize<WriteLogEntry>(lines[i], Json) is { } e) list.Add(e); }
-            catch (JsonException) { /* a broken line is skipped */ }
+            if (list.Count >= max) break;
+            if (Parse(line) is { } e) list.Add(e);
         }
         return list;
+    }
+
+    /// <summary>One line of the change log; null for a broken line (cut off by a power loss).</summary>
+    public static WriteLogEntry? Parse(string line)
+    {
+        try { return JsonSerializer.Deserialize<WriteLogEntry>(line, Json); }
+        catch (JsonException) { return null; }
     }
 }

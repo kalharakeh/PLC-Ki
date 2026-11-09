@@ -4,6 +4,7 @@ using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Configuration;
 using PlcKi.Core.Model;
+using PlcKi.Core.Storage;
 
 namespace PlcKi.Plant;
 
@@ -29,6 +30,8 @@ public sealed class PlantSettings
     public string Export { get; set; } = "";
     /// <summary>An administrator picked the setup (Get started or Connections), so the Getting started list counts it as done.</summary>
     public bool SetupChosen { get; set; }
+    /// <summary>How much is kept on disk (Storage). Applied by the daily pruning: no restart needed. Null keeps the saved ones.</summary>
+    public RetentionLimits? Retention { get; set; }
 
     /// <summary>"direct" or "link" (the PLC is read by PLC-Ki Link on the user's laptop).</summary>
     public string PlcVia { get; set; } = "direct";
@@ -117,8 +120,53 @@ public sealed class SettingsStore
             TiaProject = c["PlcKi:Tia:Project"] ?? "",
             // Settings saved before this flag existed were saved by someone who set PLC-Ki up
             SetupChosen = c.GetValue("Plant:SetupChosen", File.Exists(_ctx.SettingsFile)),
+            Retention = ReadRetention(c),
         };
     }
+
+    private static RetentionLimits ReadRetention(IConfiguration c)
+    {
+        var d = RetentionLimits.Default;
+        return new RetentionLimits
+        {
+            ProductionDays = c.GetValue("Plant:Retention:ProductionDays", d.ProductionDays),
+            ChangeLogDays = c.GetValue("Plant:Retention:ChangeLogDays", d.ChangeLogDays),
+            ChangeLogMb = c.GetValue("Plant:Retention:ChangeLogMb", d.ChangeLogMb),
+            Recordings = c.GetValue("Plant:Retention:Recordings", d.Recordings),
+            AlarmOccurrences = c.GetValue("Plant:Retention:AlarmOccurrences", d.AlarmOccurrences),
+        };
+    }
+
+    /// <summary>The storage limits in force. Saved ones that are out of range fall back to the defaults.</summary>
+    public RetentionLimits Retention() => RetentionFrom(_config);
+
+    public static RetentionLimits RetentionFrom(IConfiguration c)
+    {
+        var r = ReadRetention(c);
+        return r.Problem() == null ? r : RetentionLimits.Default;
+    }
+
+    /// <summary>Saves only the storage limits (the Storage section), without touching the other settings.</summary>
+    public void SaveRetention(RetentionLimits r)
+    {
+        if (r.Problem() is { } bad) throw new PlantException(bad);
+        lock (_lock)
+        {
+            var root = Load();
+            WriteRetention(Obj(root, "Plant"), r);
+            AtomicFile.Save(_ctx.SettingsFile, root.ToJsonString(Json));
+            (_config as IConfigurationRoot)?.Reload();
+        }
+    }
+
+    private static void WriteRetention(JsonObject plant, RetentionLimits r) => plant["Retention"] = new JsonObject
+    {
+        ["ProductionDays"] = r.ProductionDays,
+        ["ChangeLogDays"] = r.ChangeLogDays,
+        ["ChangeLogMb"] = r.ChangeLogMb,
+        ["Recordings"] = r.Recordings,
+        ["AlarmOccurrences"] = r.AlarmOccurrences,
+    };
 
     /// <summary>
     /// A restart is needed when settings were saved here, or when what is saved now differs from what is running
@@ -219,6 +267,7 @@ public sealed class SettingsStore
             plant["AllowRemote"] = s.AllowRemote;
             plant["PublicView"] = s.PublicView;
             plant["SetupChosen"] = s.SetupChosen || before.SetupChosen;
+            if (s.Retention != null) WriteRetention(plant, s.Retention);
             root["Urls"] = $"http://{(s.AllowRemote ? "*" : "localhost")}:{s.Port}";
 
             bool secretChanged = false;
@@ -265,6 +314,7 @@ public sealed class SettingsStore
         if (s.HistoryMinutes is < 1 or > 240) throw new PlantException("History: 1 to 240 minutes.");
         if (s.AskEffort is not ("low" or "medium" or "high" or "max")) throw new PlantException("Effort is low, medium, high or max.");
         if (s.Port is < 1 or > 65535) throw new PlantException("Port: 1 to 65535.");
+        if (s.Retention?.Problem() is { } keep) throw new PlantException(keep);
         if (string.IsNullOrWhiteSpace(s.Model)) throw new PlantException("Choose a machine model.");
         var model = _ctx.ResolveAppPath(s.Model);
         if (!File.Exists(model)) throw new PlantException($"The machine model file was not found: {s.Model}");

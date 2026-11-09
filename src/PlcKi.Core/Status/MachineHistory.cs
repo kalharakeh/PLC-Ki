@@ -33,6 +33,8 @@ public sealed class MachineHistory
     }
 
     public TimeSpan KeepValues => _keepValues;
+    /// <summary>At most this many events are kept (the oldest go first).</summary>
+    public int MaxEvents => _maxEvents;
 
     public void Add(Snapshot snap, MachineStatus status)
     {
