@@ -161,10 +161,15 @@
       <ul class="mem-list card">${list.map((o) => occLine(o, { showAlarm: true })).join("")}</ul>`);
   }
 
-  // ---------- History page ----------
+  // ---------- History page: the one home for past alarms ----------
+  // Tabs: Log (#/history: every alarm that came, what was noted, PLC and connection events), Ranking
+  // (#/history/ranking/count or /downtime) and Recordings (#/history/recordings[/<id>], from capture.js).
+  // #/history/<alarm id> is one alarm's own history. One set of time windows for all of it.
   const WINDOWS = [[1, "24 h"], [7, "7 days"], [30, "30 days"], [365, "1 year"]];
-  let days = 7, q = "", onlyUnnoted = false, logMax = 50, alarmOnly = null;
+  const TABS = [["log", "Log"], ["ranking", "Ranking"], ["recordings", "Recordings"]];
+  let days = 7, q = "", onlyUnnoted = false, logMax = 50, alarmOnly = null, rankBy = "count";
   let timer = null, logData = null, logKey = "";
+  let events = null, eventsAt = 0;
 
   function loadLog(force) {
     const key = `${days}|${q}|${onlyUnnoted}|${logMax}|${alarmOnly || ""}`;
@@ -176,11 +181,57 @@
     if (alarmOnly) p.set("alarm", alarmOnly);
     PK.api("GET", "/api/memory/occurrences?" + p).then((d) => { logData = d; remember(d.occurrences); PK.draw(); }).catch(() => { logData = { total: 0, occurrences: [], error: true }; PK.draw(); });
   }
+  /** The PLC's own events (STOP, back in RUN) and the connection's (dropped, back), kept since PLC-Ki started. */
+  function loadEvents() {
+    eventsAt = Date.now();
+    PK.api("GET", "/api/events?kind=cpu,link&max=50").then((e) => { events = e; PK.draw(); }).catch(() => { events = events || []; });
+  }
+
+  /** Where the address points: a tab, or one alarm's history. An alarm id is checked first, so a tab never hides one. */
+  function where(params) {
+    const p0 = params[0] || "";
+    const isAlarm = p0 && state.model && state.model.alarms.some((a) => a.id === p0);
+    if (!p0 || (!isAlarm && TABS.some(([k]) => k === p0))) return { tab: p0 || "log", alarm: null, sub: params[1] || null };
+    return { tab: "log", alarm: p0, sub: null };
+  }
+
+  const windowSeg = () => `<div class="segmented" role="group" aria-label="Time window">${WINDOWS.map(([n, l]) =>
+    `<button type="button" class="${days === n ? "on" : ""}" data-days="${n}" aria-pressed="${days === n}">${l}</button>`).join("")}</div>`;
+  const windowName = () => WINDOWS.find((w) => w[0] === days)[1];
+
+  function rankingHtml(d) {
+    const rows = d ? d.top : null;
+    const size = (r) => (rankBy === "downtime" ? r.downtimeMinutes : r.count) || 0;
+    const max = rows && rows.length ? Math.max(...rows.map(size), 0.01) : 1;
+    const seg = `<div class="segmented" role="group" aria-label="Rank by">${[["count", "Most often"], ["downtime", "Longest on"]].map(([k, l]) =>
+      `<a class="${rankBy === k ? "on" : ""}" href="#/history/ranking/${k}" ${rankBy === k ? 'aria-current="true"' : ""}>${l}</a>`).join("")}</div>`;
+    const list = !rows ? `<p class="muted">Loading…</p>` : rows.length ? `<ul class="list mem-top">${rows.map((r) => `<li class="click" data-hist="${esc(r.alarmId)}" tabindex="0">
+          ${sevTag(r.severity, r.alarmId)}
+          <span class="mem-top-t"><b>${esc(r.text)}</b><span class="mem-bar" aria-hidden="true"><i style="width:${Math.max(4, Math.round(size(r) / max * 100))}%" class="${r.severity === "WARNING" ? "w" : ""}"></i></span>
+            <span class="muted small">${r.topCause ? "Most noted cause: " + esc(r.topCause) + " · " : ""}last ${esc(PK.when(r.last))}</span></span>
+          <span class="mem-top-n">${rankBy === "downtime" ? `<b>${esc(r.downtime)}</b><span class="muted small">${r.count}×</span>` : `<b>${r.count}×</b><span class="muted small">${esc(r.downtime)} on</span>`}</span></li>`).join("")}</ul>`
+      : `<div class="nomatch">${icon("check")}<b>No alarm in this window.</b><span>PLC-Ki records every alarm that comes while it watches the machine.</span></div>`;
+    return sec("", `<div class="toolbar">${seg}</div>
+      <p class="sub">${rankBy === "downtime" ? "The alarms that were on longest in total" : "The alarms that came most often"}, in the last ${esc(windowName())}. Tap one for its own history.</p>${list}
+      <p class="faint small" style="margin-top:14px">The shift report and OEE are on <a href="#/reports">Reports</a>.</p>`);
+  }
+
+  function eventsHtml() {
+    if (!events || !events.length) return "";
+    return `<details class="more" style="margin-top:18px"><summary><b>PLC and connection</b> <span class="muted small">${events.length} since PLC-Ki started</span></summary>
+      <ul class="list events" style="margin-top:10px">${events.map((e) => {
+        const ok = /back in RUN|\bback\b|again/i.test(e.text);
+        const word = e.kind === "cpu" ? (ok ? "RUN" : (/(?:to|in) ([A-Z]+)/.exec(e.text) || [])[1] || "STOP") : ok ? "Back" : "Lost";
+        return `<li><span class="ev-time">${esc(PK.date(e.time, true))}</span><span class="ev-kind ${ok ? "run" : "stop"}">${esc(word)}</span>
+          <span style="flex:1;min-width:180px">${e.kind === "cpu" ? `<a href="#/plc">${esc(e.text)}</a>` : esc(e.text)}</span></li>`;
+      }).join("")}</ul></details>`;
+  }
 
   PK.view("history", {
     live: true,
     mount() {
-      alarmOnly = (PK.current && PK.current.params[0]) || null;
+      const w = where((PK.current && PK.current.params) || []);
+      alarmOnly = w.alarm;
       days = alarmOnly ? 365 : 7;
       logData = null; logKey = "";
       loadLog(true);
@@ -189,39 +240,34 @@
     },
     leave() { clearInterval(timer); },
     render() {
-      const want = (PK.current && PK.current.params[0]) || null;
-      if (want !== alarmOnly) { alarmOnly = want; days = want ? 365 : 7; loadLog(true); }
-      const d = cached(`/api/memory?days=${days}`);
+      const w = where((PK.current && PK.current.params) || []);
+      if (w.tab === "recordings" && w.sub && window.PKCapture) return PKCapture.page(w.sub);
+      if (w.alarm !== alarmOnly) { alarmOnly = w.alarm; days = w.alarm ? 365 : 7; loadLog(true); }
+      if (w.tab === "ranking") rankBy = w.sub === "downtime" ? "downtime" : "count";
+      const d = cached(`/api/memory?days=${days}` + (w.tab === "ranking" ? `&by=${rankBy}` : ""));
       const def = alarmOnly && state.model ? state.model.alarms.find((a) => a.id === alarmOnly) : null;
-      const seg = `<div class="segmented" role="group" aria-label="Time window">${WINDOWS.map(([n, l]) =>
-        `<button type="button" class="${days === n ? "on" : ""}" data-days="${n}" aria-pressed="${days === n}">${l}</button>`).join("")}</div>`;
-      const top = d ? `<div class="hero-kpis kpis" style="margin-top:28px">
-          <div class="k"><b>${d.occurrences}</b><span>alarm${d.occurrences === 1 ? "" : "s"} in the last ${esc(WINDOWS.find((w) => w[0] === days)[1])}</span></div>
+      const top = d && !def && w.tab !== "recordings" ? `<div class="hero-kpis kpis" style="margin-top:28px">
+          <div class="k"><b>${d.occurrences}</b><span>alarm${d.occurrences === 1 ? "" : "s"} in the last ${esc(windowName())}</span></div>
           <div class="k"><b>${esc(d.downtime)}</b><span>alarms were on (added up)</span></div>
           <div class="k ${d.occurrences && d.noted < d.occurrences ? "" : "ok"}"><b>${d.noted} of ${d.occurrences}</b><span>have a note on cause and fix</span></div>
-          <div class="k"><b>${d.recorded}</b><span>kept in the machine memory</span></div></div>` : "";
+          <div class="k"><b>${d.recorded}</b><span>kept on this PC</span></div></div>` : "";
+      const nav = def ? "" : `<nav class="ptabs" aria-label="History">${TABS.map(([k, l]) => `<a href="#/history${k === "log" ? "" : "/" + k}" class="${k === w.tab ? "on" : ""}" ${k === w.tab ? 'aria-current="page"' : ""}>${l}</a>`).join("")}</nav>`;
 
       const head = hero({
-        eyebrow: `<span class="pill info"><span class="dot"></span>Machine memory</span>`,
-        title: def ? `${esc(def.id)} history` : "Alarm history",
+        title: def ? `${esc(def.id)} history` : "History",
         sub: def ? esc(def.text) : "Every alarm PLC-Ki saw on this machine, what it was doing then, and what the technicians found and did. Ask uses it too: \"did this happen before?\"",
-        actions: `${seg}${def ? `<a class="btn b small" href="#/history">All alarms</a><a class="btn b small" href="#/alarms/${encodeURIComponent(def.id)}">Alarm details</a>` : ""}`,
-        extra: def ? "" : top,
+        actions: `${w.tab === "recordings" ? "" : windowSeg()}${def ? `<a class="btn b small" href="#/history">All alarms</a><a class="btn b small" href="#/alarms/${encodeURIComponent(def.id)}">Alarm details</a>` : ""}`,
+        extra: top + nav,
       });
 
-      const loadErr = d && d.loadError ? sec("", `<div class="notice gold">${icon("warn")}<div>${esc(d.loadError)}</div></div>`) : "";
+      if (w.tab === "recordings") return head + sec("", window.PKCapture ? PKCapture.listHtml() : `<p class="muted">Recordings are not available.</p>`);
 
+      const loadErr = d && d.loadError ? sec("", `<div class="notice gold">${icon("warn")}<div>${esc(d.loadError)}</div></div>`) : "";
+      if (w.tab === "ranking") return head + loadErr + rankingHtml(d);
+
+      if (!def && Date.now() - eventsAt > 15000) loadEvents();
       const unnoted = !def && d && d.unnoted.length ? sec("", `<h2>Waiting for a note</h2><p class="sub">Went in the last 12 hours, no cause or fix written down yet.</p>
         <ul class="mem-list card">${remember(d.unnoted).map((o) => occLine(o, { showAlarm: true })).join("")}</ul>`) : "";
-
-      const max = d && d.top.length ? Math.max(...d.top.map((r) => r.count)) : 1;
-      const most = !def && d ? sec("", `<h2>Happens most</h2>${d.top.length ? `<ul class="list mem-top">${d.top.map((r) => `<li class="click" data-hist="${esc(r.alarmId)}" tabindex="0">
-            ${sevTag(r.severity, r.alarmId)}
-            <span class="mem-top-t"><b>${esc(r.text)}</b><span class="mem-bar" aria-hidden="true"><i style="width:${Math.max(4, Math.round(r.count / max * 100))}%" class="${r.severity === "WARNING" ? "w" : ""}"></i></span>
-              <span class="muted small">${r.topCause ? "Most noted cause: " + esc(r.topCause) + " · " : ""}last ${esc(PK.when(r.last))}</span></span>
-            <span class="mem-top-n"><b>${r.count}×</b><span class="muted small">${esc(r.downtime)} on</span></span></li>`).join("")}</ul>`
-          : `<div class="nomatch">${icon("check")}<b>No alarm in this window.</b><span>PLC-Ki records every alarm that comes while it watches the machine.</span></div>`}`) : "";
-
       const summary = def ? sec("", `<div class="card">${alarmBlock(def.id)}</div>`) : "";
 
       const rows = logData ? logData.occurrences : null;
@@ -229,17 +275,19 @@
       if (alarmOnly) csv.set("alarm", alarmOnly);
       if (q) csv.set("q", q);
       if (onlyUnnoted) csv.set("unnoted", "true");
-      const log = sec("", `<h2>${def ? "Every time it was on" : "Log"}</h2>
+      const log = sec("", `<h2>${def ? "Every time it was on" : "Every alarm that came"}</h2>
         <div class="toolbar"><input type="search" id="mem-q" placeholder="Search alarm, cause, fix, step or name" value="${esc(q)}" aria-label="Search the alarm history">
           <label class="check"><input type="checkbox" id="mem-unnoted" ${onlyUnnoted ? "checked" : ""}> Only without a note</label>
           <a class="btn b small" href="/api/memory/export.csv?${csv}" download>${icon("download")} Download for Excel</a></div>
         ${!rows ? `<p class="muted">Loading…</p>` : rows.length ? `<ul class="mem-list card">${rows.map((o) => occLine(o, { showAlarm: !def })).join("")}</ul>
           ${logData.total > rows.length ? `<button type="button" class="btn plain small" data-more style="margin-top:10px">Show more (${logData.total - rows.length} older)</button>` : ""}`
-          : `<div class="nomatch">${icon("search")}<b>${q || onlyUnnoted ? "Nothing matches." : "Nothing recorded in this window yet."}</b><span>${q || onlyUnnoted ? "Try fewer words or a longer time window." : "Alarms are recorded from the moment PLC-Ki watches the machine."}</span></div>`}`);
+          : `<div class="nomatch">${icon("search")}<b>${q || onlyUnnoted ? "Nothing matches." : "Nothing recorded in this window yet."}</b><span>${q || onlyUnnoted ? "Try fewer words or a longer time window." : "Alarms are recorded from the moment PLC-Ki watches the machine."}</span></div>`}
+        ${def ? "" : eventsHtml()}`);
 
-      return head + loadErr + summary + unnoted + most + log;
+      return head + loadErr + summary + unnoted + log;
     },
     after(page) {
+      if (window.PKCapture) PKCapture.wirePage(page);
       page.querySelectorAll("[data-days]").forEach((b) => b.onclick = () => { days = Number(b.dataset.days); logMax = 50; loadLog(); PK.draw(); });
       page.querySelectorAll("[data-hist]").forEach((li) => {
         li.onclick = () => PK.go("#/history/" + encodeURIComponent(li.dataset.hist));

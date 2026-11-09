@@ -988,9 +988,8 @@
         const tree = callTree();
         const idx = notesIndex();
         const roll = rollup(tree.byName, idx);
-        const head = PK.sec("hero compact", `<div class="eyebrow">${esc(p.project)} · ${esc(p.plc)}${p.cpu ? " · " + esc(p.cpu) : ""}</div>
-          <h1>Program</h1>
-          <p class="sub">What the PLC program does and why, live. Each part is explained in plain words first; the code with live values is underneath.</p>`);
+        const head = PK.hero({ cls: "hero compact", eyebrow: `${esc(p.project)} · ${esc(p.plc)}${p.cpu ? " · " + esc(p.cpu) : ""}`, title: "Program",
+          sub: "What the PLC program does and why, live. Each part is explained in plain words first; the code with live values is underneath." });
         const picked = sel && !sel.overview;
         const body = (inner) => head + PK.sec("alt", `<div class="split ${picked ? "has-sel" : ""}"><nav class="blocklist" aria-label="Program blocks">${list(tree, roll)}</nav><div class="stack">${inner}</div></div>`);
         if (!sel || sel.overview || sel.error) watchList = [];
@@ -1328,7 +1327,7 @@
     for (const st of (hw && hw.available && hw.stations) || []) for (const mo of st.modules || []) for (const c of mo.channels || []) {
       if (ch) break;
       const same = PK.norm(c.symbol) === PK.norm(sym) || (c.tag && PK.norm('"' + c.tag + '"') === PK.norm(sym)) || String(c.address || "").replace(/\s/g, "").toUpperCase() === addr;
-      if (same) ch = { href: `#/hardware/${encodeURIComponent(st.name)}${mo.slot != null ? "/" + encodeURIComponent(mo.slot) : ""}`, where: `${st.name} · ${mo.title || mo.name || "slot " + mo.slot}` };
+      if (same) ch = { href: `#/plc/racks/${encodeURIComponent(st.name)}${mo.slot != null ? "/" + encodeURIComponent(mo.slot) : ""}`, where: `${st.name} · ${mo.title || mo.name || "slot " + mo.slot}` };
     }
     return { address: addr, input: addr.startsWith("%I"), ch };
   }

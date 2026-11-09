@@ -391,9 +391,9 @@
           <span class="pill">PLCSIM ${t && t.plcsimIp ? esc(t.plcsimIp) : "not set"}</span>
           <span class="pill ${t && t.realAllowed && t.realAllowed.length ? "warn" : ""}">Real PLCs allowed: ${t && t.realAllowed ? t.realAllowed.length : "none"}</span></div>`;
       const tiaNote = t && !t.ok ? `<div class="notice gold" style="margin-top:12px">${icon("info")}<div style="flex:1"><b>TIA Portal is not reachable.</b> ${esc(t.message || "")}</div><a class="btn gold small" href="#/setup/connections">Connections</a></div>` : "";
-      return PK.sec("hero compact", `<h1>Block generator</h1>
-          <p class="sub">${AI}, PLC-Ki's block writer, turns plain words into PLC blocks. TIA Portal compiles them, and problems go back to ${AI} until it is clean. Nothing reaches a real PLC without two people confirming.</p>
-          ${chips}${tiaNote}`)
+      return PK.hero({ cls: "hero compact", title: "Block generator",
+          sub: `${AI}, PLC-Ki's block writer, turns plain words into PLC blocks. TIA Portal compiles them, and problems go back to ${AI} until it is clean. Nothing reaches a real PLC without two people confirming.`,
+          extra: chips + tiaNote })
         + PK.sec("", `<div class="gen-layout">${listHtml()}<div class="gen-work" data-work>${workHtml()}</div></div>`);
     },
     after(page) {

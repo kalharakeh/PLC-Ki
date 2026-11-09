@@ -1,4 +1,4 @@
-// Device drawings for the PLC and Hardware pages: each module drawn from its order number (family, kind, width),
+// Device drawings for the PLC page (CPU, Racks and I/O): each module drawn from its order number (family, kind, width),
 // as a clean front view in millimetres, so a CPU 1515F looks like a wide S7-1500 CPU with a display and a DI 32
 // has its 32 channel LEDs. Original drawings in SVG, no maker logos. Colours are the devices' own, the same in
 // light and dark mode.

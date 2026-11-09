@@ -258,10 +258,13 @@ public sealed class ReportBuilder
     public FaultReport Faults(int days, DateTimeOffset now)
     {
         var cfg = _settings();
-        days = Math.Clamp(days, 1, 92);
+        // A rolling window, the same as History's: 24 h is the last 24 hours, 1 year the last 365 days
+        days = Math.Clamp(days, 1, 366);
+        var from = now.AddDays(-days);
         var today = DateOnly.FromDateTime(now.ToLocalTime().DateTime);
-        var firstDay = today.AddDays(1 - days);
-        var from = Local(firstDay.ToDateTime(TimeOnly.MinValue));
+        // The shift table lists the shifts of the last month at most, so a year stays quick to make
+        var firstDay = DateOnly.FromDateTime(from.ToLocalTime().DateTime);
+        if (firstDay < today.AddDays(-30)) firstDay = today.AddDays(-30);
         var records = _log.Records(from, now);
         var timeline = Timeline(records, from, now, now);
         var totals = Totals(timeline);

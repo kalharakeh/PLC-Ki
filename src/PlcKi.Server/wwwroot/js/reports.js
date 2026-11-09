@@ -1,4 +1,4 @@
-// Reports page: the shift report with OEE, the fault summary for maintenance, and the report settings
+// Reports page: the shift report with OEE, a summary for maintenance (down time, MTTR, MTBF, every shift), and the report settings
 // (shifts, part counters, ideal cycle time). Everything comes from what PLC-Ki records while it watches the
 // machine (/api/reports/...). Read-only towards the PLC.
 "use strict";
@@ -47,15 +47,16 @@
     try { r.faults = await api("GET", "/api/reports/faults?days=" + r.days); r.err = null; } catch (e) { r.err = e.message; }
     r.loading = false; PK.draw();
   }
-  function tab(params) { return ["shift", "faults", "settings"].includes(params[0]) ? params[0] : "shift"; }
+  // The old Fault summary address (#/reports/faults) leads to History › Ranking (core.js), where its alarm list is now
+  function tab(params) { return ["shift", "summary", "settings"].includes(params[0]) ? params[0] : "shift"; }
   async function load(params) {
     if (!r.cfg) await loadCfg();
     const t = tab(params);
     if (t === "shift") await loadShift(params[1], +(params[2] || 0));
-    else if (t === "faults") await loadFaults();
+    else if (t === "summary") await loadFaults();
     else { r.draft = r.cfg ? JSON.parse(JSON.stringify(r.cfg.settings)) : null; PK.draw(); }
   }
-  // A shift that is still running is refreshed every 30 s; the fault summary every minute
+  // A shift that is still running is refreshed every 30 s; the summary every minute
   let timer = null;
   function startTimer() {
     stopTimer();
@@ -63,7 +64,7 @@
       if (document.hidden || !PK.current || PK.current.name !== "reports") return;
       const t = tab(PK.current.params);
       if (t === "shift" && r.shift && r.shift.inProgress) loadShift(r.shift.day, r.shift.shiftIndex);
-      else if (t === "faults" && Date.now() % 60000 < 30000) loadFaults();
+      else if (t === "summary" && Date.now() % 60000 < 30000) loadFaults();
     }, 30000);
   }
   function stopTimer() { if (timer) clearInterval(timer); timer = null; }
@@ -71,8 +72,8 @@
   // ---- pieces ----
   function tabs(t) {
     const admin = PK.state.user && PK.state.user.role === "admin";
-    const b = (id, label) => `<a class="${t === id ? "on" : ""}" href="#/reports/${id}" role="tab" aria-selected="${t === id}">${label}</a>`;
-    return `<div class="segmented rp-tabs" role="tablist">${b("shift", "Shift report")}${b("faults", "Fault summary")}${b("settings", admin ? "Settings" : "How it counts")}</div>`;
+    const b = (id, label) => `<a class="${t === id ? "on" : ""}" href="#/reports/${id}" ${t === id ? 'aria-current="page"' : ""}>${label}</a>`;
+    return `<nav class="ptabs" aria-label="Reports">${b("shift", "Shift report")}${b("summary", "Summary")}${b("settings", admin ? "Settings" : "How it counts")}</nav>`;
   }
 
   function kpi(value, label, sub, cls) {
@@ -144,7 +145,7 @@
       ${nextStarted ? `<a class="btn gray small" href="#/reports/shift/${next[0]}/${next[1]}" aria-label="Next shift">›</a>` : `<span class="btn gray small" aria-disabled="true" style="opacity:.4">›</span>`}
       ${r.cfg && r.cfg.current && !(r.cfg.current.day === x.day && r.cfg.current.index === x.shiftIndex) ? `<a class="btn b small" href="#/reports/shift">This shift</a>` : ""}
       <span class="spacer"></span>
-      <a class="btn gray small" href="/api/reports/shift.csv?day=${x.day}&shift=${x.shiftIndex}" download>${icon("download")}<span>Spreadsheet</span></a>
+      <a class="btn gray small" href="/api/reports/shift.csv?day=${x.day}&shift=${x.shiftIndex}" download>${icon("download")}<span>Download for Excel</span></a>
       <button class="btn gray small" type="button" data-print>${icon("file")}<span>Print or PDF</span></button>
     </div>`;
   }
@@ -182,18 +183,18 @@
         <span>Running between faults (MTBF)</span><span>${mins(m.mtbfMinutes)}</span>
         <span>No PLC connection</span><span>${mins(t.noLink)}</span></div></div>`;
     const losses = `<div class="card"><h3>Biggest losses</h3>${lossTable(x.losses, t.idle + t.down + t.noLink)}</div>`;
-    const faults = `<div class="card"><h3>Alarms in this shift</h3>${faultTable(x.faults, true)}</div>`;
+    const faults = `<div class="card"><h3>Alarms in this shift</h3>${faultTable(x.faults, true)}<p class="faint small no-print" style="margin:10px 0 0">Every past alarm, with what fixed it: <a href="#/history">History</a>.</p></div>`;
     const ask = PK.state.user ? `<div class="row no-print" style="margin-top:6px"><button class="btn b small" type="button" data-rpask>${icon("chat")}<span>Ask ${PK.AI} for a handover note</span></button></div>` : "";
     return PK.sec("tight rp", shiftPicker(x) + head + kpis + `<div class="rp-grid">${time}<div class="grid two rp-two">${parts}${maint}</div><div class="grid two rp-two">${losses}${faults}</div></div>` + notes(x.notes) + ask);
   }
 
-  // ---- fault summary ----
+  // ---- summary over a time window: down time, MTTR and MTBF, where the time went, every shift's OEE ----
   function faultsPage() {
     const x = r.faults;
     const range = `<div class="toolbar no-print"><div class="segmented" role="group" aria-label="Time range">
-      ${[[1, "Today"], [7, "7 days"], [30, "30 days"]].map(([d, l]) => `<button type="button" data-days="${d}" class="${r.days === d ? "on" : ""}">${l}</button>`).join("")}</div>
+      ${[[1, "24 h"], [7, "7 days"], [30, "30 days"], [365, "1 year"]].map(([d, l]) => `<button type="button" data-days="${d}" class="${r.days === d ? "on" : ""}">${l}</button>`).join("")}</div>
       <span class="spacer"></span>
-      <a class="btn gray small" href="/api/reports/faults.csv?days=${r.days}" download>${icon("download")}<span>Spreadsheet</span></a>
+      <a class="btn gray small" href="/api/reports/faults.csv?days=${r.days}" download>${icon("download")}<span>Download for Excel</span></a>
       <button class="btn gray small" type="button" data-print>${icon("file")}<span>Print or PDF</span></button></div>`;
     if (!x) return PK.sec("tight rp", range + `<p class="muted">${r.err ? esc(r.err) : "Making the summary…"}</p>`);
     const t = x.totals, m = x.maint;
@@ -207,8 +208,8 @@
       ${x.shifts.map((s) => `<tr><td><a href="#/reports/shift/${s.day}/${s.shiftIndex}">${esc(dayName(s.day))}, ${esc(s.shift)}</a>${s.inProgress ? ` <span class="tag blue">now</span>` : ""}</td>
         <td class="num"><b class="rp-oee ${oeeCls(s.oee)}">${pct(s.oee)}</b></td><td class="num">${pct(s.availability)}</td><td class="num">${s.parts}</td><td class="num">${mins(s.downMinutes)}</td>
         <td class="faint">${esc(s.topLoss || "")}</td></tr>`).join("")}</table>` : `<p class="muted" style="margin:0">No shift recorded yet.</p>`;
-    return PK.sec("tight rp", range + `<div class="rp-head"><div><div class="eyebrow"><span class="faint">${esc(PK.date(x.from, false))} to now · ${esc(x.machine)}</span></div><h2 style="margin:0">Fault summary for maintenance</h2></div></div>`
-      + kpis + `<div class="rp-grid"><div class="card"><h3>Alarms, longest down time first</h3>${faultTable(x.faults, true)}</div>
+    return PK.sec("tight rp", range + `<div class="rp-head"><div><div class="eyebrow"><span class="faint">${esc(PK.date(x.from, false))} to now · ${esc(x.machine)}</span></div><h2 style="margin:0">Summary for maintenance</h2></div></div>`
+      + kpis + `<div class="rp-grid"><a class="card plink no-print" href="#/history/ranking/downtime"><span class="ico">${icon("clock")}</span><span><b>Which alarms cost the most time</b><span class="muted small">${x.faults.length ? `${x.faults.length} different alarm${x.faults.length === 1 ? "" : "s"} in this time. History ranks them by how long they were on, with what fixed them.` : "History ranks past alarms by how long they were on, with what fixed them."}</span></span><span class="chev">›</span></a>
       <div class="card"><h3>Why it was not running</h3>${lossTable(x.losses, t.idle + t.down + t.noLink)}</div>
       <div class="card"><h3>Shifts</h3><div class="tbl-wrap">${shifts}</div></div></div>` + notes(x.notes));
   }
@@ -278,9 +279,9 @@
     leave() { stopTimer(); },
     render(params) {
       const t = tab(params);
-      const head = PK.hero({ cls: "hero compact", title: "Reports.",
-        sub: "Shift report with OEE, and a fault summary for maintenance. Made from what PLC-Ki records while it watches the machine.", extra: tabs(t) });
-      const body = t === "shift" ? shiftPage() : t === "faults" ? faultsPage() : settingsPage();
+      const head = PK.hero({ cls: "hero compact", title: "Reports",
+        sub: "Shift report with OEE, and a summary for maintenance. Made from what PLC-Ki records while it watches the machine. Past alarms are in History.", extra: tabs(t) });
+      const body = t === "shift" ? shiftPage() : t === "summary" ? faultsPage() : settingsPage();
       return head + body;
     },
     after(el, params) {

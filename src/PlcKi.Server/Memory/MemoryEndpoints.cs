@@ -35,7 +35,7 @@ public static class MemoryEndpoints
     public static void MapMemory(this WebApplication app)
     {
         // The overview for the History page: most frequent alarms, downtime, what still needs a note
-        app.MapGet("/api/memory", (AlarmMemory mem, double? days) =>
+        app.MapGet("/api/memory", (AlarmMemory mem, double? days, string? by) =>
         {
             var now = DateTimeOffset.Now;
             var d = Math.Clamp(days ?? 7, 1, 3650);
@@ -48,9 +48,11 @@ public static class MemoryEndpoints
                 occurrences = inWindow.Count,
                 noted = inWindow.Count(o => o.Note != null),
                 downtime = AlarmMemory.Span(inWindow.Aggregate(TimeSpan.Zero, (s, o) => s + ((o.Went ?? now) - (o.Came < from ? from : o.Came)))),
-                top = mem.Top(from, now, 10).Select(r => new
+                // by=downtime ranks by how long each alarm was on in total (History › Ranking); the default by how often
+                top = mem.Top(from, now, by == "downtime" ? 25 : 10, by == "downtime").Select(r => new
                 {
-                    r.AlarmId, r.Text, r.Severity, r.Count, downtime = AlarmMemory.Span(r.Downtime), r.Last, r.Noted, r.TopCause,
+                    r.AlarmId, r.Text, r.Severity, r.Count, downtime = AlarmMemory.Span(r.Downtime), downtimeMinutes = Math.Round(r.Downtime.TotalMinutes, 1),
+                    r.Last, r.Noted, r.TopCause,
                 }),
                 // Alarms that went in the last 12 hours and nobody wrote down what fixed them
                 unnoted = mem.Unnoted(now.AddHours(-12), 5).Select(Dto),

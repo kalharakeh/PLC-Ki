@@ -284,8 +284,7 @@ const PKStart = (() => {
       : `<div class="wiz-nav">${i > 0 ? `<a class="btn b" href="#/setup/start/${STEPS[i - 1][0]}">Back</a>` : ""}<span class="spacer"></span>
           ${st.skip ? `<button class="btn plain" data-skip>${esc(st.skipText || "Skip for now")}</button>` : ""}
           <button class="btn big" data-next ${busy ? "disabled" : ""}>${busy ? "Saving…" : "Continue"}</button></div>`;
-    return PK.sec("hero wiz", `${PKSetup.setupNav("start")}${dots}
-        <div class="eyebrow">Step ${i + 1} of ${STEPS.length}</div><h1>${st.title}</h1><p class="sub">${st.sub}</p>`)
+    return PK.hero({ cls: "hero wiz", before: PKSetup.setupNav("start") + dots, eyebrow: `Step ${i + 1} of ${STEPS.length}`, title: st.title, sub: st.sub })
       + PK.sec("alt wiz-body", `${st.body}${nav}`);
   }
 
