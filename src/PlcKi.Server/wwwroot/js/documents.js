@@ -125,10 +125,8 @@ const PKDocs = (() => {
 
   function settingsForm({ title, kind, scope, device, scopeFixed, okText, extra = "" }) {
     return `<h2>${esc(title)}</h2>
-      ${scopeFixed ? "" : `<p class="muted small" style="margin:0 0 6px">For</p><div class="segmented" role="group" aria-label="For" data-g="scope">
-        <button type="button" data-v="machine" class="${scope === "machine" ? "on" : ""}">This machine</button><button type="button" data-v="shared" class="${scope === "shared" ? "on" : ""}">Every machine</button></div>`}
-      <p class="muted small" style="margin:14px 0 6px">What it is</p><div class="segmented" role="group" aria-label="What it is" data-g="kind">
-        ${KINDS.map(([k, l]) => `<button type="button" data-v="${k}" class="${k === kind ? "on" : ""}">${l}</button>`).join("")}</div>
+      ${scopeFixed ? "" : `<p class="muted small" style="margin:0 0 6px">For</p>${PK.ui.choice("For", [["machine", "This machine"], ["shared", "Every machine"]].map(([k, l]) => ({ label: l, on: scope === k, data: { "data-v": k } })), { data: { "data-g": "scope" } })}`}
+      <p class="muted small" style="margin:14px 0 6px">What it is</p>${PK.ui.choice("What it is", KINDS.map(([k, l]) => ({ label: l, on: k === kind, data: { "data-v": k } })), { data: { "data-g": "kind" } })}
       <label class="field" style="margin-top:14px">Device or maker (helps find the right manual)
         <input type="text" id="doc-device" placeholder="e.g. SINAMICS G120, FANUC R-30iB, Inficon LDS3000" value="${esc(device || "")}" maxlength="120"></label>
       ${extra}
@@ -136,7 +134,7 @@ const PKDocs = (() => {
   }
   function bindSegments(el) {
     el.querySelectorAll("[data-g]").forEach((g) => g.querySelectorAll("button").forEach((b) => b.onclick = () => {
-      g.querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b));
+      g.querySelectorAll("button").forEach((x) => { x.classList.toggle("on", x === b); x.setAttribute("aria-pressed", String(x === b)); });
     }));
   }
   const segValue = (el, g) => { const b = el.querySelector(`[data-g="${g}"] button.on`); return b ? b.dataset.v : null; };

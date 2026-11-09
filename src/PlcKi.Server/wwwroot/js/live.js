@@ -344,7 +344,7 @@
           ${a.condition ? `<p class="sub">${esc(a.condition)}</p>` : ""}
           ${failed.length ? `<p class="sub"><b>Failed check:</b> ${failed.map((c) => esc(c.text) + (c.values && c.values.length ? ` (now ${c.values.map((v) => esc(v.label) + " " + esc(v.text)).join(", ")})` : "")).join("; ")}</p>` : ""}
           ${settingsNotice(s)}
-          <div class="kpis aa-facts">${facts.map(([v, l, c]) => `<div class="k ${c || ""}"><b>${esc(v)}</b><span>${esc(l)}</span></div>`).join("")}</div>
+          ${PK.ui.tiles(facts.map(([value, label, state]) => ({ value, label, state })), { small: true })}
           <div class="actions"><button class="btn" data-ask="Why is alarm ${esc(a.id)} on, and how do I fix it?">Ask about this alarm</button>
             ${where.block ? `<a class="btn b" href="${esc(where.href)}">Show where it is set</a>` : ""}</div>
           <div class="aa-fix">
@@ -489,9 +489,9 @@
           : main ? (main.halted ? esc("Halted: " + (main.haltReasons.join("; ") || "the outputs are off.")) : waitsFor.length ? esc("Waiting for: " + waitsFor.join("; ")) : esc(main.does || "")) : esc(s.summary[0] || ""),
         actions: stop ? `<a class="btn" href="#/alarm">What to check</a><a class="btn b" href="#/plc">PLC page</a>` : `<button class="btn" data-ask="${ask0 ? `Why is alarm ${esc(ask0.id)} on for ${esc(attention[0].name)}, and what do I check?` : attention.length ? `Why is ${esc(attention[0].name)} ${esc(attention[0].blockedBy ? "blocked" : attention[0].state)}, and what do I check?` : "What is the machine doing right now?"}">Ask about it</button>${s.activeAlarms.length ? `<a class="btn b" href="#/alarm">${s.activeAlarms.length} active alarm${s.activeAlarms.length > 1 ? "s" : ""}</a>` : ""}`,
         // Measured values as bars with the interlock limit marked; switches and counters stay as numbers
-        extra: (s.overview.length ? (V ? V.valueBars(s.overview.slice(0, 8)) : `<div class="kpis plant-kpis">${s.overview.slice(0, 8).map((v) => `<div class="k"><b>${esc(v.text)}</b><span>${esc(v.label)}</span></div>`).join("")}</div>`) : "")
-          + `<nav class="ptabs" aria-label="Plant">${PLANT_TABS.filter(([k]) => (k !== "exchange" || s.exchange.length) && (k !== "settings" || (s.settings || []).length || (H.data && H.data.settings.length)) && (k !== "stations" || stationList.stations.length > 1) && (k !== "sequence" || (state.model && state.model.sequences.length))).map(([k, l]) =>
-            `<a href="#/plant${k === "overview" ? "" : "/" + k}" class="${k === tab ? "on" : ""}" ${k === tab ? 'aria-current="page"' : ""}>${l}${(k === "devices" || k === "settings") && counts[k] ? ` <span class="count warn">${counts[k]}</span>` : ""}</a>`).join("")}</nav>`,
+        extra: (s.overview.length ? (V ? V.valueBars(s.overview.slice(0, 8)) : PK.ui.tiles(s.overview.slice(0, 8).map((v) => ({ value: v.text, label: v.label })), { cls: "plant-kpis" })) : "")
+          + PK.ui.tabs("Plant", PLANT_TABS.filter(([k]) => (k !== "exchange" || s.exchange.length) && (k !== "settings" || (s.settings || []).length || (H.data && H.data.settings.length)) && (k !== "stations" || stationList.stations.length > 1) && (k !== "sequence" || (state.model && state.model.sequences.length))).map(([k, l]) =>
+            ({ label: l, on: k === tab, href: "#/plant" + (k === "overview" ? "" : "/" + k), count: k === "devices" || k === "settings" ? counts[k] : 0 }))),
       });
 
       loadHmi();
@@ -547,13 +547,11 @@
         const shown = sorted.filter((e) => (!eqOnlyProblems || problemOf(e)) && (!q || (e.id + " " + e.name + " " + (e.kind || "") + " " + e.state).toLowerCase().includes(q)));
         const sel = s.equipment.find((e) => e.id === selectedEq) || shown[0] || sorted[0];
         const tools = `<div class="dev-tools">${s.equipment.length > 6 ? `<input type="search" id="eq-search" placeholder="Find a device" value="${esc(eqQuery)}" aria-label="Find a device">` : ""}
-            <div class="segmented" role="group" aria-label="Show">
-              <button type="button" class="${eqOnlyProblems ? "" : "on"}" data-eqf="all" aria-pressed="${!eqOnlyProblems}">All ${s.equipment.length}</button>
-              <button type="button" class="${eqOnlyProblems ? "on" : ""}" data-eqf="problems" aria-pressed="${eqOnlyProblems}">Needs attention ${attention.length}</button></div></div>`;
+            ${PK.ui.choice("Show", [{ label: `All ${s.equipment.length}`, on: !eqOnlyProblems, data: { "data-eqf": "all" } }, { label: `Needs attention ${attention.length}`, on: eqOnlyProblems, data: { "data-eqf": "problems" } }])}</div>`;
         const list = shown.length ? `<ul class="devlist">${shown.map((e) => `<li><button type="button" class="${sel && e.id === sel.id ? "on" : ""}" data-pick="${esc(e.id)}" aria-pressed="${!!sel && e.id === sel.id}">
             <span class="ico">${icon(PK.kindIcon(e.kind))}</span><span class="dv-t"><b>${esc(e.name)}</b><span>${esc(e.id)}</span></span>
             ${devPill(e)}</button></li>`).join("")}</ul>`
-          : `<div class="nomatch">${eqOnlyProblems && !q ? `${icon("check")}<b>Every device is fine.</b>` : `${icon("search")}<b>No device matches.</b>`}<button class="btn b small" data-eq-reset>Show all devices</button></div>`;
+          : PK.ui.empty({ icon: eqOnlyProblems && !q ? "check" : "search", title: eqOnlyProblems && !q ? "Every device is fine." : "No device matches.", action: `<button class="btn b small" data-eq-reset>Show all devices</button>` });
         body = sec("", `<div class="dev-cols"><div class="stack">${tools}${list}</div>
             <div data-dev>${sel ? `<div class="card stack eq-open">${eqCard(sel, true)}<div class="actions"><button class="btn small" data-ask="${PK.devLook(sel).alarms[0] ? `Why is alarm ${esc(PK.devLook(sel).alarms[0].id)} on for ${esc(sel.id)}?` : `Why is ${esc(sel.id)} ${esc(sel.state)}?`}">Ask why</button></div></div>` : ""}</div></div>`);
       } else if (tab === "stations") {
@@ -592,7 +590,7 @@
         selectedEq = b.dataset.pick;
         PK.setHash("#/plant/devices/" + encodeURIComponent(selectedEq));
         PK.draw();
-        if (innerWidth <= 1000) setTimeout(() => { const el = page.querySelector("[data-dev]"); if (el) window.scrollTo({ top: el.getBoundingClientRect().top + scrollY - 70, behavior: "instant" }); }, 0);
+        if (PK.screenSize() !== "desktop") setTimeout(() => { const el = page.querySelector("[data-dev]"); if (el) window.scrollTo({ top: el.getBoundingClientRect().top + scrollY - 70, behavior: "instant" }); }, 0);
       });
       const hq = page.querySelector("#hmi-q");
       if (hq) hq.oninput = () => { H.q = hq.value; PK.draw(); };
@@ -648,15 +646,16 @@
       return hero({
         title: "Alarms",
         sub: "Every alarm the program can raise: what it means, where it is set, the likely causes and the fix.",
-      }) + sec("alt", `<div class="toolbar"><input type="search" id="alarm-search" placeholder="Search by number, text or device" value="${esc(alarmFilter)}" aria-label="Search alarms">
-          <div class="segmented" role="group" aria-label="Show">${[["all", "All", m.alarms.length, "Every alarm in the program"], ["active", "Active", s.activeAlarms.length, "On right now"], ["faults", "Faults", faults, "Faults stop the machine"], ["warnings", "Warnings", m.alarms.length - faults, "Warnings do not stop the machine"]]
-            .map(([k, l, n, t]) => `<button type="button" class="${alarmKind === k ? "on" : ""} ${k === "active" && n ? "hot" : ""}" data-akind="${k}" aria-pressed="${alarmKind === k}" title="${t}">${l} <b>${n}</b></button>`).join("")}</div></div>
+      }) + sec("alt", `${PK.ui.toolbar({ search: { id: "alarm-search", placeholder: "Search by number, text or device", label: "Search alarms", value: alarmFilter },
+          left: PK.ui.choice("Show", [["all", "All", m.alarms.length, "Every alarm in the program"], ["active", "Active", s.activeAlarms.length, "On right now"], ["faults", "Faults", faults, "Faults stop the machine"], ["warnings", "Warnings", m.alarms.length - faults, "Warnings do not stop the machine"]]
+            .map(([k, l, n, t]) => ({ label: `${l} <b>${n}</b>`, on: alarmKind === k, hot: k === "active" && n, title: t, data: { "data-akind": k } }))) })}
           ${PK.cpuStop(s) ? `<div class="notice red" style="margin-bottom:16px">${icon("warn")}<div><b>The PLC is in ${esc(PK.cpuStop(s).word || "STOP")}: the program is not running.</b> The alarms below are as they were when it stopped. <a href="#/alarm">What to check</a></div></div>` : ""}
           ${PK.deviceDiagnostics ? `<div class="diag-zone">${PK.deviceDiagnostics()}</div>` : ""}
           <a class="card plink alarms-past" href="#/history"><span class="ico">${icon("clock")}</span><span><b>Past alarms</b><span class="muted small">What came and went, what fixed it, and the seconds before each alarm: in History.</span></span><span class="chev">›</span></a>
-          ${rows ? `<ul class="list">${rows}</ul>` : `<div class="nomatch">${alarmKind === "active" && !q ? `${icon("check")}<b>No alarm is active.</b><span>The machine reports no fault or warning right now.</span>`
-            : `${icon("search")}<b>No alarm matches.</b><span>Search by the alarm number (like ${esc((m.alarms[0] || {}).id || "A101")}), a word from the text, or a device tag.</span>`}
-            ${q || alarmKind !== "all" ? `<button class="btn b small" data-areset>Show all alarms</button>` : ""}</div>`}`);
+          ${rows ? `<ul class="list">${rows}</ul>` : PK.ui.empty({ ...(alarmKind === "active" && !q
+            ? { title: "No alarm is active.", text: "The machine reports no fault or warning right now." }
+            : { icon: "search", title: "No alarm matches.", text: `Search by the alarm number (like ${esc((m.alarms[0] || {}).id || "A101")}), a word from the text, or a device tag.` }),
+            action: q || alarmKind !== "all" ? `<button class="btn b small" data-areset>Show all alarms</button>` : "" })}`);
     },
     after(page) {
       if (PK.wireDeviceDiagnostics) PK.wireDeviceDiagnostics(page);

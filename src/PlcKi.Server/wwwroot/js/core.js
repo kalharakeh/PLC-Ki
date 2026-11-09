@@ -95,6 +95,50 @@ const PK = (() => {
   const hero = ({ eyebrow = "", title, sub = "", actions = "", cls = "hero", extra = "", extra0 = "", before = "" }) =>
     sec(cls, `${before}${eyebrow ? `<div class="eyebrow">${eyebrow}</div>` : ""}<h1>${title}</h1>${sub ? `<p class="sub">${sub}</p>` : ""}${extra0}${actions ? `<div class="actions">${actions}</div>` : ""}${extra}`);
 
+  // ---- shared building blocks (UX review 3, item 32): every page draws these the same way ----
+  // Labels are HTML (a page may add a count); everything a page did not write itself must be escaped by the page.
+  const attrs = (o) => Object.entries(o || {}).filter(([, v]) => v != null && v !== false).map(([k, v]) => v === true ? k : `${k}="${esc(v)}"`).join(" ");
+  const ui = {
+    /** Tabs move to another view of the same page: [{ label, href | data, on, count, countCls, sub }].
+     *  Links when there is an href, buttons with data-* attributes otherwise. */
+    tabs(label, items, { cls = "" } = {}) {
+      return `<nav class="tabs ${cls}" aria-label="${esc(label)}"><div class="tabs-in" role="tablist">${items.map((t) => {
+        const inner = `<span class="tab-l">${t.label}${t.count ? ` <span class="count ${t.countCls || "warn"}">${t.count}</span>` : ""}</span>${t.sub ? `<span class="tab-sub">${t.sub}</span>` : ""}`;
+        const a = attrs({ role: "tab", class: t.on ? "on" : null, "aria-selected": String(!!t.on), "aria-current": t.on && t.href ? "page" : null, title: t.title, ...t.data });
+        return t.href ? `<a href="${esc(t.href)}" ${a}>${inner}</a>` : `<button type="button" ${a}>${inner}</button>`;
+      }).join("")}</div></nav>`;
+    },
+    /** Choose one value: a row of pills. [{ label, on, href | data, title, hot }]. Buttons say aria-pressed; links aria-current.
+     *  data: data-* attributes on the row itself, for a page that listens on it. */
+    choice(label, items, { cls = "", data } = {}) {
+      return `<div class="segmented ${cls}" role="group" aria-label="${esc(label)}"${data ? " " + attrs(data) : ""}>${items.map((o) => {
+        const c = [o.on ? "on" : "", o.hot ? "hot" : ""].filter(Boolean).join(" ") || null;
+        return o.href
+          ? `<a href="${esc(o.href)}" ${attrs({ class: c, "aria-current": o.on ? "true" : null, title: o.title })}>${o.label}</a>`
+          : `<button type="button" ${attrs({ class: c, "aria-pressed": String(!!o.on), title: o.title, disabled: o.disabled, ...o.data })}>${o.label}</button>`;
+      }).join("")}</div>`;
+    },
+    /** Number tiles: [{ value (or html), label, note, state: "ok" | "warn" | "bad" }]. small: a row of small facts; boxed: report cards;
+     *  two: two across, for long words such as order numbers. */
+    tiles(items, { small = false, boxed = false, two = false, cls = "" } = {}) {
+      return `<div class="kpis ${small ? "kpis-s" : ""} ${boxed ? "boxed" : ""} ${two ? "two" : ""} ${cls}">${items.map((t) =>
+        `<div class="k ${t.state || ""}"${t.title ? ` title="${esc(t.title)}"` : ""}><b>${t.html != null ? t.html : esc(t.value)}</b><span>${esc(t.label)}</span>${t.note ? `<span class="k-note">${esc(t.note)}</span>` : ""}</div>`).join("")}</div>`;
+    },
+    /** Nothing to show: an icon, one bold line, what it means or what to do, an optional button. */
+    empty({ icon: ic = "check", title, text = "", action = "", cls = "" }) {
+      return `<div class="empty ${cls}">${icon(ic)}<b>${title}</b>${text ? `<span>${text}</span>` : ""}${action}</div>`;
+    },
+    /** Search, filters and actions over a list: { search: { id, placeholder, value, label }, left, right }. */
+    toolbar({ search, left = "", right = "", cls = "" }) {
+      const s = search ? `<input type="search" id="${esc(search.id)}" placeholder="${esc(search.placeholder)}" aria-label="${esc(search.label || search.placeholder)}" value="${esc(search.value || "")}">` : "";
+      return `<div class="toolbar ${cls}">${s}${left}${right ? `<span class="spacer"></span>${right}` : ""}</div>`;
+    },
+  };
+
+  // ---- screen sizes: the same three as ui.css (phone up to 600 px, tablet up to 1100 px, desktop above) ----
+  const BP = { phone: 600, tablet: 1100 };
+  const screenSize = () => innerWidth <= BP.phone ? "phone" : innerWidth <= BP.tablet ? "tablet" : "desktop";
+
   function view(name, def) { views[name] = def; }
 
   function parseRoute() {
@@ -589,8 +633,7 @@ const PK = (() => {
         ${row("notify", "Show a notice when a new alarm comes", "A message from the browser, also when PLC-Ki is in a background tab.", canNotify, notHere)}
         ${row("awake", "Keep this screen on", "For a screen on the line: the display does not go dark while this page is open.", canWake, notHere)}
         <div class="opt-row" style="cursor:default"><span style="flex:1"><b>Screen colours</b><br><span class="muted small">Dark suits a wall screen in a bright hall.</span></span>
-          <div class="segmented" role="group" aria-label="Screen colours">${[["auto", "Like this PC"], ["light", "Light"], ["dark", "Dark"]].map(([k, l]) =>
-            `<button type="button" data-theme-set="${k}" class="${themeChoice() === k ? "on" : ""}" aria-pressed="${themeChoice() === k}">${l}</button>`).join("")}</div></div>
+          ${ui.choice("Screen colours", [["auto", "Like this PC"], ["light", "Light"], ["dark", "Dark"]].map(([k, l]) => ({ label: l, on: themeChoice() === k, data: { "data-theme-set": k } })))}</div>
       </div>
       <div class="row end"><button class="btn plain" type="button" data-test-beep>Test the beep</button><button class="btn" data-close>Done</button></div>`);
     s.el.addEventListener("change", async (e) => {
@@ -1268,6 +1311,6 @@ const PK = (() => {
     if (state.user) { loadHeld(); setInterval(loadHeld, 15000); }
   }
 
-  return { AI, dirty: setDirty, get isDirty() { return !!dirty; }, plain, connInfo, connSheet, helpSheet, screenSheet, passwordSheet, setHash, cmd, sec, hero, on, $, esc, icon, fillIcons, kindIcon, api, state, view, go, draw, route, toast, sheet, confirmSheet, cond, md, ago, clock, date, when,
+  return { AI, ui, BP, screenSize, dirty: setDirty, get isDirty() { return !!dirty; }, plain, connInfo, connSheet, helpSheet, screenSheet, passwordSheet, setHash, cmd, sec, hero, on, $, esc, icon, fillIcons, kindIcon, api, state, view, go, draw, route, toast, sheet, confirmSheet, cond, md, ago, clock, date, when,
     loadProgram, blockOf, valueBySymbol, norm, start, cpuStop, cpuSince, loadHeld, releaseAll, get current() { return current; } };
 })();

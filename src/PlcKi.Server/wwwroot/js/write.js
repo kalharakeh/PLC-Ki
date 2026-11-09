@@ -74,9 +74,7 @@
       ${isInput ? `<div class="notice gold">${icon("info")}<div>A one-time change of an input is overwritten at the next cycle: the CPU reads its inputs at the start of every cycle.
           ${canHold ? "To keep a value, hold the simulated input instead." : ""}</div>${canHold ? `<button type="button" class="btn small" data-hold style="flex:none">Hold on PLCSIM</button>` : ""}</div>`
         : `<div class="notice gold why-stick" data-why>${noHold ? `${icon("info")}<div>${esc(noHold)}</div>` : ""}</div>`}
-      ${isBool ? `<div class="segmented" role="group" aria-label="New value" style="align-self:flex-start">
-          <button type="button" data-b="TRUE" class="${preset === "TRUE" || (preset == null && now === false) ? "on" : ""}">TRUE</button>
-          <button type="button" data-b="FALSE" class="${preset === "FALSE" || (preset == null && now === true) ? "on" : ""}">FALSE</button></div>`
+      ${isBool ? PK.ui.choice("New value", [{ label: "TRUE", on: preset === "TRUE" || (preset == null && now === false), data: { "data-b": "TRUE" } }, { label: "FALSE", on: preset === "FALSE" || (preset == null && now === true), data: { "data-b": "FALSE" } }], { cls: "start" })
         : `<label class="field">New value <span class="hint">${esc(hint)}</span><input id="w-val" autocomplete="off" spellcheck="false" value="${esc(preset ?? (now == null ? "" : shown(now)))}" style="font-family:var(--mono);font-size:18px"></label>`}
       <label class="field">Why ${real ? "<span class=\"hint\">needed on a real PLC, goes into the change log</span>" : "<span class=\"hint\">optional</span>"}<input id="w-why" autocomplete="off" placeholder="${real ? "e.g. test valve XV101 after repair" : "e.g. test the door alarm"}"></label>
       ${real ? `<label class="field"><span>Type <b class="mono">${esc(check.plc)}</b> to confirm</span><input id="w-ok" autocomplete="off" spellcheck="false" inputmode="decimal" style="font-family:var(--mono)"></label>` : ""}
@@ -101,7 +99,7 @@
     const update = () => { go.disabled = !ready(); };
     acked = wireAck(el, update);
     el.querySelectorAll("[data-b]").forEach((b) => b.onclick = () => {
-      boolVal = b.dataset.b; el.querySelectorAll("[data-b]").forEach((x) => x.classList.toggle("on", x === b)); update();
+      boolVal = b.dataset.b; el.querySelectorAll("[data-b]").forEach((x) => { x.classList.toggle("on", x === b); x.setAttribute("aria-pressed", String(x === b)); }); update();
     });
     el.querySelectorAll("input").forEach((i) => { i.oninput = update; i.onkeydown = (e) => { if (e.key === "Enter" && ready()) go.click(); }; });
     update();
@@ -161,9 +159,7 @@
         <b class="mono">${esc(h ? h.before : c.now)}</b>. It is not a CPU force: TIA's force table does not show it.</p>
       ${warnHtml(c.warning)}
       <div class="notice gold why-stick" data-copies></div>
-      ${isBool ? `<div class="segmented" role="group" aria-label="Value to hold" style="align-self:flex-start">
-          <button type="button" data-b="TRUE" class="${preset === "TRUE" || (preset == null && c.now === "FALSE") ? "on" : ""}">TRUE</button>
-          <button type="button" data-b="FALSE" class="${preset === "FALSE" || (preset == null && c.now === "TRUE") ? "on" : ""}">FALSE</button></div>`
+      ${isBool ? PK.ui.choice("Value to hold", [{ label: "TRUE", on: preset === "TRUE" || (preset == null && c.now === "FALSE"), data: { "data-b": "TRUE" } }, { label: "FALSE", on: preset === "FALSE" || (preset == null && c.now === "TRUE"), data: { "data-b": "FALSE" } }], { cls: "start" })
         : `<label class="field">Value to hold <span class="hint">${esc(dt === "Real" ? "a number, e.g. 12.5" : "a whole number")}</span><input id="h-val" autocomplete="off" spellcheck="false" value="${esc(preset ?? c.now ?? "")}" style="font-family:var(--mono);font-size:18px"></label>`}
       <label class="field">Why <span class="hint">optional, goes into the change log</span><input id="h-why" autocomplete="off" placeholder="e.g. test the door alarm"></label>
       <p class="small" data-err style="margin:0;color:var(--fault-ink)"></p>
@@ -176,7 +172,7 @@
     const update = () => { go.disabled = !ready(); };
     acked = wireAck(el, update);
     el.querySelectorAll("[data-b]").forEach((b) => b.onclick = () => {
-      boolVal = b.dataset.b; el.querySelectorAll("[data-b]").forEach((x) => x.classList.toggle("on", x === b)); update();
+      boolVal = b.dataset.b; el.querySelectorAll("[data-b]").forEach((x) => { x.classList.toggle("on", x === b); x.setAttribute("aria-pressed", String(x === b)); }); update();
     });
     el.querySelectorAll("input").forEach((i) => { i.oninput = update; i.onkeydown = (e) => { if (e.key === "Enter" && ready()) go.click(); }; });
     update();

@@ -196,22 +196,20 @@
     return { tab: "log", alarm: p0, sub: null };
   }
 
-  const windowSeg = () => `<div class="segmented" role="group" aria-label="Time window">${WINDOWS.map(([n, l]) =>
-    `<button type="button" class="${days === n ? "on" : ""}" data-days="${n}" aria-pressed="${days === n}">${l}</button>`).join("")}</div>`;
+  const windowSeg = () => PK.ui.choice("Time window", WINDOWS.map(([n, l]) => ({ label: l, on: days === n, data: { "data-days": n } })));
   const windowName = () => WINDOWS.find((w) => w[0] === days)[1];
 
   function rankingHtml(d) {
     const rows = d ? d.top : null;
     const size = (r) => (rankBy === "downtime" ? r.downtimeMinutes : r.count) || 0;
     const max = rows && rows.length ? Math.max(...rows.map(size), 0.01) : 1;
-    const seg = `<div class="segmented" role="group" aria-label="Rank by">${[["count", "Most often"], ["downtime", "Longest on"]].map(([k, l]) =>
-      `<a class="${rankBy === k ? "on" : ""}" href="#/history/ranking/${k}" ${rankBy === k ? 'aria-current="true"' : ""}>${l}</a>`).join("")}</div>`;
+    const seg = PK.ui.choice("Rank by", [["count", "Most often"], ["downtime", "Longest on"]].map(([k, l]) => ({ label: l, on: rankBy === k, href: "#/history/ranking/" + k })));
     const list = !rows ? `<p class="muted">Loading…</p>` : rows.length ? `<ul class="list mem-top">${rows.map((r) => `<li class="click" data-hist="${esc(r.alarmId)}" tabindex="0">
           ${sevTag(r.severity, r.alarmId)}
           <span class="mem-top-t"><b>${esc(r.text)}</b><span class="mem-bar" aria-hidden="true"><i style="width:${Math.max(4, Math.round(size(r) / max * 100))}%" class="${r.severity === "WARNING" ? "w" : ""}"></i></span>
             <span class="muted small">${r.topCause ? "Most noted cause: " + esc(r.topCause) + " · " : ""}last ${esc(PK.when(r.last))}</span></span>
           <span class="mem-top-n">${rankBy === "downtime" ? `<b>${esc(r.downtime)}</b><span class="muted small">${r.count}×</span>` : `<b>${r.count}×</b><span class="muted small">${esc(r.downtime)} on</span>`}</span></li>`).join("")}</ul>`
-      : `<div class="nomatch">${icon("check")}<b>No alarm in this window.</b><span>PLC-Ki records every alarm that comes while it watches the machine.</span></div>`;
+      : PK.ui.empty({ title: "No alarm in this window.", text: "PLC-Ki records every alarm that comes while it watches the machine." });
     return sec("", `<div class="toolbar">${seg}</div>
       <p class="sub">${rankBy === "downtime" ? "The alarms that were on longest in total" : "The alarms that came most often"}, in the last ${esc(windowName())}. Tap one for its own history.</p>${list}
       <p class="faint small" style="margin-top:14px">The shift report and OEE are on <a href="#/reports">Reports</a>.</p>`);
@@ -249,12 +247,12 @@
       if (w.tab === "ranking") rankBy = w.sub === "downtime" ? "downtime" : "count";
       const d = cached(`/api/memory?days=${days}` + (w.tab === "ranking" ? `&by=${rankBy}` : ""));
       const def = alarmOnly && state.model ? state.model.alarms.find((a) => a.id === alarmOnly) : null;
-      const top = d && !def && w.tab !== "recordings" ? `<div class="hero-kpis kpis" style="margin-top:28px">
-          <div class="k"><b>${d.occurrences}</b><span>alarm${d.occurrences === 1 ? "" : "s"} in the last ${esc(windowName())}</span></div>
-          <div class="k"><b>${esc(d.downtime)}</b><span>alarms were on (added up)</span></div>
-          <div class="k ${d.occurrences && d.noted < d.occurrences ? "" : "ok"}"><b>${d.noted} of ${d.occurrences}</b><span>have a note on cause and fix</span></div>
-          <div class="k"><b>${d.recorded}</b><span>kept on this PC</span></div></div>` : "";
-      const nav = def ? "" : `<nav class="ptabs" aria-label="History">${TABS.map(([k, l]) => `<a href="#/history${k === "log" ? "" : "/" + k}" class="${k === w.tab ? "on" : ""}" ${k === w.tab ? 'aria-current="page"' : ""}>${l}</a>`).join("")}</nav>`;
+      const top = d && !def && w.tab !== "recordings" ? PK.ui.tiles([
+          { value: d.occurrences, label: `alarm${d.occurrences === 1 ? "" : "s"} in the last ${windowName()}` },
+          { value: d.downtime, label: "alarms were on (added up)" },
+          { value: `${d.noted} of ${d.occurrences}`, label: "have a note on cause and fix", state: d.occurrences && d.noted < d.occurrences ? "" : "ok" },
+          { value: d.recorded, label: "kept on this PC" }]) : "";
+      const nav = def ? "" : PK.ui.tabs("History", TABS.map(([k, l]) => ({ label: l, on: k === w.tab, href: "#/history" + (k === "log" ? "" : "/" + k) })));
 
       const head = hero({
         title: def ? `${esc(def.id)} history` : "History",
@@ -284,7 +282,7 @@
           <a class="btn b small" href="/api/memory/export.csv?${csv}" download>${icon("download")} Download for Excel</a></div>
         ${!rows ? `<p class="muted">Loading…</p>` : rows.length ? `<ul class="mem-list card">${rows.map((o) => occLine(o, { showAlarm: !def })).join("")}</ul>
           ${logData.total > rows.length ? `<button type="button" class="btn plain small" data-more style="margin-top:10px">Show more (${logData.total - rows.length} older)</button>` : ""}`
-          : `<div class="nomatch">${icon("search")}<b>${q || onlyUnnoted ? "Nothing matches." : "Nothing recorded in this window yet."}</b><span>${q || onlyUnnoted ? "Try fewer words or a longer time window." : "Alarms are recorded from the moment PLC-Ki watches the machine."}</span></div>`}
+          : PK.ui.empty({ icon: "search", title: q || onlyUnnoted ? "Nothing matches." : "Nothing recorded in this window yet.", text: q || onlyUnnoted ? "Try fewer words or a longer time window." : "Alarms are recorded from the moment PLC-Ki watches the machine." })}
         ${def ? "" : eventsHtml()}`);
 
       return head + loadErr + summary + unnoted + log;

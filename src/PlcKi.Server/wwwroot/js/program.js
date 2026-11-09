@@ -1035,9 +1035,7 @@
 
         const canRungs = nets.length > 0, canText = !!text;
         const mode = sel.mode === "rungs" && !canRungs ? (canText ? "text" : "rungs") : sel.mode === "text" && !canText ? "rungs" : sel.mode;
-        const switcher = canRungs && canText ? `<div class="segmented" role="group" aria-label="Show the code as">
-            <button type="button" data-mode="rungs" class="${mode === "rungs" ? "on" : ""}" aria-pressed="${mode === "rungs"}">Rungs</button>
-            <button type="button" data-mode="text" class="${mode === "text" ? "on" : ""}" aria-pressed="${mode === "text"}">Text</button></div>` : "";
+        const switcher = canRungs && canText ? PK.ui.choice("Show the code as", [["rungs", "Rungs"], ["text", "Text"]].map(([k, l]) => ({ label: l, on: mode === k, data: { "data-mode": k } }))) : "";
 
         let bodyHtml;
         if (mode === "rungs" && canRungs) {
@@ -1050,9 +1048,7 @@
           // Long blocks: show only the networks where something holds back an output that is asked for
           const nHold = (netsHtml.match(/data-holding="1"/g) || []).length;
           const only = netFilter === "holding";
-          const filter = nets.length > 3 ? `<div class="net-filter"><div class="segmented" role="group" aria-label="Which networks">
-              <button type="button" data-netf="all" class="${only ? "" : "on"}" aria-pressed="${!only}">All ${nets.length} networks</button>
-              <button type="button" data-netf="holding" class="${only ? "on" : ""}" aria-pressed="${only}">Holding back now · ${nHold}</button></div>
+          const filter = nets.length > 3 ? `<div class="net-filter">${PK.ui.choice("Which networks", [{ label: `All ${nets.length} networks`, on: !only, data: { "data-netf": "all" } }, { label: `Holding back now · ${nHold}`, on: only, data: { "data-netf": "holding" } }])}
               ${only && !nHold ? `<p class="ok-line">${icon("check")}<span>Nothing in this block is holding back an output right now.</span></p>` : ""}</div>` : "";
           bodyHtml = where + filter + legend + `<div class="nets ${only ? "only-holding" : ""}">${netsHtml}</div>`
             + (b.source && !b.logic ? `<p class="faint small" style="margin:12px 0 0">Only the on/off statements of this SCL block are drawn as rungs. <button type="button" class="linkbtn" data-mode="text">Show all of it as text</button>.</p>` : "");

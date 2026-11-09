@@ -157,10 +157,10 @@ const PKStations = (() => {
       title: esc(st.name),
       sub: esc(sub),
       actions: `<button class="btn" data-ask="What is station ${esc(st.name)} doing right now, and does anything need attention?">Ask about this station</button>`,
-      extra: `<div class="kpis st-kpis">
-        <div class="k ${st.alarms.length ? "bad" : ""}"><b>${st.alarms.length}</b><span>alarm${st.alarms.length === 1 ? "" : "s"}</span></div>
-        <div class="k ${problems.length ? "warn" : ""}"><b>${problems.length}</b><span>need${problems.length === 1 ? "s" : ""} attention</span></div>
-        <div class="k"><b>${st.equipment.length}</b><span>device${st.equipment.length === 1 ? "" : "s"}</span></div></div>`
+      extra: PK.ui.tiles([
+        { value: st.alarms.length, label: `alarm${st.alarms.length === 1 ? "" : "s"}`, state: st.alarms.length ? "bad" : "" },
+        { value: problems.length, label: `need${problems.length === 1 ? "s" : ""} attention`, state: problems.length ? "warn" : "" },
+        { value: st.equipment.length, label: `device${st.equipment.length === 1 ? "" : "s"}` }])
         + (chains.length && !first ? `<div class="chains">${chains.map(PK.chainHtml).join("")}</div>` : ""),
     })
       + (dev ? sec("", `<h2>${esc(dev.name)}</h2><p class="sub">The device on this label.</p><div class="st-devs">${devRow(dev, true)}</div>`) : "")
@@ -285,7 +285,7 @@ const PKStations = (() => {
             <div class="row" style="gap:8px"><button class="btn b small" data-sel="stations">Stations only</button><button class="btn b small" data-sel="all">Everything</button><button class="btn b small" data-sel="none">None</button></div>
             <div class="qr-picks">${box(all[0])}${[...groups].map(([k, list]) => `<div class="qr-grp">${list.map(box).join("")}</div>`).join("")}</div>
             <h3>3. Size</h3>
-            <div class="segmented" role="group" aria-label="Label size">${[["small", "Small, 4 across"], ["medium", "Medium, 3 across"], ["large", "Large, 2 across"]].map(([k, l]) => `<button type="button" data-size="${k}" class="${size === k ? "on" : ""}" aria-pressed="${size === k}">${l}</button>`).join("")}</div>
+            ${PK.ui.choice("Label size", [["small", "Small, 4 across"], ["medium", "Medium, 3 across"], ["large", "Large, 2 across"]].map(([k, l]) => ({ label: l, on: size === k, data: { "data-size": k } })))}
           </div></div>
           <div class="actions" style="margin-top:22px"><button class="btn big" data-print ${chosen.length ? "" : "disabled"}>Print ${chosen.length} label${chosen.length === 1 ? "" : "s"}</button><span class="muted small">Print on sticker paper, or laminate. Labels that are older than a new program import still work while the station keeps its name.</span></div>`)
         + PK.sec("qr-sec", `<div class="qr-sheet qr-${size}">${chosen.map((t) => label(t, b)).join("")}</div>`);
