@@ -163,8 +163,7 @@
     const keep = tr.keepMinutes;
     const opts = [...new Set([5, 15, 60, keep].filter((m) => m <= keep))];
     const cur = trendMin || keep;
-    return opts.length > 1 ? `<div class="segmented" role="group" aria-label="Time shown">${opts.map((m) =>
-      `<button type="button" class="${m === cur ? "on" : ""}" data-tr-min="${m}" aria-pressed="${m === cur}">${m < 60 ? m + " min" : m / 60 + " h"}</button>`).join("")}</div>` : "";
+    return opts.length > 1 ? PK.ui.choice("Time shown", opts.map((m) => ({ label: m < 60 ? m + " min" : m / 60 + " h", on: m === cur, data: { "data-tr-min": m } }))) : "";
   }
 
   /** "Last 15 minutes": the measured values stacked over one time axis, the step band and alarm marks. */
@@ -385,7 +384,7 @@
       const no = Number(b.dataset.gs);
       pick(selStep === no ? null : no);
       // One column (phone): the step's details are above the chart, so bring them into view
-      if (innerWidth <= 960) setTimeout(() => { const p = document.querySelector(".seq-side"); if (p) p.scrollIntoView({ block: "start", behavior: "instant" }); }, 0);
+      if (PK.screenSize() !== "desktop") setTimeout(() => { const p = document.querySelector(".seq-side"); if (p) p.scrollIntoView({ block: "start", behavior: "instant" }); }, 0);
     });
     page.querySelectorAll("[data-gs-go]").forEach((b) => b.onclick = () => { jumpTo = Number(b.dataset.gsGo); pick(jumpTo); });
     if (jumpTo != null) {

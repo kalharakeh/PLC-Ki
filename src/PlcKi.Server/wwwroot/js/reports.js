@@ -72,13 +72,12 @@
   // ---- pieces ----
   function tabs(t) {
     const admin = PK.state.user && PK.state.user.role === "admin";
-    const b = (id, label) => `<a class="${t === id ? "on" : ""}" href="#/reports/${id}" ${t === id ? 'aria-current="page"' : ""}>${label}</a>`;
-    return `<nav class="ptabs" aria-label="Reports">${b("shift", "Shift report")}${b("summary", "Summary")}${b("settings", "Report setup")}</nav>`;
+    return PK.ui.tabs("Reports", [["shift", "Shift report"], ["summary", "Summary"], ["settings", "Report setup"]].map(([id, label]) => ({ label, on: t === id, href: "#/reports/" + id })));
   }
 
-  function kpi(value, label, sub, cls) {
-    return `<div class="k ${cls || ""}"><b>${value}</b><span>${esc(label)}</span>${sub ? `<span class="rp-sub">${esc(sub)}</span>` : ""}</div>`;
-  }
+  // One report tile: the number, what it is, how it was worked out
+  const kpi = (value, label, note, state) => ({ html: value, label, note, state });
+  const kpiRow = (tiles) => PK.ui.tiles(tiles, { boxed: true, cls: "rp-kpis" });
 
   /** The shift as a coloured bar: running, waiting, down, no link, not watched, with hour marks. */
   function timelineBar(spans, from, to) {
@@ -161,12 +160,12 @@
 
     const empty = watched < 0.5;
     const kpis = empty ? `<div class="notice gold">${icon("info")}<div>PLC-Ki has no values for this shift${t.noLink > 0.5 ? " (no PLC connection)" : ""}. It records while it runs and is connected to the PLC.</div></div>`
-      : `<div class="kpis rp-kpis">
-        ${kpi(pct(o.value), "OEE", "Availability × Performance × Quality", oeeCls(o.value))}
-        ${kpi(pct(o.availability), "Availability", `Ran ${mins(o.runMinutes)} of ${mins(o.plannedMinutes)} planned`)}
-        ${kpi(pct(o.performance), "Performance", p.idealCycleSeconds ? `Ideal cycle ${p.idealCycleSeconds} s${p.idealEstimated ? " (estimated)" : ""}` : "Needs an ideal cycle time")}
-        ${kpi(pct(o.quality), "Quality", p.badKnown ? `${p.bad} reject${p.bad === 1 ? "" : "s"}` : "No reject counter set")}
-      </div>`;
+      : kpiRow([
+        kpi(pct(o.value), "OEE", "Availability × Performance × Quality", oeeCls(o.value)),
+        kpi(pct(o.availability), "Availability", `Ran ${mins(o.runMinutes)} of ${mins(o.plannedMinutes)} planned`),
+        kpi(pct(o.performance), "Performance", p.idealCycleSeconds ? `Ideal cycle ${p.idealCycleSeconds} s${p.idealEstimated ? " (estimated)" : ""}` : "Needs an ideal cycle time"),
+        kpi(pct(o.quality), "Quality", p.badKnown ? `${p.bad} reject${p.bad === 1 ? "" : "s"}` : "No reject counter set"),
+      ]);
 
     const time = `<div class="card"><h3>Where the time went</h3>${timelineBar(x.timeline, x.from, x.to)}${legend(t)}</div>`;
     const parts = `<div class="card"><h3>Parts</h3><div class="kv">
@@ -191,19 +190,18 @@
   // ---- summary over a time window: down time, MTTR and MTBF, where the time went, every shift's OEE ----
   function faultsPage() {
     const x = r.faults;
-    const range = `<div class="toolbar no-print"><div class="segmented" role="group" aria-label="Time range">
-      ${[[1, "24 h"], [7, "7 days"], [30, "30 days"], [365, "1 year"]].map(([d, l]) => `<button type="button" data-days="${d}" class="${r.days === d ? "on" : ""}">${l}</button>`).join("")}</div>
-      <span class="spacer"></span>
-      <a class="btn gray small" href="/api/reports/faults.csv?days=${r.days}" download>${icon("download")}<span>Download for Excel</span></a>
-      <button class="btn gray small" type="button" data-print>${icon("file")}<span>Print or PDF</span></button></div>`;
+    const range = PK.ui.toolbar({ cls: "no-print",
+      left: PK.ui.choice("Time range", [[1, "24 h"], [7, "7 days"], [30, "30 days"], [365, "1 year"]].map(([d, l]) => ({ label: l, on: r.days === d, data: { "data-days": d } }))),
+      right: `<a class="btn gray small" href="/api/reports/faults.csv?days=${r.days}" download>${icon("download")}<span>Download for Excel</span></a>
+      <button class="btn gray small" type="button" data-print>${icon("file")}<span>Print or PDF</span></button>` });
     if (!x) return PK.sec("tight rp", range + `<p class="muted">${r.err ? esc(r.err) : "Making the summary…"}</p>`);
     const t = x.totals, m = x.maint;
-    const kpis = `<div class="kpis rp-kpis">
-      ${kpi(mins(t.down), "Down by faults", `${m.stops} stop${m.stops === 1 ? "" : "s"}`, t.down > 0 ? "bad" : "ok")}
-      ${kpi(mins(m.mttrMinutes), "Average repair (MTTR)", "Down time per stop")}
-      ${kpi(mins(m.mtbfMinutes), "Running between faults (MTBF)", "Running time per stop")}
-      ${kpi(String(x.faults.length), "Different alarms", x.faults.filter((f) => f.count >= 3).length + " repeat 3 times or more")}
-    </div>`;
+    const kpis = kpiRow([
+      kpi(mins(t.down), "Down by faults", `${m.stops} stop${m.stops === 1 ? "" : "s"}`, t.down > 0 ? "bad" : "ok"),
+      kpi(mins(m.mttrMinutes), "Average repair (MTTR)", "Down time per stop"),
+      kpi(mins(m.mtbfMinutes), "Running between faults (MTBF)", "Running time per stop"),
+      kpi(String(x.faults.length), "Different alarms", x.faults.filter((f) => f.count >= 3).length + " repeat 3 times or more"),
+    ]);
     const shifts = x.shifts.length ? `<table class="tbl rp-shifts"><tr><th>Shift</th><th class="num">OEE</th><th class="num">Avail.</th><th class="num">Parts</th><th class="num">Down</th><th>Biggest loss</th></tr>
       ${x.shifts.map((s) => `<tr><td><a href="#/reports/shift/${s.day}/${s.shiftIndex}">${esc(dayName(s.day))}, ${esc(s.shift)}</a>${s.inProgress ? ` <span class="tag blue">now</span>` : ""}</td>
         <td class="num"><b class="rp-oee ${oeeCls(s.oee)}">${pct(s.oee)}</b></td><td class="num">${pct(s.availability)}</td><td class="num">${s.parts}</td><td class="num">${mins(s.downMinutes)}</td>

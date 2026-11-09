@@ -1,17 +1,17 @@
 // Device drawings for the PLC page (CPU, Racks and I/O): each module drawn from its order number (family, kind, width),
 // as a clean front view in millimetres, so a CPU 1515F looks like a wide S7-1500 CPU with a display and a DI 32
-// has its 32 channel LEDs. Original drawings in SVG, no maker logos. Colours are the devices' own, the same in
-// light and dark mode.
+// has its 32 channel LEDs. Original drawings in SVG, no maker logos. Colours are the devices' own (the --dev-* set in
+// ui.css), the same in light and dark mode.
 "use strict";
 
 const PKDev = (() => {
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const C = {
-    anth: "#30353a", anthL: "#3b4147", anthD: "#22262a", edge: "#141618", text: "#eef1f3", sub: "#9aa4ad",
-    light: "#e4e5e0", lightD: "#cfd1cb", lightEdge: "#a9aca6", term: "#3e4448",
-    yellow: "#f1c40f", yellowD: "#c99e06",
-    ledG: "#3fe06a", ledY: "#ffc21a", ledR: "#ff4b3e", ledOff: "#4a5157", ledOffL: "#b8bbb5",
-    screen: "#0b1016", rail: "#c3c8cd", railD: "#9ea5ac",
+    anth: "var(--dev-anth)", anthL: "var(--dev-anth-l)", anthD: "var(--dev-anth-d)", edge: "var(--dev-edge)", text: "var(--dev-text)", sub: "var(--dev-sub)",
+    light: "var(--dev-light)", lightD: "var(--dev-light-d)", lightEdge: "var(--dev-light-edge)", term: "var(--dev-anth-l)",
+    yellow: "var(--dev-yellow)", yellowD: "var(--dev-yellow-d)",
+    ledG: "var(--dev-led-g)", ledY: "var(--dev-led-y)", ledR: "var(--dev-led-r)", ledOff: "var(--dev-off)", ledOffL: "var(--dev-led-off-l)",
+    screen: "var(--dev-screen)", rail: "var(--dev-rail)", railD: "var(--dev-sub)",
   };
   /** Module height in mm by family (front view). */
   const HEIGHT = { "s7-1500": 147, "et200mp": 147, "s7-1200": 100, "et200sp": 117, other: 96 };
@@ -55,7 +55,7 @@ const PKDev = (() => {
     let s = `<rect x="0" y="0" width="${W}" height="${H}" rx="${k * 1.6}" fill="${C.anth}" stroke="${C.edge}" stroke-width="${k * 0.4}"/>`;
     // top vent and the front frame
     s += `<rect x="${k * 0.6}" y="${k * 0.6}" width="${W - k * 1.2}" height="${k * 7}" rx="${k}" fill="${C.anthD}"/>`;
-    for (let x = k * 3; x < W - k * 3; x += k * 2.4) s += `<rect x="${x}" y="${k * 2.4}" width="${k * 1.1}" height="${k * 3.4}" rx="${k * 0.4}" fill="#16191c"/>`;
+    for (let x = k * 3; x < W - k * 3; x += k * 2.4) s += `<rect x="${x}" y="${k * 2.4}" width="${k * 1.1}" height="${k * 3.4}" rx="${k * 0.4}" fill="var(--dev-edge)"/>`;
     if (f) s += `<rect x="${k * 0.6}" y="${k * 8}" width="${W - k * 1.2}" height="${k * 2.2}" fill="${C.yellow}"/>`;
     if (m.kind === "cpu") s += cpu1500Front(m, o, W, H);
     else if (m.kind === "ps" || m.kind === "pm") s += ps1500Front(m, o, W, H);
@@ -102,8 +102,8 @@ const PKDev = (() => {
     const fy = n ? k * 29 + Math.ceil(n / (n > 16 ? 2 : 1)) * Math.min(k * 3.2, (H * 0.5) / Math.ceil(n / (n > 16 ? 2 : 1))) + k * 4 : k * 30;
     const fh = H - fy - k * 9;
     if (fh > k * 10) {
-      s += `<rect x="${k * 1.2}" y="${fy}" width="${W - k * 2.4}" height="${fh}" rx="${k * 1.2}" fill="${C.anthL}" stroke="#4a5056" stroke-width="${k * 0.3}"/>`;
-      s += `<rect x="${W / 2 - k * 4}" y="${fy + k * 1.4}" width="${k * 8}" height="${k * 1.2}" rx="${k * 0.6}" fill="#262a2e"/>`;
+      s += `<rect x="${k * 1.2}" y="${fy}" width="${W - k * 2.4}" height="${fh}" rx="${k * 1.2}" fill="${C.anthL}" stroke="var(--dev-off)" stroke-width="${k * 0.3}"/>`;
+      s += `<rect x="${W / 2 - k * 4}" y="${fy + k * 1.4}" width="${k * 8}" height="${k * 1.2}" rx="${k * 0.6}" fill="var(--dev-slot)"/>`;
       if (f) s += `<text x="${W / 2}" y="${fy + fh / 2}" font-size="${k * 5}" font-weight="700" fill="${C.yellow}" text-anchor="middle">F</text>`;
       else if (m.addresses && m.addresses.length) s += `<text x="${W / 2}" y="${fy + fh / 2}" font-size="${k * 2.2}" fill="${C.sub}" text-anchor="middle">${esc(m.addresses[0].text)}</text>`;
     }
@@ -118,9 +118,9 @@ const PKDev = (() => {
     s += led(W - k * 6.5, ly + k * 3.6, k * 3.4, k * 1.7, "r", "off", "ERROR", k, true);
     s += led(W - k * 6.5, ly + k * 7.2, k * 3.4, k * 1.7, "y", "off", "MAINT", k, true);
     // flap and the on/off switch at the foot
-    s += `<rect x="${k * 1.2}" y="${k * 40}" width="${W - k * 2.4}" height="${H - k * 52}" rx="${k * 1.2}" fill="${C.anthL}" stroke="#4a5056" stroke-width="${k * 0.3}"/>`;
-    s += `<rect x="${W / 2 - k * 4}" y="${H - k * 26}" width="${k * 8}" height="${k * 12}" rx="${k}" fill="#1b1e21"/>`;
-    s += `<rect x="${W / 2 - k * 2.6}" y="${H - k * 24.6}" width="${k * 5.2}" height="${k * 5}" rx="${k * 0.6}" fill="#5b636a"/>`;
+    s += `<rect x="${k * 1.2}" y="${k * 40}" width="${W - k * 2.4}" height="${H - k * 52}" rx="${k * 1.2}" fill="${C.anthL}" stroke="var(--dev-off)" stroke-width="${k * 0.3}"/>`;
+    s += `<rect x="${W / 2 - k * 4}" y="${H - k * 26}" width="${k * 8}" height="${k * 12}" rx="${k}" fill="var(--dev-recess)"/>`;
+    s += `<rect x="${W / 2 - k * 2.6}" y="${H - k * 24.6}" width="${k * 5.2}" height="${k * 5}" rx="${k * 0.6}" fill="var(--dev-mid)"/>`;
     s += `<text x="${W / 2}" y="${H - k * 28}" font-size="${k * 2}" fill="${C.sub}" text-anchor="middle">I / O</text>`;
     return s;
   }
@@ -136,30 +136,30 @@ const PKDev = (() => {
     s += led(lx, ly + k * 6.8, k * 3.4, k * 1.7, "y", L.maint || "off", "MAINT", k, true);
     // display and keys
     const dx = k * 3.5, dy = k * 21, dw = W - k * 7, dh = Math.min(dw * 0.72, k * 40);
-    s += `<rect x="${dx - k * 1.2}" y="${dy - k * 1.2}" width="${dw + k * 2.4}" height="${dh + k * 2.4}" rx="${k * 1.6}" fill="#15181b"/>`;
+    s += `<rect x="${dx - k * 1.2}" y="${dy - k * 1.2}" width="${dw + k * 2.4}" height="${dh + k * 2.4}" rx="${k * 1.6}" fill="var(--dev-edge)"/>`;
     s += `<g class="pkd-screen">${o.screen ? o.screen(dx, dy, dw, dh) : screenIdle(dx, dy, dw, dh, m)}</g>`;
     const ky = dy + dh + k * 5.5, kr = Math.min(k * 2.3, dw / 16);
     const keys = [["◀", "left"], ["▲", "up"], ["▼", "down"], ["▶", "right"]];
     const gap = dw / 6.2;
     keys.forEach(([t, a], i) => {
       const cx = dx + gap * (i + 0.7);
-      s += `<g class="pkd-key" data-key="${a}" role="button" aria-label="Display key ${a}" tabindex="${o.keys ? 0 : -1}"><circle cx="${cx}" cy="${ky}" r="${kr}" fill="#454c53" stroke="#1b1e21" stroke-width="${k * 0.3}"/><text x="${cx}" y="${ky + kr * 0.42}" font-size="${kr * 1.15}" fill="#d9dee2" text-anchor="middle">${t}</text></g>`;
+      s += `<g class="pkd-key" data-key="${a}" role="button" aria-label="Display key ${a}" tabindex="${o.keys ? 0 : -1}"><circle cx="${cx}" cy="${ky}" r="${kr}" fill="var(--dev-key)" stroke="var(--dev-recess)" stroke-width="${k * 0.3}"/><text x="${cx}" y="${ky + kr * 0.42}" font-size="${kr * 1.15}" fill="var(--dev-plate)" text-anchor="middle">${t}</text></g>`;
     });
     [["ESC", "esc"], ["OK", "ok"]].forEach(([t, a], i) => {
       const cx = dx + gap * (4.55 + i * 1.05);
-      s += `<g class="pkd-key" data-key="${a}" role="button" aria-label="Display key ${t}" tabindex="${o.keys ? 0 : -1}"><rect x="${cx - kr * 1.25}" y="${ky - kr * 0.8}" width="${kr * 2.5}" height="${kr * 1.6}" rx="${kr * 0.4}" fill="#454c53" stroke="#1b1e21" stroke-width="${k * 0.3}"/><text x="${cx}" y="${ky + kr * 0.35}" font-size="${kr * 0.78}" font-weight="700" fill="#d9dee2" text-anchor="middle">${t}</text></g>`;
+      s += `<g class="pkd-key" data-key="${a}" role="button" aria-label="Display key ${t}" tabindex="${o.keys ? 0 : -1}"><rect x="${cx - kr * 1.25}" y="${ky - kr * 0.8}" width="${kr * 2.5}" height="${kr * 1.6}" rx="${kr * 0.4}" fill="var(--dev-key)" stroke="var(--dev-recess)" stroke-width="${k * 0.3}"/><text x="${cx}" y="${ky + kr * 0.35}" font-size="${kr * 0.78}" font-weight="700" fill="var(--dev-plate)" text-anchor="middle">${t}</text></g>`;
     });
     // the lower flap: memory card slot and PROFINET ports behind it
     const fy = ky + kr + k * 5, fh = H - fy - k * 8;
     if (fh > k * 12) {
-      s += `<rect x="${k * 1.2}" y="${fy}" width="${W - k * 2.4}" height="${fh}" rx="${k * 1.2}" fill="${C.anthL}" stroke="#4a5056" stroke-width="${k * 0.3}"/>`;
-      s += `<rect x="${W / 2 - k * 4}" y="${fy + k * 1.4}" width="${k * 8}" height="${k * 1.2}" rx="${k * 0.6}" fill="#262a2e"/>`;
+      s += `<rect x="${k * 1.2}" y="${fy}" width="${W - k * 2.4}" height="${fh}" rx="${k * 1.2}" fill="${C.anthL}" stroke="var(--dev-off)" stroke-width="${k * 0.3}"/>`;
+      s += `<rect x="${W / 2 - k * 4}" y="${fy + k * 1.4}" width="${k * 8}" height="${k * 1.2}" rx="${k * 0.6}" fill="var(--dev-slot)"/>`;
       const ports = (m.ports && m.ports.length ? m.ports : ["X1 P1", "X1 P2"]).filter((p) => /^PROFINET|^X\d|^Port/i.test(p));
       const plabels = ports.length ? ports.map((p) => p.replace(/PROFINET interface_?/i, "X").replace(/Port_?/i, "P")) : ["X1"];
       const pw = Math.min(k * 9, (W - k * 8) / Math.max(2, plabels.length));
       plabels.slice(0, 4).forEach((p, i) => {
         const px = k * 4 + i * (pw + k * 1.2), py = fy + fh - k * 13;
-        s += `<rect x="${px}" y="${py}" width="${pw}" height="${k * 8}" rx="${k * 0.6}" fill="#1c1f22"/><rect x="${px + pw * 0.2}" y="${py + k * 1.2}" width="${pw * 0.6}" height="${k * 4.5}" rx="${k * 0.4}" fill="#4c545b"/>`
+        s += `<rect x="${px}" y="${py}" width="${pw}" height="${k * 8}" rx="${k * 0.6}" fill="var(--dev-recess)"/><rect x="${px + pw * 0.2}" y="${py + k * 1.2}" width="${pw * 0.6}" height="${k * 4.5}" rx="${k * 0.4}" fill="var(--dev-off)"/>`
           + `<text x="${px + pw / 2}" y="${py - k * 1.2}" font-size="${k * 1.9}" fill="${C.sub}" text-anchor="middle">${esc(p)}</text>`;
       });
       if (m.safety) s += `<text x="${W - k * 4}" y="${fy + k * 9}" font-size="${k * 3.4}" font-weight="700" fill="${C.yellow}" text-anchor="end">F</text>`;
@@ -170,7 +170,7 @@ const PKDev = (() => {
   function screenIdle(x, y, w, h, m) {
     const f = h / 9;
     return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${f * 0.3}" fill="${C.screen}"/>
-      <text x="${x + w / 2}" y="${y + h / 2}" font-size="${f}" fill="#6f7b86" text-anchor="middle">${esc(m.title || "CPU")}</text>`;
+      <text x="${x + w / 2}" y="${y + h / 2}" font-size="${f}" fill="var(--dev-label)" text-anchor="middle">${esc(m.title || "CPU")}</text>`;
   }
 
   // ---------------- S7-1200 ----------------
@@ -182,7 +182,7 @@ const PKDev = (() => {
     const tc = k * 15;
     for (const ty of [0, H - tc]) {
       s += `<rect x="${k * 0.8}" y="${ty + k * 0.8}" width="${W - k * 1.6}" height="${tc - k * 1.6}" rx="${k}" fill="${C.term}"/>`;
-      for (let x = k * 4; x < W - k * 3; x += k * 5) s += `<circle cx="${x}" cy="${ty + tc / 2}" r="${k * 1.3}" fill="#5f676d"/>`;
+      for (let x = k * 4; x < W - k * 3; x += k * 5) s += `<circle cx="${x}" cy="${ty + tc / 2}" r="${k * 1.3}" fill="var(--dev-mid)"/>`;
     }
     const ins = chanOf(m, "Input"), outs = chanOf(m, "Output");
     // I/O LED rows under the top cover and above the bottom cover
@@ -195,15 +195,15 @@ const PKDev = (() => {
     s += row(ins, tc + k * 2.5) + row(outs, H - tc - k * 4);
     if (m.kind === "cpu") {
       const L = o.leds || {};
-      s += led(k * 4, tc + k * 8, k * 3, k * 1.6, L.runColor || "g", L.run || "unknown", "RUN/STOP", k).replace(/fill="#9aa4ad"/, `fill="#5a6168"`);
-      s += led(k * 4, tc + k * 12, k * 3, k * 1.6, "r", L.error || "off", "ERROR", k).replace(/fill="#9aa4ad"/, `fill="#5a6168"`);
-      s += led(k * 4, tc + k * 16, k * 3, k * 1.6, "y", L.maint || "off", "MAINT", k).replace(/fill="#9aa4ad"/, `fill="#5a6168"`);
+      s += led(k * 4, tc + k * 8, k * 3, k * 1.6, L.runColor || "g", L.run || "unknown", "RUN/STOP", k).replace(/fill="var\(--dev-sub\)"/, `fill="var(--dev-mid)"`);
+      s += led(k * 4, tc + k * 12, k * 3, k * 1.6, "r", L.error || "off", "ERROR", k).replace(/fill="var\(--dev-sub\)"/, `fill="var(--dev-mid)"`);
+      s += led(k * 4, tc + k * 16, k * 3, k * 1.6, "y", L.maint || "off", "MAINT", k).replace(/fill="var\(--dev-sub\)"/, `fill="var(--dev-mid)"`);
       // PROFINET port at the foot, left
-      s += `<rect x="${k * 4}" y="${H - tc - k * 15}" width="${k * 11}" height="${k * 9}" rx="${k * 0.8}" fill="#2c3135"/><rect x="${k * 6.5}" y="${H - tc - k * 13.6}" width="${k * 6}" height="${k * 5}" rx="${k * 0.4}" fill="#596168"/>`;
+      s += `<rect x="${k * 4}" y="${H - tc - k * 15}" width="${k * 11}" height="${k * 9}" rx="${k * 0.8}" fill="var(--dev-ink)"/><rect x="${k * 6.5}" y="${H - tc - k * 13.6}" width="${k * 6}" height="${k * 5}" rx="${k * 0.4}" fill="var(--dev-mid)"/>`;
     }
     const t = lines(m.title || m.name, Math.floor(W / (k * 2.1)));
-    t.forEach((l, i) => { s += `<text x="${m.kind === "cpu" ? k * 22 : k * 3}" y="${H / 2 - k * 2 + i * k * 4}" font-size="${k * 3}" font-weight="600" fill="#2b3035">${esc(l)}</text>`; });
-    if (m.orderNumber) s += `<text x="${m.kind === "cpu" ? k * 22 : k * 3}" y="${H / 2 + k * (t.length * 4 + 1)}" font-size="${k * 2}" fill="#6b7177" class="pkd-mono">${esc(m.orderNumber)}</text>`;
+    t.forEach((l, i) => { s += `<text x="${m.kind === "cpu" ? k * 22 : k * 3}" y="${H / 2 - k * 2 + i * k * 4}" font-size="${k * 3}" font-weight="600" fill="var(--dev-ink)">${esc(l)}</text>`; });
+    if (m.orderNumber) s += `<text x="${m.kind === "cpu" ? k * 22 : k * 3}" y="${H / 2 + k * (t.length * 4 + 1)}" font-size="${k * 2}" fill="var(--dev-label)" class="pkd-mono">${esc(m.orderNumber)}</text>`;
     return { w: W, h: H, svg: s };
   }
 
@@ -216,7 +216,7 @@ const PKDev = (() => {
     // BaseUnit with push-in terminals
     let s = `<rect x="0" y="${top}" width="${W}" height="${bu}" rx="${k}" fill="${C.light}" stroke="${C.lightEdge}" stroke-width="${k * 0.3}"/>`;
     for (let r = 0; r < 8; r++) for (let c = 0; c < 2; c++)
-      s += `<rect x="${k * (2.2 + c * 6)}" y="${top + k * (3 + r * 4.9)}" width="${k * 4.4}" height="${k * 3.2}" rx="${k * 0.5}" fill="${C.lightD}" stroke="#b3b6b0" stroke-width="${k * 0.2}"/>`;
+      s += `<rect x="${k * (2.2 + c * 6)}" y="${top + k * (3 + r * 4.9)}" width="${k * 4.4}" height="${k * 3.2}" rx="${k * 0.5}" fill="${C.lightD}" stroke="var(--dev-light-edge)" stroke-width="${k * 0.2}"/>`;
     // the module on top of it
     const short = m.kind === "bus";
     const my = short ? top - k * 46 : k * 2;
@@ -233,7 +233,7 @@ const PKDev = (() => {
     }
     // the type, written along the module as on the real label
     const t = (m.title || m.name || "").slice(0, 28);
-    s += `<text transform="translate(${W / 2 + k * 1.1} ${top - k * 3}) rotate(-90)" font-size="${k * 2.6}" font-weight="600" fill="${f ? "#3b3000" : C.text}">${esc(t)}</text>`;
+    s += `<text transform="translate(${W / 2 + k * 1.1} ${top - k * 3}) rotate(-90)" font-size="${k * 2.6}" font-weight="600" fill="${f ? "var(--dev-yellow-ink)" : C.text}">${esc(t)}</text>`;
     return { w: W, h: H, svg: s };
   }
 
@@ -241,8 +241,8 @@ const PKDev = (() => {
     const k = o.k;
     let s = `<rect x="0" y="${k * 4}" width="${W}" height="${H - k * 4}" rx="${k * 1.4}" fill="${C.anth}" stroke="${C.edge}" stroke-width="${k * 0.4}"/>`;
     // bus adapter with two RJ45 ports on top
-    s += `<rect x="${k * 4}" y="0" width="${W - k * 8}" height="${k * 22}" rx="${k}" fill="#d9dad6" stroke="${C.lightEdge}" stroke-width="${k * 0.3}"/>`;
-    for (let i = 0; i < 2; i++) s += `<rect x="${k * (7 + i * 19)}" y="${k * 4}" width="${k * 14}" height="${k * 11}" rx="${k * 0.8}" fill="#2a2e32"/><rect x="${k * (10 + i * 19)}" y="${k * 6}" width="${k * 8}" height="${k * 6}" rx="${k * 0.5}" fill="#5b636a"/><text x="${k * (14 + i * 19)}" y="${k * 19.5}" font-size="${k * 2.2}" fill="#4b5157" text-anchor="middle">P${i + 1}</text>`;
+    s += `<rect x="${k * 4}" y="0" width="${W - k * 8}" height="${k * 22}" rx="${k}" fill="var(--dev-light-d)" stroke="${C.lightEdge}" stroke-width="${k * 0.3}"/>`;
+    for (let i = 0; i < 2; i++) s += `<rect x="${k * (7 + i * 19)}" y="${k * 4}" width="${k * 14}" height="${k * 11}" rx="${k * 0.8}" fill="var(--dev-slot)"/><rect x="${k * (10 + i * 19)}" y="${k * 6}" width="${k * 8}" height="${k * 6}" rx="${k * 0.5}" fill="var(--dev-mid)"/><text x="${k * (14 + i * 19)}" y="${k * 19.5}" font-size="${k * 2.2}" fill="var(--dev-off)" text-anchor="middle">P${i + 1}</text>`;
     const L = o.leds || {};
     const ly = k * 30;
     s += led(k * 4, ly, k * 3.4, k * 1.7, "g", o.running === true ? "on" : "unknown", "RN", k);
@@ -251,7 +251,7 @@ const PKDev = (() => {
     s += led(k * 4, ly + k * 12, k * 3.4, k * 1.7, "g", o.running === true ? "on" : "unknown", "PWR", k);
     lines(m.title || m.name, Math.floor(W / (k * 2))).forEach((l, i) => { s += `<text x="${k * 3}" y="${k * 54 + i * k * 3.8}" font-size="${k * 2.8}" font-weight="600" fill="${C.text}">${esc(l)}</text>`; });
     s += `<rect x="${k * 2}" y="${k * 64}" width="${W - k * 4}" height="${H - k * 74}" rx="${k}" fill="${C.anthL}"/>`;
-    for (let r = 0; r < 4; r++) s += `<rect x="${k * 6}" y="${k * (70 + r * 6)}" width="${k * 5}" height="${k * 3.4}" rx="${k * 0.5}" fill="#59616a"/>`;
+    for (let r = 0; r < 4; r++) s += `<rect x="${k * 6}" y="${k * (70 + r * 6)}" width="${k * 5}" height="${k * 3.4}" rx="${k * 0.5}" fill="var(--dev-mid)"/>`;
     if (m.orderNumber) s += `<text x="${W / 2}" y="${H - k * 3.5}" font-size="${k * 2}" fill="${C.sub}" text-anchor="middle" class="pkd-mono">${esc(m.orderNumber)}</text>`;
     void L;
     return { w: W, h: H, svg: s };
@@ -260,12 +260,12 @@ const PKDev = (() => {
   // ---------------- anything else: drive, robot, camera ... ----------------
   function generic(m, o) {
     const k = o.k, W = Math.max(60, m.widthMm || 70) * k, H = HEIGHT.other * k;
-    let s = `<rect x="0" y="0" width="${W}" height="${H}" rx="${k * 3}" fill="#e9ebee" stroke="#a5abb1" stroke-width="${k * 0.4}"/>`;
+    let s = `<rect x="0" y="0" width="${W}" height="${H}" rx="${k * 3}" fill="var(--dev-light)" stroke="var(--dev-light-edge)" stroke-width="${k * 0.4}"/>`;
     s += `<rect x="${k * 3}" y="${k * 3}" width="${W - k * 6}" height="${k * 30}" rx="${k * 2}" fill="${C.anth}"/>`;
     s += led(k * 7, k * 8, k * 3.4, k * 1.7, "g", o.running === true ? "on" : "unknown", "", k);
     s += `<text x="${k * 7}" y="${k * 22}" font-size="${k * 4}" font-weight="600" fill="${C.text}">${esc((m.title || m.name || "").slice(0, Math.floor(W / (k * 2.6))))}</text>`;
-    lines(m.name, Math.floor(W / (k * 2.2))).forEach((l, i) => { s += `<text x="${k * 5}" y="${k * 44 + i * k * 4.4}" font-size="${k * 3.2}" fill="#2b3035">${esc(l)}</text>`; });
-    if (m.orderNumber) s += `<text x="${k * 5}" y="${H - k * 6}" font-size="${k * 2.4}" fill="#6b7177" class="pkd-mono">${esc(m.orderNumber)}</text>`;
+    lines(m.name, Math.floor(W / (k * 2.2))).forEach((l, i) => { s += `<text x="${k * 5}" y="${k * 44 + i * k * 4.4}" font-size="${k * 3.2}" fill="var(--dev-ink)">${esc(l)}</text>`; });
+    if (m.orderNumber) s += `<text x="${k * 5}" y="${H - k * 6}" font-size="${k * 2.4}" fill="var(--dev-label)" class="pkd-mono">${esc(m.orderNumber)}</text>`;
     return { w: W, h: H, svg: s };
   }
 

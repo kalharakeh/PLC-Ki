@@ -197,16 +197,16 @@
   function screen(c, mode) {
     return (x, y, w, h) => {
       const f = h / 10.5, pad = f * 0.6;
-      const bar = { ok: "#2fa84f", warn: "#d99a1e", bad: "#c9463a", info: "#2f7fd9" }[mode.cls] || "#59636d";
-      let s = `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${f * 0.3}" fill="#0b1016"/>`;
+      const bar = { ok: "var(--dev-lcd-ok)", warn: "var(--dev-lcd-warn)", bad: "var(--dev-lcd-bad)", info: "var(--dev-lcd-info)" }[mode.cls] || "var(--dev-lcd-idle)";
+      let s = `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${f * 0.3}" fill="var(--dev-screen)"/>`;
       s += `<rect x="${x}" y="${y}" width="${w}" height="${f * 1.7}" fill="${bar}"/>`;
-      s += `<text x="${x + pad}" y="${y + f * 1.2}" font-size="${f}" font-weight="700" fill="#fff">${esc(mode.text)}</text>`;
+      s += `<text x="${x + pad}" y="${y + f * 1.2}" font-size="${f}" font-weight="700" fill="var(--dev-lcd-bright)">${esc(mode.text)}</text>`;
       // The station name takes what the mode word leaves free; a longer name is cut with an ellipsis
       const room = w - pad * 3 - String(mode.text).length * f * 0.68, sf = f * 0.85;
       const maxCh = Math.max(0, Math.floor(room / (sf * 0.58)));
       let name = String((c && c.station) || "PLC");
       if (name.length > maxCh) name = maxCh > 1 ? name.slice(0, maxCh - 1).trimEnd() + "…" : "";
-      s += `<text x="${x + w - pad}" y="${y + f * 1.2}" font-size="${sf}" fill="#fff" text-anchor="end">${esc(name)}</text>`;
+      s += `<text x="${x + w - pad}" y="${y + f * 1.2}" font-size="${sf}" fill="var(--dev-lcd-bright)" text-anchor="end">${esc(name)}</text>`;
       const rows = [];
       const cp = (c && c.cpu) || {};
       if (page === 0) {
@@ -232,15 +232,15 @@
       const top = y + f * 3.1, lh = f * 1.32, maxRows = Math.floor((h - f * 5.2) / lh);
       rows.slice(0, maxRows).forEach(([a, b], i) => {
         const yy = top + i * lh;
-        if (a) s += `<text x="${x + pad}" y="${yy}" font-size="${f * 0.72}" fill="#8fa0b0">${esc(String(a).slice(0, 14))}</text>`;
-        s += `<text x="${a ? x + w * 0.4 : x + pad}" y="${yy}" font-size="${f * 0.72}" fill="#e8eef3">${esc(String(b).slice(0, a ? 20 : 32))}</text>`;
+        if (a) s += `<text x="${x + pad}" y="${yy}" font-size="${f * 0.72}" fill="var(--dev-lcd-dim)">${esc(String(a).slice(0, 14))}</text>`;
+        s += `<text x="${a ? x + w * 0.4 : x + pad}" y="${yy}" font-size="${f * 0.72}" fill="var(--dev-lcd-text)">${esc(String(b).slice(0, a ? 20 : 32))}</text>`;
       });
       // menu icons along the bottom, the current one lit
       const iw = w / PAGES.length;
       PAGES.forEach((p, i) => {
         const cx = x + iw * (i + 0.5), cy = y + h - f * 1.05;
-        s += `<rect x="${cx - iw * 0.42}" y="${cy - f * 0.8}" width="${iw * 0.84}" height="${f * 1.45}" rx="${f * 0.3}" fill="${i === page ? "#2b3a48" : "transparent"}"/>`;
-        s += `<text x="${cx}" y="${cy + f * 0.25}" font-size="${f * 0.58}" fill="${i === page ? "#fff" : "#7f8c97"}" text-anchor="middle">${esc(p.length > 9 ? p.slice(0, 5) + "." : p)}</text>`;
+        s += `<rect x="${cx - iw * 0.42}" y="${cy - f * 0.8}" width="${iw * 0.84}" height="${f * 1.45}" rx="${f * 0.3}" fill="${i === page ? "var(--dev-lcd-sel)" : "transparent"}"/>`;
+        s += `<text x="${cx}" y="${cy + f * 0.25}" font-size="${f * 0.58}" fill="${i === page ? "var(--dev-lcd-bright)" : "var(--dev-lcd-dim)"}" text-anchor="middle">${esc(p.length > 9 ? p.slice(0, 5) + "." : p)}</text>`;
       });
       return s;
     };
@@ -280,7 +280,7 @@
       const mode = modeOf(c);
       const leds = ledsOf(c, mode);
       const m = plcCpuModule();
-      const k = window.innerWidth < 700 ? 2.9 : 4;
+      const k = PK.screenSize() === "phone" ? 2.9 : 4;
       const dev = PKDev.single({ ...m, family: m.family || "s7-1500", kind: "cpu" }, { k, leds, running: mode.state === "Run", screen: (m.display !== false && (m.family || "s7-1500") === "s7-1500") ? screen(c, mode) : null, keys: true });
 
       const admin = c.admin;
@@ -313,12 +313,12 @@
         [diag && diag.alarmsRead ? String(diag.faults) : "—", "Device faults reported", diag && diag.faults ? "bad" : diag && diag.alarmsRead ? "ok" : ""],
         [leds.real ? "From PLCSIM" : "From the mode", "LEDs"],
       ];
-      const info = `<div class="card"><div class="kpis plc-kpis">${tiles.map(([v, l, cls]) => `<div class="k ${cls || ""}"><b>${esc(v)}</b><span>${esc(l)}</span></div>`).join("")}</div>
+      const info = `<div class="card">${PK.ui.tiles(tiles.map(([value, label, state]) => ({ value, label, state })), { small: true, two: true })}
         ${leds.real ? "" : `<p class="faint small" style="margin:14px 0 0">RUN/STOP follows the mode the CPU reports. ERROR and MAINT are not read from this CPU, so they stay dark here even when the real LEDs are lit.</p>`}
         <div class="row" style="margin-top:14px"><a class="btn b small" href="#/plc/racks">${icon("rack")}Racks and I/O</a>${diag && diag.problems && diag.problems.length
           ? `<a class="btn small" href="#/plc/diagnostics">${icon("warn")}${diag.problems.length} reported in Diagnostics</a>` : ""}</div></div>`;
 
-      const pageBtns = `<div class="segmented plc-pages" role="group" aria-label="Display page">${PAGES.map((p, i) => `<button type="button" data-page="${i}" class="${i === page ? "on" : ""}">${p}</button>`).join("")}</div>`;
+      const pageBtns = PK.ui.choice("Display page", PAGES.map((p, i) => ({ label: esc(p), on: i === page, data: { "data-page": i } })), { cls: "plc-pages" });
       const left = `<div class="card plc-dev"><div class="plc-dev-pic">${dev}</div>${m.display !== false && (m.family || "s7-1500") === "s7-1500" ? pageBtns : ""}
         <p class="faint small" style="margin:10px 0 0;text-align:center">Drawn from the order number${m.orderNumber ? " " + esc(m.orderNumber) : ""}. The display mirrors what PLC-Ki reads; it is not a copy of the real screen.</p></div>`;
       const notice = c.connection && c.connection !== "connected" && c.connection !== "snapshot" && !(sim.applies && sim.found)
@@ -429,11 +429,11 @@
       scope = "";
     }
     const shown = chAll ? rows : rows.slice(0, CH_ROWS);
-    const seg = (id, label) => `<button type="button" data-chf="${id}" class="${!q && filter === id ? "on" : ""}">${label}</button>`;
-    const bar = `<div class="row hw-ch-bar">
-      <div class="segmented" role="group" aria-label="Show channels">${seg("tagged", `With a tag · ${tagged}`)}${digital ? seg("on", `On now · ${onCount}`) : ""}${seg("all", `All · ${chans.length}`)}</div>
-      <input type="search" id="ch-q" placeholder="Find a tag, address or comment in this rack" aria-label="Find a channel" value="${esc(chQuery)}">
-      ${scope ? `<span class="faint small">${scope}</span>` : ""}</div>`;
+    const seg = (id, label) => ({ label, on: !q && filter === id, data: { "data-chf": id } });
+    const bar = PK.ui.toolbar({ cls: "hw-ch-bar",
+      left: PK.ui.choice("Show channels", [seg("tagged", `With a tag · ${tagged}`), digital ? seg("on", `On now · ${onCount}`) : null, seg("all", `All · ${chans.length}`)].filter(Boolean)),
+      search: { id: "ch-q", placeholder: "Find a tag, address or comment in this rack", label: "Find a channel", value: chQuery },
+      right: scope ? `<span class="faint small">${scope}</span>` : "" });
     const modCol = !!q;
     const table = rows.length ? `<table class="tbl hw-ch"><tr><th>Ch</th>${modCol ? "<th>Module</th>" : ""}<th>Address</th><th>Tag</th><th>Now</th><th>Comment</th></tr>
       ${shown.map((c) => `<tr><td class="mono">${c.io === "Output" ? "Q" : "I"}${c.n}</td>${modCol ? `<td><a href="#/plc/racks/${encodeURIComponent(st.name)}/${encodeURIComponent(c.mod.slot ?? "")}" data-goslot="${esc(c.mod.slot ?? "")}">${esc(c.mod.slot ?? "")} · ${esc(c.mod.title || c.mod.name)}</a></td>` : ""}<td class="mono">${esc(c.address)}</td>
@@ -485,12 +485,12 @@
             ${jobMsg ? `<div class="small" style="margin-top:6px">${esc(jobMsg)}</div>` : ""}<div class="row" style="margin-top:10px">${readBtn}</div></div></div>`
         : jobMsg ? `<div class="notice" style="margin-bottom:16px">${icon("info")}<div>${esc(jobMsg)}</div></div>` : "";
 
-      const picker = hw.stations.length > 1 ? `<div class="hw-stations" role="tablist" aria-label="Devices">${hw.stations.map((s) => `<a role="tab" aria-selected="${s.name === st.name}" class="hw-st ${s.name === st.name ? "on" : ""}" href="#/plc/racks/${encodeURIComponent(s.name)}">
-          <b>${stationBadge(s.name)}${esc(s.name)}</b><span>${esc([kindLabel[s.kind], famLabel[s.family]].filter(Boolean).join(" · "))}${s.ips[0] ? " · " + esc(s.ips[0]) : ""}</span></a>`).join("")}</div>` : "";
+      const picker = hw.stations.length > 1 ? PK.ui.tabs("Devices", hw.stations.map((s) => ({ on: s.name === st.name, href: "#/plc/racks/" + encodeURIComponent(s.name),
+        label: stationBadge(s.name) + esc(s.name), sub: esc([kindLabel[s.kind], famLabel[s.family]].filter(Boolean).join(" · ")) + (s.ips[0] ? " · " + esc(s.ips[0]) : "") })), { cls: "hw-stations" }) : "";
 
       const mode = modeOf(cpu);
       const running = st.kind === "plc" ? (mode.state ? mode.state === "Run" : undefined) : (cpu && cpu.connection === "connected" ? true : undefined);
-      const k = window.innerWidth < 700 ? 1.7 : 2.3;
+      const k = PK.screenSize() === "phone" ? 1.7 : 2.3;
       const svg = PKDev.rack(st, { k, values, running, selected: idx, leds: ledsOf(cpu, mode) });
       const rackCard = `<div class="card hw-rack">
         <div class="row" style="gap:10px;flex-wrap:wrap;align-items:baseline"><h2 style="margin:0;font-size:22px">${esc(st.name)}</h2>
@@ -556,7 +556,7 @@
       const [k, , tab, sub] = tabOf(params);
       if (k !== "racks") watched = [];
       const nProblems = diag && diag.problems ? diag.problems.length : 0;
-      const nav = `<nav class="ptabs" aria-label="PLC">${TABS.map(([id, label]) => `<a href="#/plc${id === "cpu" ? "" : "/" + id}" class="${id === k ? "on" : ""}" ${id === k ? 'aria-current="page"' : ""}>${label}${id === "diagnostics" && nProblems ? ` <span class="count warn">${nProblems}</span>` : ""}</a>`).join("")}</nav>`;
+      const nav = PK.ui.tabs("PLC", TABS.map(([id, label]) => ({ label, on: id === k, href: "#/plc" + (id === "cpu" ? "" : "/" + id), count: id === "diagnostics" ? nProblems : 0 })));
       const head = PK.hero({ cls: "hero compact", title: "PLC", sub, extra: nav });
       return head + tab.render(rest(params));
     },

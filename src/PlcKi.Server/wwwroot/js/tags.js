@@ -231,12 +231,10 @@
       if (tab === "dbs" && !db && data.dbs.length) openDb(data.dbs[0].name);
       const status = W.connection && W.connection !== "connected"
         ? `<div class="notice gold" style="margin-bottom:14px">${icon("warn")}<div>${W.connection === "snapshot" ? "PLC-Ki runs on test values, so tags outside the machine model show no value." : "PLC-Ki is not reading the PLC right now, so there are no live values."}</div></div>` : "";
-      const bar = `<div class="row" style="gap:12px;margin-bottom:16px;flex-wrap:wrap">
-          <div class="segmented" role="group" aria-label="Show">
-            <button type="button" data-tab="tables" class="${tab === "tables" ? "on" : ""}">Tag tables · ${nTags}</button>
-            <button type="button" data-tab="dbs" class="${tab === "dbs" ? "on" : ""}">Data blocks · ${data.dbs.length}</button></div>
-          <input type="search" id="tag-q" placeholder="${tab === "tables" ? "Find a tag, address or comment" : "Find a data block"}" aria-label="Find" value="${esc(query)}" style="max-width:340px">
-          <span class="spacer"></span><span class="faint small">${W.at ? "Read " + PK.clock(W.at) : ""}</span></div>`;
+      const bar = PK.ui.toolbar({
+          left: PK.ui.choice("Show", [{ label: `Tag tables · ${nTags}`, on: tab === "tables", data: { "data-tab": "tables" } }, { label: `Data blocks · ${data.dbs.length}`, on: tab === "dbs", data: { "data-tab": "dbs" } }]),
+          search: { id: "tag-q", placeholder: tab === "tables" ? "Find a tag, address or comment" : "Find a data block", label: "Find", value: query },
+          right: `<span class="faint small">${W.at ? "Read " + PK.clock(W.at) : ""}</span>` });
       return head + PK.sec("", status + bar + (tab === "tables" ? tablesHtml(q) : dbsHtml(q)) + (window.PKWrite ? PKWrite.logHtml() : ""));
     },
     after(page) {

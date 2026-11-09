@@ -49,7 +49,7 @@
   }
   /** On a narrow screen the work area comes first: bring it into view (after draw() restores the scroll). */
   function showWork() {
-    if (innerWidth > 1000) return;
+    if (PK.screenSize() === "desktop") return;
     setTimeout(() => { const el = document.querySelector("[data-work]"); if (el) window.scrollTo({ top: el.getBoundingClientRect().top + scrollY - 70, behavior: "instant" }); }, 0);
   }
   /** A package name from the request when none is typed: "An FB for a pump with start/stop" gives "fb-pump-start". */
@@ -244,7 +244,7 @@
   function listHtml() {
     const pk = g.packages;
     const items = !pk ? `<li class="muted small">Loading…</li>`
-      : !pk.length ? `<li class="muted small gen-empty">Nothing generated yet. What you start appears here.</li>`
+      : !pk.length ? `<li>${PK.ui.empty({ icon: "file", title: "Nothing generated yet.", text: "What you start appears here.", cls: "small" })}</li>`
       : pk.map((p) => `<li><button type="button" class="gen-item ${g.open === p.name ? "on" : ""}" data-open="${esc(p.name)}" aria-pressed="${g.open === p.name}">
           <span class="gi-top"><b>${esc(p.name)}</b>${running(p.name) ? `<span class="pill info"><span class="dot"></span>Running</span>` : p.state ? `<span class="pill ${stateCls(p.state)}">${esc(p.state)}</span>` : ""}</span>
           <span class="gi-req">${esc(p.request || "")}</span>
@@ -353,9 +353,7 @@
     const d = g.detail;
     const p = (g.packages || []).find((x) => x.name === g.open) || {};
     const meta = d ? [`${d.versions.length} version${d.versions.length === 1 ? "" : "s"}`, d.plc ? "PLC " + d.plc : "", d.context ? "fitted into " + d.context.split(/[\\/]/).pop() : ""].filter(Boolean).join(" · ") : "Loading…";
-    const tabs = `<div class="segmented" role="tablist" aria-label="Package">
-        <button type="button" role="tab" data-tab="versions" class="${g.tab === "versions" ? "on" : ""}" aria-selected="${g.tab === "versions"}">Versions</button>
-        <button type="button" role="tab" data-tab="change" class="${g.tab === "change" ? "on" : ""}" aria-selected="${g.tab === "change"}">Change it</button></div>`;
+    const tabs = PK.ui.tabs("Package", [["versions", "Versions"], ["change", "Change it"]].map(([k, l]) => ({ label: l, on: g.tab === k, data: { "data-tab": k } })));
     return `<div class="gen-head"><div style="min-width:0"><span class="eyebrow">Package${p.state ? ` <span class="pill ${stateCls(p.state)}">${esc(p.state)}</span>` : ""}</span><h2>${esc(g.open)}</h2>
         <p class="muted small" style="margin:0">${esc(meta)}</p></div>${tabs}</div>
       ${g.tab === "change" ? formHtml() : d ? versionsHtml(d) : `<div class="card"><p class="muted" style="margin:0">Loading…</p></div>`}`;

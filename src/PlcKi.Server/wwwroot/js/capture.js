@@ -215,7 +215,7 @@
     return `<p class="sub">The seconds before each alarm came: what changed, in which order, and short signals the normal reads miss. The last 100 are kept.</p>
       <p style="margin:0 0 14px">${modeLine()}</p>`
       + (!l ? `<p class="muted">Loading…</p>` : rows ? `<ul class="list events">${rows}</ul>`
-        : `<div class="nomatch">${icon("clock")}<b>No alarm has come since PLC-Ki started recording.</b><span>When one comes, the seconds before it are kept here.</span></div>`);
+        : PK.ui.empty({ icon: "clock", title: "No alarm has come since PLC-Ki started recording.", text: "When one comes, the seconds before it are kept here." }));
   }
 
   function wirePage(el) {

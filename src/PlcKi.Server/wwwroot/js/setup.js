@@ -275,8 +275,8 @@ const PKSetup = (() => {
       <div class="legend"><span><span class="sw" style="background:var(--ok)"></span>checked, working</span><span><span class="sw" style="background:var(--fault)"></span>no answer</span><span><span class="sw" style="background:var(--muted)"></span>not checked yet</span></div>`;
   }
 
-  const setupNav = (here) => `<div class="subnav">${[["start", "Get started"], ["connections", "Connections"], ["program", "Import a program"], ["settings", "Settings"], ["qr", "QR labels"]]
-    .map(([k, l]) => `<a class="btn ${k === here ? "" : "b"} small" href="#/setup/${k}">${l}</a>`).join("")}</div>`;
+  const setupNav = (here) => PK.ui.tabs("Setup", [["start", "Get started"], ["connections", "Connections"], ["program", "Import a program"], ["settings", "Settings"], ["qr", "QR labels"]]
+    .map(([k, l]) => ({ label: l, on: k === here, href: "#/setup/" + k })));
 
   function choice(name, current, options) {
     return `<div class="choice" role="group">${options.map((o) => `<button type="button" data-${name}="${o.value}" class="${current === o.value ? "on" : ""}" aria-pressed="${current === o.value}" aria-label="${esc(o.label + ". " + o.text)}" ${o.disabled ? "disabled" : ""}>
@@ -594,8 +594,7 @@ const PKSetup = (() => {
         <div class="label">${esc(p.cpu || "PLC")}</div><div class="value">${esc(p.name)}</div><div class="faint">${p.blocks} blocks · ${p.tags} tags · ${(p.languages || []).join(", ")}</div></div>`).join("")}</div>` : "";
 
     const mi = imp.modelInfo;
-    const review = mi ? (mi.ok ? `<div class="kpis">${[["Tags", mi.tags], ["Steps", mi.steps], ["Devices", mi.equipment], ["Alarms", mi.alarms]]
-        .map(([l, v]) => `<div class="k"><b>${v}</b><span>${l}</span></div>`).join("")}</div>
+    const review = mi ? (mi.ok ? `${PK.ui.tiles([["Tags", mi.tags], ["Steps", mi.steps], ["Devices", mi.equipment], ["Alarms", mi.alarms]].map(([label, value]) => ({ value, label })))}
         <p style="margin:12px 0 0"><b>${esc(mi.name)}</b>${mi.description ? " · " + esc(mi.description) : ""}</p>
         ${imp.job && imp.job.state === "problems" ? `<div class="notice gold" style="margin-top:10px">${icon("warn")}<div>Ki left some problems (see the log). PLC-Ki will not start with this model until they are fixed. Build it again, or ask for help with the log.</div></div>` : ""}
         <div class="row" style="margin-top:14px"><button class="btn" data-use ${imp.job && imp.job.state === "problems" ? "disabled" : ""}>Use this program</button></div>`
@@ -605,10 +604,11 @@ const PKSetup = (() => {
     return PK.hero({ cls: "hero compact", before: setupNav("program"), title: "Import a program",
         sub: `Give PLC-Ki the TIA archive. It reads every block, and Ki writes the plain-English model of steps, devices, alarms, causes and fixes, once.`,
         extra: `${restartBar()}
-        <div class="kpis" style="margin-top:30px"><div class="k"><b>${esc(state.info ? state.info.machine : "")}</b><span>watched now</span></div>
-          <div class="k"><b>${state.model ? state.model.alarms.length : "–"}</b><span>alarms explained</span></div>
-          <div class="k"><b>${state.model ? state.model.equipment.length : "–"}</b><span>devices</span></div>
-          <div class="k"><b style="font-size:16px;font-weight:600;word-break:break-all">${esc((cur.export || "none").split(/[\\/]/).pop())}</b><span>program file</span></div></div>` })
+        ${PK.ui.tiles([
+          { value: state.info ? state.info.machine : "", label: "watched now" },
+          { value: state.model ? state.model.alarms.length : "–", label: "alarms explained" },
+          { value: state.model ? state.model.equipment.length : "–", label: "devices" },
+          { html: `<span class="k-file">${esc((cur.export || "none").split(/[\\/]/).pop())}</span>`, label: "program file" }])}` })
       + PK.sec("alt", `${PKModel.html()}${refreshHtml()}<div class="steps col">
         ${step(1, "Choose the program", "A TIA archive (.zap20), a program export (.zip) made earlier, or a Beckhoff TwinCAT 3 project (.tnzip, or the project folder zipped).", `
           <div class="dropzone" id="drop">${icon("import", "")}<div style="font-weight:600;margin-top:6px">Drop the file here, or click to choose it</div>
@@ -620,7 +620,7 @@ const PKSetup = (() => {
           + (imp.job && imp.job.kind === "export" ? jobCard(imp.job) : ""))}
         ${step(3, "Build the machine model", "Ki reads the program and writes what each step, device and alarm means. A few minutes, usually one to a few dollars of API use.",
           ch && !isArchive ? `${plcPick}
-            <div class="row"><span class="small muted">Effort</span><div class="segmented">${["medium", "high", "max"].map((e) => `<button class="${imp.effort === e ? "on" : ""}" data-effort="${e}">${e}</button>`).join("")}</div>
+            <div class="row"><span class="small muted">Effort</span>${PK.ui.choice("Effort", ["medium", "high", "max"].map((e) => ({ label: e, on: imp.effort === e, data: { "data-effort": e } })))}
               <label class="check small"><input type="checkbox" id="compare" ${imp.compare ? "checked" : ""}>Compare with the current model</label></div>
             <div class="row" style="margin-top:14px"><button class="btn" data-build ${jobRunning || (exp && exp.plcs.length > 1 && !imp.plc) ? "disabled" : ""}>Build the model</button>
               ${exp && exp.plcs.length > 1 && !imp.plc ? `<span class="faint">Choose the PLC first.</span>` : ""}</div>` + (imp.job && imp.job.kind === "import" ? jobCard(imp.job) : "") : `<span class="faint">Needs a program export.</span>`)}
