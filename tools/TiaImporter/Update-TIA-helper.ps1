@@ -30,6 +30,20 @@ if (-not $NoPull) {
   if (-not (Get-Command git -ErrorAction SilentlyContinue)) { Problem "git is not installed; skipping. Copy the newest PLC-Ki folder here by hand." }
   elseif (-not (Test-Path (Join-Path $root ".git"))) { Problem "$root is not a git clone; skipping." }
   else {
+    # A work branch is deleted on GitHub once its pull request is merged. If this folder is still on one,
+    # go back to main, but only when nothing was changed here (checkout must not throw edits away).
+    git -C $root fetch --prune origin
+    $branch = (git -C $root rev-parse --abbrev-ref HEAD).Trim()
+    if ($branch -ne "main" -and $branch -ne "HEAD") {
+      git -C $root rev-parse --verify --quiet "refs/remotes/origin/$branch" | Out-Null
+      if ($LASTEXITCODE -ne 0) {
+        $changed = git -C $root status --porcelain --untracked-files=no
+        if ($changed) { Stop-Here "This folder is on the branch '$branch', which is gone from GitHub, and has local changes. Ask for help before switching to main." }
+        Problem "The branch '$branch' is gone from GitHub (it was merged). Switching to main."
+        git -C $root checkout main
+        if ($LASTEXITCODE -ne 0) { Stop-Here "Could not switch to main (see above). Ask for help before going on." }
+      } else { Problem "This folder is on the branch '$branch', not main. Updating that branch." }
+    }
     git -C $root pull
     if ($LASTEXITCODE -ne 0) { Stop-Here "git pull did not work (see above). If it says your local changes would be overwritten, ask for help before going on." }
     Ok "up to date"
