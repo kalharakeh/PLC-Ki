@@ -216,10 +216,13 @@ public class StorageTests : IDisposable
         var rec = Enumerable.Range(1, 3).Select(i => Put($"captures/helium/2026110{i}-120000-000-A01.json")).ToList();
         var old = Put("value-changes-2020-01-31-235959.jsonl");
 
-        var would = Service(new RetentionLimits { ProductionDays = 7, Recordings = 1 }).Prune(Now, dryRun: true);
+        var rotate = WriteEndpoints.ChangeLog(_dir).RotateBytes;
+
+        var would = Service(new RetentionLimits { ProductionDays = 7, Recordings = 1, ChangeLogMb = 1 }).Prune(Now, dryRun: true);
 
         Assert.Equal(new[] { "production", "changes", "recordings" }, would.Select(r => r.Kind));
         Assert.True(File.Exists(day) && File.Exists(old) && rec.All(File.Exists));
+        Assert.Equal(rotate, WriteEndpoints.ChangeLog(_dir).RotateBytes);     // a preview does not change how the log rotates
     }
 
     [Fact]

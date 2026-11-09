@@ -131,7 +131,7 @@ public sealed class JsonLinesLog
     {
         lock (_lock)
         {
-            RotateBytes = Math.Clamp(maxBytes / 5, 64 * 1024, DefaultRotateBytes);
+            if (!dryRun) RotateBytes = Math.Clamp(maxBytes / 5, 64 * 1024, DefaultRotateBytes);
             if (!dryRun && File.Exists(Live) && new FileInfo(Live).Length > RotateBytes) Rotate(new FileInfo(Live));
             var older = Older();
             var cutoff = now.LocalDateTime.AddDays(-days);

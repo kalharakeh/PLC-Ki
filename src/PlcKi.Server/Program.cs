@@ -129,7 +129,9 @@ static async Task<int> RunAppAsync(string[] appArgs, bool probe, JobService jobs
     // Storage limits (Setup › Settings › Storage): read live from settings.json, applied at start and once a day
     var startLimits = SettingsStore.RetentionFrom(builder.Configuration);
     var memory = new AlarmMemory(AlarmMemory.FileFor(plant.DataDir, model.Name), model.Name);
-    memory.Prune(startLimits.AlarmOccurrences);      // the saved limit, before the first alarm is counted
+    // The saved limit, before the first alarm is counted
+    if (memory.Prune(startLimits.AlarmOccurrences) is var trimmed and > 0)
+        Console.WriteLine($"Storage limits: removed {trimmed} alarm occurrences without a note (limit {startLimits.AlarmOccurrences}).");
     builder.Services.AddSingleton(memory);
     builder.Services.AddSingleton(new ModelFile(Resolve(opt.Model)));
     builder.Services.AddSingleton<ModelFixService>();
