@@ -466,7 +466,6 @@
     },
     render(params) {
       if (params[0] && params[0] !== stationName) { stationName = params[0]; slotSel = params[1] ?? null; }
-      const head = "";
       if (hwError) return PK.sec("", `<div class="notice gold">${icon("warn")}<div>${esc(hwError)}</div></div>`);
       if (!hw) return PK.sec("", `<p class="muted">Loading…</p>`);
       const admin = PK.state.user && PK.state.user.role === "admin";
@@ -502,7 +501,7 @@
       // The PLC's station shows everything the CPU reports and every drive; another station only its own
       const diagZone = `<div class="diag-zone">${problemsCard({ title: `Reported for ${esc(st.name)}`, station: st.name }) + drivesSection(st.name)}</div>`;
       const meta = `<p class="faint small" style="margin:14px 0 0">${esc(hw.project || "")}${hw.exportedAt ? " · read from TIA " + esc(PK.date(hw.exportedAt)) : ""}</p>`;
-      return head + PK.sec("", notice + picker + rackCard + detail + diagZone + networkCard() + meta);
+      return PK.sec("", notice + picker + rackCard + detail + diagZone + networkCard() + meta);
     },
     after(el) {
       el.querySelectorAll("[data-read]").forEach((b) => PK.on(b, "click", readHardware));

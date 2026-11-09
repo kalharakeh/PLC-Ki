@@ -198,7 +198,10 @@ public class ReportTests
         var now = DateTimeOffset.Now;
         // "24 h" is the last 24 hours, not since midnight; "1 year" is not cut to 92 days
         Assert.Equal(now.AddDays(-1), b.Faults(1, now).From);
-        Assert.Equal(now.AddDays(-365), b.Faults(365, now).From);
+        var year = b.Faults(365, now);
+        Assert.Equal(now.AddDays(-365), year.From);
+        Assert.Contains(year.Notes, n => n.Contains("last 31 days"));
+        Assert.DoesNotContain(b.Faults(7, now).Notes, n => n.Contains("last 31 days"));
     }
 
     [Fact]

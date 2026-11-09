@@ -1472,7 +1472,6 @@ ul.mem-list.card { padding: 4px 22px; }
 }
 
 /* Reports: shift report with OEE, fault summary, report settings */
-.rp-tabs { margin-top: 4px; width: fit-content; max-width: 100%; }
 .rp-pick input[type=date] { padding: 8px 12px; border-radius: 12px; border: 1px solid var(--line-strong); background: var(--field); color: var(--ink); font: inherit; font-size: 15px; }
 .segmented a { font-size: 13px; font-weight: 500; padding: 6px 13px; border-radius: 999px; color: var(--muted); text-decoration: none; }
 .segmented a:hover { color: var(--ink); }
@@ -1523,7 +1522,7 @@ section.rp { padding-top: 8px; }
   .app { display: block !important; }
   body { background: #fff !important; }
   section.hero.compact { padding-block: 0 8px; }
-  section.hero .sub, section.hero .rp-tabs { display: none; }
+  section.hero .sub, section.hero .ptabs { display: none; }
   .card, .rp-kpis .k { box-shadow: none !important; backdrop-filter: none !important; break-inside: avoid; }
   details.rp-fix { display: none; }
   .rp-seg { -webkit-print-color-adjust: exact; print-color-adjust: exact; }

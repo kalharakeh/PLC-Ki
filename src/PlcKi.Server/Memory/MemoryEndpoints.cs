@@ -49,7 +49,7 @@ public static class MemoryEndpoints
                 noted = inWindow.Count(o => o.Note != null),
                 downtime = AlarmMemory.Span(inWindow.Aggregate(TimeSpan.Zero, (s, o) => s + ((o.Went ?? now) - (o.Came < from ? from : o.Came)))),
                 // by=downtime ranks by how long each alarm was on in total (History › Ranking); the default by how often
-                top = mem.Top(from, now, by == "downtime" ? 25 : 10, by == "downtime").Select(r => new
+                top = mem.Top(from, now, by != null ? 25 : 10, by == "downtime").Select(r => new
                 {
                     r.AlarmId, r.Text, r.Severity, r.Count, downtime = AlarmMemory.Span(r.Downtime), downtimeMinutes = Math.Round(r.Downtime.TotalMinutes, 1),
                     r.Last, r.Noted, r.TopCause,
