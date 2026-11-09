@@ -417,7 +417,12 @@ public sealed class S7CommPlusSource : IPlcSource
             try
             {
                 _textLists = _extras.Run("loading the CPU's text lists", l => ((S7ExtraLink)l).Client.GetTextListsAsync().GetAwaiter().GetResult(), out var why);
-                if (why != null) _log.LogDebug("No text lists from the CPU yet: {Why}", why);
+                if (why != null)
+                {
+                    // The extra-values connection was not there: try again soon, not in 10 minutes
+                    _textListsNext = DateTimeOffset.Now.AddSeconds(30);
+                    _log.LogDebug("No text lists from the CPU yet: {Why}", why);
+                }
             }
             catch (Exception ex) { _log.LogDebug(ex, "No text lists from the CPU; diagnostic texts may show placeholders."); }
         }
