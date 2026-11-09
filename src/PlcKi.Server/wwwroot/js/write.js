@@ -60,7 +60,7 @@
         <div class="row">${where}</div>
         <div class="notice gold">${icon("shield")}<div>${esc(check.why)}</div></div>
         ${real && check.plcsimWhy && !String(check.why || "").startsWith(check.plcsimWhy) ? `<p class="faint small" style="margin:0">${esc(check.plcsimWhy)} So PLC-Ki uses the rules for a real PLC.</p>` : ""}
-        <div class="row end"><button class="btn" data-close>OK</button></div>`);
+        <div class="row end"><button class="btn" data-close>Done</button></div>`);
       return;
     }
     const isBool = type === "Bool";
@@ -145,7 +145,7 @@
     if (!c.allowed) {
       PK.sheet(`<span class="eyebrow">Hold on PLCSIM</span><h2 class="mono" style="font-size:22px;word-break:break-all">${esc(symbol)}</h2>
         <div class="notice gold">${icon("shield")}<div>${esc(c.why)}</div></div>
-        <div class="row end"><button class="btn" data-close>OK</button></div>`);
+        <div class="row end"><button class="btn" data-close>Done</button></div>`);
       return;
     }
     const dt = c.datatype || type;

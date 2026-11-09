@@ -104,7 +104,7 @@
     }
     return R.html;
   }
-  let histOpen = false;           // "This alarm before" stays open across the redraws
+  let histOpen = false;           // "History of this alarm" stays open across the redraws
 
   function relatedEquipment(alarm) {
     const loc = parseLoc(alarm.location);
@@ -372,7 +372,7 @@
           <div class="grid two"><div>${s.summary.map((l) => `<p class="sub" style="margin-bottom:12px">${esc(l)}</p>`).join("")}</div>
           ${seq ? `<div class="card"><h3>${esc(seq.name)}</h3>${stepStrip(seq)}${chartLink(seq)}
             ${seq.next.length ? `<p class="muted small" style="margin:12px 0 8px">To go on it needs</p><ul class="conds">${seq.next.flatMap((n) => n.conditions).map((c) => PK.condHeld(c, s)).join("")}</ul>` : ""}</div>` : ""}</div>`)
-        + (window.PKMemory ? sec("", `<details class="more" data-hist ${histOpen ? "open" : ""}><summary><b>This alarm before</b> <span class="muted small">every time PLC-Ki saw it, and what was found</span></summary>
+        + (window.PKMemory ? sec("", `<details class="more" data-hist ${histOpen ? "open" : ""}><summary><b>History of this alarm</b> <span class="muted small">every time PLC-Ki saw it, and what was found</span></summary>
             <div class="card" style="margin-top:12px">${PKMemory.alarmBlock(a.id)}</div></details>`) : "")
         + guide();
     },
@@ -399,7 +399,7 @@
   // One short header (the step, what it waits for, the key values), then four tabs so the page stays one screen:
   // Overview (what needs attention, the sequence, the machine at a glance), Devices (list and the picked one),
   // Values over time, and Data exchange. The tab is in the address: #/plant/devices/M201, #/plant/values.
-  const PLANT_TABS = [["overview", "Overview"], ["devices", "Devices"], ["sequence", "Sequence"], ["stations", "Stations"], ["values", "Values over time"], ["settings", "Settings"], ["exchange", "Data exchange"]];
+  const PLANT_TABS = [["overview", "Overview"], ["devices", "Devices"], ["sequence", "Sequence"], ["stations", "Stations"], ["values", "Values over time"], ["settings", "Machine settings"], ["exchange", "Data exchange"]];
   // The HMI panel's operator settings and buttons (from the program export), loaded once for the Settings tab
   const H = { data: null, error: null, loading: false, q: "", shown: [] };
   async function loadHmi() {
@@ -641,7 +641,7 @@
                 <div class="actions" style="margin-top:14px">${on ? `<a class="btn small" href="#/alarm">Open on Active alarm</a>` : ""}
                 ${(() => { const w = alarmWhere(a); return w.block ? `<a class="btn b small" href="${esc(w.href)}">Show where it is set</a>` : ""; })()}
                 <button class="btn b small" data-ask="Explain alarm ${esc(a.id)}: when does it come, why, and how is it fixed?">Ask</button></div></div>
-            </div>${window.PKMemory ? `<div class="mem-in-row"><h3>This alarm before</h3>${PKMemory.alarmBlock(a.id, { compact: true })}</div>` : ""}` : ""}
+            </div>${window.PKMemory ? `<div class="mem-in-row"><h3>History of this alarm</h3>${PKMemory.alarmBlock(a.id, { compact: true })}</div>` : ""}` : ""}
         </li>`;
       }).join("");
       // The counts live in the filter buttons: one row to read and to click, no second row of the same numbers

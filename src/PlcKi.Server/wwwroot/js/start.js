@@ -47,7 +47,7 @@ const PKStart = (() => {
     const demo = DEMO.test(s.model || "");
     list.push({ key: "program", title: "Teach it your machine", done: !demo, text: demo ? "PLC-Ki shows the demo mixing station until you import your TIA program." : `Watching ${state.info ? state.info.machine : "your program"}.`, href: "#/setup/program", btn: "Import" });
     const keyOk = info.apiKey !== "none";
-    list.push({ key: "ask", title: "Turn on Ask", done: keyOk, text: keyOk ? "Claude can answer questions and read programs." : "Needs a Claude API key. Without it, Ask and program import stay off.", href: "#/setup/start/assistant", btn: "Add key" });
+    list.push({ key: "ask", title: "Turn on Ask", done: keyOk, text: keyOk ? "Ki can answer questions and read programs." : "Needs a Claude API key. Without it, Ask and program import stay off.", href: "#/setup/start/assistant", btn: "Add key" });
     const t = r.tia || {};
     list.push({ key: "tia", title: "TIA helper", optional: true, done: !!t.ok, text: t.ok ? `Ready on ${t.machine || "the TIA PC"}.` : "Only for importing a program and the block generator. " + PK.plain(t.message).text, href: "#/setup/start/tia", btn: "Set up" });
     return list;
@@ -197,7 +197,7 @@ const PKStart = (() => {
     if (m === "local") {
       body = `<div class="card stack"><h3>TIA Portal is on this PC</h3>
         <p class="muted" style="margin:0">PLC-Ki starts the TIA helper by itself, in its own window, when it needs TIA. Tell it where the helper is.</p>
-        ${field("w-tiaImporterPath", "TiaImporter.exe on this PC", w.tiaImporterPath, { placeholder: helperExe })}
+        ${field("w-tiaImporterPath", "TIA helper (TiaImporter.exe) on this PC", w.tiaImporterPath, { placeholder: helperExe })}
         ${field("w-tiaPlcsimIp", "PLCSIM address (for test downloads)", w.tiaPlcsimIp, { placeholder: "e.g. 192.168.0.10, empty = no PLCSIM downloads" })}
         ${check}</div>`;
     } else if (m === "remote") {
@@ -233,7 +233,7 @@ const PKStart = (() => {
     const k = PKSetup.info.apiKey;
     return {
       title: "Turn on Ask.",
-      sub: "Claude answers questions about the machine (\"why is the alarm on?\") and reads your program once, at import, to write the plain-English explanations. Both need a Claude API key.",
+      sub: "Ki answers questions about the machine (\"why is the alarm on?\") and reads your program once, at import, to write the plain-English explanations. Both need a Claude API key.",
       body: `<div class="card stack">
         ${k !== "none" ? `<div class="notice green">${icon("check")}<div>${k === "environment" ? "A key is already set on this PC (outside PLC-Ki). You can leave this empty." : "A key is saved. Leave empty to keep it."}</div></div>` : ""}
         ${field("w-apiKey", "Claude API key", "", { type: "password", placeholder: "sk-ant-…", hint: "From console.anthropic.com, API keys. Stored encrypted on this PC." })}
@@ -246,7 +246,7 @@ const PKStart = (() => {
     const demo = DEMO.test(w.model || "");
     return {
       title: demo ? "Teach it your machine." : "Your machine.",
-      sub: demo ? "Right now PLC-Ki shows a demo mixing station. Give it your TIA archive (.zap20): TIA exports the program, Claude writes what each step, device and alarm means, and you check it."
+      sub: demo ? "Right now PLC-Ki shows a demo mixing station. Give it your TIA archive (.zap20): TIA exports the program, Ki writes what each step, device and alarm means, and you check it."
         : "PLC-Ki watches the program you imported. Import again when the program changes.",
       body: `<div class="card stack"><div class="row"><span class="ico">${icon(demo ? "file" : "check")}</span><div style="flex:1"><b>${esc(state.info ? state.info.machine : "")}</b>
           <div class="faint small">${demo ? "Demo machine" : esc((w.model || "").split(/[\\/]/).pop())}</div></div>

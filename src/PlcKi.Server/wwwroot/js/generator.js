@@ -1,6 +1,6 @@
 // Block generator (administrators): say what you need, Ki (PLC-Ki's block writer, on Claude) writes the blocks, the TIA PC imports and compiles them,
 // optionally downloads to PLCSIM and watches them run. A real-PLC download needs two people-confirmations: the version
-// typed here, and the PLC address typed in the TiaImporter window on the TIA PC.
+// typed here, and the PLC address typed in the TIA helper window on the TIA PC.
 "use strict";
 
 (() => {

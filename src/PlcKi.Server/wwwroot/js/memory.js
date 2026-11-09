@@ -1,5 +1,5 @@
-/* Machine memory: every alarm occurrence PLC-Ki saw, what the machine was doing, and what the technicians noted
-   as cause and fix. The History page, the "This alarm before" card on Active alarm and Alarms, and the note sheet. */
+/* History (the alarm memory): every alarm occurrence PLC-Ki saw, what the machine was doing, and what the technicians noted
+   as cause and fix. The History page, the "History of this alarm" card on Active alarm and Alarms, and the note sheet. */
 (function () {
   const { esc, sec, hero, icon, state } = PK;
 
@@ -106,12 +106,12 @@
   }
 
   /**
-   * "This alarm before" for one alarm: the plain line ("Happened 4 times... last time a dirty sensor"),
+   * "History of this alarm": the plain line ("Happened 4 times... last time a dirty sensor"),
    * the causes noted most, and the last few occurrences. For Active alarm (full) and the Alarms list (compact).
    */
   function alarmBlock(id, { compact = false } = {}) {
     const d = cached(`/api/memory/alarms/${encodeURIComponent(id)}`);
-    if (!d) return compact ? "" : `<p class="muted">Looking in the machine memory…</p>`;
+    if (!d) return compact ? "" : `<p class="muted">Looking in History…</p>`;
     const h = d.summary, occ = remember(d.occurrences);
     const open = occ.find((o) => !o.went);
     const past = occ.filter((o) => o !== open);
@@ -279,7 +279,7 @@
       if (q) csv.set("q", q);
       if (onlyUnnoted) csv.set("unnoted", "true");
       const log = sec("", `<h2>${def ? "Every time it was on" : "Every alarm that came"}</h2>
-        <div class="toolbar"><input type="search" id="mem-q" placeholder="Search alarm, cause, fix, step or name" value="${esc(q)}" aria-label="Search the alarm history">
+        <div class="toolbar"><input type="search" id="mem-q" placeholder="Search alarm, cause, fix, step or name" value="${esc(q)}" aria-label="Search History">
           <label class="check"><input type="checkbox" id="mem-unnoted" ${onlyUnnoted ? "checked" : ""}> Only without a note</label>
           <a class="btn b small" href="/api/memory/export.csv?${csv}" download>${icon("download")} Download for Excel</a></div>
         ${!rows ? `<p class="muted">Loading…</p>` : rows.length ? `<ul class="mem-list card">${rows.map((o) => occLine(o, { showAlarm: !def })).join("")}</ul>

@@ -167,7 +167,7 @@ public sealed class BlockGenerator
         }
         if (dots > 0) Console.WriteLine();
         if (stop != null && stop.Contains("refusal", StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("Claude declined to write these blocks.");
+            throw new InvalidOperationException("Ki declined to write these blocks.");
         if (stop != null && stop.Contains("max_tokens", StringComparison.OrdinalIgnoreCase))
             _log("  The answer hit the length limit and is cut off. Ask for fewer or smaller blocks per request, or choose a lower 'How hard Ki thinks'.");
         return text.ToString();
