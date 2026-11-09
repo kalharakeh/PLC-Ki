@@ -156,7 +156,7 @@
       ? (admin ? "Add the key under Setup, Settings (Assistant). PLC-Ki restarts by itself, then Ask works." : "Ask an administrator to add a Claude key to PLC-Ki.")
       : (admin ? "" : "Ask an administrator if you need it.");
     off.innerHTML = `<div><b>Ask is off.</b> ${esc(s.reason || "The assistant is not available.")} ${esc(fix)}</div>`
-      + (admin && s.code === "nokey" ? `<div class="row" style="margin-top:8px"><a class="btn small" href="#/setup/settings" data-add-key>Add the key</a></div>` : "");
+      + (admin && s.code === "nokey" ? `<div class="mt-2 row"><a class="btn small" href="#/setup/settings" data-add-key>Add the key</a></div>` : "");
     off.classList.remove("hidden");
     const k = off.querySelector("[data-add-key]"); if (k) k.onclick = () => close();
     form.classList.add("hidden");

@@ -32,7 +32,7 @@
 
   /** A safety warning that must be acknowledged with one click before the Write or Hold button works. */
   const warnHtml = (w) => w ? `<div class="notice red" data-warn>${icon("shield")}<div><b>${esc(w)}</b></div>
-      <button type="button" class="btn small" data-ack style="flex:none">I understand</button></div>` : "";
+      <button type="button" class="no-shrink btn small" data-ack>I understand</button></div>` : "";
 
   /** Wires the "I understand" button; returns () => acknowledged (true when there is no warning). */
   function wireAck(el, update) {
@@ -59,7 +59,7 @@
       PK.sheet(`<span class="eyebrow">Change a value</span><h2 class="mono" style="font-size:22px;word-break:break-all">${esc(symbol)}</h2>
         <div class="row">${where}</div>
         <div class="notice gold">${icon("shield")}<div>${esc(check.why)}</div></div>
-        ${real && check.plcsimWhy && !String(check.why || "").startsWith(check.plcsimWhy) ? `<p class="faint small" style="margin:0">${esc(check.plcsimWhy)} So PLC-Ki uses the rules for a real PLC.</p>` : ""}
+        ${real && check.plcsimWhy && !String(check.why || "").startsWith(check.plcsimWhy) ? `<p class="m-0 faint small">${esc(check.plcsimWhy)} So PLC-Ki uses the rules for a real PLC.</p>` : ""}
         <div class="row end"><button class="btn" data-close>Done</button></div>`);
       return;
     }
@@ -72,13 +72,13 @@
         It is logged with your name and reason. Inputs, outputs and values the safety program reads are never changed.</div></div>` : ""}
       ${warnHtml(check.warning)}
       ${isInput ? `<div class="notice gold">${icon("info")}<div>A one-time change of an input is overwritten at the next cycle: the CPU reads its inputs at the start of every cycle.
-          ${canHold ? "To keep a value, hold the simulated input instead." : ""}</div>${canHold ? `<button type="button" class="btn small" data-hold style="flex:none">Hold on PLCSIM</button>` : ""}</div>`
+          ${canHold ? "To keep a value, hold the simulated input instead." : ""}</div>${canHold ? `<button type="button" class="no-shrink btn small" data-hold>Hold on PLCSIM</button>` : ""}</div>`
         : `<div class="notice gold why-stick" data-why>${noHold ? `${icon("info")}<div>${esc(noHold)}</div>` : ""}</div>`}
       ${isBool ? PK.ui.choice("New value", [{ label: "TRUE", on: preset === "TRUE" || (preset == null && now === false), data: { "data-b": "TRUE" } }, { label: "FALSE", on: preset === "FALSE" || (preset == null && now === true), data: { "data-b": "FALSE" } }], { cls: "start" })
         : `<label class="field">New value <span class="hint">${esc(hint)}</span><input id="w-val" autocomplete="off" spellcheck="false" value="${esc(preset ?? (now == null ? "" : shown(now)))}" style="font-family:var(--mono);font-size:18px"></label>`}
       <label class="field">Why ${real ? "<span class=\"hint\">needed on a real PLC, goes into the change log</span>" : "<span class=\"hint\">optional</span>"}<input id="w-why" autocomplete="off" placeholder="${real ? "e.g. test valve XV101 after repair" : "e.g. test the door alarm"}"></label>
       ${real ? `<label class="field"><span>Type <b class="mono">${esc(check.plc)}</b> to confirm</span><input id="w-ok" autocomplete="off" spellcheck="false" inputmode="decimal" style="font-family:var(--mono)"></label>` : ""}
-      <p class="small" data-err style="margin:0;color:var(--fault-ink)"></p>
+      <p class="m-0 ink-fault small" data-err></p>
       <div class="row end"><button class="btn gray" data-close>Cancel</button><button class="btn ${real ? "red" : ""}" data-go>${real ? "Write to the real PLC" : "Write"}</button></div>`);
     const el = s.el, go = el.querySelector("[data-go]");
     const holdBtn = el.querySelector("[data-hold]");
@@ -154,15 +154,15 @@
       <div class="row"><span class="pill ok"><span class="dot"></span>PLCSIM ${esc(c.instance || "")} ${esc(c.plc)}</span><span class="tag">${esc(dt)}</span><span class="tag">${esc(c.address)}</span>
         <span class="muted small">now <b>${esc(c.now)}</b></span></div>
       ${h ? `<div class="notice gold">${icon("warn")}<div>Held at <b>${esc(h.value)}</b> by ${esc(h.user)}, ${esc(PK.date(h.time))}. Release puts back <b>${esc(h.before)}</b>.</div>
-          <button type="button" class="btn small" data-release style="flex:none">Release</button></div>` : ""}
-      <p style="margin:0">This sets the simulated input in PLCSIM. It stays until you release it; release puts back
+          <button type="button" class="no-shrink btn small" data-release>Release</button></div>` : ""}
+      <p class="m-0">This sets the simulated input in PLCSIM. It stays until you release it; release puts back
         <b class="mono">${esc(h ? h.before : c.now)}</b>. It is not a CPU force: TIA's force table does not show it.</p>
       ${warnHtml(c.warning)}
       <div class="notice gold why-stick" data-copies></div>
       ${isBool ? PK.ui.choice("Value to hold", [{ label: "TRUE", on: preset === "TRUE" || (preset == null && c.now === "FALSE"), data: { "data-b": "TRUE" } }, { label: "FALSE", on: preset === "FALSE" || (preset == null && c.now === "TRUE"), data: { "data-b": "FALSE" } }], { cls: "start" })
         : `<label class="field">Value to hold <span class="hint">${esc(dt === "Real" ? "a number, e.g. 12.5" : "a whole number")}</span><input id="h-val" autocomplete="off" spellcheck="false" value="${esc(preset ?? c.now ?? "")}" style="font-family:var(--mono);font-size:18px"></label>`}
       <label class="field">Why <span class="hint">optional, goes into the change log</span><input id="h-why" autocomplete="off" placeholder="e.g. test the door alarm"></label>
-      <p class="small" data-err style="margin:0;color:var(--fault-ink)"></p>
+      <p class="m-0 ink-fault small" data-err></p>
       <div class="row end"><button class="btn gray" data-close>Cancel</button><button class="btn" data-go>Hold</button></div>`);
     const el = s.el, go = el.querySelector("[data-go]");
     let boolVal = isBool ? (el.querySelector("[data-b].on") || {}).dataset?.b || null : null;
@@ -242,16 +242,16 @@
     loadHeld();
     const items = (heldList && heldList.items) || [];
     if (!items.length) return "";
-    return `<div class="card"><h3 style="margin:0 0 4px">Inputs held on PLCSIM (${items.length})</h3>
-      <p class="muted small" style="margin:0 0 8px">Each stays until released; release puts back the value it had before.
+    return `<div class="card"><h3 class="mt-0 mb-1">Inputs held on PLCSIM (${items.length})</h3>
+      <p class="mt-0 mb-2 muted small">Each stays until released; release puts back the value it had before.
         ${heldList.checkedNow ? "" : `PLCSIM could not be read just now (${esc(heldList.error || "")}), so this is PLC-Ki's own list.`}</p>
       <table class="tbl"><tr><th>Input</th><th>Held at</th><th>Before</th><th>Who</th><th>Since</th><th></th></tr>
       ${items.map((h) => `<tr><td class="mono small" style="word-break:break-all">${esc(h.symbol)} <span class="faint">${esc(h.address)}</span></td>
         <td><b class="mono">${esc(h.value)}</b></td><td class="mono">${esc(h.before)}</td><td>${esc(h.user)}</td>
-        <td class="small" style="white-space:nowrap">${esc(PK.date(h.time))}</td>
+        <td class="nowrap small">${esc(PK.date(h.time))}</td>
         <td><button type="button" class="btn gray small" data-release-one="${esc(h.symbol)}">Release</button></td></tr>`).join("")}
       </table>
-      <div class="row end" style="margin-top:8px"><button type="button" class="btn small" data-release-every>Release all</button></div></div>`;
+      <div class="mt-2 row end"><button type="button" class="btn small" data-release-every>Release all</button></div></div>`;
   }
 
   /** The change log for the Tags page (administrators). */
@@ -271,11 +271,11 @@
     const held = heldHtml();
     if (!log || !log.length) return held + `<p class="faint small">Values changed from PLC-Ki are listed here. Administrators can change a value with ${icon("pen")} next to it.</p>`;
     return held + `<div class="card"><details class="more" style="border:0;margin:0;padding:0"><summary>Changes made from PLC-Ki (${log.length}${log.length >= 30 ? "+" : ""})</summary>
-      <table class="tbl" style="margin-top:8px"><tr><th>When</th><th>Who</th><th>PLC</th><th>Value</th><th>Change</th><th>Why</th></tr>
-      ${log.map((e) => `<tr><td class="small" style="white-space:nowrap">${esc(PK.date(e.time))}</td><td>${esc(e.user)}</td>
+      <table class="mt-2 tbl"><tr><th>When</th><th>Who</th><th>PLC</th><th>Value</th><th>Change</th><th>Why</th></tr>
+      ${log.map((e) => `<tr><td class="nowrap small">${esc(PK.date(e.time))}</td><td>${esc(e.user)}</td>
         <td><span class="pill ${e.target === "real" ? "bad" : "ok"}" style="font-size:12px">${e.target === "real" ? "Real" : e.target === "plcsim" ? "PLCSIM" : "–"} ${esc(e.plc)}</span></td>
         <td class="mono small" style="word-break:break-all">${esc(e.symbol)}</td>
-        <td class="small">${ACTION[e.action] ? `<span class="tag gold">${ACTION[e.action]}</span> ` : ""}${RULE[e.rule] ? `<span class="tag red" title="${esc(e.rule)}">${RULE[e.rule]}</span> ` : ""}${e.action === "clear" ? esc(e.value) : e.ok ? `${esc(e.before)} → <b>${esc(e.value)}</b>${e.held === false && !e.action ? ` <span class="faint">(set back to ${esc(e.after)})</span>` : ""}` : `<span style="color:var(--fault-ink)">Refused: ${esc(e.error)}</span>`}</td>
+        <td class="small">${ACTION[e.action] ? `<span class="tag gold">${ACTION[e.action]}</span> ` : ""}${RULE[e.rule] ? `<span class="tag red" title="${esc(e.rule)}">${RULE[e.rule]}</span> ` : ""}${e.action === "clear" ? esc(e.value) : e.ok ? `${esc(e.before)} → <b>${esc(e.value)}</b>${e.held === false && !e.action ? ` <span class="faint">(set back to ${esc(e.after)})</span>` : ""}` : `<span class="ink-fault">Refused: ${esc(e.error)}</span>`}</td>
         <td class="muted small">${esc(e.reason || "")}</td></tr>`).join("")}
       </table></details></div>`;
   }

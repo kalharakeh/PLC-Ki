@@ -169,7 +169,7 @@
   /** "Last 15 minutes": the measured values stacked over one time axis, the step band and alarm marks. */
   function trends() {
     const tr = needTrend();
-    if (!tr) return `<p class="muted">Loading the values…</p>`;
+    if (!tr) return PK.ui.loading("chart", { label: "Loading the values" });
     const short = (trendMin || tr.keepMinutes) * 60000 - (tr.to - tr.from) > 30000;
     const note = short ? `PLC-Ki started watching ${dur(tr.to - tr.from)} ago, so the charts start there.` : "";
     const ids = tr.series.map((s) => s.id);
@@ -190,7 +190,7 @@
         ${tr.steps.map((q) => bandRow(q, tr)).join("")}
         ${axisRow(tr)}
       </div>
-      <p class="faint small" style="margin:10px 0 0">${note ? esc(note) + " " : ""}Move along a chart to read the values at that time. Dashed line: the setpoint. Red marks: an alarm came. Grey marks: it went. ${keep}</p>
+      <p class="mt-3 mb-0 faint small">${note ? esc(note) + " " : ""}Move along a chart to read the values at that time. Dashed line: the setpoint. Red marks: an alarm came. Grey marks: it went. ${keep}</p>
     </div>`;
   }
 
@@ -255,7 +255,7 @@
     const maxAvg = Math.max(1, ...rows.map((s) => { const e = st.get(s.no); return e.done ? e.total / e.done : 0; }));
     const changes = spans.length - 1;
     return `<div class="tr-rows" data-tr-rows>${bandRow({ id: def.id, name: def.name, spans }, tr, false)}${axisRow(tr, false)}</div>
-      <p class="faint small" style="margin:8px 0 18px">${changes ? `${changes} step change${changes > 1 ? "s" : ""}` : "No step change"} in the last ${Math.round((tr.to - tr.from) / 60000)} minutes. Move along the band to see which step ran when.</p>
+      <p class="mt-2 mb-4 faint small">${changes ? `${changes} step change${changes > 1 ? "s" : ""}` : "No step change"} in the last ${Math.round((tr.to - tr.from) / 60000)} minutes. Move along the band to see which step ran when.</p>
       <table class="tbl steptimes"><tr><th>Step</th><th>Ran</th><th>Last</th><th>Average</th><th class="bar-h"></th></tr>
       ${rows.map((s) => {
         const e = st.get(s.no), avg = e.done ? e.total / e.done : null;
@@ -316,7 +316,7 @@
   /** The selected step on the right of the chart: its time against the limit, what it does, and one row per condition. */
   function stepPanel(def, q, stats, no) {
     const s = def.steps.find((x) => x.no === no);
-    if (!s) return `<div class="card"><p class="muted" style="margin:0">Tap a step in the chart to see it here.</p></div>`;
+    if (!s) return `<div class="card"><p class="m-0 muted">Tap a step in the chart to see it here.</p></div>`;
     const isCur = q && q.step === s.no;
     const e = stats.get(s.no);
     const lim = limitMs(s);
@@ -324,22 +324,22 @@
     const over = lim && t != null && t > lim;
     const bar = t != null && lim ? `<div class="sp-time"><div class="row"><span>${isCur ? "In this step" : "Last time it took"} <b>${dur(t)}</b></span><span class="spacer"></span><span class="faint">limit ${dur(lim)}</span></div>
         <div class="vb-track"><i class="vb-fill ${over ? "bad" : t > lim * 0.8 ? "warn" : ""}" style="width:${Math.min(100, (t / lim) * 100).toFixed(1)}%"></i></div></div>`
-      : t != null ? `<p style="margin:0">${isCur ? "In this step for" : "Last time it took"} <b>${dur(t)}</b>. No time limit is known.</p>` : "";
+      : t != null ? `<p class="m-0">${isCur ? "In this step for" : "Last time it took"} <b>${dur(t)}</b>. No time limit is known.</p>` : "";
     const live = isCur ? q.next : [];
     const trans = s.next.map((tn) => {
       const l = live.find((n) => n.to === tn.to);
       const rows = l ? l.conditions.map((c) => PK.condHeld(c)).join("")
         : (tn.conditions || []).map((c) => `<li><span class="mark unk" aria-label="not checked now">·</span><span>${esc(fill(c.text))}</span></li>`).join("");
       return `<div class="sp-tr"><div class="row"><b>To step ${tn.to} ${esc(stepName(def, tn.to))}</b><span class="spacer"></span>${l ? `<span class="pill ${l.ready ? "ok" : l.ready === false ? "warn" : ""} small-pill">${l.ready ? "ready" : l.ready === false ? "waiting" : "not known"}</span>` : ""}</div>
-        ${rows ? `<ul class="conds">${rows}</ul>` : `<p class="faint small" style="margin:4px 0 0">No condition.</p>`}</div>`;
+        ${rows ? `<ul class="conds">${rows}</ul>` : `<p class="mt-1 mb-0 faint small">No condition.</p>`}</div>`;
     }).join("");
     return `<div class="card stack sp-card">
-      <div class="row"><h3 style="margin:0">Step ${s.no} ${esc(s.name)}</h3>${isCur ? `<span class="now-tag">now</span>` : ""}</div>
+      <div class="row"><h3 class="m-0">Step ${s.no} ${esc(s.name)}</h3>${isCur ? `<span class="now-tag">now</span>` : ""}</div>
       ${bar}
-      ${s.does ? `<p style="margin:0"><span class="muted">This step should:</span> ${esc(fill(s.does))}</p>` : ""}
-      ${s.limit ? `<p class="faint small" style="margin:0">${esc(fill(s.limit))}</p>` : ""}
-      ${e ? `<p class="faint small" style="margin:0">In the last minutes: ran ${e.n}×${e.done ? `, on average ${dur(e.total / e.done)}, longest ${dur(e.max)}` : ""}.</p>` : ""}
-      ${trans ? `<div class="stack" style="gap:12px">${trans}</div>` : `<p class="faint small" style="margin:0">The last step: no transition goes on from here.</p>`}
+      ${s.does ? `<p class="m-0"><span class="muted">This step should:</span> ${esc(fill(s.does))}</p>` : ""}
+      ${s.limit ? `<p class="m-0 faint small">${esc(fill(s.limit))}</p>` : ""}
+      ${e ? `<p class="m-0 faint small">In the last minutes: ran ${e.n}×${e.done ? `, on average ${dur(e.total / e.done)}, longest ${dur(e.max)}` : ""}.</p>` : ""}
+      ${trans ? `<div class="gap-3 stack">${trans}</div>` : `<p class="m-0 faint small">The last step: no transition goes on from here.</p>`}
     </div>`;
   }
 
@@ -349,7 +349,7 @@
   /** The step chart with the selected step beside it, then the step timeline. "" when the machine has no sequence. */
   function sequenceBody(id, step) {
     const s = state.status, m = state.model;
-    if (!s || !m) return `<p class="muted">Loading the sequence…</p>`;
+    if (!s || !m) return PK.ui.loading("chart", { label: "Loading the sequence" });
     const def = seqDef(id) || m.sequences[0];
     if (!def) return `<p class="muted">The imported program has no GRAPH sequence or step chain.</p>`;
     const q = s.sequences.find((x) => x.id === def.id);
@@ -369,11 +369,11 @@
         ${blk ? `<a class="btn b small" href="#/program/${encodeURIComponent(blk)}/as-rungs">Show in the program</a>` : ""}
         <button class="btn b small" data-ask="Explain what ${esc(def.name)} does, step by step, and where it is now.">Ask</button></div>
       <div class="seq-cols">
-        <div><p class="faint small" style="margin:0 0 10px">${def.steps.length} steps, read like the GRAPH editor: each step, the transition under it, and jumps (↷) to other steps. Tap a step to see it on the right.</p>
+        <div><p class="mt-0 mb-3 faint small">${def.steps.length} steps, read like the GRAPH editor: each step, the transition under it, and jumps (↷) to other steps. Tap a step to see it on the right.</p>
           <div class="gwrap">${stepChart(def, q, stats)}</div></div>
         <aside class="seq-side">${stepPanel(def, q, stats, shown)}</aside>
       </div>
-      <h2 style="margin-top:34px">Step timeline</h2><p class="sub">Which step ran when, and how long each one took.</p>${tr ? timeline(def, spans, tr) : `<p class="muted">Loading…</p>`}`;
+      <h2 class="mt-6">Step timeline</h2><p class="sub">Which step ran when, and how long each one took.</p>${tr ? timeline(def, spans, tr) : PK.ui.loading("chart")}`;
   }
   /** Clicks on the step chart (called from the Plant page's after()). */
   function bindSequence(page, id) {

@@ -30,7 +30,7 @@ const PKModel = (() => {
   /** The card on Setup > Program. */
   function html() {
     const r = mc.report;
-    if (mc.error) return `<div class="card" style="margin-bottom:22px"><p class="muted" style="margin:0">Model check: ${esc(mc.error)}</p></div>`;
+    if (mc.error) return `<div class="mb-5 card"><p class="m-0 muted">Model check: ${esc(mc.error)}</p></div>`;
     if (!r) return "";
     const watched = spanMs(r.watched);
     const wrong = r.findings.filter((f) => f.severity === "wrong").length;
@@ -39,17 +39,17 @@ const PKModel = (() => {
       : `${r.findings.length} thing${r.findings.length === 1 ? "" : "s"} the model does not explain${wrong ? `, ${wrong} clearly wrong` : ""}, in ${mins(watched)} of watching.`;
     const list = r.findings.map((f, i) => `<li class="mc-item">
         <span class="pill ${f.severity === "wrong" ? "bad" : "warn"}"><span class="dot"></span>${f.severity === "wrong" ? "Wrong" : "Check"}</span>
-        <div style="flex:1;min-width:0"><b style="font-weight:600">${esc(f.title)}</b>
+        <div class="grow min0"><b class="semibold">${esc(f.title)}</b>
           <div class="muted small">${esc(f.detail)}</div>
           <div class="faint small">${esc(targetName(f.target))} · seen ${f.count}× · last ${esc(PK.ago ? PK.ago(f.lastSeen) : f.lastSeen)}</div></div>
         ${f.target.startsWith("tag:") ? "" : `<button class="btn small" data-mcfix="${i}">Fix</button>`}</li>`).join("");
-    return `<div class="card stack" style="margin-bottom:22px">
-      <div class="row"><span class="ico">${icon("check")}</span><h3 style="margin:0;flex:1">Does the model match the machine?</h3>
+    return `<div class="mb-5 card stack">
+      <div class="row"><span class="ico">${icon("check")}</span><h3 class="m-0 grow">Does the model match the machine?</h3>
         <button class="btn gray small" data-mcreset ${r.reads ? "" : "disabled"}>Start over</button></div>
-      <p class="muted" style="margin:0">PLC-Ki compares the model with what the machine does while it runs: outputs that switch on although the model says an interlock is missing,
+      <p class="m-0 muted">PLC-Ki compares the model with what the machine does while it runs: outputs that switch on although the model says an interlock is missing,
         devices shown blocked while the machine keeps going, steps and step changes the model does not know. Let the machine run a few cycles, then look here.</p>
-      <p style="margin:0"><b>${esc(head)}</b></p>
-      ${r.seen && r.seen.length ? `<p class="faint small" style="margin:0">${r.seen.map(esc).join(" · ")}</p>` : ""}
+      <p class="m-0"><b>${esc(head)}</b></p>
+      ${r.seen && r.seen.length ? `<p class="m-0 faint small">${r.seen.map(esc).join(" · ")}</p>` : ""}
       ${list ? `<ul class="list mc-list">${list}</ul>` : ""}
     </div>`;
   }
@@ -71,7 +71,7 @@ const PKModel = (() => {
     let newTags = "[]";
     const s = PK.sheet(`<h2>Correct ${esc(targetName(target))}</h2>
       ${finding ? `<div class="notice gold">${icon("warn")}<div><b>${esc(finding.title)}</b><br><span class="small">${esc(finding.detail)}</span></div></div>` : ""}
-      ${entry.findings && entry.findings.length > (finding ? 1 : 0) ? `<p class="small muted" style="margin:0">Also seen for this entry: ${entry.findings.filter((x) => !finding || x.title !== finding.title).map((x) => esc(x.title)).join("; ")}</p>` : ""}
+      ${entry.findings && entry.findings.length > (finding ? 1 : 0) ? `<p class="m-0 small muted">Also seen for this entry: ${entry.findings.filter((x) => !finding || x.title !== finding.title).map((x) => esc(x.title)).join("; ")}</p>` : ""}
       <label class="field">What is wrong? (optional)<textarea id="mf-note" rows="2" placeholder="For example: the robot is not blocked, it just finished its job."></textarea>
         <span class="hint">${AI} reads the program part this entry is about and what the machine did, and proposes a corrected entry. Nothing is saved until you press Save.</span></label>
       <div class="row"><button class="btn" data-mfask ${entry.canAsk ? "" : "disabled"}>${icon("spark")}<span>Ask ${AI} to correct it</span></button>
@@ -79,7 +79,7 @@ const PKModel = (() => {
       <div id="mf-why"></div>
       <details class="more" ${entry.canAsk ? "" : "open"}><summary>The entry in the model (JSON)</summary>
         <textarea id="mf-json" rows="14" spellcheck="false" style="font-family:var(--mono);font-size:12.5px;width:100%;margin-top:10px">${esc(entry.json)}</textarea></details>
-      <p class="faint small" style="margin:0">Saving keeps a copy of the current model next to it, then restarts PLC-Ki so the pages use the corrected model.</p>
+      <p class="m-0 faint small">Saving keeps a copy of the current model next to it, then restarts PLC-Ki so the pages use the corrected model.</p>
       <div class="row end"><button class="btn gray" data-close>Cancel</button><button class="btn" data-mfsave>Save and restart</button></div>`);
     const $ = (sel) => s.el.querySelector(sel);
     $("[data-mfask]").onclick = async () => {

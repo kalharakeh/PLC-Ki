@@ -50,20 +50,20 @@
 
   function knowledgeBlock(k) {
     if (!k) return "";
-    return `<details class="more" style="margin-top:8px"><summary><b>${esc(k.title)}</b> <span class="faint small">general Siemens knowledge</span></summary>
-      <p class="muted small" style="margin:8px 0">${esc(k.meaning)}</p>
-      ${k.checks && k.checks.length ? `<h3 style="margin:8px 0 4px">What to check</h3><ol class="small" style="margin:0;padding-left:20px">${k.checks.slice(0, 4).map((c) => `<li>${esc(c)}</li>`).join("")}</ol>` : ""}
-      ${k.fixes && k.fixes.length ? `<h3 style="margin:10px 0 4px">How to fix</h3><ol class="small" style="margin:0;padding-left:20px">${k.fixes.slice(0, 4).map((c) => `<li>${esc(c)}</li>`).join("")}</ol>` : ""}
-      ${k.safety ? `<p class="small" style="margin:8px 0 0"><b>Safety:</b> ${esc(k.safety)}</p>` : ""}</details>`;
+    return `<details class="mt-2 more"><summary><b>${esc(k.title)}</b> <span class="faint small">general Siemens knowledge</span></summary>
+      <p class="mt-2 mb-2 muted small">${esc(k.meaning)}</p>
+      ${k.checks && k.checks.length ? `<h3 class="mt-2 mb-1">What to check</h3><ol class="small" style="margin:0;padding-left:20px">${k.checks.slice(0, 4).map((c) => `<li>${esc(c)}</li>`).join("")}</ol>` : ""}
+      ${k.fixes && k.fixes.length ? `<h3 class="mt-3 mb-1">How to fix</h3><ol class="small" style="margin:0;padding-left:20px">${k.fixes.slice(0, 4).map((c) => `<li>${esc(c)}</li>`).join("")}</ol>` : ""}
+      ${k.safety ? `<p class="mt-2 mb-0 small"><b>Safety:</b> ${esc(k.safety)}</p>` : ""}</details>`;
   }
 
   function problemItem(p) {
     const where = p.station ? `<a href="#/plc/racks/${encodeURIComponent(p.station)}${p.slot != null ? "/" + encodeURIComponent(p.slot) : ""}">${esc(p.station)}${p.module ? " · " + esc(p.module) : p.slot != null ? " · slot " + esc(p.slot) : ""}</a>` : `<span class="faint">Device not found in the hardware</span>`;
     return `<li style="flex-wrap:wrap;align-items:flex-start">
       <span class="pill ${sevCls[p.severity] || ""}"><span class="dot"></span>${esc(sevText[p.severity] || p.severity)}</span>
-      <span style="flex:1;min-width:220px"><b style="font-weight:600">${esc(p.text)}</b>
+      <span style="flex:1;min-width:220px"><b class="semibold">${esc(p.text)}</b>
         <div class="small">${where} · <span class="faint">${esc(kindText[p.kind] || p.kind)}${p.codes && p.codes.length ? " · " + p.codes.map(esc).join(", ") : ""}${p.since ? " · since " + esc(PK.date(p.since, true)) : ""}</span></div>
-        ${p.info ? `<div class="faint small" style="margin-top:4px">${esc(p.info)}</div>` : ""}
+        ${p.info ? `<div class="mt-1 faint small">${esc(p.info)}</div>` : ""}
         ${knowledgeBlock(p.knowledge)}</span>
       <button class="btn b small" data-ask="${esc(`The PLC reports "${p.text}"${p.station ? " for " + p.station : ""}. What does it mean here, what is affected, and how do I fix it?`)}">Ask</button></li>`;
   }
@@ -72,15 +72,15 @@
   function problemsCard(opts) {
     opts = opts || {};
     const d = diag;
-    const head = `<h3>${opts.title || "Reported by the PLC"}</h3><p class="muted small" style="margin:0 0 10px">The CPU's own system diagnostics: PROFINET devices, modules, channels and drives. Read live, nothing to set up in the PLC.</p>`;
-    if (!d) return `<div class="card">${head}<p class="muted">${esc(diagError || "Reading…")}</p></div>`;
+    const head = `<h3>${opts.title || "Reported by the PLC"}</h3><p class="mt-0 mb-3 muted small">The CPU's own system diagnostics: PROFINET devices, modules, channels and drives. Read live, nothing to set up in the PLC.</p>`;
+    if (!d) return `<div class="card">${head}${diagError ? PK.ui.error(diagError) : PK.ui.loading("list", { rows: 3, label: "Reading" })}</div>`;
     const live = d.connection === "connected" || d.connection === "snapshot";
     let body;
-    if (!live) body = `<p class="muted" style="margin:0">PLC-Ki is not reading the PLC right now.</p>`;
-    else if (!d.alarmsRead) body = `<p class="muted" style="margin:0">${esc(d.alarmsError || "This connection cannot read the CPU's diagnostics (PLC-Ki Link does not pass them on yet).")}</p>`;
+    if (!live) body = `<p class="m-0 muted">PLC-Ki is not reading the PLC right now.</p>`;
+    else if (!d.alarmsRead) body = `<p class="m-0 muted">${esc(d.alarmsError || "This connection cannot read the CPU's diagnostics (PLC-Ki Link does not pass them on yet).")}</p>`;
     else if (!d.problems.length) body = `<div class="notice green">${icon("check")}<div>No device problem reported. ${d.cpuAlarms ? `The CPU has ${d.cpuAlarms} other alarm${d.cpuAlarms === 1 ? "" : "s"} from the program.` : ""}</div></div>`;
     else body = `<ul class="list">${d.problems.filter((p) => !opts.station || p.station === opts.station).map(problemItem).join("") || `<li class="muted">Nothing reported for this device.</li>`}</ul>`;
-    return `<div class="card">${head}${body}${d.alarmsTime && live ? `<p class="faint small" style="margin:8px 0 0">Read ${esc(PK.clock(d.alarmsTime))}</p>` : ""}</div>`;
+    return `<div class="card">${head}${body}${d.alarmsTime && live ? `<p class="mt-2 mb-0 faint small">Read ${esc(PK.clock(d.alarmsTime))}</p>` : ""}</div>`;
   }
 
   function driveCard(dr) {
@@ -94,28 +94,28 @@
     if (dr.telegram) facts.push(["Telegram", dr.telegram]);
     if (dr.block) facts.push(["Drive block", dr.block]);
     const vals = dr.values || [];
-    const table = vals.length ? `<details class="more" style="margin-top:8px"><summary><span class="small">Values read (${vals.length})</span></summary>
-      <table class="tbl" style="margin-top:6px"><tr><th>Value</th><th>Tag</th><th>Now</th></tr>${vals.map((v) => `<tr><td>${esc(v.label)}</td><td class="mono small">${esc(v.from)}</td>
-        <td>${v.error ? `<span class="faint small" title="${esc(v.error)}">not read</span>` : v.value === true || v.value === false ? `<span class="chip ${v.value ? "t" : "f"}" style="margin:0">${v.value ? "TRUE" : "FALSE"}</span>` : v.value == null ? "…" : `<span class="chip" style="margin:0">${esc(v.value)}</span>`}</td></tr>`).join("")}</table></details>` : "";
+    const table = vals.length ? `<details class="mt-2 more"><summary><span class="small">Values read (${vals.length})</span></summary>
+      <table class="mt-2 tbl"><tr><th>Value</th><th>Tag</th><th>Now</th></tr>${vals.map((v) => `<tr><td>${esc(v.label)}</td><td class="mono small">${esc(v.from)}</td>
+        <td>${v.error ? `<span class="faint small" title="${esc(v.error)}">not read</span>` : v.value === true || v.value === false ? `<span class="m-0 chip ${v.value ? "t" : "f"}">${v.value ? "TRUE" : "FALSE"}</span>` : v.value == null ? "…" : `<span class="m-0 chip">${esc(v.value)}</span>`}</td></tr>`).join("")}</table></details>` : "";
     return `<div class="card drive-card">
-      <div class="row" style="gap:10px;align-items:baseline;flex-wrap:wrap"><h3 style="margin:0">${dr.station ? `<a href="#/plc/racks/${encodeURIComponent(dr.station)}">${esc(dr.name)}</a>` : esc(dr.name)}</h3>
+      <div class="row" style="gap:10px;align-items:baseline;flex-wrap:wrap"><h3 class="m-0">${dr.station ? `<a href="#/plc/racks/${encodeURIComponent(dr.station)}">${esc(dr.name)}</a>` : esc(dr.name)}</h3>
         <span class="muted small">${esc([dr.title, dr.orderNumber, dr.ip].filter(Boolean).join(" · "))}</span><span class="spacer"></span>
         <span class="pill ${cls}"><span class="dot"></span>${esc(driveText[dr.state] || dr.state)}</span></div>
-      ${dr.text ? `<p style="margin:8px 0 0">${esc(dr.text)}</p>` : ""}
+      ${dr.text ? `<p class="mt-2 mb-0">${esc(dr.text)}</p>` : ""}
       ${dr.problems && dr.problems.length ? `<ul class="small" style="margin:6px 0 0;padding-left:20px">${dr.problems.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}
       ${facts.length ? `<div class="hw-fields">${facts.map(([a, b]) => `<div><span>${esc(a)}</span><b>${esc(b)}</b></div>`).join("")}</div>` : ""}
       ${knowledgeBlock(dr.knowledge)}
-      ${(dr.reported || []).length ? `<p class="small" style="margin:8px 0 0"><b>The CPU reports:</b> ${dr.reported.map((p) => esc(p.text)).join("; ")}</p>` : ""}
+      ${(dr.reported || []).length ? `<p class="mt-2 mb-0 small"><b>The CPU reports:</b> ${dr.reported.map((p) => esc(p.text)).join("; ")}</p>` : ""}
       ${table}
-      ${(dr.notes || []).length ? `<p class="faint small" style="margin:8px 0 0">${dr.notes.map(esc).join(" ")}</p>` : ""}
-      ${dr.state === "Fault" || dr.state === "Inhibited" ? `<div class="row" style="margin-top:10px"><button class="btn b small" data-ask="${esc(`Drive ${dr.name} ${dr.state === "Fault" ? "has a fault" : "has switching on inhibited"}${dr.fault ? " (" + dr.fault + ")" : ""}. Why, what does it stop, and how do I fix it?`)}">Ask</button></div>` : ""}
+      ${(dr.notes || []).length ? `<p class="mt-2 mb-0 faint small">${dr.notes.map(esc).join(" ")}</p>` : ""}
+      ${dr.state === "Fault" || dr.state === "Inhibited" ? `<div class="mt-3 row"><button class="btn b small" data-ask="${esc(`Drive ${dr.name} ${dr.state === "Fault" ? "has a fault" : "has switching on inhibited"}${dr.fault ? " (" + dr.fault + ")" : ""}. Why, what does it stop, and how do I fix it?`)}">Ask</button></div>` : ""}
     </div>`;
   }
 
   function drivesSection(only) {
     const list = diag && diag.drives ? diag.drives.filter((d) => !only || d.station === only) : [];
     if (!list.length) return "";
-    return `<div class="stack" style="margin-top:16px"><h3 style="margin:0">Drives</h3>${list.map(driveCard).join("")}</div>`;
+    return `<div class="mt-4 stack"><h3 class="m-0">Drives</h3>${list.map(driveCard).join("")}</div>`;
   }
 
   /** For the Alarms page: device problems and drives in fault, or nothing when all is well. */
@@ -123,7 +123,7 @@
     if (!diag) { loadDiag(); return ""; }
     const bad = (diag.drives || []).filter((d) => d.state === "Fault" || d.state === "Inhibited");
     if (!diag.problems.length && !bad.length) return "";
-    return `<div style="margin-bottom:16px">${problemsCard({ title: "Hardware and drives" })}${bad.map(driveCard).join("")}</div>`;
+    return `<div class="mb-4">${problemsCard({ title: "Hardware and drives" })}${bad.map(driveCard).join("")}</div>`;
   };
   /** The CPU's own messages (newest first), for the Active alarm page while the CPU is in STOP. null while not read. */
   let diagAsked = 0;
@@ -276,7 +276,7 @@
   const cpuTab = {
     render() {
       const c = cpu;
-      if (!c) return PK.sec("", `<p class="muted">${cpuError ? esc(cpuError) : "Reading the CPU…"}</p>`);
+      if (!c) return PK.sec("", cpuError ? PK.ui.error(cpuError) : PK.ui.loading("cards", { rows: 2, label: "Reading the CPU" }));
       const mode = modeOf(c);
       const leds = ledsOf(c, mode);
       const m = plcCpuModule();
@@ -292,14 +292,14 @@
       const modeCard = `<div class="card plc-mode">
         <div class="eyebrow">Operating mode</div>
         <div class="plc-mode-big ${mode.cls}" aria-live="polite"><span class="dot"></span>${esc(mode.text)}</div>
-        <p class="muted small" style="margin:6px 0 0">${[mode.sw ? "Mode switch " + mode.sw : "", mode.from ? "from " + mode.from : "", c.address ? c.address : ""].filter(Boolean).map(esc).join(" · ") || "The CPU mode was not read yet."}</p>
-        ${c.mode && c.mode.error ? `<p class="faint small" style="margin:4px 0 0">${esc(c.mode.error)}</p>` : ""}
-        <div class="row" style="margin-top:16px;gap:10px">
+        <p class="mt-2 mb-0 muted small">${[mode.sw ? "Mode switch " + mode.sw : "", mode.from ? "from " + mode.from : "", c.address ? c.address : ""].filter(Boolean).map(esc).join(" · ") || "The CPU mode was not read yet."}</p>
+        ${c.mode && c.mode.error ? `<p class="mt-1 mb-0 faint small">${esc(c.mode.error)}</p>` : ""}
+        <div class="mt-4 gap-3 row">
           <button class="btn" type="button" data-mode="run" ${can && mode.state !== "Run" && !busy ? "" : "disabled"}>${icon("play")}${busy === "run" ? "Starting…" : "Start"}</button>
           <button class="btn red-tinted" type="button" data-mode="stop" ${can && mode.state !== "Stop" && !busy ? "" : "disabled"}>${icon("stop")}${busy === "stop" ? "Stopping…" : "Stop"}</button>
           ${sim.applies && sim.found ? `<span class="tag blue">PLCSIM</span>` : `<span class="tag">Read-only</span>`}
         </div>
-        ${why ? `<p class="faint small" style="margin:10px 0 0">${esc(why)}</p>` : `<p class="faint small" style="margin:10px 0 0">Asks you first. Real PLCs are never started or stopped from PLC-Ki.</p>`}
+        ${why ? `<p class="mt-3 mb-0 faint small">${esc(why)}</p>` : `<p class="mt-3 mb-0 faint small">Asks you first. Real PLCs are never started or stopped from PLC-Ki.</p>`}
       </div>`;
 
       const tiles = [
@@ -314,15 +314,15 @@
         [leds.real ? "From PLCSIM" : "From the mode", "LEDs"],
       ];
       const info = `<div class="card">${PK.ui.tiles(tiles.map(([value, label, state]) => ({ value, label, state })), { small: true, two: true })}
-        ${leds.real ? "" : `<p class="faint small" style="margin:14px 0 0">RUN/STOP follows the mode the CPU reports. ERROR and MAINT are not read from this CPU, so they stay dark here even when the real LEDs are lit.</p>`}
-        <div class="row" style="margin-top:14px"><a class="btn b small" href="#/plc/racks">${icon("rack")}Racks and I/O</a>${diag && diag.problems && diag.problems.length
+        ${leds.real ? "" : `<p class="mt-4 mb-0 faint small">RUN/STOP follows the mode the CPU reports. ERROR and MAINT are not read from this CPU, so they stay dark here even when the real LEDs are lit.</p>`}
+        <div class="mt-4 row"><a class="btn b small" href="#/plc/racks">${icon("rack")}Racks and I/O</a>${diag && diag.problems && diag.problems.length
           ? `<a class="btn small" href="#/plc/diagnostics">${icon("warn")}${diag.problems.length} reported in Diagnostics</a>` : ""}</div></div>`;
 
       const pageBtns = PK.ui.choice("Display page", PAGES.map((p, i) => ({ label: esc(p), on: i === page, data: { "data-page": i } })), { cls: "plc-pages" });
       const left = `<div class="card plc-dev"><div class="plc-dev-pic">${dev}</div>${m.display !== false && (m.family || "s7-1500") === "s7-1500" ? pageBtns : ""}
         <p class="faint small" style="margin:10px 0 0;text-align:center">Drawn from the order number${m.orderNumber ? " " + esc(m.orderNumber) : ""}. The display mirrors what PLC-Ki reads; it is not a copy of the real screen.</p></div>`;
       const notice = c.connection && c.connection !== "connected" && c.connection !== "snapshot" && !(sim.applies && sim.found)
-        ? `<div class="notice gold" style="margin-bottom:16px">${icon("warn")}<div>PLC-Ki is not reading the PLC right now, so the mode and LEDs are not live.</div></div>` : "";
+        ? `<div class="mb-4 notice gold">${icon("warn")}<div>PLC-Ki is not reading the PLC right now, so the mode and LEDs are not live.</div></div>` : "";
       return PK.sec("", notice + `<div class="plc-grid">${left}<div class="stack">${modeCard}${info}</div></div>`);
     },
     after(el) {
@@ -366,10 +366,10 @@
     const v = values[ch.symbol];
     if (!v) return `<span class="faint">…</span>`;
     if (v.error) return `<span class="faint small" title="${esc(v.error)}">not read</span>`;
-    if (v.value === true || v.value === false) return `<span class="chip ${v.value ? "t" : "f"}" style="margin:0">${v.value ? "TRUE" : "FALSE"}</span>`;
+    if (v.value === true || v.value === false) return `<span class="m-0 chip ${v.value ? "t" : "f"}">${v.value ? "TRUE" : "FALSE"}</span>`;
     if (v.value == null) return `<span class="faint">…</span>`;
     const n = typeof v.value === "number" && !Number.isInteger(v.value) ? v.value.toFixed(3).replace(/0+$/, "").replace(/\.$/, "") : String(v.value);
-    return `<span class="chip" style="margin:0">${esc(n)}</span>`;
+    return `<span class="m-0 chip">${esc(n)}</span>`;
   }
 
   function stationBadge(name) {
@@ -382,7 +382,7 @@
     const list = diag && diag.problems ? diag.problems.filter((p) => p.station === st.name && p.slot != null && String(p.slot) === String(m.slot)) : [];
     if (!list.length) return "";
     const worst = list.some((p) => p.severity === "fault") ? "red" : "gold";
-    return `<div class="notice ${worst}" style="margin-top:12px">${icon("warn")}<div>${list.map((p) => `<div><b>${esc(p.text)}</b>${p.codes.length ? " · " + p.codes.map(esc).join(", ") : ""}</div>`).join("")}</div></div>`;
+    return `<div class="mt-3 notice ${worst}">${icon("warn")}<div>${list.map((p) => `<div><b>${esc(p.text)}</b>${p.codes.length ? " · " + p.codes.map(esc).join(", ") : ""}</div>`).join("")}</div></div>`;
   }
 
   function moduleCard(m, st) {
@@ -395,12 +395,12 @@
     const chans = m.channels || [];
     const tagged = chans.filter((c) => c.tag).length;
     const table = chans.length || chQuery ? channelList(m, st, chans, tagged)
-      : `<p class="muted" style="margin:12px 0 0">${m.kind === "cpu" ? "The CPU itself has no I/O channels." : m.kind === "ps" || m.kind === "pm" ? "A power supply has no I/O channels." : "No I/O channels known for this module."}</p>`;
+      : `<p class="mt-3 mb-0 muted">${m.kind === "cpu" ? "The CPU itself has no I/O channels." : m.kind === "ps" || m.kind === "pm" ? "A power supply has no I/O channels." : "No I/O channels known for this module."}</p>`;
     return `<div class="card hw-detail">
       <div class="row" style="gap:10px;align-items:baseline;flex-wrap:wrap"><h2 style="margin:0;font-size:24px">${esc(m.title || m.name)}</h2>
         ${m.safety ? `<span class="tag gold">Fail-safe</span>` : ""}<span class="tag">${esc(kindName[m.kind] || m.kind)}</span><span class="spacer"></span>
         ${chans.length ? `<span class="faint small">${chans.length} channels · ${tagged} with a tag${watchAt ? " · read " + PK.clock(watchAt) : ""}</span>` : ""}</div>
-      ${m.name && m.name !== m.title ? `<p class="muted" style="margin:4px 0 0">${esc(m.name)}${m.comment ? " · " + esc(m.comment) : ""}</p>` : m.comment ? `<p class="muted" style="margin:4px 0 0">${esc(m.comment)}</p>` : ""}
+      ${m.name && m.name !== m.title ? `<p class="mt-1 mb-0 muted">${esc(m.name)}${m.comment ? " · " + esc(m.comment) : ""}</p>` : m.comment ? `<p class="mt-1 mb-0 muted">${esc(m.comment)}</p>` : ""}
       <div class="hw-fields">${fields.map(([a, b]) => `<div><span>${esc(a)}</span><b>${esc(b)}</b></div>`).join("")}</div>
       ${moduleProblems(m, st)}
       ${table}</div>`;
@@ -438,7 +438,7 @@
     const table = rows.length ? `<table class="tbl hw-ch"><tr><th>Ch</th>${modCol ? "<th>Module</th>" : ""}<th>Address</th><th>Tag</th><th>Now</th><th>Comment</th></tr>
       ${shown.map((c) => `<tr><td class="mono">${c.io === "Output" ? "Q" : "I"}${c.n}</td>${modCol ? `<td><a href="#/plc/racks/${encodeURIComponent(st.name)}/${encodeURIComponent(c.mod.slot ?? "")}" data-goslot="${esc(c.mod.slot ?? "")}">${esc(c.mod.slot ?? "")} · ${esc(c.mod.title || c.mod.name)}</a></td>` : ""}<td class="mono">${esc(c.address)}</td>
         <td class="mono">${c.tag ? `<a href="#/tags">${esc(c.tag)}</a>` : `<span class="faint">—</span>`}</td><td>${channelValue(c)}</td><td class="muted">${esc(c.comment || "")}</td></tr>`).join("")}</table>`
-      : `<p class="muted" style="margin:10px 0 0">${q ? "No channel matches." : filter === "on" ? "No input or output of this module is on right now." : "No channel of this module has a tag."}</p>`;
+      : `<p class="mt-3 mb-0 muted">${q ? "No channel matches." : filter === "on" ? "No input or output of this module is on right now." : "No channel of this module has a tag."}</p>`;
     const more = rows.length > shown.length ? `<button type="button" class="btn plain small" data-chall>Show all ${rows.length}</button>`
       : chAll && rows.length > CH_ROWS ? `<button type="button" class="btn plain small" data-chall>Show fewer</button>` : "";
     return bar + table + more;
@@ -449,7 +449,7 @@
       <td>${esc(kindLabel[s.kind] || s.kind)}${famLabel[s.family] ? " · " + famLabel[s.family] : ""}</td><td class="mono">${esc(s.ips.join(", ") || "—")}</td>
       <td class="mono muted">${esc(s.pnName || "")}</td><td class="muted">${esc(s.controlsIoSystem ? "controls " + s.controlsIoSystem : s.ioSystem || "")}</td>
       <td class="muted">${s.modules.length}</td><td>${(() => { const sev = diag && diag.stations && diag.stations[s.name]; return sev ? `<span class="pill ${sevCls[sev]}"><span class="dot"></span>${esc(sevText[sev])}</span>` : `<span class="faint">—</span>`; })()}</td></tr>`).join("");
-    return `<div class="card"><h3>Network</h3><p class="muted small" style="margin:0 0 8px">Every device in the project with its address and the PROFINET system it is on.</p>
+    return `<div class="card"><h3>Network</h3><p class="mt-0 mb-2 muted small">Every device in the project with its address and the PROFINET system it is on.</p>
       <div class="tbl-wrap"><table class="tbl"><tr><th>Device</th><th>Kind</th><th>IP address</th><th>PROFINET name</th><th>IO system</th><th>Modules</th><th>Status</th></tr>${rows}</table></div></div>`;
   }
 
@@ -466,8 +466,8 @@
     },
     render(params) {
       if (params[0] && params[0] !== stationName) { stationName = params[0]; slotSel = params[1] ?? null; }
-      if (hwError) return PK.sec("", `<div class="notice gold">${icon("warn")}<div>${esc(hwError)}</div></div>`);
-      if (!hw) return PK.sec("", `<p class="muted">Loading…</p>`);
+      if (hwError) return PK.sec("", PK.ui.error(hwError, { level: "warn" }));
+      if (!hw) return PK.sec("", PK.ui.loading("chart"));
       const admin = PK.state.user && PK.state.user.role === "admin";
       const st = hw.stations.find((s) => s.name === stationName) || hw.stations.find((s) => s.name === hw.plcStation) || hw.stations[0];
       if (!st) return PK.sec("", `<div class="notice gold">${icon("warn")}<div>The project has no devices.</div></div>`);
@@ -481,9 +481,9 @@
       const only = hw.source !== "hardware";
       const readBtn = admin ? `<button class="btn small" type="button" data-read ${job ? "disabled" : ""}>${icon("download")}${job ? "Reading…" : only ? "Read the hardware from TIA" : "Read again from TIA"}</button>` : "";
       const notice = only
-        ? `<div class="notice gold" style="margin-bottom:16px">${icon("info")}<div style="flex:1">Only the CPU is known so far: this program export has no hardware configuration. ${admin ? "Read it from TIA: a minute or two on the TIA PC, the program and model stay as they are." : "Ask an administrator to read the hardware from TIA."}
-            ${jobMsg ? `<div class="small" style="margin-top:6px">${esc(jobMsg)}</div>` : ""}<div class="row" style="margin-top:10px">${readBtn}</div></div></div>`
-        : jobMsg ? `<div class="notice" style="margin-bottom:16px">${icon("info")}<div>${esc(jobMsg)}</div></div>` : "";
+        ? `<div class="mb-4 notice gold">${icon("info")}<div class="grow">Only the CPU is known so far: this program export has no hardware configuration. ${admin ? "Read it from TIA: a minute or two on the TIA PC, the program and model stay as they are." : "Ask an administrator to read the hardware from TIA."}
+            ${jobMsg ? `<div class="mt-2 small">${esc(jobMsg)}</div>` : ""}<div class="mt-3 row">${readBtn}</div></div></div>`
+        : jobMsg ? `<div class="mb-4 notice">${icon("info")}<div>${esc(jobMsg)}</div></div>` : "";
 
       const picker = hw.stations.length > 1 ? PK.ui.tabs("Devices", hw.stations.map((s) => ({ on: s.name === st.name, href: "#/plc/racks/" + encodeURIComponent(s.name),
         label: stationBadge(s.name) + esc(s.name), sub: esc([kindLabel[s.kind], famLabel[s.family]].filter(Boolean).join(" · ")) + (s.ips[0] ? " · " + esc(s.ips[0]) : "") })), { cls: "hw-stations" }) : "";
@@ -496,11 +496,11 @@
         <div class="row" style="gap:10px;flex-wrap:wrap;align-items:baseline"><h2 style="margin:0;font-size:22px">${esc(st.name)}</h2>
           <span class="muted small">${esc([st.typeName, st.orderNumber, st.ips.join(", ")].filter(Boolean).join(" · "))}</span><span class="spacer"></span>${only ? "" : readBtn}</div>
         <div class="rack-scroll" tabindex="0" aria-label="Rack drawing, scrolls sideways">${svg}</div>
-        <p class="faint small" style="margin:6px 0 0">Tap a module for its channels. Channel LEDs: green is on, grey is off, dim is no live value (no tag, or not read). Pictures are drawn from the order number, not photos.</p></div>`;
+        <p class="mt-2 mb-0 faint small">Tap a module for its channels. Channel LEDs: green is on, grey is off, dim is no live value (no tag, or not read). Pictures are drawn from the order number, not photos.</p></div>`;
       const detail = sel ? moduleCard(sel, st) : "";
       // The PLC's station shows everything the CPU reports and every drive; another station only its own
       const diagZone = `<div class="diag-zone">${problemsCard({ title: `Reported for ${esc(st.name)}`, station: st.name }) + drivesSection(st.name)}</div>`;
-      const meta = `<p class="faint small" style="margin:14px 0 0">${esc(hw.project || "")}${hw.exportedAt ? " · read from TIA " + esc(PK.date(hw.exportedAt)) : ""}</p>`;
+      const meta = `<p class="mt-4 mb-0 faint small">${esc(hw.project || "")}${hw.exportedAt ? " · read from TIA " + esc(PK.date(hw.exportedAt)) : ""}</p>`;
       return PK.sec("", notice + picker + rackCard + detail + diagZone + networkCard() + meta);
     },
     after(el) {
@@ -530,7 +530,7 @@
   const diagTab = {
     render() {
       const drives = drivesSection(null);
-      return PK.sec("", `<div class="diag-zone">${problemsCard()}${drives || (diag ? `<p class="faint small" style="margin:14px 0 0">No drive in the program is read by PLC-Ki.</p>` : "")}</div>`);
+      return PK.sec("", `<div class="diag-zone">${problemsCard()}${drives || (diag ? `<p class="mt-4 mb-0 faint small">No drive in the program is read by PLC-Ki.</p>` : "")}</div>`);
     },
     after(el) { wireAsk(el); },
   };

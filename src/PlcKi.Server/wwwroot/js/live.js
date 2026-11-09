@@ -155,14 +155,14 @@
     const alarms = look.alarms.map((a) => `<a class="eq-alarm ${a.severity === "WARNING" ? "w" : ""}" href="#/alarms/${encodeURIComponent(a.id)}">${icon("bell")}<span><b>${a.severity === "WARNING" ? "Warning" : "Alarm"} ${esc(a.id)}:</b> ${esc(a.text)}</span><span class="chev">›</span></a>`).join("");
     const vals = e.values.length ? `<div class="kv">${e.values.map((v) => `<span>${esc(v.label)}</span><span class="val">${esc(v.text)}</span>`).join("")}</div>` : "";
     return `<div class="eq-top"><span class="ico">${icon(PK.kindIcon(e.kind))}</span>
-        <div style="flex:1"><div class="eq-name">${esc(e.name)}</div><div class="eq-id">${esc(e.id)}${e.kind ? " · " + esc(e.kind) : ""}</div></div>
+        <div class="grow"><div class="eq-name">${esc(e.name)}</div><div class="eq-id">${esc(e.id)}${e.kind ? " · " + esc(e.kind) : ""}</div></div>
         <span class="lv lv-${esc(lvl)}">${esc(look.alarms.length ? (lvl === "fault" ? "fault" : "warning") : e.state)}</span></div>
       ${alarms}
       ${chain}
       ${e.blockedBy ? `<div class="eq-why">${icon("warn")}<span>${esc(e.blockedBy.charAt(0).toUpperCase() + e.blockedBy.slice(1))}</span></div>` : ""}
       ${vals}
-      ${full && e.permits.length ? `<div><h3 style="margin-top:6px">Interlocks</h3><ul class="conds">${e.permits.map(cond).join("")}</ul></div>` : ""}
-      ${full && e.explanation && !e.blockedBy ? `<p class="muted small" style="margin:0">${esc(e.explanation)}</p>` : ""}
+      ${full && e.permits.length ? `<div><h3 class="mt-2">Interlocks</h3><ul class="conds">${e.permits.map(cond).join("")}</ul></div>` : ""}
+      ${full && e.explanation && !e.blockedBy ? `<p class="m-0 muted small">${esc(e.explanation)}</p>` : ""}
       ${full ? `<div class="row">${logicLink(e)}${modelFix("equipment:" + e.id)}</div>` : `<span class="eq-more" aria-hidden="true">Details ›</span>`}`;
   }
   /** "Show in the program" for a device: its block and instance from the model's location ("FB_VFD, instance "Station".M201"). */
@@ -201,7 +201,7 @@
   function settingsNotice(s) {
     const bad = (s.settings || []).filter((x) => x.valid === false);
     if (!bad.length) return "";
-    return `<div class="notice gold" style="margin-top:18px">${icon("warn")}<div><b>${bad.length === 1 ? "A machine setting stops it from working" : bad.length + " machine settings stop it from working"}</b>
+    return `<div class="mt-4 notice gold">${icon("warn")}<div><b>${bad.length === 1 ? "A machine setting stops it from working" : bad.length + " machine settings stop it from working"}</b>
       ${bad.map((x) => `<br>${esc(x.label)} is <b>${esc(x.value)}</b>: ${esc(x.problem || "the machine cannot work with this value")}.`).join("")}
       <br><span class="small">Set it on the HMI (or in the recipe). <a href="#/plant/settings">All settings</a></span></div></div>`;
   }
@@ -248,8 +248,8 @@
       "Start it again only when you know why it stopped and the machine is safe to run.",
     ];
     const reported = msgs === null ? ""
-      : msgs.length ? `<div class="card"><h3>What the CPU reports</h3><ul class="list">${msgs.map((m) => `<li style="flex-wrap:wrap"><span style="flex:1;min-width:200px"><b style="font-weight:600">${esc(m.text)}</b>${m.info ? `<div class="faint small">${esc(m.info)}</div>` : ""}</span>${m.since ? `<span class="faint small">${esc(PK.when(m.since))}</span>` : ""}</li>`).join("")}</ul></div>`
-      : `<div class="card"><h3>What the CPU reports</h3><p class="muted" style="margin:0">No message from the CPU right now. Its diagnostic buffer in TIA says why it stopped.</p></div>`;
+      : msgs.length ? `<div class="card"><h3>What the CPU reports</h3><ul class="list">${msgs.map((m) => `<li style="flex-wrap:wrap"><span style="flex:1;min-width:200px"><b class="semibold">${esc(m.text)}</b>${m.info ? `<div class="faint small">${esc(m.info)}</div>` : ""}</span>${m.since ? `<span class="faint small">${esc(PK.when(m.since))}</span>` : ""}</li>`).join("")}</ul></div>`
+      : `<div class="card"><h3>What the CPU reports</h3><p class="m-0 muted">No message from the CPU right now. Its diagnostic buffer in TIA says why it stopped.</p></div>`;
     return hero({
       cls: "hero cpu-stop-page",
       eyebrow: `<span class="pill bad"><span class="dot"></span>PLC in ${esc(word)}${alarms.length ? ` · ${alarms.length} alarm${alarms.length > 1 ? "s" : ""} on` : ""}</span>`,
@@ -262,7 +262,7 @@
     })
     + (alarms.length ? sec("alt", `<h2>Alarms that are on</h2><p class="sub">As they were when the CPU stopped. Fix the STOP first; some may go when the program runs again.</p>
         <ul class="list">${alarms.map((a) => `<li><span class="tag ${a.severity === "WARNING" ? "gold" : "red"}">${esc(a.id)}</span>
-          <span style="flex:1;min-width:0"><a href="#/alarms/${encodeURIComponent(a.id)}">${esc(a.text)}</a></span></li>`).join("")}</ul>`) : "")
+          <span class="grow min0"><a href="#/alarms/${encodeURIComponent(a.id)}">${esc(a.text)}</a></span></li>`).join("")}</ul>`) : "")
     + (seq ? sec(alarms.length ? "" : "alt", `<h2>${esc(seq.name)}</h2><p class="sub">${esc(seq.explanation)}</p>${stepStrip(seq)}`) : "");
   }
 
@@ -299,10 +299,10 @@
         }) + (settingsNotice(s) ? sec("", settingsNotice(s)) : "")
         + (window.PKMemory ? PKMemory.unnotedBlock() : "")
         + (n ? sec("alt", `<h2>Blocked now</h2><p class="sub">The program asks for ${n === 1 ? "this device" : "these devices"}, but ${n === 1 ? "its" : "their"} output stays off. ${n > 1 ? "The cause comes first." : ""}</p>
-            <div class="stack">${order.map((e) => `<div class="aa-dev"><div class="row"><h3 style="margin:0">${esc(e.name)}</h3><span class="spacer"></span><a class="small" href="#/plant/devices/${encodeURIComponent(e.id)}">Details ›</a></div>
+            <div class="stack">${order.map((e) => `<div class="aa-dev"><div class="row"><h3 class="m-0">${esc(e.name)}</h3><span class="spacer"></span><a class="small" href="#/plant/devices/${encodeURIComponent(e.id)}">Details ›</a></div>
               ${PK.devStrip(e)}</div>`).join("")}</div>`) : "")
         + (seq ? sec(n ? "" : "alt", `<h2>${esc(seq.name)}</h2>${n ? `<p class="sub">${esc(seq.explanation)}</p>` : ""}${stepStrip(seq)}${chartLink(seq)}
-            ${seq.next.length ? `<p class="muted small" style="margin:16px 0 8px">To go on it needs</p><ul class="conds">${seq.next.flatMap((x) => x.conditions).map((c) => PK.condHeld(c, s)).join("")}</ul>` : ""}`) : "")
+            ${seq.next.length ? `<p class="mt-4 mb-2 muted small">To go on it needs</p><ul class="conds">${seq.next.flatMap((x) => x.conditions).map((c) => PK.condHeld(c, s)).join("")}</ul>` : ""}`) : "")
         + guide();
       }
 
@@ -348,32 +348,32 @@
           <div class="actions"><button class="btn" data-ask="Why is alarm ${esc(a.id)} on, and how do I fix it?">Ask about this alarm</button>
             ${where.block ? `<a class="btn b" href="${esc(where.href)}">Show where it is set</a>` : ""}</div>
           <div class="aa-fix">
-            <div class="card"><h3>Fix it</h3>${fixList}<p class="faint small" style="margin:10px 0 0">Tap a step when it is done. The ticks are only on this screen.</p></div>
+            <div class="card"><h3>Fix it</h3>${fixList}<p class="mt-3 mb-0 faint small">Tap a step when it is done. The ticks are only on this screen.</p></div>
             <div class="card"><h3>Likely causes</h3>${a.causes.length ? `<ol class="causes">${a.causes.map((c, i) => `<li><b>${i + 1}</b><span>${esc(c)}</span></li>`).join("")}</ol>` : `<p class="muted">None written yet.</p>`}</div>
           </div>
           ${window.PKMemory ? PKMemory.lastLine(a.id) : ""}
-          ${eqs.map((e) => `<div class="aa-dev"><div class="row"><h3 style="margin:0">${esc(e.name)}</h3><span class="spacer"></span><a class="small" href="#/plant/devices/${encodeURIComponent(e.id)}">Details ›</a></div>${PK.devStrip(e)}</div>`).join("")}`;
+          ${eqs.map((e) => `<div class="aa-dev"><div class="row"><h3 class="m-0">${esc(e.name)}</h3><span class="spacer"></span><a class="small" href="#/plant/devices/${encodeURIComponent(e.id)}">Details ›</a></div>${PK.devStrip(e)}</div>`).join("")}`;
 
       const vals = eqs.flatMap((e) => e.values);
-      const side = `${eqs.length && V ? `<div class="card aa-pic"><div class="row"><h3 style="margin:0">Where in the machine</h3><span class="spacer"></span><a class="small" href="#/plant">Plant ›</a></div>
+      const side = `${eqs.length && V ? `<div class="card aa-pic"><div class="row"><h3 class="m-0">Where in the machine</h3><span class="spacer"></span><a class="small" href="#/plant">Plant ›</a></div>
             ${V.plantMap(V.around(eqs.map((e) => e.id)), null, eqs.map((e) => e.id))}
             ${vals.length ? `<div class="kv">${vals.map((v) => `<span>${esc(v.label)}</span><span class="val">${esc(v.text)}</span>`).join("")}</div>` : ""}</div>` : ""}
           <div class="card aa-sw"><h3>Where it is set</h3>
-            ${where.block ? `<div class="path">${(path || [{ block: where.block }]).map((p) => `<span>${esc(p.block)}${p.instance ? " " + esc(p.instance) : ""}</span>`).join("<i>›</i>")}${where.network ? `<i>›</i><span>Network ${esc(where.network)}</span>` : ""}${where.symbol ? `<i>›</i><span>${esc(where.symbol)}</span>` : ""}</div>` : `<p class="muted small" style="margin:0">${esc(a.location || "No place in the program is known for this alarm.")}</p>`}
-            ${rung ? `<div class="aa-rung">${rung}</div><p class="faint small" style="margin:0">${rec ? "Values just before the alarm came, from the recording. ? means not recorded." : "Values now. They can look normal again after a halt."}</p>` : ""}
-            <div class="row" style="gap:8px">${where.block ? `<a class="btn b small" href="${esc(where.href)}">Open in the program</a>` : links(loc)}${modelFix("alarm:" + a.id)}</div></div>`;
+            ${where.block ? `<div class="path">${(path || [{ block: where.block }]).map((p) => `<span>${esc(p.block)}${p.instance ? " " + esc(p.instance) : ""}</span>`).join("<i>›</i>")}${where.network ? `<i>›</i><span>Network ${esc(where.network)}</span>` : ""}${where.symbol ? `<i>›</i><span>${esc(where.symbol)}</span>` : ""}</div>` : `<p class="m-0 muted small">${esc(a.location || "No place in the program is known for this alarm.")}</p>`}
+            ${rung ? `<div class="aa-rung">${rung}</div><p class="m-0 faint small">${rec ? "Values just before the alarm came, from the recording. ? means not recorded." : "Values now. They can look normal again after a halt."}</p>` : ""}
+            <div class="gap-2 row">${where.block ? `<a class="btn b small" href="${esc(where.href)}">Open in the program</a>` : links(loc)}${modelFix("alarm:" + a.id)}</div></div>`;
 
-      return sec("hero aa", `${chips}<div class="aa-grid"><div class="aa-main">${main}</div><aside class="aa-side">${side}</aside></div>`)
+      return sec(`hero aa ${warn ? "aa-warn" : ""}`, `${chips}<div class="aa-grid"><div class="aa-main">${main}</div><aside class="aa-side">${side}</aside></div>`)
         + (window.PKCapture ? PKCapture.alarmSection(a) : "")
         + (checks.length ? sec("", `<h2>What the program checks</h2><p class="sub">The comparisons behind this alarm, ${a.checksAtAlarm ? "with the values from the last read before it came" : "with the values now"}. ✗ is the one that failed.</p>
             <div class="card"><ul class="conds">${checks.map(cond).join("")}</ul></div>`) : "")
         + (typeof PKDocs !== "undefined" ? PKDocs.alarmSection(a, eqs) : "")
         + sec("alt", `<h2>What is going on</h2>
-          <div class="grid two"><div>${s.summary.map((l) => `<p class="sub" style="margin-bottom:12px">${esc(l)}</p>`).join("")}</div>
+          <div class="grid two"><div>${s.summary.map((l) => `<p class="mb-3 sub">${esc(l)}</p>`).join("")}</div>
           ${seq ? `<div class="card"><h3>${esc(seq.name)}</h3>${stepStrip(seq)}${chartLink(seq)}
-            ${seq.next.length ? `<p class="muted small" style="margin:12px 0 8px">To go on it needs</p><ul class="conds">${seq.next.flatMap((n) => n.conditions).map((c) => PK.condHeld(c, s)).join("")}</ul>` : ""}</div>` : ""}</div>`)
+            ${seq.next.length ? `<p class="mt-3 mb-2 muted small">To go on it needs</p><ul class="conds">${seq.next.flatMap((n) => n.conditions).map((c) => PK.condHeld(c, s)).join("")}</ul>` : ""}</div>` : ""}</div>`)
         + (window.PKMemory ? sec("", `<details class="more" data-hist ${histOpen ? "open" : ""}><summary><b>History of this alarm</b> <span class="muted small">every time PLC-Ki saw it, and what was found</span></summary>
-            <div class="card" style="margin-top:12px">${PKMemory.alarmBlock(a.id)}</div></details>`) : "")
+            <div class="mt-3 card">${PKMemory.alarmBlock(a.id)}</div></details>`) : "")
         + guide();
     },
     after(page) {
@@ -425,7 +425,7 @@
     const rows = d.settings.filter(hit);
     const take = rows.slice(0, 300);
     H.shown = take.filter((f) => f.type && !f.modelTag).concat(d.commands.filter(hit).slice(0, 100).filter((f) => f.type && !f.modelTag));
-    const modelVal = (f) => { const m = f.modelTag && (s.settings || []).find((x) => x.id === f.modelTag); return m ? `<span class="chip" style="margin:0">${esc(m.value)}</span>` : null; };
+    const modelVal = (f) => { const m = f.modelTag && (s.settings || []).find((x) => x.id === f.modelTag); return m ? `<span class="m-0 chip">${esc(m.value)}</span>` : null; };
     const byScreen = new Map();
     for (const f of take) { const k = (f.screenKind === "Popup" ? "Pop-up " : "Screen ") + f.screen + (f.screenNumber != null ? ` (no. ${f.screenNumber})` : ""); if (!byScreen.has(k)) byScreen.set(k, []); byScreen.get(k).push(f); }
     const panels = d.panels.map((p) => `${esc(p.name)}${p.type ? ` · ${esc(p.type)}` : ""}`).join(", ");
@@ -520,23 +520,23 @@
               <span class="lv lv-${esc(e.blockedBy ? "warn" : e.level)}">${esc(e.blockedBy ? "blocked" : e.state)}</span><span class="chev">›</span></a></li>`).join("")}</ul>`
           : `<p class="ok-line">${icon("check")}<span>No alarm, and every device is doing what the program asks.</span></p>`;
         const seqCards = s.sequences.map((q) => `<div class="card stack">
-            <div class="row"><h3 style="margin:0">${esc(q.name)}</h3><span class="pill ${seqState(q)[1]}">${seqState(q)[0]}</span><span class="spacer"></span>
+            <div class="row"><h3 class="m-0">${esc(q.name)}</h3><span class="pill ${seqState(q)[1]}">${seqState(q)[0]}</span><span class="spacer"></span>
               <a class="small" href="#/plant/sequence/${encodeURIComponent(q.id)}">Step chart and timeline ›</a></div>
             ${stepStrip(q)}
             ${stop ? `<div class="notice red">${icon("warn")}<div>${esc(q.explanation)}</div></div>`
-              : q.does ? `<p style="margin:0"><span class="muted">This step should:</span> ${esc(q.does)}</p>` : ""}
+              : q.does ? `<p class="m-0"><span class="muted">This step should:</span> ${esc(q.does)}</p>` : ""}
             ${q.halted && q.haltReasons.length && !stop ? `<div class="notice red">${icon("warn")}<div><b>Halted, outputs are off:</b> ${q.haltReasons.map(esc).join("; ")}</div></div>` : ""}
-            ${q.next.map((n) => `<div><p class="muted small" style="margin:0 0 6px">To go to step ${n.to} "${esc(n.toName)}" it needs</p><ul class="conds">${n.conditions.map((c) => PK.condHeld(c, s)).join("")}</ul></div>`).join("")}
-            ${q.limit ? `<p class="faint" style="margin:0">${esc(q.limit)}</p>` : ""}
+            ${q.next.map((n) => `<div><p class="mt-0 mb-2 muted small">To go to step ${n.to} "${esc(n.toName)}" it needs</p><ul class="conds">${n.conditions.map((c) => PK.condHeld(c, s)).join("")}</ul></div>`).join("")}
+            ${q.limit ? `<p class="m-0 faint">${esc(q.limit)}</p>` : ""}
           </div>`).join("");
         body = sec("", `<div class="plant-cols">
             <div class="stack">
-              <div class="card stack"><div class="row"><h3 style="margin:0">Needs attention</h3>${nNeeds ? `<span class="count ${stop || s.activeAlarms.some((x) => x.severity !== "WARNING") ? "" : "warn"}">${nNeeds}</span>` : ""}<span class="spacer"></span>
+              <div class="card stack"><div class="row"><h3 class="m-0">Needs attention</h3>${nNeeds ? `<span class="count ${stop || s.activeAlarms.some((x) => x.severity !== "WARNING") ? "" : "warn"}">${nNeeds}</span>` : ""}<span class="spacer"></span>
                 <a class="small" href="#/plant/devices">All devices ›</a></div>${needs}</div>
               ${seqCards}
             </div>
             <div class="stack">
-              ${V && s.equipment.length ? `<div class="card stack"><h3 style="margin:0">The machine at a glance</h3>${V.plantMap(s.equipment, null)}</div>` : ""}
+              ${V && s.equipment.length ? `<div class="card stack"><h3 class="m-0">The machine at a glance</h3>${V.plantMap(s.equipment, null)}</div>` : ""}
               ${V ? `<a class="card plink" href="#/plant/values"><span class="ico">${icon("clock")}</span><span><b>Values over time</b><span class="muted small">The last minutes of every measured value, with steps and alarms.</span></span><span class="chev">›</span></a>` : ""}
               ${s.exchange.length ? `<a class="card plink" href="#/plant/exchange"><span class="ico">${icon("link")}</span><span><b>Data exchange</b><span class="muted small">${s.exchange.length} signals to and from ${esc([...new Set(s.exchange.map((x) => x.partner))].join(", "))}.</span></span><span class="chev">›</span></a>` : ""}
             </div>
@@ -569,7 +569,7 @@
               <td><b>${esc(x.label)}</b>${where(x) ? `<br><span class="faint small">On the panel: ${esc(where(x))}</span>` : ""}</td><td class="val ${x.valid === false ? "setting-bad" : ""}">${esc(x.value)}</td>
               <td class="muted">${esc(x.text || "")}${x.valid === false && x.problem ? `<br><span class="setting-bad">${esc(x.problem)}${where(x) ? `. Change it on the panel: ${esc(where(x))}` : ""}</span>` : ""}</td></tr>`).join("")}
           </table></div>` : `<p class="sub">Values an operator sets on the HMI panel, with what they are now.</p>`)
-          + `<div style="margin-top:18px">${hmiSettingsHtml(s)}</div>`);
+          + `<div class="mt-4">${hmiSettingsHtml(s)}</div>`);
       } else {
         body = sec("", `<div class="card"><table class="tbl xchg"><tr><th>With</th><th>Signal</th><th>Value</th><th>Meaning</th></tr>
             ${s.exchange.map((x) => `<tr><td class="with"><b title="${x.direction === "in" ? "from" : "to"} ${esc(x.partner)}">${x.direction === "in" ? "← from" : "→ to"} ${esc(x.partner)}</b></td>
@@ -630,13 +630,13 @@
         const on = active.has(a.id), open = openAlarm === a.id;
         return `<li class="click" data-open="${esc(a.id)}" id="alarm-${esc(a.id)}" style="flex-wrap:wrap" tabindex="0" aria-expanded="${open}">
           <span class="tag ${a.severity === "WARNING" ? "gold" : "red"}">${esc(a.id)}</span>
-          <span style="flex:1;min-width:200px"><b style="font-weight:600">${esc(a.text)}</b>${a.location ? `<div class="faint">${esc(a.location)}</div>` : ""}</span>
+          <span style="flex:1;min-width:200px"><b class="semibold">${esc(a.text)}</b>${a.location ? `<div class="faint">${esc(a.location)}</div>` : ""}</span>
           ${on ? `<span class="pill ${a.severity === "WARNING" ? "warn" : "bad"}"><span class="dot"></span>Active</span>` : ""}<span class="chev">${open ? "⌄" : "›"}</span>
           ${open ? `<div style="flex-basis:100%;padding:10px 0 4px" class="grid two">
-              <div>${a.condition ? `<h3>Meaning</h3><p style="margin:0 0 12px" class="muted">${esc(a.condition)}</p>` : ""}
+              <div>${a.condition ? `<h3>Meaning</h3><p class="mt-0 mb-3 muted">${esc(a.condition)}</p>` : ""}
                 ${a.causes.length ? `<h3>Likely causes</h3><ol class="causes small">${a.causes.map((c, i) => `<li><b>${i + 1}</b><span>${esc(c)}</span></li>`).join("")}</ol>` : ""}</div>
               <div>${a.fix.length ? `<h3>How to fix</h3><ol class="fix small">${a.fix.map((c) => `<li style="font-size:15px;cursor:default">${esc(c)}</li>`).join("")}</ol>` : ""}
-                <div class="actions" style="margin-top:14px">${on ? `<a class="btn small" href="#/alarm">Open on Active alarm</a>` : ""}
+                <div class="mt-4 actions">${on ? `<a class="btn small" href="#/alarm">Open on Active alarm</a>` : ""}
                 ${(() => { const w = alarmWhere(a); return w.block ? `<a class="btn b small" href="${esc(w.href)}">Show where it is set</a>` : ""; })()}
                 <button class="btn b small" data-ask="Explain alarm ${esc(a.id)}: when does it come, why, and how is it fixed?">Ask</button></div></div>
             </div>${window.PKMemory ? `<div class="mem-in-row"><h3>History of this alarm</h3>${PKMemory.alarmBlock(a.id, { compact: true })}</div>` : ""}` : ""}
@@ -649,7 +649,7 @@
       }) + sec("alt", `${PK.ui.toolbar({ search: { id: "alarm-search", placeholder: "Search by number, text or device", label: "Search alarms", value: alarmFilter },
           left: PK.ui.choice("Show", [["all", "All", m.alarms.length, "Every alarm in the program"], ["active", "Active", s.activeAlarms.length, "On right now"], ["faults", "Faults", faults, "Faults stop the machine"], ["warnings", "Warnings", m.alarms.length - faults, "Warnings do not stop the machine"]]
             .map(([k, l, n, t]) => ({ label: `${l} <b>${n}</b>`, on: alarmKind === k, hot: k === "active" && n, title: t, data: { "data-akind": k } }))) })}
-          ${PK.cpuStop(s) ? `<div class="notice red" style="margin-bottom:16px">${icon("warn")}<div><b>The PLC is in ${esc(PK.cpuStop(s).word || "STOP")}: the program is not running.</b> The alarms below are as they were when it stopped. <a href="#/alarm">What to check</a></div></div>` : ""}
+          ${PK.cpuStop(s) ? `<div class="mb-4 notice red">${icon("warn")}<div><b>The PLC is in ${esc(PK.cpuStop(s).word || "STOP")}: the program is not running.</b> The alarms below are as they were when it stopped. <a href="#/alarm">What to check</a></div></div>` : ""}
           ${PK.deviceDiagnostics ? `<div class="diag-zone">${PK.deviceDiagnostics()}</div>` : ""}
           <a class="card plink alarms-past" href="#/history"><span class="ico">${icon("clock")}</span><span><b>Past alarms</b><span class="muted small">What came and went, what fixed it, and the seconds before each alarm: in History.</span></span><span class="chev">›</span></a>
           ${rows ? `<ul class="list">${rows}</ul>` : PK.ui.empty({ ...(alarmKind === "active" && !q

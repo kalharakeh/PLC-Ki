@@ -135,8 +135,8 @@
     return `<ul class="cap-sum">${c.summary.slice(1).map((s) => `<li>${esc(s)}</li>`).join("")}</ul>
       <div class="cap-key small muted"><span><i class="k-on"></i>on</span><span><i class="k-pulse"></i>short pulse (shorter than one normal read)</span><span><i class="k-zero"></i>alarm came</span><span><b class="cap-rel">●</b> in the alarm's own check</span></div>
       <div class="tr-rows cap-rows">${axis(c, g)}${tracks.map((k) => track(k, c, g)).join("")}${tracks.length > 6 ? axis(c, g) : ""}</div>
-      ${rest > 0 ? `<button type="button" class="btn plain small" data-cap-all="${esc(c.id)}" style="margin-top:10px">Show all ${c.tracks.length} tags that changed</button>` : ""}
-      <p class="faint small" style="margin:12px 0 0">${esc(c.summary[0] || "")}</p>`;
+      ${rest > 0 ? `<button type="button" class="mt-3 btn plain small" data-cap-all="${esc(c.id)}">Show all ${c.tracks.length} tags that changed</button>` : ""}
+      <p class="mt-3 mb-0 faint small">${esc(c.summary[0] || "")}</p>`;
   }
 
   function bind(page) {
@@ -174,12 +174,12 @@
     if (!c) return "";
     const g = geom(c);
     const tracks = c.tracks.slice().sort((x, y) => (y.related ? 1 : 0) - (x.related ? 1 : 0)).slice(0, 5);
-    return sec("", `<div class="row" style="margin-bottom:6px"><h2 style="margin:0">The seconds before it came</h2><span class="spacer"></span>
+    return sec("", `<div class="mb-2 row"><h2 class="m-0">The seconds before it came</h2><span class="spacer"></span>
         <a class="btn b small" href="#/history/recordings/${encodeURIComponent(c.id)}">Open full size</a>
         <button class="btn b small" data-ask="Look at the seconds before alarm ${esc(a.id)} came (get_alarm_capture). What changed right before it, and what does that say about the cause?">Ask what it shows</button></div>
-      <p class="sub" style="margin-bottom:12px">${esc(c.summary[1] || c.summary[0] || "")}</p>
+      <p class="mb-3 sub">${esc(c.summary[1] || c.summary[0] || "")}</p>
       <div class="tr-rows cap-rows cap-mini">${tracks.map((k) => track(k, c, g)).join("")}${axis(c, g)}</div>
-      ${c.tracks.length > tracks.length ? `<p class="faint small" style="margin:8px 0 0">${c.tracks.length - tracks.length} more tags changed. Open full size to see them.</p>` : ""}`);
+      ${c.tracks.length > tracks.length ? `<p class="mt-2 mb-0 faint small">${c.tracks.length - tracks.length} more tags changed. Open full size to see them.</p>` : ""}`);
   }
 
   // ---------- History › Recordings: the list, and one recording on its own page ----------
@@ -193,7 +193,7 @@
   /** One recording on its own page (#/history/recordings/<id>): its own header, then every change. */
   function page(id) {
     const c = detail(id);
-    if (!c) return hero({ title: "Loading…" });
+    if (!c) return hero({ title: "Alarm recording" }) + PK.sec("", PK.ui.loading("chart"));
     if (c.missing) return hero({ title: "This recording is no longer kept.", sub: "PLC-Ki keeps the last 100 alarm recordings.", actions: `<a class="btn" href="#/history/recordings">All recordings</a>` });
     return hero({
       eyebrow: `<span class="pill ${c.severity === "WARNING" ? "warn" : "bad"}"><span class="dot"></span>${esc(c.severity)} · ${esc(c.alarmId)}</span>${c.blip ? ` <span class="pill warn">Blip: on for ${ms(c.onMs)}</span>` : ""}`,
@@ -213,8 +213,8 @@
         <span style="flex:1;min-width:180px"><b>${esc(c.alarmId)}</b> ${esc(c.alarmText)}<br><span class="muted small">${esc(c.headline || "")}</span></span>
         ${c.pulses ? `<span class="pill warn small">${c.pulses} short pulse${c.pulses > 1 ? "s" : ""}</span>` : ""}<span class="chev">›</span></a></li>`).join("");
     return `<p class="sub">The seconds before each alarm came: what changed, in which order, and short signals the normal reads miss. The last 100 are kept.</p>
-      <p style="margin:0 0 14px">${modeLine()}</p>`
-      + (!l ? `<p class="muted">Loading…</p>` : rows ? `<ul class="list events">${rows}</ul>`
+      <p class="mt-0 mb-4">${modeLine()}</p>`
+      + (!l ? PK.ui.loading("list") : rows ? `<ul class="list events">${rows}</ul>`
         : PK.ui.empty({ icon: "clock", title: "No alarm has come since PLC-Ki started recording.", text: "When one comes, the seconds before it are kept here." }));
   }
 

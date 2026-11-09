@@ -67,7 +67,7 @@ const PKStart = (() => {
     if (!ready) { readiness().then((r) => r && PK.draw()); return ""; }
     // The disk nearly full: shown to administrators even when everything is set up (Setup › Settings › Storage)
     const disk = ready.disk && ready.disk.low ? `<section class="guide-sec"><div class="wrap"><div class="notice red" role="alert">${icon("info")}
-      <div style="flex:1">${esc(ready.disk.warning)}</div><a class="btn small" href="#/setup/settings">Open Storage</a></div></div></section>` : "";
+      <div class="grow">${esc(ready.disk.warning)}</div><a class="btn small" href="#/setup/settings">Open Storage</a></div></div></section>` : "";
     if (session.get(HIDE) === "1") return disk;
     const list = items(ready);
     const need = list.filter((i) => !i.optional);
@@ -141,7 +141,7 @@ const PKStart = (() => {
             <div><h3>What runs where</h3><dl class="where-list">${d.where.map(([a, b]) => `<dt>${esc(a)}</dt><dd>${esc(b)}</dd>`).join("")}</dl></div>
             <div><h3>Every day</h3><ul class="plainlist">${d.every.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>
           </div>
-          ${p === "same" ? "" : `<p class="faint small" style="margin:16px 0 0">Tip: installed with <a href="${SETUP_URL}" target="_blank" rel="noopener">PLC-Ki-Setup.exe</a>
+          ${p === "same" ? "" : `<p class="mt-4 mb-0 faint small">Tip: installed with <a href="${SETUP_URL}" target="_blank" rel="noopener">PLC-Ki-Setup.exe</a>
             (the installer), PLC-Ki runs by itself in the background and starts with Windows, so there is no window to keep open.</p>`}</div>
         ${p === "same" && PKSetup.info.service ? `<div class="notice gold">${icon("info")}<div>PLC-Ki runs as a Windows service on this PC, so it cannot open the TIA helper window itself.
           Set the helper up as for a VM (double-click Setup-TIA-helper on this PC) and choose <b>PC with a TIA VM</b> with the address <code>http://localhost:5090</code>.</div></div>` : ""}`,
@@ -159,14 +159,14 @@ const PKStart = (() => {
       const cmdText = `cd /d %USERPROFILE%\\Downloads\\PLC-Ki && dotnet run --project src\\PlcKi.Server -- link --server ${location.origin} --key ${key}${w.tiaMode === "link" ? ` --tia "${helperExe}"` : ""}`;
       linkPart = `<div class="card stack">
         <h3>PLC-Ki Link on your laptop</h3>
-        <p class="muted" style="margin:0">The laptop reads the PLC and sends the values here. It only connects out to this server, so the plant network needs no changes.</p>
+        <p class="m-0 muted">The laptop reads the PLC and sends the values here. It only connects out to this server, so the plant network needs no changes.</p>
         <ol class="howto">
           <li><b>Make a key.</b> It lets your laptop in. It is shown once.
-            <div class="row" style="margin-top:8px"><button class="btn small" data-link-key>${l && l.hasKey ? "Make a new key" : "Make a key"}</button>
+            <div class="mt-2 row"><button class="btn small" data-link-key>${l && l.hasKey ? "Make a new key" : "Make a key"}</button>
             ${linkKey ? `<span class="pill ok"><span class="dot"></span>Key made. It is in the command below.</span>` : l && l.hasKey ? `<span class="faint small">A key exists. Make a new one if you lost it.</span>` : ""}</div></li>
           <li><b>On the laptop, open Command Prompt and paste this one line.</b> Leave the window open.${cmd("On the laptop", cmdText)}</li>
           <li><b>Wait here.</b> This turns green within a few seconds:
-            <div style="margin-top:8px">${!l ? `<span class="pill">Checking…</span>` : l.connected ? `<span class="pill ok"><span class="dot"></span>Link connected from ${esc(l.machine || "the laptop")}${l.plc && l.plc.connected ? ", reading the PLC" : ""}</span>` : `<span class="pill bad"><span class="dot"></span>Link not connected yet</span>`}</div></li>
+            <div class="mt-2">${!l ? `<span class="pill">Checking…</span>` : l.connected ? `<span class="pill ok"><span class="dot"></span>Link connected from ${esc(l.machine || "the laptop")}${l.plc && l.plc.connected ? ", reading the PLC" : ""}</span>` : `<span class="pill bad"><span class="dot"></span>Link not connected yet</span>`}</div></li>
         </ol></div>`;
     }
     return {
@@ -177,11 +177,11 @@ const PKStart = (() => {
             <div class="row" style="align-self:end;margin-bottom:2px">${viaLink ? "" : `<button class="btn b" data-test>Test</button>`}
               ${liveNow ? `<span class="pill ok"><span class="dot"></span>Live now</span>` : ""}</div></div>
           ${result(plcTest)}
-          <details class="more"><summary>Where do I find the address?</summary><p class="muted small" style="margin:8px 0 0">In TIA Portal: <b>Devices &amp; networks</b>, click the CPU, then
+          <details class="more"><summary>Where do I find the address?</summary><p class="mt-2 mb-0 muted small">In TIA Portal: <b>Devices &amp; networks</b>, click the CPU, then
             <b>Properties › PROFINET interface › Ethernet addresses</b>. For PLCSIM Advanced it is the address of the virtual PLC, as shown in PLCSIM Advanced.
             ${viaLink ? "" : "This PC must be in the same network: <code>ping</code> to the address should answer."}</p></details>
-          <details class="more"><summary>The CPU has a password</summary><div style="margin-top:8px">${viaLink
-            ? `<p class="muted small" style="margin:0">With Link the password stays on the laptop: add <code>--plc-password &lt;password&gt;</code> to the Link command.</p>`
+          <details class="more"><summary>The CPU has a password</summary><div class="mt-2">${viaLink
+            ? `<p class="m-0 muted small">With Link the password stays on the laptop: add <code>--plc-password &lt;password&gt;</code> to the Link command.</p>`
             : field("w-plcPassword", "CPU access password", "", { type: "password", hint: PKSetup.info.plcPassword === "none" ? "Only if the CPU has access protection." : "A password is saved. Leave empty to keep it." })}</div></details>
         </div>${linkPart}`,
     };
@@ -191,12 +191,12 @@ const PKStart = (() => {
     const m = w.tiaMode;
     const needApply = PKSetup.info.restartNeeded;
     const check = `<div class="row"><button class="btn b" data-check-tia>Check the TIA helper</button></div>
-      ${needApply && tiaCheck && !tiaCheck.ok ? `<div class="notice gold">${icon("info")}<div style="flex:1">Your new settings are saved but not used yet. Apply them, then check again.</div><button class="btn gold small" data-restart>Apply now</button></div>` : ""}
+      ${needApply && tiaCheck && !tiaCheck.ok ? `<div class="notice gold">${icon("info")}<div class="grow">Your new settings are saved but not used yet. Apply them, then check again.</div><button class="btn gold small" data-restart>Apply now</button></div>` : ""}
       ${result(tiaCheck)}`;
     let body;
     if (m === "local") {
       body = `<div class="card stack"><h3>TIA Portal is on this PC</h3>
-        <p class="muted" style="margin:0">PLC-Ki starts the TIA helper by itself, in its own window, when it needs TIA. Tell it where the helper is.</p>
+        <p class="m-0 muted">PLC-Ki starts the TIA helper by itself, in its own window, when it needs TIA. Tell it where the helper is.</p>
         ${field("w-tiaImporterPath", "TIA helper (TiaImporter.exe) on this PC", w.tiaImporterPath, { placeholder: helperExe })}
         ${field("w-tiaPlcsimIp", "PLCSIM address (for test downloads)", w.tiaPlcsimIp, { placeholder: "e.g. 192.168.0.10, empty = no PLCSIM downloads" })}
         ${check}</div>`;
@@ -218,7 +218,7 @@ const PKStart = (() => {
           ${check}</div>`;
     } else {
       body = `<div class="card stack"><h3>TIA Portal on your laptop</h3>
-        <p class="muted" style="margin:0">PLC-Ki Link carries the TIA work to the laptop. The Link command on the previous page already starts the TIA helper there (the part with <code>--tia</code>).</p>
+        <p class="m-0 muted">PLC-Ki Link carries the TIA work to the laptop. The Link command on the previous page already starts the TIA helper there (the part with <code>--tia</code>).</p>
         ${field("w-tiaProject", "TIA project for generated blocks (optional)", w.tiaProject, { placeholder: "C:\\Users\\…\\Documents\\Automation\\…\\Project.ap20", hint: "A path on the laptop." })}
         ${check}</div>`;
     }
@@ -237,7 +237,7 @@ const PKStart = (() => {
       body: `<div class="card stack">
         ${k !== "none" ? `<div class="notice green">${icon("check")}<div>${k === "environment" ? "A key is already set on this PC (outside PLC-Ki). You can leave this empty." : "A key is saved. Leave empty to keep it."}</div></div>` : ""}
         ${field("w-apiKey", "Claude API key", "", { type: "password", placeholder: "sk-ant-…", hint: "From console.anthropic.com, API keys. Stored encrypted on this PC." })}
-        <p class="faint small" style="margin:0">Questions cost a few cents each. Importing a program costs a few dollars, once.</p></div>`,
+        <p class="m-0 faint small">Questions cost a few cents each. Importing a program costs a few dollars, once.</p></div>`,
       skip: true,
     };
   }
@@ -248,10 +248,10 @@ const PKStart = (() => {
       title: demo ? "Teach it your machine." : "Your machine.",
       sub: demo ? "Right now PLC-Ki shows a demo mixing station. Give it your TIA archive (.zap20): TIA exports the program, Ki writes what each step, device and alarm means, and you check it."
         : "PLC-Ki watches the program you imported. Import again when the program changes.",
-      body: `<div class="card stack"><div class="row"><span class="ico">${icon(demo ? "file" : "check")}</span><div style="flex:1"><b>${esc(state.info ? state.info.machine : "")}</b>
+      body: `<div class="card stack"><div class="row"><span class="ico">${icon(demo ? "file" : "check")}</span><div class="grow"><b>${esc(state.info ? state.info.machine : "")}</b>
           <div class="faint small">${demo ? "Demo machine" : esc((w.model || "").split(/[\\/]/).pop())}</div></div>
           <a class="btn ${demo ? "" : "b"}" href="#/setup/program" data-seen>${demo ? "Import my program" : "Import again"}</a></div>
-        ${demo ? `<p class="faint small" style="margin:0">Needs the TIA helper (previous steps) and the Claude key. You can also keep the demo for now.</p>` : ""}</div>`,
+        ${demo ? `<p class="m-0 faint small">Needs the TIA helper (previous steps) and the Claude key. You can also keep the demo for now.</p>` : ""}</div>`,
       skip: demo, skipText: "Keep the demo for now",
     };
   }
@@ -275,7 +275,7 @@ const PKStart = (() => {
   function stepIndex() { const k = (PK.current && PK.current.params[0]) || "setup"; return Math.max(0, STEPS.findIndex(([x]) => x === k)); }
 
   function render() {
-    if (!w) return PK.hero({ title: "Loading…" });
+    if (!w) return PK.hero({ title: "Get started" }) + PK.sec("", PK.ui.loading("cards", { rows: 3 }));
     const i = stepIndex();
     const [key] = STEPS[i];
     const st = builders[key]();
@@ -373,7 +373,7 @@ const PKStart = (() => {
           busy = false;
           PK.go("#/setup/start/" + nextKey);
           if (nextKey === "done") readiness(true).then(PK.draw);
-        } catch (e) { busy = false; const p = PK.plain(e.message); toast(p.todo ? p.text + " " + p.todo : p.text, "error"); PK.draw(); }
+        } catch (e) { busy = false; toast(e, "error"); PK.draw(); }
       };
       if (key === "done") page.querySelectorAll("[data-restart]").forEach((b) => PK.on(b, "click", () => local.set(SEEN, "1")));
     },
