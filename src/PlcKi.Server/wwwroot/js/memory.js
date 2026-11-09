@@ -170,6 +170,7 @@
   let days = 7, q = "", onlyUnnoted = false, logMax = 50, alarmOnly = null, rankBy = "count";
   let timer = null, logData = null, logKey = "";
   let events = null, eventsAt = 0;
+  let mounted = false;        // the first visit starts at 7 days; later visits keep the window that was picked
 
   function loadLog(force) {
     const key = `${days}|${q}|${onlyUnnoted}|${logMax}|${alarmOnly || ""}`;
@@ -231,8 +232,10 @@
     live: true,
     mount() {
       const w = where((PK.current && PK.current.params) || []);
+      // The time window stays when moving between the tabs; one alarm's own history starts at a year
+      if (!mounted || (w.alarm != null) !== (alarmOnly != null)) days = w.alarm ? 365 : 7;
+      mounted = true;
       alarmOnly = w.alarm;
-      days = alarmOnly ? 365 : 7;
       logData = null; logKey = "";
       loadLog(true);
       clearInterval(timer);
