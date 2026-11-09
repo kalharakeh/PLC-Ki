@@ -703,11 +703,103 @@ const PKSetup = (() => {
     },
   });
 
+  // ---------- Storage (inside Settings) ----------
+  // What PLC-Ki keeps, how much, the limits that stop it growing forever, export and clear (/api/admin/storage).
+  let storage = null;
+  async function loadStorage() {
+    try { storage = await api("GET", "/api/admin/storage"); } catch (e) { storage = { error: e.message }; }
+  }
+  const size = (b) => b == null ? "" : b >= 1073741824 ? (b / 1073741824).toFixed(1) + " GB" : b >= 1048576 ? (b / 1048576).toFixed(1) + " MB" : b >= 1024 ? Math.round(b / 1024) + " KB" : b + " bytes";
+  const EXPORT = {
+    changes: ["/api/admin/storage/changes.csv", "CSV"],
+    recordings: ["/api/admin/storage/recordings.zip", "Zip"],
+    memory: ["/api/memory/export.csv?days=3650", "CSV"],
+  };
+  const LIMITS = [
+    ["productionDays", "Production log", "days", "400 days lets a report compare with the same weeks last year."],
+    ["changeLogDays", "Change log", "days", "Who changed which value. Older files go first."],
+    ["changeLogMb", "Change log, at most", "MB", "Whichever comes first: the days or the size."],
+    ["recordings", "Alarm recordings", "per machine", "The newest ones are kept."],
+    ["alarmOccurrences", "Alarm memory", "occurrences", "Ones with a technician's note are never removed."],
+  ];
+  const isoDay = (d) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  function storageHtml() {
+    if (!storage) return "";
+    if (storage.error) return PK.sec("", `<h2>Storage</h2><div class="notice red">${esc(storage.error)}</div>`);
+    const d = storage.disk, l = storage.limits;
+    const today = isoDay(new Date()), monthAgo = isoDay(new Date(Date.now() - 30 * 864e5));
+    const rows = storage.rows.map((r) => {
+      const exp = r.kind === "production" && r.count ? `<button class="btn plain small" data-prod-csv>CSV</button>`
+        : EXPORT[r.kind] && r.count ? `<a class="btn plain small" href="${EXPORT[r.kind][0]}" download>${EXPORT[r.kind][1]}</a>` : "";
+      const clr = r.clear ? `<button class="btn plain small" style="color:var(--fault)" data-clear="${esc(r.kind)}">Clear</button>` : "";
+      return `<tr><td><b style="font-weight:600">${esc(r.title)}</b><div class="muted small">${esc(r.what)}</div></td>
+        <td class="small">${r.where === "memory" ? "Memory" : `Disk<div class="faint mono" style="overflow-wrap:anywhere">${esc(r.folder || "")}</div>`}</td>
+        <td class="small" style="white-space:nowrap">${esc(r.countText)}${r.bytes != null && r.where === "disk" ? `<div class="faint">${size(r.bytes)}</div>` : ""}</td>
+        <td class="small" style="white-space:nowrap">${r.oldest ? esc(PK.date(r.oldest, r.kind !== "production")) : "–"}</td>
+        <td class="small">${esc(r.limit)}</td>
+        <td style="white-space:nowrap">${exp}${clr}</td></tr>`;
+    }).join("");
+    const last = storage.lastPrune
+      ? `Limits last applied ${esc(PK.date(storage.lastPrune))}: ${storage.lastRemoved.length ? storage.lastRemoved.map((x) => esc(x.text)).join("; ") + " removed." : "nothing was over them."}`
+      : "Limits are applied when PLC-Ki starts and once a day.";
+    return PK.sec("", `<h2 id="storage">Storage</h2><p class="sub">What PLC-Ki keeps on this PC, how much, and for how long.</p>
+      ${d.warning ? `<div class="notice red" style="margin-bottom:14px">${icon("info")}<div>${esc(d.warning)}</div></div>` : ""}
+      <p class="small" style="margin:0 0 12px">Data folder: <span class="mono">${esc(storage.dataDir)}</span>${d.total ? ` · ${size(d.free)} free of ${size(d.total)} (${Math.round(d.free / d.total * 100)} %)` : ""}</p>
+      <div style="overflow-x:auto"><table class="tbl"><tr><th>What</th><th>Where</th><th>How much</th><th>Oldest</th><th>Kept</th><th></th></tr>${rows}</table></div>
+      <div class="row" data-prod-range hidden style="gap:10px;margin-top:10px;flex-wrap:wrap;align-items:end">
+        <label class="field" style="max-width:180px">Production log from<input type="date" id="pr-from" value="${monthAgo}"></label>
+        <label class="field" style="max-width:180px">to<input type="date" id="pr-to" value="${today}"></label>
+        <a class="btn small" data-prod-dl href="#" download>Download CSV</a></div>
+      <h3 style="margin-top:26px">Limits</h3>
+      <div class="grid three">${LIMITS.map(([k, t, unit, hint]) => `<label class="field">${t} <span class="hint">${unit}</span>
+        <input id="lim-${k}" type="number" min="1" value="${l[k]}"><span class="hint">${hint}</span></label>`).join("")}</div>
+      <div class="row" style="gap:12px;margin-top:10px;align-items:center"><button class="btn" data-save-limits>Save limits</button>
+        <span class="muted small">${last} Notes, documents, logins, settings and keys are never removed automatically.</span></div>`);
+  }
+  function bindStorage(page) {
+    if (!storage || storage.error) return;
+    const prod = page.querySelector("[data-prod-csv]"), range = page.querySelector("[data-prod-range]"), dl = page.querySelector("[data-prod-dl]");
+    const href = () => `/api/admin/storage/production.csv?from=${encodeURIComponent(page.querySelector("#pr-from").value)}&to=${encodeURIComponent(page.querySelector("#pr-to").value)}`;
+    if (dl) {
+      dl.href = href();
+      page.querySelectorAll("#pr-from,#pr-to").forEach((el) => { el.onchange = () => { dl.href = href(); }; });
+    }
+    if (prod) prod.onclick = () => { range.hidden = !range.hidden; };
+    page.querySelectorAll("[data-clear]").forEach((b) => b.onclick = async () => {
+      const r = storage.rows.find((x) => x.kind === b.dataset.clear);
+      if (!r || !(await PK.confirmSheet({ title: `Clear the ${r.title.toLowerCase()}?`,
+        text: `<p style="margin-top:0">This deletes ${esc(r.clear)}</p><p><b>It cannot be undone.</b> Export it first if you may need it. The change log notes that you cleared it.</p>`,
+        ok: "Delete", danger: true }))) return;
+      b.disabled = true;
+      try { const x = await api("POST", "/api/admin/storage/clear", { kind: r.kind }); toast(`Cleared: ${x.text}.`); }
+      catch (e) { toast(e.message, "error"); }
+      await loadStorage(); PK.draw();
+    });
+    const save = page.querySelector("[data-save-limits]");
+    if (save) save.onclick = async () => {
+      const limits = Object.fromEntries(LIMITS.map(([k]) => [k, Number(page.querySelector("#lim-" + k).value)]));
+      save.disabled = true;
+      try {
+        // Tighter limits remove data now: say exactly what, and ask first
+        const dry = await api("PUT", "/api/admin/storage/limits", { limits, dryRun: true });
+        if (dry.removed.length && !(await PK.confirmSheet({ title: "Save these limits?",
+          text: `<p style="margin-top:0">They remove now:</p><ul>${dry.removed.map((x) => `<li>${esc(x.text)}${x.bytes ? ` (${size(x.bytes)})` : ""}</li>`).join("")}</ul><p><b>This cannot be undone.</b></p>`,
+          ok: "Save and remove", danger: true }))) { save.disabled = false; return; }
+        const done = await api("PUT", "/api/admin/storage/limits", { limits, dryRun: false });
+        toast(done.removed.length ? "Saved. Removed: " + done.removed.map((x) => x.text).join("; ") + "." : "Saved.");
+        await loadSettings();
+      } catch (e) { toast(e.message, "error"); }
+      save.disabled = false;
+      await loadStorage(); PK.draw();
+    };
+  }
+
   // ---------- Settings ----------
   let users = null;
   PK.view("setup/settings", {
     async mount() {
       try { await loadSettings(); users = await api("GET", "/api/admin/users"); } catch (e) { toast(e.message, "error"); }
+      await loadStorage();
       PK.draw();
     },
     render() {
@@ -730,6 +822,7 @@ const PKSetup = (() => {
             <label class="field" style="max-width:200px">Port<input id="port" type="number" value="${s.port}">${runNote("port")}</label></div>
         </div>
         <div class="actions" style="margin-top:24px"><button class="btn big" data-save-settings>Save</button><span class="muted small">Saves Machine, Assistant and Access. Logins below save on their own.</span></div>`)
+        + storageHtml()
         + PK.sec("", `<h2>Logins</h2><p class="sub">Operators see every machine page. Administrators also see Setup.</p>
           <ul class="list logins">${(users || []).map((u) => `<li><span class="ico">${icon("user")}</span>
             <span style="flex:1"><b style="font-weight:600">${esc(u.name)}</b>${state.user && u.name === state.user.name ? " (you)" : ""}<div class="faint">${u.role === "admin" ? "Administrator" : "Operator"}</div></span>
@@ -744,6 +837,7 @@ const PKSetup = (() => {
     },
     after(page) {
       bindRestart(page);
+      bindStorage(page);
       const v = (id) => page.querySelector("#" + id);
       const saveBtn = page.querySelector("[data-save-settings]");
       const form = page.querySelector("[data-settings-form]");

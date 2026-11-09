@@ -23,10 +23,11 @@ const PKStart = (() => {
     loading = true;
     try {
       const d = await PKSetup.loadSettings();
-      let ask = null, tia = null;
+      let ask = null, tia = null, disk = null;
       try { ask = await api("GET", "/api/ask"); } catch { /* shown as unknown */ }
+      try { disk = await api("GET", "/api/admin/storage/disk"); } catch { /* not shown */ }
       try { tia = await api("GET", "/api/admin/tia/status"); } catch (e) { tia = { ok: false, message: e.message }; }
-      ready = { settings: d.settings, info: d.info, ask, tia };
+      ready = { settings: d.settings, info: d.info, ask, tia, disk };
       readyAt = Date.now();
     } catch { /* not an administrator, or PLC-Ki down */ }
     loading = false;
@@ -62,15 +63,19 @@ const PKStart = (() => {
 
   /** The "Getting started" card at the top of the machine pages, for administrators, until everything needed is done. */
   function card() {
-    if (!state.user || state.user.role !== "admin" || session.get(HIDE) === "1") return "";
+    if (!state.user || state.user.role !== "admin") return "";
     if (!ready) { readiness().then((r) => r && PK.draw()); return ""; }
+    // The disk nearly full: shown to administrators even when everything is set up (Setup › Settings › Storage)
+    const disk = ready.disk && ready.disk.low ? `<section class="guide-sec"><div class="wrap"><div class="notice red" role="alert">${icon("info")}
+      <div style="flex:1">${esc(ready.disk.warning)}</div><a class="btn small" href="#/setup/settings">Open Storage</a></div></div></section>` : "";
+    if (session.get(HIDE) === "1") return disk;
     const list = items(ready);
     const need = list.filter((i) => !i.optional);
     const done = need.filter((i) => i.done).length;
-    if (done === need.length) return "";
+    if (done === need.length) return disk;
     const next = list.find((i) => !i.done && !i.optional) || list.find((i) => !i.done);
     // A slim bar below the page's own content: the machine comes first, set-up second
-    return `<section class="guide-sec"><div class="wrap"><div class="guide-bar" role="region" aria-label="Getting started">
+    return disk + `<section class="guide-sec"><div class="wrap"><div class="guide-bar" role="region" aria-label="Getting started">
       <div class="gb-text"><span class="gb-count">Getting started · ${done} of ${need.length} done</span>
         <span class="gb-next"><b>Next: ${esc(next.title)}.</b> ${esc(next.text)}</span></div>
       <div class="gb-actions">${next.action === "restart" ? `<button class="btn small gold" data-restart>${esc(next.btn)}</button>` : `<a class="btn small" href="${next.href}">${esc(next.btn)}</a>`}

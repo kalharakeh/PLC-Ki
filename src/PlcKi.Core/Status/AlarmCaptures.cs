@@ -53,7 +53,8 @@ public sealed class AlarmCaptureBook
 
     public TimeSpan Before { get; }
     public TimeSpan After { get; }
-    public int Max { get; }
+    public int Max { get; private set; }
+    public string? Folder => _folder;
     /// <summary>At most this many tracks per capture (the alarm bit and its related tags always first).</summary>
     public int MaxTracks { get; init; } = 40;
 
@@ -287,6 +288,30 @@ public sealed class AlarmCaptureBook
                 File.Delete(old);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { /* kept in memory anyway */ }
+    }
+
+    /// <summary>Sets the limit and removes the oldest recordings over it, in memory and on disk. Returns how many were (or would be) removed.</summary>
+    public int Prune(int max, bool dryRun = false)
+    {
+        max = Math.Max(1, max);
+        lock (_lock)
+        {
+            var onDisk = _folder != null && Directory.Exists(_folder) ? Directory.GetFiles(_folder, "*.json").Length : 0;
+            var n = Math.Max(Math.Max(0, _done.Count - max), Math.Max(0, onDisk - max));
+            if (dryRun) return n;
+            Max = max;
+            while (_done.Count > Max) _done.RemoveFirst();
+            if (_folder != null && Directory.Exists(_folder))
+                foreach (var old in Directory.GetFiles(_folder, "*.json").OrderByDescending(f => Path.GetFileName(f), StringComparer.Ordinal).Skip(Max))
+                    try { File.Delete(old); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+            return n;
+        }
+    }
+
+    /// <summary>Forgets every finished recording (the files are removed by the caller). Recordings still being cut stay.</summary>
+    public void Clear()
+    {
+        lock (_lock) _done.Clear();
     }
 
     private void Load()

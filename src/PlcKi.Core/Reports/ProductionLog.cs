@@ -232,6 +232,32 @@ public sealed class ProductionLog
         }
     }
 
+    /// <summary>
+    /// The day files in a production log folder (yyyy-MM-dd.jsonl), oldest first. Only names that are exactly a date:
+    /// the report settings (settings.json) live in the same folder and are never one of them.
+    /// </summary>
+    public static List<(DateOnly Day, string Path)> DayFiles(string dir)
+    {
+        var list = new List<(DateOnly, string)>();
+        if (!Directory.Exists(dir)) return list;
+        foreach (var f in Directory.GetFiles(dir, "*.jsonl"))
+            if (DateOnly.TryParseExact(System.IO.Path.GetFileNameWithoutExtension(f), "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.None, out var d))
+                list.Add((d, f));
+        return list.OrderBy(x => x.Item1).ToList();
+    }
+
+    /// <summary>After the day files were cleared: the next status writes a fresh "start" and state line, so today's report has its opening state.</summary>
+    public void Restart()
+    {
+        lock (_lock)
+        {
+            _started = false;
+            _state = _why = null;
+            _lastWrite = DateTimeOffset.MinValue;
+        }
+    }
+
     /// <summary>For tests: feed records directly (memory mode only).</summary>
     public void AddRaw(IEnumerable<ProdRecord> records)
     {

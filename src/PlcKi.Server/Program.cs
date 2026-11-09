@@ -126,7 +126,10 @@ static async Task<int> RunAppAsync(string[] appArgs, bool probe, JobService jobs
     builder.Services.AddSingleton(new MachineHistory(TimeSpan.FromMinutes(Math.Clamp(opt.HistoryMinutes, 1, 240))));
     builder.Services.AddSingleton(new LiveModelCheck(model));
     // Machine memory: every alarm occurrence and the technicians' notes, one file per machine in the data folder
+    // Storage limits (Setup › Settings › Storage): read live from settings.json, applied at start and once a day
+    var startLimits = SettingsStore.RetentionFrom(builder.Configuration);
     var memory = new AlarmMemory(AlarmMemory.FileFor(plant.DataDir, model.Name), model.Name);
+    memory.Prune(startLimits.AlarmOccurrences);      // the saved limit, before the first alarm is counted
     builder.Services.AddSingleton(memory);
     builder.Services.AddSingleton(new ModelFile(Resolve(opt.Model)));
     builder.Services.AddSingleton<ModelFixService>();
@@ -141,8 +144,12 @@ static async Task<int> RunAppAsync(string[] appArgs, bool probe, JobService jobs
     builder.Services.AddSingleton(new PlcKi.Server.Reports.ReportService(model, plant.DataDir, memory));
     builder.Services.AddSingleton(fast);
     // Kept per machine model, so a capture never shows next to another machine's tags
-    builder.Services.AddSingleton(new AlarmCaptureBook(model, fast,
+    builder.Services.AddSingleton(new AlarmCaptureBook(model, fast, max: startLimits.Recordings,
         folder: Path.Combine(plant.DataDir, "captures", CaptureFolder(opt.Model))));
+    builder.Services.AddSingleton(sp => new PlcKi.Server.Storage.StorageService(plant.DataDir, () => sp.GetRequiredService<SettingsStore>().Retention(),
+        memory, sp.GetRequiredService<AlarmCaptureBook>(), sp.GetRequiredService<PlcKi.Server.Reports.ReportService>().Log,
+        sp.GetRequiredService<ILoggerFactory>().CreateLogger("storage")));
+    builder.Services.AddHostedService<PlcKi.Server.Storage.StoragePruning>();
     builder.Services.AddSingleton<WatchList>();
     builder.Services.AddSingleton<DeviceWatch>();
     builder.Services.AddSingleton<PlcKi.Server.Hardware.DiagnosticsService>();
@@ -339,6 +346,7 @@ static async Task<int> RunAppAsync(string[] appArgs, bool probe, JobService jobs
     app.MapHolds();     // /api/admin/hold: hold a simulated input on PLCSIM (inputs only, never safety I/O); /api/held for the banner
     PlcKi.Server.Mobile.PhoneEndpoints.MapPhone(app);   // /api/admin/phone-address for the QR labels
     app.MapMemory();    // /api/memory/... machine memory: alarm history and notes (History page)
+    PlcKi.Server.Storage.StorageEndpoints.MapStorage(app);   // /api/admin/storage: what is kept, limits, export, clear (Settings)
     app.Lifetime.ApplicationStopped.Register(() => memory.Save());
     PlcKi.Server.Reports.ReportEndpoints.MapReports(app);   // /api/reports/... shift report, OEE, fault summary
     PlcKi.Server.Docs.DocumentEndpoints.MapDocuments(app);      // /api/documents (Documents page, alarm page), uploads under /api/admin

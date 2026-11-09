@@ -229,6 +229,8 @@ generator, without commands.
 | `../PlcKi.Core/Status/MachineHistory.cs` | Recent events and values, in memory |
 | `../PlcKi.Core/Status/StatusEngine.cs` | Turns values + model into the plain-English status |
 | `../PlcKi.Core/Expressions/Expr.cs` | The small condition language used in the model (`Level >= LevelA AND NOT AnyFault`) |
+| `Storage/StorageService.cs`, `Storage/StorageEndpoints.cs` | Setup › Settings › Storage: what is kept, the limits (pruned at start and daily), export, clear |
+| `../PlcKi.Core/Storage/JsonLinesLog.cs` | The change log (`value-changes.jsonl`), put aside into dated files as it grows |
 | `wwwroot/` | The page (no external libraries; `ask.js` is the chat box) |
 
 API: `/api/status` (everything on the page as JSON), `/api/values` (raw values with symbols), `/api/model`,

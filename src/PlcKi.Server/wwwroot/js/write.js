@@ -265,7 +265,7 @@
     logAt = Date.now();
     try { log = await api("GET", "/api/admin/write/log?max=30"); PK.draw(); } catch { /* next time */ }
   }
-  const ACTION = { hold: "Held", release: "Released", "release-all": "Released (all)", "changed-outside": "No longer held" };
+  const ACTION = { hold: "Held", release: "Released", "release-all": "Released (all)", "changed-outside": "No longer held", clear: "Cleared" };
   // The rule that allowed a change, shown only when it came with a warning
   const RULE = { "plcsim-safety-input": "safety input", "plcsim-safety-output": "safety output", "plcsim-safety-read": "safety program reads it",
     "plcsim-input-unchecked": "F-module not checked", "plcsim-output-unchecked": "F-module not checked" };
@@ -279,7 +279,7 @@
       ${log.map((e) => `<tr><td class="small" style="white-space:nowrap">${esc(PK.date(e.time))}</td><td>${esc(e.user)}</td>
         <td><span class="pill ${e.target === "real" ? "bad" : "ok"}" style="font-size:12px">${e.target === "real" ? "Real" : e.target === "plcsim" ? "PLCSIM" : "–"} ${esc(e.plc)}</span></td>
         <td class="mono small" style="word-break:break-all">${esc(e.symbol)}</td>
-        <td class="small">${ACTION[e.action] ? `<span class="tag gold">${ACTION[e.action]}</span> ` : ""}${RULE[e.rule] ? `<span class="tag red" title="${esc(e.rule)}">${RULE[e.rule]}</span> ` : ""}${e.ok ? `${esc(e.before)} → <b>${esc(e.value)}</b>${e.held === false && !e.action ? ` <span class="faint">(set back to ${esc(e.after)})</span>` : ""}` : `<span style="color:var(--fault-ink)">Refused: ${esc(e.error)}</span>`}</td>
+        <td class="small">${ACTION[e.action] ? `<span class="tag gold">${ACTION[e.action]}</span> ` : ""}${RULE[e.rule] ? `<span class="tag red" title="${esc(e.rule)}">${RULE[e.rule]}</span> ` : ""}${e.action === "clear" ? esc(e.value) : e.ok ? `${esc(e.before)} → <b>${esc(e.value)}</b>${e.held === false && !e.action ? ` <span class="faint">(set back to ${esc(e.after)})</span>` : ""}` : `<span style="color:var(--fault-ink)">Refused: ${esc(e.error)}</span>`}</td>
         <td class="muted small">${esc(e.reason || "")}</td></tr>`).join("")}
       </table></details></div>`;
   }
