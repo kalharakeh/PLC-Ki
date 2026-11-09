@@ -31,6 +31,19 @@ public class ProgramSearchTests
         Assert.Equal(new[] { "FB_AlarmHandler" }, writers);
     }
 
+    [Fact]
+    public void Find_tags_looks_in_every_data_block_value()
+    {
+        var data = Path.Combine(AppContext.BaseDirectory, "data");
+        var program = new ProgramService(new PlcKi.Server.Live.PlcKiOptions { Export = Path.Combine(data, "demo-export.zip") }, TestData.Model, p => p);
+        var json = JsonSerializer.SerializeToElement(program.FindTags("A02_XV101"));
+        var hit = json.GetProperty("values").EnumerateArray().First();
+        Assert.Equal("DB_Alarms", hit.GetProperty("db").GetString());
+        Assert.Contains("A02_XV101_NotOpen", hit.GetProperty("symbol").GetString());
+        // Too short a query finds nothing rather than everything
+        Assert.Empty(JsonSerializer.SerializeToElement(program.FindTags("A")).GetProperty("values").EnumerateArray());
+    }
+
     private static readonly string[] Scl =
     {
         "#Run := #Start AND NOT #Stop;",                      // 0: every time the block runs

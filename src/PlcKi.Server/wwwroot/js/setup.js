@@ -88,7 +88,7 @@ const PKSetup = (() => {
     if (has(/Siemens TIA Openness|not a member of|EngineeringSecurityException|UnauthorizedAccess/i))
       return { text: "Your Windows user on the TIA PC may not use TIA Openness.", todo: "On the VM: Computer Management, Local Users and Groups, Groups, \"Siemens TIA Openness\": add your user. Then log off and on again, and start the job again." };
     if (has(/whitelist|allow access|access was denied by the user|firewall.*openness/i))
-      return { text: "TIA Portal did not allow TiaImporter to use it.", todo: "On the VM: double-click Update-TIA-helper in C:\\PLCKi\\PLC-Ki\\tools\\TiaImporter once (it approves TiaImporter in TIA), or answer \"Yes to all\" when TIA asks." };
+      return { text: "TIA Portal did not allow the TIA helper to use it.", todo: "On the VM: double-click Update-TIA-helper in C:\\PLCKi\\PLC-Ki\\tools\\TiaImporter once (it approves TiaImporter in TIA), or answer \"Yes to all\" when TIA asks." };
     if (has(/refused the token|\b401\b.*(helper|5090|vm)|(helper|5090|vm).*\b401\b/i))
       return PK.plain("refused the token");
     if (has(/No answer from .*:\d+|Cannot reach the TIA helper|Link is not connected|connection refused.*5090|actively refused/i))
@@ -151,11 +151,11 @@ const PKSetup = (() => {
       const written = Number(([...log.matchAll(/written (\d+) kB of the model/g)].pop() || [])[1] || 0);
       const pct = Math.min(95, Math.round(5 + secs / est * 85));
       const phase = at(/Compared with|Wrote /) ? "Checking the model"
-        : at(/Correcting \d+ problem/) ? "Claude is fixing what the check found"
-        : written > 0 ? `Claude is writing the model (${written} kB so far)`
-        : at(/reading the program/) ? "Claude is reading the program and thinking" : "Reading the program export";
+        : at(/Correcting \d+ problem/) ? "Ki is fixing what the check found"
+        : written > 0 ? `Ki is writing the model (${written} kB so far)`
+        : at(/reading the program/) ? "Ki is reading the program and thinking" : "Reading the program export";
       const mins = Math.max(3, Math.round(est / 60));
-      return { pct, phase, hint: `About ${mins} minutes for a program this size; it can take longer. While Claude writes, the kB count keeps growing.` };
+      return { pct, phase, hint: `About ${mins} minutes for a program this size; it can take longer. While Ki writes, the kB count keeps growing.` };
     }
     if (job.kind === "develop") {
       // The generator's own markers (##plcki stage ...) say where it is; between them, creep forward a little
@@ -275,7 +275,7 @@ const PKSetup = (() => {
       <div class="legend"><span><span class="sw" style="background:var(--ok)"></span>checked, working</span><span><span class="sw" style="background:var(--fault)"></span>no answer</span><span><span class="sw" style="background:var(--muted)"></span>not checked yet</span></div>`;
   }
 
-  const setupNav = (here) => `<div class="subnav">${[["start", "Get started"], ["connections", "Connections"], ["program", "Program"], ["settings", "Settings"], ["qr", "QR labels"]]
+  const setupNav = (here) => `<div class="subnav">${[["start", "Get started"], ["connections", "Connections"], ["program", "Import a program"], ["settings", "Settings"], ["qr", "QR labels"]]
     .map(([k, l]) => `<a class="btn ${k === here ? "" : "b"} small" href="#/setup/${k}">${l}</a>`).join("")}</div>`;
 
   function choice(name, current, options) {
@@ -288,7 +288,7 @@ const PKSetup = (() => {
     const preset = c.setupChosen ? presetOf(c) : null;   // a fresh install has not picked one yet
     const tiaFields = c.tiaMode === "local" ? `
         <div class="grid two">
-          <label class="field">TiaImporter.exe on this PC<input id="tiaImporterPath" value="${esc(c.tiaImporterPath)}" placeholder="C:\\PLCKi\\PLC-Ki\\tools\\TiaImporter\\bin\\Release\\net48\\TiaImporter.exe"><span class="hint">PLC-Ki starts it in its own window and stops it when PLC-Ki stops.</span></label>
+          <label class="field">TIA helper (TiaImporter.exe) on this PC<input id="tiaImporterPath" value="${esc(c.tiaImporterPath)}" placeholder="C:\\PLCKi\\PLC-Ki\\tools\\TiaImporter\\bin\\Release\\net48\\TiaImporter.exe"><span class="hint">PLC-Ki starts it in its own window and stops it when PLC-Ki stops.</span></label>
           <label class="field">TIA project for generated blocks<input id="tiaProject" value="${esc(c.tiaProject)}" placeholder="C:\\Users\\you\\Documents\\Automation\\Line1\\Line1.ap20"><span class="hint">Can also be chosen on the Block generator page.</span></label>
           <label class="field">PLCSIM address (downloads for testing)<input id="tiaPlcsimIp" value="${esc(c.tiaPlcsimIp)}" placeholder="e.g. 192.168.0.10, empty = no PLCSIM downloads"></label>
           <label class="field">Real PLCs that may be loaded<input id="tiaAllowReal" value="${esc(c.tiaAllowReal)}" placeholder="empty = never"><span class="hint">Each download is still confirmed by typing the address in the TiaImporter window, with the CPU in STOP.</span></label>
@@ -321,13 +321,12 @@ const PKSetup = (() => {
          ${tiaPlain && tiaPlain.todo ? `<span class="muted small" style="flex-basis:100%">${esc(tiaPlain.todo)}</span>` : ""}
          ${tiaStatus.ok ? `<span class="faint small">PLCSIM downloads: ${tiaStatus.plcsimIp ? esc(tiaStatus.plcsimIp) : "off"} · real PLC downloads: ${tiaStatus.realAllowed ? "allowed (confirmed at the TIA PC)" : "off"}</span>` : ""}`;
 
-    return PK.sec("hero compact", `${setupNav("connections")}
-        <h1>Connections</h1>
-        <p class="sub">Where PLC-Ki finds the PLC (live values) and TIA Portal (imports and the block generator). Pick the setup that matches yours.
-          New here? <a href="#/setup/start">Get started</a> walks you through it.</p>
-        ${restartBar()}
+    return PK.hero({ cls: "hero compact", before: setupNav("connections"), title: "Connections",
+        sub: `Where PLC-Ki finds the PLC (live values) and TIA Portal (imports and the block generator). Pick the setup that matches yours.
+          New here? <a href="#/setup/start">Get started</a> walks you through it.`,
+        extra: `${restartBar()}
         ${choice("preset", preset, Object.entries(presets).map(([k, p]) => ({ value: k, label: p.title, text: p.text, icon: p.icon, })))}
-        <div style="margin-top:22px">${diagram(c)}</div>`)
+        <div style="margin-top:22px">${diagram(c)}</div>` })
 
       + PK.sec("alt", `<div class="row" style="align-items:baseline"><h2>The PLC</h2><span class="pill warn">${(c.plcAllowWrites || "").trim() ? "Reads; changes allowed" : "Reads only"}</span></div>
         <p class="sub">PLC-Ki reads values with the S7 protocol TIA and HMIs use. Administrators can change a value on PLCSIM, safety ones after a warning; on a real PLC only memory and data values, when it is allowed below. F-blocks never.</p>
@@ -357,7 +356,7 @@ const PKSetup = (() => {
         </details></div>`)
 
       + PK.sec("", `<h2>TIA Portal</h2>
-        <p class="sub">Used to import a program from an archive and by the block generator. A small helper, TiaImporter, does the TIA work next to TIA.</p>
+        <p class="sub">Used to import a program from an archive and by the block generator. A small program, the TIA helper, does the TIA work next to TIA.</p>
         <div class="card stack">
         ${choice("tiamode", c.tiaMode, [
           { value: "local", label: "This PC", text: "TIA Portal is installed here.", icon: "pc" },
@@ -520,7 +519,7 @@ const PKSetup = (() => {
     return `<div class="card stack" style="margin-bottom:22px">
       <div class="row"><span class="ico">${icon("import")}</span><h3 style="margin:0;flex:1">Changed the program in TIA? Refresh it</h3></div>
       <p class="muted" style="margin:0">PLC-Ki shows the code, tags and addresses of the program it last read${pr ? `: <b>${esc(pr.project)}</b>${pr.exportedAt ? `, read ${PK.date(pr.exportedAt)}` : ""}` : ""}.
-        After changes in TIA (new addresses, edited blocks), read the project again. About a minute; no Claude, no cost. Alarms and steps stay as they are.
+        After changes in TIA (new addresses, edited blocks), read the project again. About a minute; Ki is not used, so it costs nothing. Alarms and steps stay as they are.
         If TIA Portal has the project open, it is read from there (TIA asks once to allow access).</p>
       ${fresh.error ? `<div class="notice gold">${icon("warn")}<div>Cannot list the TIA projects: ${esc(fresh.error)} Check Connections.</div></div>`
         : `<div class="row"><label class="field" style="flex:1;margin:0">TIA project<select id="fresh-project">${opts.map((x) => `<option value="${esc(x.path)}" ${x.path === fresh.project ? "selected" : ""}>${esc(x.name)}  ·  ${esc(x.path)}</option>`).join("")}</select></label>
@@ -598,19 +597,18 @@ const PKSetup = (() => {
     const review = mi ? (mi.ok ? `<div class="kpis">${[["Tags", mi.tags], ["Steps", mi.steps], ["Devices", mi.equipment], ["Alarms", mi.alarms]]
         .map(([l, v]) => `<div class="k"><b>${v}</b><span>${l}</span></div>`).join("")}</div>
         <p style="margin:12px 0 0"><b>${esc(mi.name)}</b>${mi.description ? " · " + esc(mi.description) : ""}</p>
-        ${imp.job && imp.job.state === "problems" ? `<div class="notice gold" style="margin-top:10px">${icon("warn")}<div>Claude left some problems (see the log). PLC-Ki will not start with this model until they are fixed. Build it again, or ask for help with the log.</div></div>` : ""}
+        ${imp.job && imp.job.state === "problems" ? `<div class="notice gold" style="margin-top:10px">${icon("warn")}<div>Ki left some problems (see the log). PLC-Ki will not start with this model until they are fixed. Build it again, or ask for help with the log.</div></div>` : ""}
         <div class="row" style="margin-top:14px"><button class="btn" data-use ${imp.job && imp.job.state === "problems" ? "disabled" : ""}>Use this program</button></div>`
       : `<div class="notice red">${icon("warn")}<div>${esc(mi.error)}</div></div>`) : "";
 
     const step = (n, title, text, body) => `<div class="step ${stepCls(n)}"><div class="n">${stepCls(n) === "done" ? "✓" : n}</div><h3>${title}</h3><p style="margin-bottom:14px">${text}</p>${body}</div>`;
-    return PK.sec("hero compact", `${setupNav("program")}
-        <h1>Import a program</h1>
-        <p class="sub">Give PLC-Ki the TIA archive. It reads every block, and Claude writes the plain-English model of steps, devices, alarms, causes and fixes, once.</p>
-        ${restartBar()}
+    return PK.hero({ cls: "hero compact", before: setupNav("program"), title: "Import a program",
+        sub: `Give PLC-Ki the TIA archive. It reads every block, and Ki writes the plain-English model of steps, devices, alarms, causes and fixes, once.`,
+        extra: `${restartBar()}
         <div class="kpis" style="margin-top:30px"><div class="k"><b>${esc(state.info ? state.info.machine : "")}</b><span>watched now</span></div>
           <div class="k"><b>${state.model ? state.model.alarms.length : "–"}</b><span>alarms explained</span></div>
           <div class="k"><b>${state.model ? state.model.equipment.length : "–"}</b><span>devices</span></div>
-          <div class="k"><b style="font-size:16px;font-weight:600;word-break:break-all">${esc((cur.export || "none").split(/[\\/]/).pop())}</b><span>program file</span></div></div>`)
+          <div class="k"><b style="font-size:16px;font-weight:600;word-break:break-all">${esc((cur.export || "none").split(/[\\/]/).pop())}</b><span>program file</span></div></div>` })
       + PK.sec("alt", `${PKModel.html()}${refreshHtml()}<div class="steps col">
         ${step(1, "Choose the program", "A TIA archive (.zap20), a program export (.zip) made earlier, or a Beckhoff TwinCAT 3 project (.tnzip, or the project folder zipped).", `
           <div class="dropzone" id="drop">${icon("import", "")}<div style="font-weight:600;margin-top:6px">Drop the file here, or click to choose it</div>
@@ -620,13 +618,13 @@ const PKSetup = (() => {
         ${step(2, "Export it with TIA Portal", "Only for archives. TIA opens it in the background on the TIA PC (see Connections) and exports every block. The archive is not changed.",
           (isArchive ? `<button class="btn" data-export ${jobRunning ? "disabled" : ""}>Export with TIA</button>` : `<span class="faint">${ch ? "Not needed: this is already an export." : "Waiting for a file."}</span>`)
           + (imp.job && imp.job.kind === "export" ? jobCard(imp.job) : ""))}
-        ${step(3, "Build the machine model", "Claude reads the program and writes what each step, device and alarm means. A few minutes, usually one to a few dollars of API use.",
+        ${step(3, "Build the machine model", "Ki reads the program and writes what each step, device and alarm means. A few minutes, usually one to a few dollars of API use.",
           ch && !isArchive ? `${plcPick}
             <div class="row"><span class="small muted">Effort</span><div class="segmented">${["medium", "high", "max"].map((e) => `<button class="${imp.effort === e ? "on" : ""}" data-effort="${e}">${e}</button>`).join("")}</div>
               <label class="check small"><input type="checkbox" id="compare" ${imp.compare ? "checked" : ""}>Compare with the current model</label></div>
             <div class="row" style="margin-top:14px"><button class="btn" data-build ${jobRunning || (exp && exp.plcs.length > 1 && !imp.plc) ? "disabled" : ""}>Build the model</button>
               ${exp && exp.plcs.length > 1 && !imp.plc ? `<span class="faint">Choose the PLC first.</span>` : ""}</div>` + (imp.job && imp.job.kind === "import" ? jobCard(imp.job) : "") : `<span class="faint">Needs a program export.</span>`)}
-        ${step(4, "Check it and use it", "What Claude found. Use it, and PLC-Ki restarts with this machine.", review || `<span class="faint">The result shows here.</span>`)}
+        ${step(4, "Check it and use it", "What Ki found. Use it, and PLC-Ki restarts with this machine.", review || `<span class="faint">The result shows here.</span>`)}
         </div>
         ${imp.job && !["export", "import", "refresh"].includes(imp.job.kind) ? `<div style="margin-top:22px">${jobCard(imp.job)}</div>` : ""}`);
   }
@@ -666,10 +664,10 @@ const PKSetup = (() => {
           const job = await api("POST", "/api/admin/import/refresh", { project: fresh.project });
           startJob(job, async (j) => {
             if (j.state !== "done") return;
-            state.program = null; state.programError = null;   // Code, Logic and Tags load the new program
+            state.program = null; state.programError = null;   // Program and Tags load the new program
             window.dispatchEvent(new Event("pk:program-changed"));
             await refreshFiles(); await loadRefresh();
-            toast("Refreshed. Code, Logic and Tags show the program as it is in TIA now.");
+            toast("Refreshed. Program and Tags show the program as it is in TIA now.");
           });
         } catch (e) { toast(e.message, "error"); }
       };
@@ -807,15 +805,17 @@ const PKSetup = (() => {
       const s = settings;
       const keyText = { settings: "A key is saved here.", environment: "A key is already set on this PC (outside PLC-Ki). A key entered here replaces it.", none: "No key yet: the Ask box stays off until you add one." }[info.apiKey];
       const sw = (id, on, title, text) => `<div class="row"><div style="flex:1"><b style="font-weight:600">${title}</b><div class="muted small">${text}</div></div><label class="switch"><input type="checkbox" id="${id}" ${on ? "checked" : ""}><span></span></label></div>`;
-      return PK.sec("hero compact", `${setupNav("settings")}<h1>Settings</h1><p class="sub">The machine model, the assistant, and who can open PLC-Ki from where.</p>${restartBar()}`)
+      return PK.hero({ cls: "hero compact", before: setupNav("settings"), title: "Settings",
+        sub: `The machine model, the assistant, and who can open PLC-Ki from where.`,
+        extra: `${restartBar()}` })
         + PK.sec("alt", `<div class="grid two" data-settings-form>
           <div class="card stack"><h3>Machine</h3>
             <label class="field">Machine model<select id="model">${(lists.models || []).map((f) => `<option value="${esc(f.path)}" ${f.path === s.model ? "selected" : ""}>${esc(f.label)}${f.uploaded ? " (imported)" : ""}</option>`).join("")}</select><span class="hint">New models come from the Program page. Its program export is picked with it.</span>${runNote("model")}</label>
             <label class="field">History kept (minutes)<input id="historyMinutes" type="number" value="${s.historyMinutes}"><span class="hint">For questions like "what happened before the alarm?"</span></label></div>
           <div class="card stack"><h3>Assistant</h3>
-            ${sw("askEnabled", s.askEnabled, "Ask box", "Claude answers questions about the machine.")}
+            ${sw("askEnabled", s.askEnabled, "Ask box", "Ki answers questions about the machine.")}
             <label class="field">Claude API key <span class="hint">${esc(keyText)}</span><input id="apiKey" type="password" autocomplete="new-password" placeholder="sk-ant-…"></label>
-            <label class="field">How hard Claude thinks<select id="askEffort">${["low", "medium", "high", "max"].map((x) => `<option ${s.askEffort === x ? "selected" : ""}>${x}</option>`).join("")}</select></label></div>
+            <label class="field">How hard Ki thinks<select id="askEffort">${["low", "medium", "high", "max"].map((x) => `<option ${s.askEffort === x ? "selected" : ""}>${x}</option>`).join("")}</select></label></div>
           <div class="card stack"><h3>Access</h3>
             ${sw("allowRemote", s.allowRemote, "Other computers may open PLC-Ki", "Off: only this PC. On: anyone on the network who has a login.")}
             ${sw("publicView", s.publicView, "Viewing without login", "For a screen on the line. Setup still needs an administrator.")}

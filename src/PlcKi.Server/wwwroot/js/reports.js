@@ -73,7 +73,7 @@
   function tabs(t) {
     const admin = PK.state.user && PK.state.user.role === "admin";
     const b = (id, label) => `<a class="${t === id ? "on" : ""}" href="#/reports/${id}" ${t === id ? 'aria-current="page"' : ""}>${label}</a>`;
-    return `<nav class="ptabs" aria-label="Reports">${b("shift", "Shift report")}${b("summary", "Summary")}${b("settings", admin ? "Settings" : "How it counts")}</nav>`;
+    return `<nav class="ptabs" aria-label="Reports">${b("shift", "Shift report")}${b("summary", "Summary")}${b("settings", "Report setup")}</nav>`;
   }
 
   function kpi(value, label, sub, cls) {

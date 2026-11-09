@@ -147,7 +147,7 @@ public sealed class ModelBuilder
             }
         }
         if (stop != null && stop.Contains("refusal", StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("Claude declined to write the model for this program.");
+            throw new InvalidOperationException("Ki declined to write the model for this program.");
         if (stop != null && stop.Contains("max_tokens", StringComparison.OrdinalIgnoreCase))
             _log("  The answer hit the length limit; it may be cut off.");
         return text.ToString();

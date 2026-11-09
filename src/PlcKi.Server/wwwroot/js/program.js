@@ -1152,7 +1152,7 @@
       const v = resolver(sel.inst, sel.block)(op);
       PK.sheet(`<span class="eyebrow">${coil ? "Where it is used" : "What sets it"}</span>
         <h2 class="mono" style="font-size:20px;word-break:break-all">${esc(clean(op))}${v ? " " + chip(v) : ""}</h2>
-        <div class="src-answer">${r.html}</div><div class="row end"><button class="btn" data-close>OK</button></div>`);
+        <div class="src-answer">${r.html}</div><div class="row end"><button class="btn" data-close>Done</button></div>`);
     }
 
     /** Scroll to a place in this block: its rung, or its line in the text (switching to the text when it has no rung). */

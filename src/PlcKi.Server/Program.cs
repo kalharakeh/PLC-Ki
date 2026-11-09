@@ -303,6 +303,7 @@ static async Task<int> RunAppAsync(string[] appArgs, bool probe, JobService jobs
         p.Block(name = name.Replace("%2F", "/", StringComparison.OrdinalIgnoreCase)) is { } b ? Results.Ok(b) : Results.NotFound(new { error = $"Block {name} is not in the program export." }));
 
     app.MapGet("/api/program/tags", (string? db, ProgramService p) => Results.Ok(p.Tags(db)));
+    app.MapGet("/api/program/tags/find", (string? q, ProgramService p) => Results.Ok(p.FindTags(q)));   // the search box
     app.MapGet("/api/program/hmi", (ProgramService p) => Results.Ok(p.Hmi()));
 
     // Live values for the Tags page: the page names the symbols it shows; the polling loop reads them next to the

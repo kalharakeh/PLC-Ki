@@ -200,7 +200,7 @@ public sealed class AskService
             {
                 var why = resp.StopDetails is { } d ? $" ({d})" : "";
                 _log.LogWarning("Claude declined the question{Why}", why);
-                return (Done(id, "Claude declined to answer this question. Try asking it differently, for example about a specific alarm, step or device.",
+                return (Done(id, "Ki declined to answer this question. Try asking it differently, for example about a specific alarm, step or device.",
                     steps, model, "declined" + why, inTok, outTok, cacheTok, started), true);
             }
 

@@ -582,7 +582,7 @@ const PK = (() => {
     const row = (key, title, text, ok, why) => `<label class="opt-row ${ok ? "" : "off"}"><input type="checkbox" data-opt="${key}" ${screenOpt[key] && ok ? "checked" : ""} ${ok ? "" : "disabled"}>
       <span><b>${esc(title)}</b><br><span class="muted small">${esc(ok ? text : why)}</span></span></label>`;
     const notHere = "Not possible on this connection: the browser allows it only on the PLC-Ki PC itself (localhost) or over https.";
-    const s = sheet(`<span class="eyebrow">This screen</span><h2>Alarms and screen</h2>
+    const s = sheet(`<span class="eyebrow">This screen</span><h2>Alarm sound and screen</h2>
       <p class="muted" style="margin:0">Only for this browser on this device. Nothing here changes the machine.</p>
       <div class="stack" style="gap:12px">
         ${row("sound", "Beep when a new alarm comes", "A short tone: three beeps for a fault, one for a warning. Leave this page open in a tab.", true, "")}
@@ -935,7 +935,7 @@ const PK = (() => {
       ${a.text ? `<p class="${a.level === "real" ? "notice gold" : "muted"}" style="margin:0">${esc(a.text)}</p>` : ""}
       ${i.todo ? `<div class="notice ${i.level === "bad" ? "red" : "gold"}">${icon("info")}<div><b>What to do</b><br>${esc(i.todo)}</div></div>` : ""}
       ${i.detail ? `<details class="more"><summary>Technical detail</summary><p class="faint small" style="margin:8px 0 0">${esc(i.detail)}</p></details>` : ""}
-      <div class="row end">${admin && i.level !== "ok" ? `<a class="btn b" href="#/setup/connections" data-close>Open Connections</a>` : ""}<button class="btn" data-close>OK</button></div>`);
+      <div class="row end">${admin && i.level !== "ok" ? `<a class="btn b" href="#/setup/connections" data-close>Open Connections</a>` : ""}<button class="btn" data-close>Done</button></div>`);
   }
 
   /** A command to type, with where to type it ("On the VM") and a Copy button. One line where possible. */
@@ -965,13 +965,14 @@ const PK = (() => {
       "Where in the machine: the device behind the alarm and the chain Requested › Interlocks › Output › Feedback. The first red link is why it is not working.",
       "Where in the software: from the main cycle (OB1) down to the bit that sets the alarm. Show where it is set opens that network as rungs with live values.",
       "The seconds before it came: every change of the machine's tags in the 10 s before the alarm, recorded much finer than the normal reads. Short pulses (amber) are signals the once-a-second reads would miss.",
-      "This alarm before: how often it came, how long it stayed, and the cause and fix technicians noted last time. When you have found the cause, tap Note cause and fix so the next person sees it.",
-      "Ask about this alarm: Claude looks at the live values, the last minutes, the machine memory and the program, and says why it is on and what to check."]],
+      "History of this alarm: how often it came, how long it stayed, and the cause and fix technicians noted last time. When you have found the cause, tap Note cause and fix so the next person sees it.",
+      "Ask about this alarm: Ki looks at the live values, the last minutes, History and the program, and says why it is on and what to check."]],
     plant: ["Plant", "What the machine is doing now. The top shows the step, what it waits for and the key values; the tabs below hold the rest.", [
       "Overview: Needs attention lists active alarms and blocked or faulted devices first; tap one to go to it. Below it the sequence: the blue step is where it is now, red means halted, ✓ is met, ✗ is missing.",
       "The machine at a glance: every device as a symbol. Green runs, grey is off, a dashed amber edge means the program asks for it but an interlock blocks it, red is a fault. Tap one to open it on Devices.",
       "Devices: the list on the left (needs attention first), the picked device on the right with the chain Requested › Interlocks › Output › Feedback. The first red link is why it is not running.",
       "Values over time: the measured values of the last minutes, with the step band and alarm marks under them. Move along a chart to read every value at that moment.",
+      "Machine settings: the values an operator or engineer sets on the HMI panel or in the recipe, with what they are now. ✗ means the machine cannot work with that value.",
       "Data exchange: signals to and from MES, a filler and so on, with their live values."]],
     sequence: ["Step chart", "One sequence as a chain of steps, read like the GRAPH editor, with how long each step took.", [
       "Step timeline: which step ran when in the last minutes, and the last and average time of each step. A step that takes longer than usual is where the machine waits.",
@@ -1011,7 +1012,7 @@ const PK = (() => {
       "Summary: down time, average repair time (MTTR), running time between faults (MTBF), why the machine was not running, and every shift's OEE, over 24 h, 7 days, 30 days or 1 year. Which alarms cost the most time is in History, Ranking.",
       "Download for Excel saves a CSV file; Print or PDF prints the page.",
       "PLC-Ki records only while it runs and reads the PLC. Time it was off or without connection is shown and left out of OEE.",
-      "Settings (administrators): shift times, planned stops, the part and reject counters and the ideal cycle time. Without a counter every finished sequence cycle counts as one part."]],
+      "Report setup (administrators): shift times, planned stops, the part and reject counters and the ideal cycle time. Without a counter every finished sequence cycle counts as one part."]],
     "setup/start": ["Get started", "Sets PLC-Ki up one question at a time. You can come back here any time.", [
       "Each step is saved when you press Continue. Skip what you don't need now: TIA Portal is only needed to import a program or build blocks.",
       "At the end, Apply restarts PLC-Ki with the new settings (a few seconds)."]],
@@ -1019,8 +1020,8 @@ const PK = (() => {
       "The drawing turns each line green when it works and red when it does not. Grey means not checked yet.",
       "Test the address checks that something answers on the PLC's S7 port. It sends nothing to the PLC.",
       "Save, then Apply: PLC-Ki uses new connection settings after a quick restart."]],
-    "setup/program": ["Program", "Teaches PLC-Ki a machine from its TIA program.", [
-      "1. Drop the TIA archive (.zap20). 2. TIA exports it on the TIA PC (needs the TIA helper). 3. Claude builds the model: a few minutes, about a dollar. 4. Check the numbers and press Use this program.",
+    "setup/program": ["Import a program", "Teaches PLC-Ki a machine from its TIA program.", [
+      "1. Drop the TIA archive (.zap20). 2. TIA exports it on the TIA PC (needs the TIA helper). 3. Ki builds the model: a few minutes, about a dollar. 4. Check the numbers and press Use this program.",
       "Import again when the program in the PLC changes, so the explanations match."]],
     "setup/generator": ["Block generator", "Say what you need; Ki, PLC-Ki's block writer, writes the blocks, TIA imports and compiles them, PLCSIM runs them.", [
       "New blocks: say what you need, pick the TIA project and press Generate. The package name is made from your words if you leave it empty.",
@@ -1085,8 +1086,8 @@ const PK = (() => {
       ${a.text ? `<p class="small" style="margin:0">${esc(a.text)}</p>` : ""}
       <p class="faint small" style="margin:0">The light at the top right shows the PLC connection; click it for what it means. Ask answers questions about the machine on every page.</p>
       <p class="faint small" style="margin:0"><button type="button" class="linkbtn" data-screen>Alarm sound and screen</button>: beep or show a notice when an alarm comes, keep a line screen on.</p>
-      <p class="faint small keys" style="margin:0"><kbd>?</kbd> this help · <kbd>/</kbd> ask a question · <kbd>Esc</kbd> close</p>
-      <div class="row end">${admin && name !== "setup/start" ? `<a class="btn b" href="#/setup/start" data-close>Get started</a>` : ""}<button class="btn" data-close>OK</button></div>`);
+      <p class="faint small keys" style="margin:0"><kbd>Ctrl K</kbd> search · <kbd>?</kbd> this help · <kbd>/</kbd> ask Ki · <kbd>Esc</kbd> close</p>
+      <div class="row end">${admin && name !== "setup/start" ? `<a class="btn b" href="#/setup/start" data-close>Get started</a>` : ""}<button class="btn" data-close>Done</button></div>`);
     h.el.querySelector("[data-screen]").onclick = () => { h.close(); screenSheet(); };
   }
 
