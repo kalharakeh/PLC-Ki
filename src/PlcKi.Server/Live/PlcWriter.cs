@@ -57,6 +57,7 @@ public sealed class PlcWriter
             Logger = _log,
         };
         var client = new S7CommPlusClient(options);
+        S7Connections.Track(client, "change", _log);
         try
         {
             try { client.ConnectAsync().GetAwaiter().GetResult(); }

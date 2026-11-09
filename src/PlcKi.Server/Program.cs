@@ -114,7 +114,13 @@ static async Task<int> RunAppAsync(string[] appArgs, bool probe, JobService jobs
     linkHub.Load(plant.DataDir);
     builder.Services.AddSingleton(linkHub);
     builder.Services.AddSingleton<TiaConnection>();
-    builder.Services.AddSingleton(sp => new ProgramService(opt, model, Resolve));
+    builder.Services.AddSingleton(sp =>
+    {
+        var p = new ProgramService(opt, model, Resolve);
+        // A new program (Refresh from TIA): the names the PLC did not know may exist now, so they are looked up again
+        if (sp.GetRequiredService<IPlcSource>() is S7CommPlusSource s7) p.Reloaded += s7.ForgetProgram;
+        return p;
+    });
     builder.Services.AddSingleton(sp => new PlcKi.Server.Hardware.HardwareService(opt, sp.GetRequiredService<ProgramService>(), Resolve));
     builder.Services.AddSingleton(new StatusEngine(model));
     builder.Services.AddSingleton(new MachineHistory(TimeSpan.FromMinutes(Math.Clamp(opt.HistoryMinutes, 1, 240))));

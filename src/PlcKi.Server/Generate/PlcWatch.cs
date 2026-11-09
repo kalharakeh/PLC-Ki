@@ -68,7 +68,13 @@ public sealed class PlcWatch
             // WriteEnabled stays at its default (false): watching is read-only
             SecurityMode = S7CommPlusSecurityMode.Auto,
         });
-        await client.ConnectAsync(ct);
+        PlcKi.Server.Live.S7Connections.Track(client, "after-download watch", Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance);
+        try { await client.ConnectAsync(ct); }
+        catch
+        {
+            await client.DisposeAsync();
+            throw;
+        }
         return client;
     }
 
@@ -86,7 +92,9 @@ public sealed class PlcWatch
                 alarms[a.CpuAlarmId] = text;
             }
         }
-        catch (Exception) { /* some CPUs have no alarm service; the state is still useful */ }
+        // Some CPUs have no alarm service; the state is still useful. But a failure that faulted the client ends the watch:
+        // the next call on a faulted client would open a second connection and leave this one open (driver behaviour).
+        catch (Exception) when (client.IsConnected) { }
         return new PlcSnapshot(state.OperatingState.ToString(), alarms);
     }
 }
