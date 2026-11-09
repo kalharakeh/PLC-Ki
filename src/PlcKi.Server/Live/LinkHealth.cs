@@ -105,8 +105,8 @@ public sealed class LinkGrace
     /// </summary>
     public static TimeSpan WindowFor(int pollMs)
     {
-        // TODO(human): choose the grace window
-        return TimeSpan.FromSeconds(5);
+        // Three polls, at least 3 s (a reconnect with login, lookups and subscription takes 1-4 s on PLCSIM) and at most 10 s
+        return TimeSpan.FromMilliseconds(Math.Clamp(3 * pollMs, 3000, 10000));
     }
 
     /// <summary>The link dropped (once per drop; later failed reconnects keep the first reason).</summary>
