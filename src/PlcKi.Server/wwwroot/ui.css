@@ -16,7 +16,8 @@
   --warn: #d99a1e; --warn-soft: #fbf0d6; --warn-ink: #7a5508;
   --ok: #5e7f5f; --ok-soft: #e3ebe2; --ok-ink: #2f5a31;
   --steel: #2f4858; --steel-soft: #dfe5ea;
-  --edge: transparent;   /* the outline of a card on the page: none in light mode, a faint line in dark */
+  --edge: transparent;
+  --live-flash: rgba(37, 99, 201, 0.2);   /* a value that just changed */   /* the outline of a card on the page: none in light mode, a faint line in dark */
 
   --ease: cubic-bezier(0.25, 0.1, 0.25, 1);
   --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -53,7 +54,7 @@
     --fault: #e0705f; --fault-soft: #3a1c18; --fault-ink: #f19a8e;
     --warn: #e0a73a; --warn-soft: #3b2d0f; --warn-ink: #f0c56b;
     --ok: #7fa880; --ok-soft: #1d2b1e; --ok-ink: #9fd0a2;
-    --steel-soft: #1f2a31; --edge: var(--line);
+    --steel-soft: #1f2a31; --edge: var(--line); --live-flash: rgba(91, 143, 240, 0.32);
     --shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
     color-scheme: dark;
   }
@@ -66,7 +67,7 @@
     --fault: #e0705f; --fault-soft: #3a1c18; --fault-ink: #f19a8e;
     --warn: #e0a73a; --warn-soft: #3b2d0f; --warn-ink: #f0c56b;
     --ok: #7fa880; --ok-soft: #1d2b1e; --ok-ink: #9fd0a2;
-    --steel-soft: #1f2a31; --edge: var(--line);
+    --steel-soft: #1f2a31; --edge: var(--line); --live-flash: rgba(91, 143, 240, 0.32);
     --shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
     color-scheme: dark;
 }
@@ -697,15 +698,7 @@ html.has-dirty { scroll-padding-bottom: 110px; }
 kbd { font-family: var(--font); font-size: 12px; font-weight: 600; min-width: 20px; display: inline-grid; place-items: center; padding: 1px 6px;
   border: 1px solid var(--line-strong); border-bottom-width: 2px; border-radius: 6px; background: var(--bg-alt); color: var(--ink); }
 
-/* Fingers need bigger targets than a mouse (tablets on the line, phones) */
-@media (pointer: coarse) {
-  .btn.small { min-height: 40px; padding: 8px 16px; }
-  .btn.plain.small { min-height: 40px; }
-  .chips button { min-height: 40px; padding: 8px 14px; font-size: 14px; }
-  .segmented > :is(button, a) { min-height: 38px; padding: 8px 14px; font-size: 14px; }
-  #conn, #cpu-pill { min-height: 34px; }
-  .keys { display: none; }
-}
+/* Fingers need bigger targets than a mouse: see Spacing, Touch (html[data-density="touch"]) at the end */
 @media (max-width: 600px) {
   .toolbar input[type="search"] { max-width: none; flex-basis: 100%; }
   .toolbar .segmented { width: 100%; justify-content: space-between; flex-wrap: nowrap; overflow-x: auto; }
@@ -1161,7 +1154,7 @@ main#page section.hero .alarm-chips { margin-bottom: 14px; }
   .nav-group { height: 1px; margin: 8px 6px; padding: 0; overflow: hidden; font-size: 0; background: var(--frame-line); opacity: 1; }
   .nav-group:first-child { margin-top: 10px; height: 0; }
   .sidebar .count { position: absolute; top: 1px; right: 3px; margin: 0; min-width: 16px; height: 16px; font-size: 10px; padding: 0 4px; }
-  .tb-t, #help-open kbd { display: none; }
+  .tb-t { display: none; }   /* the ? key hint stays: it is how people learn the key (item 37) */
 }
 @media (min-width: 601px) and (max-width: 1100px) {
   .clock, #machine-sub { display: none; }
@@ -1821,3 +1814,50 @@ section.hero.aa .card { background: var(--panel); }
 .eq-open:has(> .eq-top :is(.lv-fault, .lv-bad)), .devlist button:has(:is(.lv-fault, .lv-bad)) { border-left: 4px solid var(--fault); }
 .blocked-now .aa-dev { padding-left: var(--sp-3); }
 .devlist button.on:has(.lv-warn, .lv-fault, .lv-bad) { box-shadow: none; }
+
+/* ---------- Spacing (item 36): html[data-density] is set from Alarm sound and screen ---------- */
+/* Touch: tablets on the line, gloves. "Like this device" picks it on a touch screen. Targets at least 44 px. */
+[data-density="touch"] .btn, [data-density="touch"] .btn.small { min-height: 44px; }
+[data-density="touch"] .btn.small { padding: 10px 18px; }
+[data-density="touch"] .chips button { min-height: 44px; padding: 10px 16px; font-size: 15px; }
+[data-density="touch"] .segmented > :is(button, a) { min-height: 44px; padding: 10px 16px; font-size: 15px; display: inline-flex; align-items: center; }
+[data-density="touch"] .tabs-in > :is(a, button) { min-height: 48px; padding-inline: 16px; }
+[data-density="touch"] .list > li { min-height: 52px; }
+[data-density="touch"] :is(input:not([type=checkbox]):not([type=radio]), select) { min-height: 44px; }
+[data-density="touch"] .check input { width: 24px; height: 24px; }
+[data-density="touch"] .sidebar .links a, [data-density="touch"] .rail-btn { min-height: 44px; }
+[data-density="touch"] .linkbtn { padding: 6px 0; }
+[data-density="touch"] #conn, [data-density="touch"] #cpu-pill { min-height: 36px; }
+[data-density="touch"] .keys { display: none; }
+/* Compact: control-room PCs. Smaller steps and type, so Active alarm fits one 1080p screen. */
+[data-density="compact"] { --sp-4: 12px; --sp-5: 16px; --sp-6: 24px; }
+[data-density="compact"] body { font-size: 15px; }
+[data-density="compact"] section { padding-block: 20px; }
+[data-density="compact"] main#page section.hero { padding-block: 16px 14px; }
+[data-density="compact"] main#page section.hero h1 { font-size: 22px; }
+[data-density="compact"] .aa-main h1 { font-size: 24px; }
+[data-density="compact"] :is(.sub, main#page .sub, .aa-main .sub) { font-size: 14px; margin-bottom: 8px; }
+[data-density="compact"] main#page h2 { font-size: 17px; }
+[data-density="compact"] .card { padding: 12px 14px; }
+[data-density="compact"] :is(.aa-fix .card, .aa-pic, .aa-sw) { padding: 10px 12px; }
+[data-density="compact"] .aa-grid { gap: 16px; }
+[data-density="compact"] .aa-main, [data-density="compact"] .aa-side, [data-density="compact"] .stack { gap: 10px; }
+[data-density="compact"] .grid { gap: 12px; }
+[data-density="compact"] .k b { font-size: 18px; } [data-density="compact"] .kpis-s .k b { font-size: 16px; }
+[data-density="compact"] .list > li { padding: 8px 14px; }
+[data-density="compact"] :is(.fix li, .aa-fix .fix li, .causes li) { font-size: 14.5px; }
+[data-density="compact"] .fix { gap: 6px; }
+[data-density="compact"] .btn { padding: 7px 14px; font-size: 14px; }
+[data-density="compact"] .btn.small { padding: 5px 11px; font-size: 13px; }
+[data-density="compact"] table.tbl :is(th, td) { padding: 6px 10px; }
+[data-density="compact"] .alarm-chips { margin-bottom: 10px; }
+
+/* ---------- Live (item 39) ---------- */
+/* A changed value: a short soft background (PK morph() animates it; nothing with reduced motion) */
+:is(.val, .vb-h b, .vb-plain .k b, .chip, [data-live]) { border-radius: 4px; }
+/* "updated 1 s ago" beside the connection pill; it turns red when the values stop coming */
+.conn-age { font-size: 12px; color: var(--frame-muted, var(--muted)); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.conn-age:empty { display: none; }
+.conn-age.stale { color: var(--fault); font-weight: 600; }
+/* No room in the bar on phones and tablets: there the pill turning "not reachable" after 5 s says it instead */
+@media (max-width: 1100px) { .conn-age { display: none; } }

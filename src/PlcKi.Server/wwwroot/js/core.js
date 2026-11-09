@@ -88,6 +88,7 @@ const PK = (() => {
   const views = {};
   let current = null;       // { name, view, params }
   let lastHtml = "";
+  let tabsIntoView = false;
   // Page building blocks: sections with a centred column on one calm background. The old "alt" and "dark"
   // band colours are dropped here, so every page reads as one work surface with cards (UX review 2).
   const sec = (cls, html) => `<section class="${cls.replace(/\b(alt|dark)\b/g, "").replace(/\s+/g, " ").trim()}"><div class="wrap">${html}</div></section>`;
@@ -102,9 +103,11 @@ const PK = (() => {
     /** Tabs move to another view of the same page: [{ label, href | data, on, count, countCls, sub }].
      *  Links when there is an href, buttons with data-* attributes otherwise. */
     tabs(label, items, { cls = "" } = {}) {
-      return `<nav class="tabs ${cls}" aria-label="${esc(label)}"><div class="tabs-in" role="tablist">${items.map((t) => {
+      // One tab is in the Tab order (the open one); the arrow keys move between them (item 37, see the keydown below)
+      const first = items.some((t) => t.on) ? -1 : 0;
+      return `<nav class="tabs ${cls}" aria-label="${esc(label)}"><div class="tabs-in" role="tablist">${items.map((t, i) => {
         const inner = `<span class="tab-l">${t.label}${t.count ? ` <span class="count ${t.countCls || "warn"}">${t.count}</span>` : ""}</span>${t.sub ? `<span class="tab-sub">${t.sub}</span>` : ""}`;
-        const a = attrs({ role: "tab", class: t.on ? "on" : null, "aria-selected": String(!!t.on), "aria-current": t.on && t.href ? "page" : null, title: t.title, ...t.data });
+        const a = attrs({ role: "tab", class: t.on ? "on" : null, "aria-selected": String(!!t.on), "aria-current": t.on && t.href ? "page" : null, tabindex: t.on || i === first ? "0" : "-1", title: t.title, ...t.data });
         return t.href ? `<a href="${esc(t.href)}" ${a}>${inner}</a>` : `<button type="button" ${a}>${inner}</button>`;
       }).join("")}</div></nav>`;
     },
@@ -225,6 +228,8 @@ const PK = (() => {
     showBack();
     lastHtml = "";
     page.innerHTML = "";
+    quiet(2000);            // a new page: its first values are not "changes"
+    tabsIntoView = true;    // and its open tab is shown, also at the end of a long row on a phone
     if (v.mount) v.mount(page, params);
     else draw();
     page.scrollTop = 0;
@@ -348,7 +353,7 @@ const PK = (() => {
       if (!o) { from.appendChild(n); return; }
       // A different element in the same place (other tag, id or data-* hooks) is swapped, so no handler from the old one stays on it
       if (o.nodeType !== n.nodeType || (o.nodeType === 1 && (o.tagName !== n.tagName || o.id !== n.id || o.type !== n.type || hooks(o) !== hooks(n)))) { from.replaceChild(n, o); return; }
-      if (o.nodeType !== 1) { if (o.nodeValue !== n.nodeValue) o.nodeValue = n.nodeValue; return; }
+      if (o.nodeType !== 1) { if (o.nodeValue !== n.nodeValue) { o.nodeValue = n.nodeValue; if (o.nodeType === 3) changed(o.parentElement); } return; }
       syncAttrs(o, n);
       if (o.dataset.icon && !n.firstChild) return;          // its icon is filled in once
       if (o.tagName === "TEXTAREA") { if (document.activeElement !== o && o.value !== n.value) o.value = n.value; return; }
@@ -359,6 +364,21 @@ const PK = (() => {
       }
     });
     for (let i = news.length; i < olds.length; i++) olds[i].remove();
+  }
+  // ---- live values: a short soft highlight when one changes (item 39) ----
+  // Only measured values (.val in lists, value bars, tag and channel chips, anything marked data-live), and only on a
+  // live update: not right after a click, a key or a page change, when the person changed what is shown themselves.
+  // Timers ("45 s in this step") are not marked, so they do not blink every second. Nothing moves with reduced motion.
+  const LIVE = ".val, .vb-h b, .vb-plain .k b, .chip, [data-live]";
+  let quietUntil = 0;
+  const quiet = (ms = 1500) => { quietUntil = Math.max(quietUntil, Date.now() + ms); };
+  ["pointerdown", "keydown", "input"].forEach((t) => document.addEventListener(t, () => quiet(), true));
+  const lessMotion = window.matchMedia ? matchMedia("(prefers-reduced-motion: reduce)") : { matches: false };
+  function changed(el) {
+    const v = el && el.closest(LIVE);
+    if (!v || !v.animate || lessMotion.matches || Date.now() < quietUntil) return;
+    const c = getComputedStyle(document.documentElement).getPropertyValue("--live-flash").trim();
+    v.animate([{ backgroundColor: c }, { backgroundColor: "transparent" }], { duration: 1400, easing: "ease-out" });
   }
   const hooks = (el) => { let k = ""; for (const a of el.attributes) if (a.name.startsWith("data-")) k += a.name + "=" + a.value + ";"; return k; };
   function syncAttrs(o, n) {
@@ -406,6 +426,13 @@ const PK = (() => {
     morph(page, t.content);
     lastHtml = html;
     fillIcons(page);
+    if (tabsIntoView) {
+      tabsIntoView = false;
+      page.querySelectorAll(".tabs-in").forEach((row) => {
+        const on = row.querySelector(".on");
+        if (on && (on.offsetLeft < row.scrollLeft || on.offsetLeft + on.offsetWidth > row.scrollLeft + row.clientWidth)) row.scrollLeft = on.offsetLeft - 16;
+      });
+    }
     if (current.view.after) current.view.after(page, current.params);
     if (keep) {
       const el = page.querySelector(keep.sel);
@@ -418,6 +445,19 @@ const PK = (() => {
   }
 
   // ---- live polling ----
+  /** "updated 1 s ago" beside the connection pill (item 39): a frozen page counts up, a live one stays at a second or two. */
+  function renderAge() {
+    const el = $("conn-age");
+    if (!el) return;
+    const c = state.status && state.status.connection;
+    if (!state.lastOk || !c || !["connected", "snapshot"].includes(c.state)) { el.textContent = ""; return; }
+    const s = Math.max(1, Math.round((Date.now() - state.lastOk) / 1000));
+    const text = s < 60 ? `updated ${s} s ago` : `updated ${ago(state.lastOk)}`;
+    if (el.textContent !== text) el.textContent = text;
+    el.classList.toggle("stale", s > 5);
+  }
+  setInterval(renderAge, 1000);
+
   function renderConn() {
     const pill = $("conn");
     const c = state.status && state.status.connection;
@@ -540,6 +580,16 @@ const PK = (() => {
   // ---- This screen: alert on new alarms, keep the screen on. Saved per browser. ----
   const screenOpt = (() => { try { return JSON.parse(localStorage.getItem("plcki.screen") || "{}"); } catch { return {}; } })();
   const saveScreenOpt = () => { try { localStorage.setItem("plcki.screen", JSON.stringify(screenOpt)); } catch { /* private window */ } };
+
+  // ---- Spacing (item 36): Compact for control-room PCs, Touch for tablets and gloves. "auto" is Touch on a touch screen. ----
+  const coarse = window.matchMedia ? matchMedia("(pointer: coarse)") : { matches: false, addEventListener() {} };
+  const densityChoice = () => screenOpt.density || "auto";
+  function applyDensity() {
+    const c = densityChoice();
+    document.documentElement.dataset.density = c === "auto" ? (coarse.matches ? "touch" : "normal") : c;
+  }
+  applyDensity();
+  coarse.addEventListener("change", applyDensity);
   let seenAlarms = null;
   function alertNew(al) {
     if (!state.status || Date.now() - state.lastOk > 5000) return;
@@ -658,6 +708,8 @@ const PK = (() => {
         ${row("awake", "Keep this screen on", "For a screen on the line: the display does not go dark while this page is open.", canWake, notHere)}
         <div class="opt-row" style="cursor:default"><span class="grow"><b>Screen colours</b><br><span class="muted small">Dark suits a wall screen in a bright hall.</span></span>
           ${ui.choice("Screen colours", [["auto", "Like this PC"], ["light", "Light"], ["dark", "Dark"]].map(([k, l]) => ({ label: l, on: themeChoice() === k, data: { "data-theme-set": k } })))}</div>
+        <div class="opt-row" style="cursor:default"><span class="grow"><b>Spacing</b><br><span class="muted small">Compact fits more on a control-room PC. Touch makes buttons bigger for a tablet or gloves.</span></span>
+          ${ui.choice("Spacing", [["auto", "Like this device"], ["compact", "Compact"], ["touch", "Touch"]].map(([k, l]) => ({ label: l, on: densityChoice() === k, data: { "data-density-set": k } })))}</div>
       </div>
       <div class="row end"><button class="btn plain" type="button" data-test-beep>Test the beep</button><button class="btn" data-close>Done</button></div>`);
     s.el.addEventListener("change", async (e) => {
@@ -675,6 +727,10 @@ const PK = (() => {
     s.el.querySelectorAll("[data-theme-set]").forEach((b) => b.onclick = () => {
       setTheme(b.dataset.themeSet);
       s.el.querySelectorAll("[data-theme-set]").forEach((x) => { x.classList.toggle("on", x === b); x.setAttribute("aria-pressed", x === b); });
+    });
+    s.el.querySelectorAll("[data-density-set]").forEach((b) => b.onclick = () => {
+      screenOpt.density = b.dataset.densitySet; saveScreenOpt(); applyDensity();
+      s.el.querySelectorAll("[data-density-set]").forEach((x) => { x.classList.toggle("on", x === b); x.setAttribute("aria-pressed", x === b); });
     });
   }
 
@@ -816,6 +872,8 @@ const PK = (() => {
     wrap.innerHTML = `<div class="sheet" role="dialog" aria-modal="true" tabindex="-1">${html}</div>`;
     document.body.append(wrap);
     fillIcons(wrap);
+    // The Esc key was only in Help: the close buttons say it (item 37)
+    if (dismiss) wrap.querySelectorAll("[data-close]").forEach((b) => { if (!b.title) b.title = b.textContent.trim() + " (Esc)"; b.setAttribute("aria-keyshortcuts", "Escape"); });
     const el = wrap.firstElementChild;
     const h = el.querySelector("h2, h1");   // screen readers name the dialog by its heading
     if (h) { h.id = h.id || "sheet-h-" + Math.random().toString(36).slice(2, 8); el.setAttribute("aria-labelledby", h.id); }
@@ -1342,6 +1400,20 @@ const PK = (() => {
     bar.querySelector("[data-discard]").onclick = () => { setDirty(null); route(); };
     bar.querySelector("[data-save-now]").onclick = () => dirty && dirty.save();
     window.addEventListener("beforeunload", (e) => { if (dirty) { e.preventDefault(); e.returnValue = ""; } });
+    // Tabs (item 37): Left and Right move to the next tab, Home and End to the first and last; Enter or Space opens it
+    document.addEventListener("keydown", (e) => {
+      const tab = e.target.closest && e.target.closest('[role="tab"]');
+      if (!tab || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.key === " " && tab.tagName === "A") { e.preventDefault(); tab.click(); return; }
+      if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return;
+      const list = [...tab.closest('[role="tablist"]').querySelectorAll('[role="tab"]')];
+      let i = list.indexOf(tab);
+      i = e.key === "Home" ? 0 : e.key === "End" ? list.length - 1 : (i + (e.key === "ArrowRight" ? 1 : -1) + list.length) % list.length;
+      e.preventDefault();
+      list.forEach((t, k) => { t.tabIndex = k === i ? 0 : -1; });
+      list[i].focus();
+      list[i].scrollIntoView({ block: "nearest", inline: "nearest" });
+    });
     document.addEventListener("keydown", (e) => {
       if (e.ctrlKey || e.metaKey || e.altKey || document.querySelector(".sheet-wrap")) return;
       const t = e.target;
