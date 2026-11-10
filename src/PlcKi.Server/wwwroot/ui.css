@@ -1670,6 +1670,19 @@ section.hero.aa { padding-block: 26px 30px; }
 .aa-after .list li { gap: 10px; }
 .aa-after .list li .faint { display: block; margin-top: 2px; }
 .aa-gone { margin-bottom: 14px; }
+/* Where to measure (review 41): label and PLC tag, address, then rack, slot, module and channel */
+.aa-ms { display: grid; gap: 10px; padding: 16px 18px; }
+.ms-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.ms-list li { display: grid; grid-template-columns: minmax(0, 1.2fr) auto minmax(0, 1.6fr); gap: 4px 12px; align-items: baseline; padding: 8px 0; border-top: 1px solid var(--line); }
+.ms-list li:first-child { border-top: 0; padding-top: 0; }
+.ms-l { display: grid; min-width: 0; }
+.ms-l .small { overflow-wrap: anywhere; }
+.ms-a { font-weight: 600; }
+.ms-w { min-width: 0; overflow-wrap: anywhere; font-size: 14px; }
+@media (max-width: 600px) {
+  .ms-list li { grid-template-columns: minmax(0, 1fr) auto; }
+  .ms-w { grid-column: 1 / -1; }
+}
 .share-text { width: 100%; font: 14px/1.45 var(--mono, ui-monospace, monospace); padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line-strong); background: var(--bg); color: var(--ink); resize: vertical; margin: 10px 0 14px; }
 .aa-dev { display: grid; gap: 8px; }
 .aa-pic, .aa-sw { display: grid; gap: 12px; padding: 16px 18px; }
