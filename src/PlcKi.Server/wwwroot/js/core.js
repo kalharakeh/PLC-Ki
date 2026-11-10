@@ -154,6 +154,66 @@ const PK = (() => {
     empty({ icon: ic = "check", title, text = "", action = "", cls = "" }) {
       return `<div class="empty ${cls}">${icon(ic)}<b>${title}</b>${text ? `<span>${text}</span>` : ""}${action}</div>`;
     },
+    /** The machine's states, the same words and colours on every page: [name, colour]. */
+    states: {
+      running: ["Running", "var(--ok)"], idle: ["Waiting or stopped", "var(--steel)"], down: ["Down (fault)", "var(--fault)"],
+      nolink: ["No PLC connection", "var(--warn)"], off: ["Not watched", "var(--line-strong)"],
+    },
+    /** What a mark on the timeline stands for (EventLog.Mark on the server). Colour only where it is a state. */
+    marks: { alarm: "Alarm came", warn: "Warning came", halt: "Halted", stop: "PLC in STOP", link: "PLC connection lost", write: "Value changed" },
+    /**
+     * The machine's state over a time as one coloured bar (running, waiting, down, no PLC connection, not watched), time
+     * under it, and marks above it for what happened: [{ time, mark, text }]. Each mark is a button with data-tlmk="i";
+     * sel is the index shown as picked. Hours under a day or so; days (Mon 9) over longer times.
+     */
+    timeline({ spans, from, to, marks = [], sel = -1, label = "Machine state over time" }) {
+      const a = new Date(from).getTime(), b = new Date(to).getTime(), len = Math.max(1, b - a);
+      const at = (t) => ((new Date(t).getTime() - a) / len * 100);
+      const hm = (t) => { const d = new Date(t); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+      const days = len > 36 * 3600000;
+      const dayName = (t) => { const d = new Date(t); return `${["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d.getDay()]} ${d.getDate()}`; };
+      const segs = spans.map((s) => {
+        const [name, col] = ui.states[s.state] || [s.state, "var(--muted)"];
+        const w = (new Date(s.to).getTime() - new Date(s.from).getTime()) / len * 100;
+        const tip = `${days ? dayName(s.from) + " " : ""}${hm(s.from)}–${hm(s.to)} ${name}${s.why ? ": " + s.why : ""}`;
+        return `<span class="rp-seg rp-${esc(s.state)}" style="left:${at(s.from).toFixed(3)}%;width:${Math.max(w, 0.15).toFixed(3)}%;background:${col}" title="${esc(tip)}"></span>`;
+      }).join("");
+      const ticks = [];
+      if (days) {
+        const d = new Date(a); d.setHours(24, 0, 0, 0);
+        for (let t = d.getTime(); t < b; t += 86400000) ticks.push(`<span class="rp-tick" style="left:${at(t).toFixed(2)}%">${dayName(t)}</span>`);
+      } else {
+        const first = new Date(a); first.setMinutes(0, 0, 0);
+        const hours = len / 3600000, step = hours > 12 ? 4 : hours > 6 ? 2 : 1;
+        for (let t = first.getTime() + 3600000; t < b; t += 3600000)
+          if (!(new Date(t).getHours() % step)) ticks.push(`<span class="rp-tick" style="left:${at(t).toFixed(2)}%">${hm(t)}</span>`);
+      }
+      // A window that ends now says "now" at its end; a shift still running shows where now is
+      const nowT = Date.now(), endIsNow = Math.abs(b - nowT) < 120000;
+      let endLabel = endIsNow ? "now" : hm(b);
+      if (!endIsNow && nowT > a && nowT < b) {
+        if (at(nowT) > 80) endLabel = "";      // "now" close to the end: the end time would sit on it
+        const x = at(nowT);
+        for (let i = ticks.length - 1; i >= 0; i--) if (Math.abs(+ticks[i].match(/left:([\d.]+)%/)[1] - x) < 6) ticks.splice(i, 1);   // no overlap
+        ticks.push(`<span class="rp-tick rp-now" style="left:${x.toFixed(2)}%">now</span>`);
+      }
+      const mk = marks.map((m, i) => `<button type="button" class="tl-mk tl-${esc(m.mark)}${i === sel ? " on" : ""}" style="left:${at(m.time).toFixed(3)}%" data-tlmk="${i}"
+        title="${esc(`${days ? dayName(m.time) + " " : ""}${clock(m.time)} ${m.text}`)}" aria-label="${esc(`${clock(m.time)} ${ui.marks[m.mark] || m.mark}: ${m.text}`)}"></button>`).join("");
+      return `<div class="tl">${marks.length ? `<div class="tl-marks">${mk}</div>` : ""}<div class="rp-bar" role="img" aria-label="${esc(label)}">${segs}</div>
+        <div class="rp-ticks"><span>${days ? dayName(a) : hm(a)}</span>${ticks.join("")}${endLabel ? `<span class="rp-end">${endLabel}</span>` : ""}</div></div>`;
+    },
+    /** Each kind of machine event in plain words (the same names as the shift log's spreadsheet). */
+    kinds: { alarm: "Alarm", step: "Step", halt: "Halt", blocked: "Blocked", output: "Output", state: "Device state", cpu: "PLC mode",
+      link: "PLC connection", write: "Value changed", monitor: "PLC-Ki" },
+    /** Machine events as lines: time, kind, what happened (an alarm id links to its page). day: show the day too.
+     *  hit: a time (ms); lines of that moment are marked. */
+    events(list, { cls = "", day = false, hit = null } = {}) {
+      const t = (x) => day ? date(x) : clock(x);
+      const text = (e) => e.alarm && e.text.startsWith(e.alarm)
+        ? `<a href="#/alarms/${encodeURIComponent(e.alarm)}">${esc(e.alarm)}</a>${esc(e.text.slice(e.alarm.length))}` : esc(e.text);
+      return `<ul class="tl-list ${cls}">${list.map((e) => `<li${hit != null && new Date(e.time).getTime() === hit ? ` class="hit"` : ""}><span class="tl-dot${e.mark ? " tl-" + esc(e.mark) : ""}"></span><time datetime="${esc(e.time)}">${t(e.time)}</time>
+        <span class="tl-k">${esc(ui.kinds[e.kind] || e.kind)}</span><span class="tl-t">${text(e)}</span></li>`).join("")}</ul>`;
+    },
     /** Search, filters and actions over a list: { search: { id, placeholder, value, label }, left, right }. */
     toolbar({ search, left = "", right = "", cls = "" }) {
       const s = search ? `<input type="search" id="${esc(search.id)}" placeholder="${esc(search.placeholder)}" aria-label="${esc(search.label || search.placeholder)}" value="${esc(search.value || "")}">` : "";

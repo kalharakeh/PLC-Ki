@@ -61,20 +61,18 @@ public sealed class EventLog
     public List<MachineEvent> Read(DateTimeOffset from, DateTimeOffset to, IReadOnlySet<string>? kinds = null)
     {
         bool Want(MachineEvent e) => e.Time >= from && e.Time <= to && (kinds == null || kinds.Contains(e.Kind));
-        lock (_lock)
+        if (_mem != null) lock (_lock) return _mem.Where(Want).OrderBy(e => e.Time).ToList();
+        // The files are read without the lock, so a long read never holds up the polling loop's writes
+        bool rare = kinds == null || kinds.Any(k => !Busy.Contains(k));
+        bool busy = kinds == null || kinds.Any(Busy.Contains);
+        var list = new List<MachineEvent>();
+        for (var day = from.ToLocalTime().Date; day <= to.ToLocalTime().Date; day = day.AddDays(1))
         {
-            if (_mem != null) return _mem.Where(Want).OrderBy(e => e.Time).ToList();
-            bool rare = kinds == null || kinds.Any(k => !Busy.Contains(k));
-            bool busy = kinds == null || kinds.Any(Busy.Contains);
-            var list = new List<MachineEvent>();
-            for (var day = from.ToLocalTime().Date; day <= to.ToLocalTime().Date; day = day.AddDays(1))
-            {
-                if (rare) ReadFile(FileFor(day, false), list, Want);
-                if (busy) ReadFile(FileFor(day, true), list, Want);
-            }
-            // Stable: events of the same moment keep the order they were written in
-            return list.OrderBy(e => e.Time).ToList();
+            if (rare) ReadFile(FileFor(day, false), list, Want);
+            if (busy) ReadFile(FileFor(day, true), list, Want);
         }
+        // Stable: events of the same moment keep the order they were written in
+        return list.OrderBy(e => e.Time).ToList();
     }
 
     private static void ReadFile(string f, List<MachineEvent> into, Func<MachineEvent, bool> want)
@@ -82,7 +80,10 @@ public sealed class EventLog
         if (!File.Exists(f)) return;
         try
         {
-            foreach (var line in File.ReadLines(f))
+            // Shared with the writer: an append going on now must not fail (a half-written last line is skipped below)
+            using var fs = new FileStream(f, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            using var rd = new StreamReader(fs);
+            while (rd.ReadLine() is { } line)
             {
                 if (string.IsNullOrWhiteSpace(line)) continue;
                 try { if (JsonSerializer.Deserialize<Line>(line, Json)?.ToEvent() is { } e && want(e)) into.Add(e); }
@@ -105,6 +106,27 @@ public sealed class EventLog
             .SelectMany(ProductionLog.DayFiles)
             .OrderBy(d => d.Day).ToList();
     }
+
+    /// <summary>
+    /// How an event shows as a mark on the timeline strip: "alarm" (a fault came), "warn" (a warning came), "halt",
+    /// "stop" (the PLC left RUN), "link" (the connection was lost), "write" (a value changed from PLC-Ki).
+    /// Null: no mark (an alarm went, a step, an output...): those are in the shift log only.
+    /// </summary>
+    public static string? Mark(MachineEvent e) => e.Kind switch
+    {
+        // What was already so when PLC-Ki started watching did not happen then: every restart would add a mark
+        _ when e.Text.Contains("when watching started", StringComparison.Ordinal) => null,
+        "alarm" when e.Text.Contains(" went:", StringComparison.Ordinal) => null,
+        "alarm" => e.Text.Contains("(WARNING)", StringComparison.OrdinalIgnoreCase) ? "warn" : "alarm",
+        "halt" when e.Text.Contains(" halted in step", StringComparison.Ordinal) => "halt",
+        "cpu" when !e.Text.Contains("back in RUN", StringComparison.Ordinal) => "stop",
+        "link" when e.Text.StartsWith("Lost", StringComparison.Ordinal) || e.Text.StartsWith("The PLC connection dropped", StringComparison.Ordinal) => "link",
+        "write" => "write",
+        _ => null,
+    };
+
+    /// <summary>The kinds that can carry a mark (read without the busy step files).</summary>
+    public static readonly IReadOnlySet<string> Marked = new HashSet<string> { "alarm", "halt", "cpu", "link", "write" };
 
     /// <summary>One line in a day file: short names, empty fields left out.</summary>
     private sealed record Line(

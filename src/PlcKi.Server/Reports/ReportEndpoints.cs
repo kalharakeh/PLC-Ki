@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using PlcKi.Core.Model;
 using PlcKi.Core.Reports;
+using PlcKi.Core.Status;
 using PlcKi.Server.Live;
 
 namespace PlcKi.Server.Reports;
@@ -84,6 +85,32 @@ public static class ReportEndpoints
             return Results.Ok(r.Builder.Shift(pick.Value.Day, pick.Value.Index, now));
         });
 
+        // The timeline strip on Plant: the machine's states, the marked events (alarms, halts, STOP, link, values changed)
+        // and the latest few events of any kind. window: shift (this shift), 24h or 7d.
+        app.MapGet("/api/timeline", (ReportService r, EventLog log, string? window) =>
+        {
+            var now = DateTimeOffset.Now;
+            var w = TimelineWindow(r.Settings, window, now);
+            var end = w.To < now ? w.To : now;
+            var cfg = r.Settings;
+            // Each mark says its shift, so a click opens that shift's log at that time
+            var marks = log.Read(w.From, end, EventLog.Marked)
+                .Select(e => (e, mark: EventLog.Mark(e))).Where(x => x.mark != null).TakeLast(1500)
+                .Select(x => (x.e, x.mark, sh: cfg.Shifts.Count > 0 ? ReportBuilder.ShiftAt(cfg, x.e.Time) : null))
+                .Select(x => new { time = x.e.Time, mark = x.mark, kind = x.e.Kind, text = x.e.Text, alarm = x.e.Alarm,
+                    shift = x.sh is { } s ? new { day = s.Day.ToString("yyyy-MM-dd"), index = s.Index } : null });
+            // The latest lines: the last hour is enough most of the time (steps are many), else the last day
+            var recent = log.Read(now.AddHours(-1), now);
+            if (recent.Count < 6) recent = log.Read(now.AddHours(-24), now);
+            var latest = recent.TakeLast(6).Reverse().Select(EventEndpoints.Dto);
+            return Results.Ok(new
+            {
+                window = w.Window, label = w.Label, from = w.From, to = w.To, now,
+                shift = w.Day is { } d ? new { day = d.ToString("yyyy-MM-dd"), index = w.Index } : null,
+                spans = r.Builder.States(w.From, w.To, now), marks, recent = latest,
+            });
+        });
+
         app.MapGet("/api/reports/faults", (ReportService r, int? days) => Results.Ok(r.Builder.Faults(days ?? 7, DateTimeOffset.Now)));
 
         // Spreadsheet downloads (semicolons and a BOM, so Excel opens them right in German and English Windows)
@@ -157,6 +184,26 @@ public static class ReportEndpoints
         if (day != null && DateOnly.TryParseExact(day, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var d))
             return (d, Math.Clamp(shift ?? 0, 0, s.Shifts.Count - 1));
         return ReportBuilder.ShiftAt(s, now) ?? ReportBuilder.LastShift(s, now) ?? (DateOnly.FromDateTime(now.LocalDateTime), 0);
+    }
+
+    /// <summary>
+    /// The strip's window: "shift" is the shift running now (the last 8 hours when no shift covers now or none is set up),
+    /// "24h" and "7d" end now.
+    /// </summary>
+    public static (string Window, string Label, DateTimeOffset From, DateTimeOffset To, DateOnly? Day, int Index) TimelineWindow(
+        ReportSettings cfg, string? window, DateTimeOffset now)
+    {
+        switch (window)
+        {
+            case "24h": return ("24h", "Last 24 hours", now.AddHours(-24), now, null, 0);
+            case "7d": return ("7d", "Last 7 days", now.AddDays(-7), now, null, 0);
+        }
+        if (cfg.Shifts.Count > 0 && ReportBuilder.ShiftAt(cfg, now) is { } at)
+        {
+            var (from, to) = ReportBuilder.Window(at.Day, cfg.Shifts[at.Index]);
+            return ("shift", cfg.Shifts[at.Index].Name + " shift", from, to, at.Day, at.Index);
+        }
+        return ("shift", "Last 8 hours", now.AddHours(-8), now, null, 0);
     }
 
     static string? Blank(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();

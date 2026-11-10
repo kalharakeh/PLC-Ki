@@ -40,7 +40,7 @@ public static class EventEndpoints
 
     public static object Dto(MachineEvent e) => new
     {
-        time = e.Time, kind = e.Kind, text = e.Text, alarm = e.Alarm, seq = e.Seq, step = e.Step, device = e.Device, tag = e.Tag,
+        time = e.Time, kind = e.Kind, text = e.Text, mark = EventLog.Mark(e), alarm = e.Alarm, seq = e.Seq, step = e.Step, device = e.Device, tag = e.Tag,
     };
 
     public static WebApplication MapEvents(this WebApplication app)

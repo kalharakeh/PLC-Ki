@@ -1525,6 +1525,37 @@ section.rp { padding-top: 8px; }
 .rp-ticks > span { position: absolute; top: 0; transform: translateX(-50%); white-space: nowrap; }
 .rp-ticks > span:first-child { transform: none; left: 0; }
 .rp-ticks > .rp-end { right: 0; transform: none; }
+.rp-ticks > .rp-now { color: var(--ink); font-weight: 600; }
+/* Timeline strip (PK.ui.timeline): marks above the state bar for what happened (review 3, item 40) */
+.tl { position: relative; }
+.tl-marks { position: relative; height: 18px; margin-top: var(--sp-2); }
+.tl-mk { position: absolute; bottom: 0; width: 12px; height: 16px; margin-left: -6px; padding: 0; border: 0; background: none; cursor: pointer; }
+.tl-mk::before { content: ""; position: absolute; left: calc(50% - 4px); bottom: 2px; border: 4px solid transparent; border-top: 9px solid var(--muted); border-bottom: 0; }
+.tl-mk.tl-alarm::before, .tl-mk.tl-stop::before { border-top-color: var(--fault); }
+.tl-mk.tl-warn::before, .tl-mk.tl-halt::before, .tl-mk.tl-link::before { border-top-color: var(--warn); }
+.tl-mk.on::after { content: ""; position: absolute; left: calc(50% - 1px); bottom: -40px; height: 38px; border-left: 2px solid var(--ink); }
+@media (pointer: coarse) { .tl-marks { height: 26px; } .tl-mk { width: 24px; height: 26px; margin-left: -12px; } }
+.tl-mk:focus-visible { outline: 2px solid var(--focus, var(--steel)); outline-offset: 1px; border-radius: 3px; }
+.tl-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--line-strong); flex: none; }
+.tl-dot.tl-alarm, .tl-dot.tl-stop { background: var(--fault); }
+.tl-dot.tl-warn, .tl-dot.tl-halt, .tl-dot.tl-link { background: var(--warn); }
+.tl-dot.tl-write { background: var(--muted); }
+.tl-sel { margin: var(--sp-2) 0 0; font-size: 14px; }
+.tl-sel time, .tl-list time { font-variant-numeric: tabular-nums; color: var(--muted); white-space: nowrap; }
+.tl-list { list-style: none; margin: var(--sp-3) 0 0; padding: 0; }
+.tl-list li { display: flex; gap: var(--sp-2); align-items: baseline; padding: 6px 0; border-top: 1px solid var(--line); font-size: 14px; line-height: 1.4; }
+.tl-list li:first-child { border-top: 0; }
+.tl-list li.hit { background: var(--accent-soft); border-radius: 8px; padding-left: 8px; padding-right: 8px; }
+.tl-list .tl-dot { align-self: flex-start; margin-top: 6px; }
+.tl-list .tl-k { color: var(--muted); font-size: 12.5px; white-space: nowrap; min-width: 92px; }
+.tl-list .tl-t { min-width: 0; overflow-wrap: anywhere; }
+.tl-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2) var(--sp-3); }
+.tl-head h3 { margin: 0; }
+@media (max-width: 600px) {
+  .tl-recent li:nth-child(n+4) { display: none; }
+  .tl-marks .tl-write, .legend .lg-write { display: none; }
+  .tl-list .tl-k { display: none; }
+}
 .rp-loss td, .rp-faults td, .rp-shifts td { font-size: 14.5px; }
 .tbl .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .rp-meter { height: 5px; border-radius: 3px; background: var(--bg-alt); margin-top: 6px; overflow: hidden; }

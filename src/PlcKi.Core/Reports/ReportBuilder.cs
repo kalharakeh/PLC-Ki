@@ -212,6 +212,10 @@ public sealed class ReportBuilder
         return new MaintResult(stops, stops > 0 ? Math.Round(t.Down / stops, 1) : null, stops > 0 ? Math.Round(t.Running / stops, 1) : null);
     }
 
+    /// <summary>The machine's states over any window (the timeline strip on Plant), from the production log.</summary>
+    public List<StateSpan> States(DateTimeOffset from, DateTimeOffset to, DateTimeOffset now) =>
+        Timeline(_log.Records(from, to < now ? to : now), from, to, now);
+
     // ---------------------------------------------------------------- reports
 
     public ShiftReport Shift(DateOnly day, int index, DateTimeOffset now)
