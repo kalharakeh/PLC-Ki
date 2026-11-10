@@ -1488,7 +1488,7 @@ const PK = (() => {
     // Public view without a login: Ask needs a login (it spends Claude credit), so its buttons are hidden
     document.documentElement.classList.toggle("anon", !state.user);
     if (can("plcsim")) setInterval(loadChanges, 60000);   // "changes allowed" can change without a restart
-    const who = state.user ? state.user.name + (admin ? " · administrator" : " · operator") : "Not logged in";
+    const who = state.user ? state.user.name + " · " + roleTitle(state.user.role).toLowerCase() : "Not logged in";
     document.querySelectorAll(".who").forEach((el) => { el.textContent = who; });
     document.querySelectorAll(".act-logout").forEach((el) => { el.textContent = state.user ? "Log out" : "Log in"; });
     const acts = {
