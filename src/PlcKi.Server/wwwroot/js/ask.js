@@ -163,6 +163,7 @@
     chips.classList.add("hidden");
   }
   fetch("/api/ask").then((r) => r.json()).then(showOff).catch(() => {});
+  document.addEventListener("pk:lang", () => { if (PK.state.ask) showOff(PK.state.ask); });
   restore();
 
   window.PKAsk = { open, close };

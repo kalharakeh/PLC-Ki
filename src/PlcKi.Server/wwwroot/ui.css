@@ -679,6 +679,12 @@ html.has-back #page > section:first-child { padding-top: 18px; }
 .dirty-bar.on { transform: translateX(-50%); opacity: 1; pointer-events: auto; }
 .dirty-bar .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--warn); flex: none; }
 .dirty-bar > span:nth-child(2) { margin-right: 6px; white-space: nowrap; }
+/* A longer word for it (German) must not push Save off a phone screen */
+@media (max-width: 600px) {
+  .dirty-bar { gap: 8px; padding-left: 14px; font-size: 14px; border-radius: 26px; }
+  .dirty-bar > span:nth-child(2) { white-space: normal; margin-right: 0; min-width: 0; line-height: 1.2; }
+  .dirty-bar .btn { flex: none; }
+}
 html.has-dirty { scroll-padding-bottom: 110px; }
 .has-dirty .toast { bottom: 88px; }
 .has-dirty footer.foot { padding-bottom: 96px; }

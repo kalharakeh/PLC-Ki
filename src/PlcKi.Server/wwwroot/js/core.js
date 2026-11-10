@@ -1646,7 +1646,7 @@ const PK = (() => {
       ${a.text ? `<p class="m-0 small">${esc(a.text)}</p>` : ""}
       <p class="m-0 faint small">${PK.t("The light at the top right shows the PLC connection; click it for what it means. Ask answers questions about the machine on every page.")}</p>
       <p class="m-0 faint small"><button type="button" class="linkbtn" data-screen>${PK.t("Alarm sound and screen")}</button>: ${PK.t("beep or show a notice when an alarm comes, keep a line screen on.")}</p>
-      <p class="m-0 faint small keys"><kbd>Ctrl K</kbd> ${PK.t("search")} · <kbd>?</kbd> ${PK.t("this help")} · <kbd>/</kbd> ${PK.t("ask Ki")} · <kbd>Esc</kbd> ${PK.t("close")}</p>
+      <p class="m-0 faint small keys"><kbd>${PK.t("Ctrl K")}</kbd> ${PK.t("search")} · <kbd>?</kbd> ${PK.t("this help")} · <kbd>/</kbd> ${PK.t("ask Ki")} · <kbd>Esc</kbd> ${PK.t("close")}</p>
       <div class="row end">${admin && name !== "setup/start" ? `<a class="btn b" href="#/setup/start" data-close>${PK.t("Get started")}</a>` : ""}<button class="btn" data-close>${PK.t("Done")}</button></div>`);
     h.el.querySelector("[data-screen]").onclick = () => { h.close(); screenSheet(); };
   }
@@ -1772,6 +1772,7 @@ const PK = (() => {
     try { state.info = await api("GET", "/api/info"); } catch { /* PLC-Ki not answering: English */ }
     I18N.setLang(prefs.get("language", "") || (state.info && state.info.language) || (state.user ? "" : st0Language) || "en");
     I18N.dom(document.body);
+    document.dispatchEvent(new Event("pk:lang"));     // what a script drew before the language was known draws itself again
     // "Ask Ki" reads "Ki fragen" in German; the narrow bar keeps just "Ki"
     if (I18N.lang === "de") $("ask-open").innerHTML = `Ki<span class="ask-ki"> fragen</span><kbd>/</kbd>`;
     readScreenOpt();

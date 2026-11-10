@@ -30,13 +30,16 @@ const I18N = (() => {
 
   /** The whole text: an exact German entry, else the first rule that matches; null when there is none. */
   function whole(m, depth = 0) {
-    if (own(de, m)) return de[m];
-    for (const [re, to] of rules) if (re.test(m)) return m.replace(re, (...a) => to.replace(/\$(T?)(\d)/g, (_, tr, i) => (tr ? inner(a[+i], depth) : a[+i])));
+    // A single word inside a longer message ("Open." after "Valve XV101:") is the program's own state word, not a menu word:
+    // only the rules may translate it there
+    if (own(de, m) && (depth === 0 || /\s/.test(m))) return de[m];
+    for (const [re, to] of rules) if (re.test(m)) return m.replace(re, (...a) => to.replace(/\$(T?)(\d)/g, (_, tr, i) => (tr ? inner(a[+i], depth) : a[+i] ?? "")));
     return null;
   }
   /** $T1 in a rule: the text caught by group 1, translated on its own (clauses joined with "), " are taken apart first). */
   function inner(text, depth) {
-    if (depth > 3 || text == null) return text;
+    if (text == null) return "";
+    if (depth > 3) return text;
     const bits = String(text).split(/\), (?=[a-z])/);
     return bits.map((b, i) => { const s = i < bits.length - 1 ? b + ")" : b; const r = parts(s, depth + 1); return r != null ? r : s; }).join("; ");
   }

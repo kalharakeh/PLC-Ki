@@ -2733,6 +2733,7 @@ I18N.addRules([
   [/^(\S+) blipped: on for only (\d+) ms, too short for the normal reads: (.+)\.$/, "$1 blitzte kurz auf: nur $2 ms aktiv, zu kurz für die normalen Lesezyklen: $3."],
   [/^Blocked for (\d+) min \(needs (.+?), now (.+)\) while the steps changed (\d+) times\.$/, "$1 min blockiert (braucht $2, jetzt $3), während die Schritte $4-mal wechselten."],
   [/^Blocked for (\d+) min \(needs (.+)\) while the steps changed (\d+) times\.$/, "$1 min blockiert (braucht $2), während die Schritte $3-mal wechselten."],
+  [/^Halted$/, "Angehalten"],
   // ---- core
   [/^Request failed \((\d+)\)\.$/, "Anfrage fehlgeschlagen ($1)."],
   [/^Block (.+) is not in the (?:loaded program|program export)\.$/, "Baustein $1 ist nicht im geladenen Programm."],
