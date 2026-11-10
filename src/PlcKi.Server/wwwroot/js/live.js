@@ -220,10 +220,50 @@
       ${chain}
       ${e.blockedBy ? `<div class="eq-why">${icon("warn")}<span>${esc(e.blockedBy.charAt(0).toUpperCase() + e.blockedBy.slice(1))}</span></div>` : ""}
       ${vals}
+      ${full ? measureHtml(deviceSignals(e)) : ""}
       ${full && e.permits.length ? `<div><h3 class="mt-2">Interlocks</h3><ul class="conds">${e.permits.map(cond).join("")}</ul></div>` : ""}
       ${full && e.explanation && !e.blockedBy ? `<p class="m-0 muted small">${esc(e.explanation)}</p>` : ""}
       ${full ? `<div class="row">${logicLink(e)}${modelFix("equipment:" + e.id)}</div>` : `<span class="eq-more" aria-hidden="true">Details ›</span>`}`;
   }
+  // ---------- Where to measure (review 41) ----------
+  // Each signal's input or output, rack, slot and channel, from the tag table and the hardware read from TIA (the PLC
+  // page's Racks and I/O). Looked up once per signal in the background (PKProgram.whereToMeasure); the page redraws.
+  const MS = { res: new Map(), busy: new Set() };
+  for (const ev of ["pk:program-changed", "pk:hardware-changed"]) window.addEventListener(ev, () => MS.res.clear());
+  function measureOf(symbol) {
+    if (MS.res.has(symbol)) return MS.res.get(symbol);
+    if (window.PKProgram && PKProgram.whereToMeasure && !MS.busy.has(symbol)) {
+      MS.busy.add(symbol);
+      PKProgram.whereToMeasure(symbol).then((r) => { MS.res.set(symbol, r || null); MS.busy.delete(symbol); PK.draw(); });
+    }
+    return undefined;
+  }
+  /** A device's own signals: its command (the output) and its values (open switch, speed, drive ready). */
+  function deviceSignals(e) {
+    const def = state.model && (state.model.equipment || []).find((d) => d.id === e.id);
+    return def ? [def.command, ...(def.values || [])].filter(Boolean) : [];
+  }
+  /** "XV101 open switch · %I0.2 · PLC_1 slot 2, DI 32x24VDC HF, channel 2 ›" for each signal that reaches an input or output. */
+  function measureHtml(ids, { card = false } = {}) {
+    const tags = (state.model && state.model.tags) || [];
+    const rows = [];
+    let noModule = false;
+    for (const id of [...new Set(ids)]) {
+      const t = tags.find((x) => x.id === id);
+      const r = t ? measureOf(t.symbol) : null;
+      if (!r) continue;
+      if (!r.ch) noModule = true;
+      const c = r.ch;
+      rows.push(`<li><span class="ms-l">${esc(t.label || t.id)}<span class="faint small">${esc(r.tag)}${r.comment ? " · " + esc(r.comment) : ""}</span></span>
+        <span class="mono ms-a">${esc(r.address)}</span>
+        ${c ? `<a class="ms-w" href="${esc(c.href)}">${esc(c.station)}${c.slot != null ? ", slot " + esc(c.slot) : ""}${c.module ? " · " + esc(c.module) : ""}${c.channel != null ? " · channel " + esc(c.channel) : ""} ›</a>` : `<span class="ms-w faint small">Module not known</span>`}</li>`);
+    }
+    if (!rows.length) return "";
+    const inner = `<h3 class="${card ? "m-0" : "mt-2"}">Where to measure</h3><ul class="ms-list">${rows.join("")}</ul>
+      ${noModule ? `<p class="m-0 faint small">The module and channel show once the hardware is read from TIA (PLC page, Racks and I/O).</p>` : ""}`;
+    return card ? `<div class="card aa-ms">${inner}</div>` : `<div class="ms">${inner}</div>`;
+  }
+
   /** "Show in the program" for a device: its block and instance from the model's location ("FB_VFD, instance "Station".M201"). */
   function logicLink(e) {
     const l = parseLoc(e.location);
@@ -434,6 +474,7 @@
       const side = `${eqs.length && V ? `<div class="card aa-pic"><div class="row"><h3 class="m-0">Where in the machine</h3><span class="spacer"></span><a class="small" href="#/plant">Plant ›</a></div>
             ${V.plantMap(V.around(eqs.map((e) => e.id)), null, eqs.map((e) => e.id))}
             ${vals.length ? `<div class="kv">${vals.map((v) => `<span>${esc(v.label)}</span><span class="val">${esc(v.text)}</span>`).join("")}</div>` : ""}</div>` : ""}
+          ${measureHtml([...failed.flatMap((c) => (c.values || []).map((v) => v.id)), ...eqs.flatMap(deviceSignals)], { card: true })}
           <div class="card aa-sw"><h3>Where it is set</h3>
             ${where.block ? `<div class="path">${(path || [{ block: where.block }]).map((p) => `<span>${esc(p.block)}${p.instance ? " " + esc(p.instance) : ""}</span>`).join("<i>›</i>")}${where.network ? `<i>›</i><span>Network ${esc(where.network)}</span>` : ""}${where.symbol ? `<i>›</i><span>${esc(where.symbol)}</span>` : ""}</div>` : `<p class="m-0 muted small">${esc(a.location || "No place in the program is known for this alarm.")}</p>`}
             ${rung ? `<div class="aa-rung">${rung}</div><p class="m-0 faint small">${rec ? "Values just before the alarm came, from the recording. ? means not recorded." : "Values now. They can look normal again after a halt."}</p>` : ""}

@@ -1311,7 +1311,8 @@
 
   // The tag tables and the hardware, read once, for "an input from the field at %I0.3, on this module"
   let ioData = null;
-  window.addEventListener("pk:program-changed", () => { ioData = null; });
+  // A new program or a new hardware read: the addresses and channels may be different
+  for (const ev of ["pk:program-changed", "pk:hardware-changed"]) window.addEventListener(ev, () => { ioData = null; });
   async function ioOf(sym) {
     ioData ||= Promise.all([PK.api("GET", "/api/program/tags").catch(() => null), PK.api("GET", "/api/hardware").catch(() => null)]);
     const [tags, hw] = await ioData;
@@ -1323,9 +1324,41 @@
     for (const st of (hw && hw.available && hw.stations) || []) for (const mo of st.modules || []) for (const c of mo.channels || []) {
       if (ch) break;
       const same = PK.norm(c.symbol) === PK.norm(sym) || (c.tag && PK.norm('"' + c.tag + '"') === PK.norm(sym)) || String(c.address || "").replace(/\s/g, "").toUpperCase() === addr;
-      if (same) ch = { href: `#/plc/racks/${encodeURIComponent(st.name)}${mo.slot != null ? "/" + encodeURIComponent(mo.slot) : ""}`, where: `${st.name} · ${mo.title || mo.name || "slot " + mo.slot}` };
+      if (same) ch = { href: `#/plc/racks/${encodeURIComponent(st.name)}${mo.slot != null ? "/" + encodeURIComponent(mo.slot) : ""}`, where: `${st.name} · ${mo.title || mo.name || "slot " + mo.slot}`,
+        station: st.name, slot: mo.slot, module: mo.title || mo.name || null, channel: c.n };
     }
-    return { address: addr, input: addr.startsWith("%I"), ch };
+    return { address: addr, input: addr.startsWith("%I"), ch, comment: tag.comment || null };
+  }
+
+  /**
+   * Where an electrician measures a signal (review 41): its input or output address, rack, slot, module and channel.
+   * A model signal is often a data block value the program copies from an input ("DB_IO".ZSO := "DI_ZSO";) or into an
+   * output ("DQ_Y101" := "DB_IO".OpenCmd;): such a plain copy is followed one step. Scaled or combined values are not.
+   * Resolves to { address, input, ch, comment, tag (the PLC tag), via (the block with the copy) } or null.
+   */
+  const measured = new Map();
+  for (const ev of ["pk:program-changed", "pk:hardware-changed"]) window.addEventListener(ev, () => measured.clear());
+  function whereToMeasure(sym) {
+    const key = PK.norm(sym);
+    if (!measured.has(key)) measured.set(key, findMeasure(sym).catch(() => null));
+    return measured.get(key);
+  }
+  async function findMeasure(sym) {
+    const direct = await ioOf(sym);
+    if (direct) return { ...direct, tag: sym, via: null };
+    let r = null;
+    try { r = await PK.api("GET", "/api/program/search?q=" + encodeURIComponent(String(sym).replace(/^"([^"]+)"$/, "$1"))); } catch { return null; }
+    const plain = /^"[^"]+"$|^[A-Za-z_]\w*$/;     // a whole PLC tag, nothing computed
+    for (const x of (r && r.results) || []) for (const l of x.lines || []) {
+      const m = /^\s*(.+?)\s*:=\s*(.+?)\s*;\s*(\/\/.*)?$/.exec(l.text || "");
+      if (!m) continue;
+      const [lhs, rhs] = [m[1].trim(), m[2].trim()];
+      const other = PK.norm(lhs) === PK.norm(sym) ? rhs : PK.norm(rhs) === PK.norm(sym) ? lhs : null;
+      if (!other || !plain.test(other) || other.startsWith("#")) continue;
+      const io = await ioOf(other.startsWith('"') ? other : `"${other}"`);
+      if (io) return { ...io, tag: other.replace(/^"|"$/g, ""), via: x.block };
+    }
+    return null;
   }
 
   /** What sets a global signal, as sheet paragraphs; { here } when the only writer is the block on screen. */
@@ -1441,7 +1474,7 @@
     try { return netHtml(net, resolve || resolver(inst, b, want), op, null, null, []); }
     finally { plainDraw = false; drawBlock = was; }
   }
-  window.PKProgram = { rungFor, writersOf, whyNotStick, copiesOverwritten };
+  window.PKProgram = { rungFor, writersOf, whyNotStick, copiesOverwritten, whereToMeasure };
 
   PK.view("program", program());
   PK.view("logic", alias("rungs"));
