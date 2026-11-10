@@ -310,7 +310,7 @@ public sealed class PollingService : BackgroundService
                 _log.LogInformation("Captured the seconds around alarm {Alarm} ({Tracks} tags changed).", c.AlarmId, c.Tracks.Count);
                 if (c.Blip)
                     _state.History.Note(new MachineEvent(c.Time, "alarm",
-                        $"{c.AlarmId} blipped: on for only {c.OnMs:0} ms, too short for the normal reads: {c.AlarmText}."));
+                        $"{c.AlarmId} blipped: on for only {c.OnMs:0} ms, too short for the normal reads: {c.AlarmText}.") { Alarm = c.AlarmId });
             }
         }
         catch (Exception ex)

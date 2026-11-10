@@ -109,7 +109,7 @@ public static class WriteEndpoints
                     Address: p.Address, Rule: p.Rule));
                 history.Note(new MachineEvent(DateTimeOffset.Now, "write",
                     $"{user} changed {symbol} from {r.Before} to {r.Written} on {where}" + (r.Held ? "." : $", but the program set it back to {r.After}.")
-                    + (reason != null ? $" Reason: {reason}" : "")));
+                    + (reason != null ? $" Reason: {reason}" : "")) { Tag = symbol });
                 return Results.Ok(new
                 {
                     symbol,

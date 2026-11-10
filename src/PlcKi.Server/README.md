@@ -138,7 +138,7 @@ answer ("Looked at: device M201 · history of Level"):
 | `get_live_status` | Everything on the status page, as data |
 | `read_tags` | Current values by tag id or a search ("temperature") |
 | `get_tag_history` | How values changed in the last minutes, with min/max/average |
-| `get_recent_events` | Step changes, alarms coming and going, halts, blocked devices, link changes |
+| `get_recent_events` | Step changes, alarms coming and going, halts, blocked devices, link changes; from the event day files, so across restarts, or for a given from/to (a shift) |
 | `get_sequence` | Every step: what it does, its limit, the conditions to move on |
 | `get_equipment` | A device's interlocks and states, as programmed, plus its live state |
 | `get_alarm` | An alarm's location, condition, causes and fix, and whether it is on |
@@ -227,6 +227,7 @@ generator, without commands.
 | `Ask/AskService.cs`, `Ask/SystemPrompt.cs` | The question loop with Claude (official `Anthropic` NuGet package) and its instructions |
 | `../PlcKi.Core/Ask/MachineTools.cs` | The read-only lookups Claude can use |
 | `../PlcKi.Core/Status/MachineHistory.cs` | Recent events and values, in memory |
+| `../PlcKi.Core/Status/EventLog.cs` | Every event on disk, a file per day (`events\<machine>`, steps and outputs in `steps\`) |
 | `../PlcKi.Core/Status/StatusEngine.cs` | Turns values + model into the plain-English status |
 | `../PlcKi.Core/Expressions/Expr.cs` | The small condition language used in the model (`Level >= LevelA AND NOT AnyFault`) |
 | `Storage/StorageService.cs`, `Storage/StorageEndpoints.cs` | Setup › Settings › Storage: what is kept, the limits (pruned at start and daily), export, clear |

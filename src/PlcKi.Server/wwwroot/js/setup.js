@@ -712,9 +712,13 @@ const PKSetup = (() => {
     changes: ["/api/admin/storage/changes.csv", "CSV"],
     recordings: ["/api/admin/storage/recordings.zip", "Zip"],
     memory: ["/api/memory/export.csv?days=3650", "CSV"],
+    events: ["/api/events.csv?days=3660&kind=alarm,halt,blocked,state,cpu,link,write,monitor", "CSV"],
+    steps: ["/api/events.csv?days=3660&kind=step,output", "CSV"],
   };
   const LIMITS = [
     ["productionDays", "Production log", "days", "400 days lets a report compare with the same weeks last year."],
+    ["eventDays", "Machine events", "days", "Alarms, halts, connection drops, values changed. As long as the production log, so every shift report has its shift log."],
+    ["stepEventDays", "Steps and outputs", "days", "About 20 per cycle, 1 to 5 MB a day, so kept for a shorter time."],
     ["changeLogDays", "Change log", "days", "Who changed which value. Older files go first."],
     ["changeLogMb", "Change log, at most", "MB", "Whichever comes first: the days or the size."],
     ["recordings", "Alarm recordings", "per machine", "The newest ones are kept."],
@@ -733,7 +737,7 @@ const PKSetup = (() => {
       return `<tr><td><b class="semibold">${esc(r.title)}</b><div class="muted small">${esc(r.what)}</div></td>
         <td class="small">${r.where === "memory" ? "Memory" : `Disk<div class="faint mono" style="overflow-wrap:anywhere">${esc(r.folder || "")}</div>`}</td>
         <td class="nowrap small">${esc(r.countText)}${r.bytes != null && r.where === "disk" ? `<div class="faint">${size(r.bytes)}</div>` : ""}</td>
-        <td class="nowrap small">${r.oldest ? esc(PK.date(r.oldest, r.kind !== "production")) : "–"}</td>
+        <td class="nowrap small">${r.oldest ? esc(PK.date(r.oldest, !["production", "events", "steps"].includes(r.kind))) : "–"}</td>
         <td class="small">${esc(r.limit)}</td>
         <td class="nowrap">${exp}${clr}</td></tr>`;
     }).join("");
