@@ -24,32 +24,32 @@ const PKModel = (() => {
   };
   const targetName = (t) => {
     const [kind, id] = [t.slice(0, t.indexOf(":")), t.slice(t.indexOf(":") + 1)];
-    return { equipment: "Device", sequence: "Sequence", alarm: "Alarm", setting: "Setting", tag: "Tag" }[kind] + " " + id;
+    return { equipment: PK.t("Device"), sequence: PK.t("Sequence"), alarm: PK.t("Alarm"), setting: PK.t("Setting"), tag: PK.t("Tag") }[kind] + " " + id;
   };
 
   /** The card on Setup > Program. */
   function html() {
     const r = mc.report;
-    if (mc.error) return `<div class="mb-5 card"><p class="m-0 muted">Model check: ${esc(mc.error)}</p></div>`;
+    if (mc.error) return `<div class="mb-5 card"><p class="m-0 muted">${PK.t("Model check: {error}", { error: esc(PK.srv(mc.error)) })}</p></div>`;
     if (!r) return "";
     const watched = spanMs(r.watched);
     const wrong = r.findings.filter((f) => f.severity === "wrong").length;
-    const head = !r.reads ? "Waiting for live values from the PLC."
-      : r.findings.length === 0 ? `Nothing found in ${mins(watched)} of watching (${r.stepChanges} step changes).`
-      : `${r.findings.length} thing${r.findings.length === 1 ? "" : "s"} the model does not explain${wrong ? `, ${wrong} clearly wrong` : ""}, in ${mins(watched)} of watching.`;
+    const head = !r.reads ? PK.t("Waiting for live values from the PLC.")
+      : r.findings.length === 0 ? PK.t("Nothing found in {time} of watching ({count} step changes).", { time: mins(watched), count: r.stepChanges })
+      : wrong ? PK.t("{n} thing the model does not explain, {wrong} clearly wrong, in {time} of watching.|{n} things the model does not explain, {wrong} clearly wrong, in {time} of watching.", { n: r.findings.length, wrong, time: mins(watched) })
+      : PK.t("{n} thing the model does not explain, in {time} of watching.|{n} things the model does not explain, in {time} of watching.", { n: r.findings.length, time: mins(watched) });
     const list = r.findings.map((f, i) => `<li class="mc-item">
-        <span class="pill ${f.severity === "wrong" ? "bad" : "warn"}"><span class="dot"></span>${f.severity === "wrong" ? "Wrong" : "Check"}</span>
-        <div class="grow min0"><b class="semibold">${esc(f.title)}</b>
-          <div class="muted small">${esc(f.detail)}</div>
-          <div class="faint small">${esc(targetName(f.target))} · seen ${f.count}× · last ${esc(PK.ago ? PK.ago(f.lastSeen) : f.lastSeen)}</div></div>
-        ${f.target.startsWith("tag:") ? "" : `<button class="btn small" data-mcfix="${i}">Fix</button>`}</li>`).join("");
+        <span class="pill ${f.severity === "wrong" ? "bad" : "warn"}"><span class="dot"></span>${f.severity === "wrong" ? PK.t("Wrong") : PK.t("Check")}</span>
+        <div class="grow min0"><b class="semibold">${esc(PK.srv(f.title))}</b>
+          <div class="muted small">${esc(PK.srv(f.detail))}</div>
+          <div class="faint small">${esc(PK.t("{target} · seen {count}× · last {when}", { target: targetName(f.target), count: f.count, when: PK.ago ? PK.ago(f.lastSeen) : f.lastSeen }))}</div></div>
+        ${f.target.startsWith("tag:") ? "" : `<button class="btn small" data-mcfix="${i}">${PK.t("Fix this")}</button>`}</li>`).join("");
     return `<div class="mb-5 card stack">
-      <div class="row"><span class="ico">${icon("check")}</span><h3 class="m-0 grow">Does the model match the machine?</h3>
-        <button class="btn gray small" data-mcreset ${r.reads ? "" : "disabled"}>Start over</button></div>
-      <p class="m-0 muted">PLC-Ki compares the model with what the machine does while it runs: outputs that switch on although the model says an interlock is missing,
-        devices shown blocked while the machine keeps going, steps and step changes the model does not know. Let the machine run a few cycles, then look here.</p>
+      <div class="row"><span class="ico">${icon("check")}</span><h3 class="m-0 grow">${PK.t("Does the model match the machine?")}</h3>
+        <button class="btn gray small" data-mcreset ${r.reads ? "" : "disabled"}>${PK.t("Start over")}</button></div>
+      <p class="m-0 muted">${PK.t("PLC-Ki compares the model with what the machine does while it runs: outputs that switch on although the model says an interlock is missing, devices shown blocked while the machine keeps going, steps and step changes the model does not know. Let the machine run a few cycles, then look here.")}</p>
       <p class="m-0"><b>${esc(head)}</b></p>
-      ${r.seen && r.seen.length ? `<p class="m-0 faint small">${r.seen.map(esc).join(" · ")}</p>` : ""}
+      ${r.seen && r.seen.length ? `<p class="m-0 faint small">${r.seen.map((x) => esc(PK.srv(x))).join(" · ")}</p>` : ""}
       ${list ? `<ul class="list mc-list">${list}</ul>` : ""}
     </div>`;
   }
@@ -69,30 +69,30 @@ const PKModel = (() => {
     try { entry = await api("GET", "/api/admin/model/entry?target=" + encodeURIComponent(target)); }
     catch (e) { toast(e.message, "error"); return; }
     let newTags = "[]";
-    const s = PK.sheet(`<h2>Correct ${esc(targetName(target))}</h2>
-      ${finding ? `<div class="notice gold">${icon("warn")}<div><b>${esc(finding.title)}</b><br><span class="small">${esc(finding.detail)}</span></div></div>` : ""}
-      ${entry.findings && entry.findings.length > (finding ? 1 : 0) ? `<p class="m-0 small muted">Also seen for this entry: ${entry.findings.filter((x) => !finding || x.title !== finding.title).map((x) => esc(x.title)).join("; ")}</p>` : ""}
-      <label class="field">What is wrong? (optional)<textarea id="mf-note" rows="2" placeholder="For example: the robot is not blocked, it just finished its job."></textarea>
-        <span class="hint">${AI} reads the program part this entry is about and what the machine did, and proposes a corrected entry. Nothing is saved until you press Save.</span></label>
-      <div class="row"><button class="btn" data-mfask ${entry.canAsk ? "" : "disabled"}>${icon("spark")}<span>Ask ${AI} to correct it</span></button>
-        ${entry.canAsk ? "" : `<span class="faint small">${AI} needs a Claude key (Setup, Settings).</span>`}<span class="faint small" id="mf-wait"></span></div>
+    const s = PK.sheet(`<h2>${PK.t("Correct {what}", { what: esc(targetName(target)) })}</h2>
+      ${finding ? `<div class="notice gold">${icon("warn")}<div><b>${esc(PK.srv(finding.title))}</b><br><span class="small">${esc(PK.srv(finding.detail))}</span></div></div>` : ""}
+      ${entry.findings && entry.findings.length > (finding ? 1 : 0) ? `<p class="m-0 small muted">${PK.t("Also seen for this entry: {list}", { list: entry.findings.filter((x) => !finding || x.title !== finding.title).map((x) => esc(PK.srv(x.title))).join("; ") })}</p>` : ""}
+      <label class="field">${PK.t("What is wrong? (optional)")}<textarea id="mf-note" rows="2" placeholder="${PK.t("For example: the robot is not blocked, it just finished its job.")}"></textarea>
+        <span class="hint">${PK.t("{ai} reads the program part this entry is about and what the machine did, and proposes a corrected entry. Nothing is saved until you press Save.", { ai: AI })}</span></label>
+      <div class="row"><button class="btn" data-mfask ${entry.canAsk ? "" : "disabled"}>${icon("spark")}<span>${PK.t("Ask {ai} to correct it", { ai: AI })}</span></button>
+        ${entry.canAsk ? "" : `<span class="faint small">${PK.t("{ai} needs a Claude key (Setup, Settings).", { ai: AI })}</span>`}<span class="faint small" id="mf-wait"></span></div>
       <div id="mf-why"></div>
-      <details class="more" ${entry.canAsk ? "" : "open"}><summary>The entry in the model (JSON)</summary>
+      <details class="more" ${entry.canAsk ? "" : "open"}><summary>${PK.t("The entry in the model (JSON)")}</summary>
         <textarea id="mf-json" rows="14" spellcheck="false" style="font-family:var(--mono);font-size:12.5px;width:100%;margin-top:10px">${esc(entry.json)}</textarea></details>
-      <p class="m-0 faint small">Saving keeps a copy of the current model next to it, then restarts PLC-Ki so the pages use the corrected model.</p>
-      <div class="row end"><button class="btn gray" data-close>Cancel</button><button class="btn" data-mfsave>Save and restart</button></div>`);
+      <p class="m-0 faint small">${PK.t("Saving keeps a copy of the current model next to it, then restarts PLC-Ki so the pages use the corrected model.")}</p>
+      <div class="row end"><button class="btn gray" data-close>${PK.t("Cancel")}</button><button class="btn" data-mfsave>${PK.t("Save and restart")}</button></div>`);
     const $ = (sel) => s.el.querySelector(sel);
     $("[data-mfask]").onclick = async () => {
       const b = $("[data-mfask]");
-      b.disabled = true; $("#mf-wait").textContent = `${AI} is reading the program… (up to a minute)`;
+      b.disabled = true; $("#mf-wait").textContent = PK.t("{ai} is reading the program… (up to a minute)", { ai: AI });
       try {
         const r = await api("POST", "/api/admin/model/entry/ask", { target, note: $("#mf-note").value.trim() || null, json: null });
         $("#mf-json").value = r.json;
         newTags = r.newTags || "[]";
         const nt = JSON.parse(newTags);
-        $("#mf-why").innerHTML = `<div class="notice ${r.problems && r.problems.length ? "gold" : "blue"}">${icon("info")}<div>${esc(r.why || "Proposal ready.")}
-          ${nt.length ? `<br><span class="small">Adds ${nt.length} tag${nt.length === 1 ? "" : "s"}: ${nt.map((t) => esc(t.id)).join(", ")}</span>` : ""}
-          ${r.problems && r.problems.length ? `<br><span class="small"><b>Still not right:</b> ${r.problems.map(esc).join("; ")}</span>` : ""}</div></div>`;
+        $("#mf-why").innerHTML = `<div class="notice ${r.problems && r.problems.length ? "gold" : "blue"}">${icon("info")}<div>${esc(PK.srv(r.why || "") || PK.t("Proposal ready."))}
+          ${nt.length ? `<br><span class="small">${PK.t("Adds {n} tag|Adds {n} tags", { n: nt.length })}: ${nt.map((t) => esc(t.id)).join(", ")}</span>` : ""}
+          ${r.problems && r.problems.length ? `<br><span class="small"><b>${PK.t("Still not right:")}</b> ${r.problems.map((x) => esc(PK.srv(x))).join("; ")}</span>` : ""}</div></div>`;
         s.el.querySelector("details.more").open = true;
         $("#mf-wait").textContent = "";
       } catch (e) { $("#mf-wait").textContent = ""; toast(e.message, "error"); }
@@ -102,7 +102,7 @@ const PKModel = (() => {
       try {
         await api("POST", "/api/admin/model/entry", { target, json: $("#mf-json").value, newTags });
         s.close();
-        toast("Saved. Restarting PLC-Ki…");
+        toast(PK.t("Saved. Restarting PLC-Ki…"));
         PKSetup.restart();
       } catch (e) { toast(e.message, "error"); }
     };

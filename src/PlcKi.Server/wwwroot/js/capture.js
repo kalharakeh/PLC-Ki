@@ -61,7 +61,7 @@
     const ticks = [];
     for (let t = -c.before; t <= c.after + 1e-9; t += step) ticks.push(t);
     return `<div class="tr-row axis"><div class="tr-lab"></div><div class="tr-plot axis cap-axis">
-      ${ticks.map((t) => `<span class="cap-tick ${t === 0 ? "zero" : ""}" style="left:${g.x(t).toFixed(2)}%">${t === 0 ? "alarm" : (t > 0 ? "+" : "−") + Math.abs(t) + " s"}</span>`).join("")}</div></div>`;
+      ${ticks.map((t) => `<span class="cap-tick ${t === 0 ? "zero" : ""}" style="left:${g.x(t).toFixed(2)}%">${t === 0 ? PK.t("alarm") : (t > 0 ? "+" : "−") + Math.abs(t) + " s"}</span>`).join("")}</div></div>`;
   }
 
   /** Value at t (seconds from the alarm): the start value, then each change up to t. */
@@ -79,13 +79,13 @@
       if (on && t > from) {
         const l = g.x(from), w = Math.max(0.5, g.x(t) - l);
         const pulse = pulses.some((p) => p.tag === k.tag && p.on && Math.abs(p.t - from) < 1e-3);
-        bars.push(`<span class="cap-on ${pulse ? "pulse" : ""}" style="left:${l.toFixed(2)}%;width:${w.toFixed(2)}%" title="${esc(`on from ${fmtT(from)} for ${ms((t - from) * 1000)}`)}"></span>`);
+        bars.push(`<span class="cap-on ${pulse ? "pulse" : ""}" style="left:${l.toFixed(2)}%;width:${w.toFixed(2)}%" title="${esc(PK.t("on from {from} for {dur}", { from: fmtT(from), dur: ms((t - from) * 1000) }))}"></span>`);
       }
       if (next != null) { on = next; from = t; }
     }
     // a short off-gap inside an on-stretch gets a marker too
     const offPulses = pulses.filter((p) => p.tag === k.tag && !p.on)
-      .map((p) => `<span class="cap-off-pulse" style="left:${g.x(p.t).toFixed(2)}%" title="${esc(`off for ${ms(p.ms)} at ${fmtT(p.t)}`)}"></span>`);
+      .map((p) => `<span class="cap-off-pulse" style="left:${g.x(p.t).toFixed(2)}%" title="${esc(PK.t("off for {dur} at {at}", { dur: ms(p.ms), at: fmtT(p.t) }))}"></span>`);
     return bars.join("") + offPulses.join("");
   }
 
@@ -110,18 +110,18 @@
       <span class="tr-y hi">${hi.toFixed(dec)}</span><span class="tr-y lo">${lo.toFixed(dec)}</span>`;
   }
 
-  const fmtT = (t) => t === 0 ? "the alarm" : (t < 0 ? ms(-t * 1000) + " before" : ms(t * 1000) + " after");
+  const fmtT = (t) => t === 0 ? PK.t("the alarm") : (t < 0 ? PK.t("{time} before", { time: ms(-t * 1000) }) : PK.t("{time} after", { time: ms(t * 1000) }));
 
   function track(k, c, g) {
     const at = valueAt(k, -0.0005);
     const isBool = k.type === "Bool";
     const plot = isBool ? boolPlot(k, c, g, c.pulses) : numPlot(k, c, g);
-    const gaps = (c.gaps || []).map((x) => { const l = g.x(x.from), r = g.x(x.to ?? c.after); return `<span class="cap-gap" style="left:${l.toFixed(2)}%;width:${Math.max(0.5, r - l).toFixed(2)}%" title="No data: PLC link down"></span>`; }).join("");
+    const gaps = (c.gaps || []).map((x) => { const l = g.x(x.from), r = g.x(x.to ?? c.after); return `<span class="cap-gap" style="left:${l.toFixed(2)}%;width:${Math.max(0.5, r - l).toFixed(2)}%" title="${PK.t("No data: PLC link down")}"></span>`; }).join("");
     const n = k.changes.length;
     return `<div class="tr-row ${isBool ? "cap-bool" : ""}">
-      <div class="tr-lab"><span class="tr-name" title="${esc(k.symbol + (n ? ", " + n + " change" + (n > 1 ? "s" : "") : ", no change"))}">${k.related ? `<b class="cap-rel" title="In this alarm's own check">●</b> ` : ""}${esc(k.label)}</span>
-        <b class="tr-now small" title="Value just before the alarm">${esc(at.txt)}</b>
-        <span class="tr-rng">${n ? `${n} change${n > 1 ? "s" : ""}` : "no change"}</span></div>
+      <div class="tr-lab"><span class="tr-name" title="${esc(k.symbol + ", " + (n ? PK.t("{n} change|{n} changes", { n }) : PK.t("no change")))}">${k.related ? `<b class="cap-rel" title="${PK.t("In this alarm's own check")}">●</b> ` : ""}${esc(k.label)}</span>
+        <b class="tr-now small" title="${PK.t("Value just before the alarm")}">${esc(at.txt)}</b>
+        <span class="tr-rng">${n ? PK.t("{n} change|{n} changes", { n }) : PK.t("no change")}</span></div>
       <div class="tr-plot ${isBool ? "cap-b" : ""}">${plot}${gaps}<i class="tr-al came cap-zero" style="left:${g.x(0).toFixed(2)}%"></i></div></div>`;
   }
 
@@ -132,11 +132,11 @@
     const all = showAll[c.id] || full;
     const tracks = all ? c.tracks : c.tracks.slice(0, max);
     const rest = c.tracks.length - tracks.length;
-    return `<ul class="cap-sum">${c.summary.slice(1).map((s) => `<li>${esc(s)}</li>`).join("")}</ul>
-      <div class="cap-key small muted"><span><i class="k-on"></i>on</span><span><i class="k-pulse"></i>short pulse (shorter than one normal read)</span><span><i class="k-zero"></i>alarm came</span><span><b class="cap-rel">●</b> in the alarm's own check</span></div>
+    return `<ul class="cap-sum">${c.summary.slice(1).map((s) => `<li>${esc(PK.srv(s))}</li>`).join("")}</ul>
+      <div class="cap-key small muted"><span><i class="k-on"></i>${PK.t("on")}</span><span><i class="k-pulse"></i>${PK.t("short pulse (shorter than one normal read)")}</span><span><i class="k-zero"></i>${PK.t("alarm came")}</span><span><b class="cap-rel">●</b> ${PK.t("in the alarm's own check")}</span></div>
       <div class="tr-rows cap-rows">${axis(c, g)}${tracks.map((k) => track(k, c, g)).join("")}${tracks.length > 6 ? axis(c, g) : ""}</div>
-      ${rest > 0 ? `<button type="button" class="mt-3 btn plain small" data-cap-all="${esc(c.id)}">Show all ${c.tracks.length} tags that changed</button>` : ""}
-      <p class="mt-3 mb-0 faint small">${esc(c.summary[0] || "")}</p>`;
+      ${rest > 0 ? `<button type="button" class="mt-3 btn plain small" data-cap-all="${esc(c.id)}">${PK.t("Show all {n} tags that changed", { n: c.tracks.length })}</button>` : ""}
+      <p class="mt-3 mb-0 faint small">${esc(PK.srv(c.summary[0] || ""))}</p>`;
   }
 
   function bind(page) {
@@ -174,33 +174,33 @@
     if (!c) return "";
     const g = geom(c);
     const tracks = c.tracks.slice().sort((x, y) => (y.related ? 1 : 0) - (x.related ? 1 : 0)).slice(0, 5);
-    return sec("", `<div class="mb-2 row"><h2 class="m-0">The seconds before it came</h2><span class="spacer"></span>
-        <a class="btn b small" href="#/history/recordings/${encodeURIComponent(c.id)}">Open full size</a>
-        <button class="btn b small" data-ask="Look at the seconds before alarm ${esc(a.id)} came (get_alarm_capture). What changed right before it, and what does that say about the cause?">Ask what it shows</button></div>
-      <p class="mb-3 sub">${esc(c.summary[1] || c.summary[0] || "")}</p>
+    return sec("", `<div class="mb-2 row"><h2 class="m-0">${PK.t("The seconds before it came")}</h2><span class="spacer"></span>
+        <a class="btn b small" href="#/history/recordings/${encodeURIComponent(c.id)}">${PK.t("Open full size")}</a>
+        <button class="btn b small" data-ask="Look at the seconds before alarm ${esc(a.id)} came (get_alarm_capture). What changed right before it, and what does that say about the cause?">${PK.t("Ask what it shows")}</button></div>
+      <p class="mb-3 sub">${esc(PK.srv(c.summary[1] || c.summary[0] || ""))}</p>
       <div class="tr-rows cap-rows cap-mini">${tracks.map((k) => track(k, c, g)).join("")}${axis(c, g)}</div>
-      ${c.tracks.length > tracks.length ? `<p class="mt-2 mb-0 faint small">${c.tracks.length - tracks.length} more tags changed. Open full size to see them.</p>` : ""}`);
+      ${c.tracks.length > tracks.length ? `<p class="mt-2 mb-0 faint small">${PK.t("{n} more tags changed. Open full size to see them.", { n: c.tracks.length - tracks.length })}</p>` : ""}`);
   }
 
   // ---------- History › Recordings: the list, and one recording on its own page ----------
   function modeLine() {
     if (!fast) return "";
     if (fast.mode === "subscription")
-      return `<span class="pill ok"><span class="dot"></span>Fast capture on</span> <span class="muted small">${fast.fastTags} tags, every change sampled every ${fast.cycleMs} ms by the PLC. Keeps the last ${Math.round(fast.keepSeconds)} s; ${fast.beforeSeconds} s before and ${fast.afterSeconds} s after each alarm are saved.</span>`;
-    return `<span class="pill warn"><span class="dot"></span>Normal reads only</span> <span class="muted small">Changes shorter than ${ms(fast.readMs)} can be missing${fast.note ? ": " + esc(fast.note) : "."}</span>`;
+      return `<span class="pill ok"><span class="dot"></span>${PK.t("Fast capture on")}</span> <span class="muted small">${PK.t("{tags} tags, every change sampled every {ms} ms by the PLC. Keeps the last {keep} s; {before} s before and {after} s after each alarm are saved.", { tags: fast.fastTags, ms: fast.cycleMs, keep: Math.round(fast.keepSeconds), before: fast.beforeSeconds, after: fast.afterSeconds })}</span>`;
+    return `<span class="pill warn"><span class="dot"></span>${PK.t("Normal reads only")}</span> <span class="muted small">${fast.note ? PK.t("Changes shorter than {time} can be missing: {note}", { time: ms(fast.readMs), note: esc(PK.srv(fast.note)) }) : PK.t("Changes shorter than {time} can be missing.", { time: ms(fast.readMs) })}</span>`;
   }
 
   /** One recording on its own page (#/history/recordings/<id>): its own header, then every change. */
   function page(id) {
     const c = detail(id);
-    if (!c) return hero({ title: "Alarm recording" }) + PK.sec("", PK.ui.loading("chart"));
-    if (c.missing) return hero({ title: "This recording is no longer kept.", sub: "PLC-Ki keeps the last 100 alarm recordings.", actions: `<a class="btn" href="#/history/recordings">All recordings</a>` });
+    if (!c) return hero({ title: PK.t("Alarm recording") }) + PK.sec("", PK.ui.loading("chart"));
+    if (c.missing) return hero({ title: PK.t("This recording is no longer kept."), sub: PK.t("PLC-Ki keeps the last 100 alarm recordings."), actions: `<a class="btn" href="#/history/recordings">${PK.t("All recordings")}</a>` });
     return hero({
-      eyebrow: `<span class="pill ${c.severity === "WARNING" ? "warn" : "bad"}"><span class="dot"></span>${esc(c.severity)} · ${esc(c.alarmId)}</span>${c.blip ? ` <span class="pill warn">Blip: on for ${ms(c.onMs)}</span>` : ""}`,
+      eyebrow: `<span class="pill ${c.severity === "WARNING" ? "warn" : "bad"}"><span class="dot"></span>${esc(c.severity === "WARNING" ? PK.t("WARNING") : c.severity === "FAULT" ? PK.t("FAULT") : c.severity)} · ${esc(c.alarmId)}</span>${c.blip ? ` <span class="pill warn">${PK.t("Blip: on for {time}", { time: ms(c.onMs) })}</span>` : ""}`,
       title: esc(c.alarmText),
-      sub: `Came at ${esc(PK.date(c.time, true))}. Every change from ${c.before} s before to ${c.after} s after.`,
-      actions: `<a class="btn b" href="#/alarms/${encodeURIComponent(c.alarmId)}">About this alarm</a><a class="btn b" href="#/history/recordings">All recordings</a>
-        <button class="btn" data-ask="Look at capture ${esc(c.id)} of alarm ${esc(c.alarmId)} (get_alarm_capture). What changed right before it, and what does that say about the cause?">Ask what it shows</button>`,
+      sub: PK.t("Came at {time}. Every change from {before} s before to {after} s after.", { time: esc(PK.date(c.time, true)), before: c.before, after: c.after }),
+      actions: `<a class="btn b" href="#/alarms/${encodeURIComponent(c.alarmId)}">${PK.t("About this alarm")}</a><a class="btn b" href="#/history/recordings">${PK.t("All recordings")}</a>
+        <button class="btn" data-ask="Look at capture ${esc(c.id)} of alarm ${esc(c.alarmId)} (get_alarm_capture). What changed right before it, and what does that say about the cause?">${PK.t("Ask what it shows")}</button>`,
     }) + sec("", body(c, { full: true }));
   }
 
@@ -209,13 +209,13 @@
     const l = needList();
     const rows = (l || []).map((c) => `<li><a class="cap-li" href="#/history/recordings/${encodeURIComponent(c.id)}">
         <span class="ev-time">${esc(PK.date(c.time, true))}</span>
-        <span class="ev-kind ${c.blip ? "start" : "came"}">${c.blip ? "Blip" : "Came"}</span>
-        <span style="flex:1;min-width:180px"><b>${esc(c.alarmId)}</b> ${esc(c.alarmText)}<br><span class="muted small">${esc(c.headline || "")}</span></span>
-        ${c.pulses ? `<span class="pill warn small">${c.pulses} short pulse${c.pulses > 1 ? "s" : ""}</span>` : ""}<span class="chev">›</span></a></li>`).join("");
-    return `<p class="sub">The seconds before each alarm came: what changed, in which order, and short signals the normal reads miss. The last 100 are kept.</p>
+        <span class="ev-kind ${c.blip ? "start" : "came"}">${c.blip ? PK.t("Blip") : PK.t("Came")}</span>
+        <span style="flex:1;min-width:180px"><b>${esc(c.alarmId)}</b> ${esc(c.alarmText)}<br><span class="muted small">${esc(PK.srv(c.headline || ""))}</span></span>
+        ${c.pulses ? `<span class="pill warn small">${PK.t("{n} short pulse|{n} short pulses", { n: c.pulses })}</span>` : ""}<span class="chev">›</span></a></li>`).join("");
+    return `<p class="sub">${PK.t("The seconds before each alarm came: what changed, in which order, and short signals the normal reads miss. The last 100 are kept.")}</p>
       <p class="mt-0 mb-4">${modeLine()}</p>`
       + (!l ? PK.ui.loading("list") : rows ? `<ul class="list events">${rows}</ul>`
-        : PK.ui.empty({ icon: "clock", title: "No alarm has come since PLC-Ki started recording.", text: "When one comes, the seconds before it are kept here." }));
+        : PK.ui.empty({ icon: "clock", title: PK.t("No alarm has come since PLC-Ki started recording."), text: PK.t("When one comes, the seconds before it are kept here.") }));
   }
 
   function wirePage(el) {

@@ -35,7 +35,7 @@
     const stationsOf = (a) => all.stations.filter((st) => st.alarms.some((x) => x.id === a.id)).map((st) => st.name);
     if (param == null || param === "") {
       const [level, word] = PKStations.levelOf({ alarms: s.activeAlarms, equipment: s.equipment, sequences: s.sequences });
-      return { name: s.machine || "Machine", station: null, alarms: s.activeAlarms, equipment: s.equipment, sequences: s.sequences, level, word, stationsOf };
+      return { name: s.machine || PK.t("Machine"), station: null, alarms: s.activeAlarms, equipment: s.equipment, sequences: s.sequences, level, word, stationsOf };
     }
     const want = param === "-" ? "" : param, low = want.toLowerCase();
     const st = all.stations.find((x) => x.key === want) || all.stations.find((x) => x.key.toLowerCase() === low || x.name.toLowerCase() === low);
@@ -61,9 +61,9 @@
     const run = list.find((x) => x.running), last = list.find((x) => !x.running);
     const p = !sc.station && T.shift && T.shift.parts;
     const items = [
-      run ? [dur((Date.now() - run.start) / 1000), "this cycle"] : null,
-      last ? [dur(last.sec), "last cycle"] : null,
-      p && (p.total || p.cycles) ? [String(p.total || p.cycles), p.total ? "parts this shift" : "cycles this shift"] : null,
+      run ? [dur((Date.now() - run.start) / 1000), PK.t("this cycle")] : null,
+      last ? [dur(last.sec), PK.t("last cycle")] : null,
+      p && (p.total || p.cycles) ? [String(p.total || p.cycles), p.total ? PK.t("parts this shift") : PK.t("cycles this shift")] : null,
     ].filter(Boolean);
     return items.length ? `<div class="tv-cycle">${items.map(([v, l]) => `<div><b>${esc(v)}</b><span>${esc(l)}</span></div>`).join("")}</div>` : "";
   }
@@ -75,11 +75,11 @@
     const s = state.status;
     const waits = q.next.flatMap((n) => n.conditions).filter((c) => c.met === false).map((c) => {
       const d = c.heldBy && s.equipment.find((e) => e.id === c.heldBy);
-      return d ? `${c.text} (${d.name} is ${d.blockedBy ? "blocked" : "in fault"})` : c.text;
+      return d ? (d.blockedBy ? PK.t("{text} ({name} is blocked)", { text: c.text, name: d.name }) : PK.t("{text} ({name} is in fault)", { text: c.text, name: d.name })) : c.text;
     });
-    const line = stopped ? "" : q.halted ? "Halted: " + (q.haltReasons.join("; ") || "the outputs are off.") : waits.length ? "Waiting for: " + waits.join("; ") : q.does || "";
+    const line = stopped ? "" : q.halted ? PK.t("Halted: {why}", { why: q.haltReasons.map((x) => PK.srv(x)).join("; ") || PK.t("the outputs are off.") }) : waits.length ? PK.t("Waiting for: {what}", { what: waits.join("; ") }) : q.does || "";
     return `<div class="tv-step">
-      <div class="tv-step-n">${esc(stopped ? "Last step" : "Step")} ${esc(q.step ?? "?")}${q.timeInStep && !stopped ? `<span class="tv-for">for ${esc(q.timeInStep)}</span>` : ""}</div>
+      <div class="tv-step-n">${esc(stopped ? PK.t("Last step") : PK.t("Step"))} ${esc(q.step ?? "?")}${q.timeInStep && !stopped ? `<span class="tv-for">${PK.t("for {time}", { time: esc(q.timeInStep) })}</span>` : ""}</div>
       <div class="tv-step-t">${esc(q.stepName || q.name)}</div>
       ${line ? `<div class="tv-step-w">${esc(line)}</div>` : ""}</div>`;
   }
@@ -87,7 +87,7 @@
   /** The machine picture (the Plant page's map), large, not clickable. ring: devices to mark. */
   function pictureHtml(equipment, ring, { dim = false } = {}) {
     const V = window.PKVis;
-    if (!V || !equipment.length) return `<div class="tv-pic tv-none">${dim ? "" : "No devices in the model for this screen."}</div>`;
+    if (!V || !equipment.length) return `<div class="tv-pic tv-none">${dim ? "" : PK.t("No devices in the model for this screen.")}</div>`;
     return `<div class="tv-pic ${dim ? "dim" : ""}" inert>${V.plantMap(equipment, null, ring)}</div>`;
   }
 
@@ -98,26 +98,26 @@
     const atStart = al.filter((x) => x.atStart).length;
     const first = al.length > 1 && al[0] === a && (!a.atStart || atStart === 1);     // as Active alarm says "First"
     const where = sc.stationsOf(a);
-    const station = where.length ? where.join(", ") : "Whole machine";
-    const since = a.atStart ? "On since PLC-Ki started watching" : a.since ? `Since ${PK.when(a.since)} · ${PK.ago(a.since)}` : "";
+    const station = where.length ? where.join(", ") : PK.t("Whole machine");
+    const since = a.atStart ? PK.t("On since PLC-Ki started watching") : a.since ? PK.t("Since {when} · {ago}", { when: PK.when(a.since), ago: PK.ago(a.since) }) : "";
     const others = al.filter((x) => x !== a);
     const fix = (a.fix || []).slice(0, 3);
     return `<div class="tv-al ${warn ? "warn" : "fault"}" role="alert">
-      <div class="tv-al-top"><span class="tv-al-sev">${esc(warn ? "Warning" : "Fault")} · ${esc(a.id)}</span>${first ? `<span class="tv-al-first">First alarm</span>` : ""}</div>
+      <div class="tv-al-top"><span class="tv-al-sev">${esc(warn ? PK.t("Warning") : PK.t("Fault"))} · ${esc(a.id)}</span>${first ? `<span class="tv-al-first">${PK.t("First alarm")}</span>` : ""}</div>
       <div class="tv-al-text" role="heading" aria-level="2">${esc(a.text)}</div>
       <div class="tv-al-facts"><span>${icon("plant")}${esc(station)}</span>${since ? `<span>${icon("clock")}${esc(since)}</span>` : ""}</div>
       ${a.condition ? `<p class="tv-al-cond">${esc(a.condition)}</p>` : ""}
-      ${others.length ? `<div class="tv-al-more"><b>Also on:</b> ${others.slice(0, 4).map((x) => `<span class="tv-al-chip ${x.severity === "WARNING" ? "warn" : ""}">${esc(x.id)} ${esc(x.text.length > 44 ? x.text.slice(0, 42) + "…" : x.text)}</span>`).join("")}${others.length > 4 ? ` <span>and ${others.length - 4} more</span>` : ""}</div>` : ""}
-      ${fix.length ? `<div class="tv-al-fix"><b>What to do</b><ol>${fix.map((f) => `<li>${esc(f)}</li>`).join("")}</ol></div>` : ""}
+      ${others.length ? `<div class="tv-al-more"><b>${PK.t("Also on:")}</b> ${others.slice(0, 4).map((x) => `<span class="tv-al-chip ${x.severity === "WARNING" ? "warn" : ""}">${esc(x.id)} ${esc(x.text.length > 44 ? x.text.slice(0, 42) + "…" : x.text)}</span>`).join("")}${others.length > 4 ? ` <span>${PK.t("and {n} more", { n: others.length - 4 })}</span>` : ""}</div>` : ""}
+      ${fix.length ? `<div class="tv-al-fix"><b>${PK.t("What to do")}</b><ol>${fix.map((f) => `<li>${esc(f)}</li>`).join("")}</ol></div>` : ""}
     </div>`;
   }
 
   function stopHtml(stop) {
     return `<div class="tv-al fault" role="alert">
-      <div class="tv-al-top"><span class="tv-al-sev">PLC · ${esc(stop.word || "STOP")}</span></div>
-      <div class="tv-al-text" role="heading" aria-level="2">The PLC is in ${esc(stop.word || "STOP")}</div>
+      <div class="tv-al-top"><span class="tv-al-sev">${PK.t("PLC")} · ${esc(stop.word || "STOP")}</span></div>
+      <div class="tv-al-text" role="heading" aria-level="2">${PK.t("The PLC is in {word}", { word: esc(stop.word || "STOP") })}</div>
       <div class="tv-al-facts"><span>${icon("clock")}${esc((PK.cpuSince(stop) || "").replace(/^s/, "S"))}</span></div>
-      <p class="tv-al-cond">The program is not running. What the screen shows is its last state.</p></div>`;
+      <p class="tv-al-cond">${PK.t("The program is not running. What the screen shows is its last state.")}</p></div>`;
   }
 
   /** The whole screen: the band on top (state, step, cycle, clock), the body under it, the quiet controls in a corner. */
@@ -138,32 +138,32 @@
       </header>
       <div class="tv-body">${body}</div>
       <div class="tv-corner">
-        ${test ? `<span class="tv-test" title="The values come from a test file, not from the machine">Test values</span>` : ""}
-        ${needClick ? `<span class="tv-hint">Click once so alarms can beep</span>` : ""}
-        ${full ? `<button type="button" class="tv-btn" data-tv-full title="Full screen" aria-label="Full screen">${icon("expand")}</button>` : ""}
-        <button type="button" class="tv-btn" data-tv-exit title="Leave the line screen (Esc)" aria-label="Leave the line screen">${icon("x")}</button>
+        ${test ? `<span class="tv-test" title="${PK.t("The values come from a test file, not from the machine")}">${PK.t("Test values")}</span>` : ""}
+        ${needClick ? `<span class="tv-hint">${PK.t("Click once so alarms can beep")}</span>` : ""}
+        ${full ? `<button type="button" class="tv-btn" data-tv-full title="${PK.t("Full screen")}" aria-label="${PK.t("Full screen")}">${icon("expand")}</button>` : ""}
+        <button type="button" class="tv-btn" data-tv-exit title="${PK.t("Leave the line screen (Esc)")}" aria-label="${PK.t("Leave the line screen")}">${icon("x")}</button>
       </div></div></div>`;
   }
 
   function render(params) {
     const s = state.status;
     const param = params && params[0];
-    if (!s) return frame({ level: "idle", word: "Connecting", title: "PLC-Ki", body: `<div class="tv-msg">Waiting for the first values from PLC-Ki.</div>` });
+    if (!s) return frame({ level: "idle", word: PK.t("Connecting"), title: "PLC-Ki", body: `<div class="tv-msg">${PK.t("Waiting for the first values from PLC-Ki.")}</div>` });
     const sc = scopeOf(param, s);
-    if (!sc) return frame({ level: "idle", word: "No such station", title: s.machine || "PLC-Ki",
-      body: `<div class="tv-msg">There is no station called “${esc(param)}” in this machine now. <a href="#/tv">Show the whole machine</a></div>` });
-    const title = sc.station ? `${s.machine || "Machine"} · ${sc.name}` : sc.name;
+    if (!sc) return frame({ level: "idle", word: PK.t("No such station"), title: s.machine || "PLC-Ki",
+      body: `<div class="tv-msg">${PK.t("There is no station called “{name}” in this machine now. {link}", { name: esc(param), link: `<a href="#/tv">${PK.t("Show the whole machine")}</a>` })}</div>` });
+    const title = sc.station ? `${s.machine || PK.t("Machine")} · ${sc.name}` : sc.name;
     const conn = s.connection || {};
 
     // Values that are not live are said on the screen itself: the banner and the top bar are hidden here
     if (Date.now() - state.lastOk > STALE_MS) {
-      return frame({ level: "fault", word: "No data", title, step: stepHtml(sc), body: `<div class="tv-split">
-        <div class="tv-al fault" role="alert"><div class="tv-al-text" role="heading" aria-level="2">PLC-Ki is not answering</div><p class="tv-al-cond">The values are frozen since ${esc(PK.clock(state.lastOk))}. Check that the PLC-Ki PC is on and on the network.</p></div>
+      return frame({ level: "fault", word: PK.t("No data"), title, step: stepHtml(sc), body: `<div class="tv-split">
+        <div class="tv-al fault" role="alert"><div class="tv-al-text" role="heading" aria-level="2">${PK.t("PLC-Ki is not answering")}</div><p class="tv-al-cond">${PK.t("The values are frozen since {time}. Check that the PLC-Ki PC is on and on the network.", { time: esc(PK.clock(state.lastOk)) })}</p></div>
         ${pictureHtml(sc.equipment, [], { dim: true })}</div>` });
     }
     if (["disconnected", "connecting", "waiting", "notset"].includes(conn.state)) {
-      return frame({ level: "warn", word: "No PLC connection", title, step: stepHtml(sc), body: `<div class="tv-split">
-        <div class="tv-al warn" role="alert"><div class="tv-al-text" role="heading" aria-level="2">PLC-Ki cannot read the PLC</div><p class="tv-al-cond">${conn.lastGoodRead ? `The values are from the last good read at ${esc(PK.clock(conn.lastGoodRead))}.` : "There are no values yet."}</p></div>
+      return frame({ level: "warn", word: PK.t("No PLC connection"), title, step: stepHtml(sc), body: `<div class="tv-split">
+        <div class="tv-al warn" role="alert"><div class="tv-al-text" role="heading" aria-level="2">${PK.t("PLC-Ki cannot read the PLC")}</div><p class="tv-al-cond">${conn.lastGoodRead ? PK.t("The values are from the last good read at {time}.", { time: esc(PK.clock(conn.lastGoodRead)) }) : PK.t("There are no values yet.")}</p></div>
         ${pictureHtml(sc.equipment, [], { dim: true })}</div>` });
     }
     const stop = PK.cpuStop(s);

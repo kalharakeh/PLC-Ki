@@ -23,7 +23,7 @@
     const d = new Date(day + "T12:00:00");
     const today = new Date(); today.setHours(12, 0, 0, 0);
     const diff = Math.round((today - d) / 86400000);
-    return diff === 0 ? "Today" : diff === 1 ? "Yesterday" : PK.weekdayDay(d);
+    return diff === 0 ? PK.t("Today") : diff === 1 ? PK.t("Yesterday") : PK.weekdayDay(d);
   };
   const oeeCls = (x) => (x == null ? "" : x >= 0.85 ? "ok" : x >= 0.6 ? "warn" : "bad");
   const STATE = PK.ui.states;
@@ -64,7 +64,7 @@
       ho.data = await api("PUT", "/api/reports/handover", { day, shift: +shift, text: ho.draft });
       ho.draft = null;
       PK.dirty(null);
-      toast(ho.data.note ? "Saved. The next shift sees it when they open PLC-Ki." : "Removed the handover note.");
+      toast(ho.data.note ? PK.t("Saved. The next shift sees it when they open PLC-Ki.") : PK.t("Removed the handover note."));
       if (PK.loadHandover) PK.loadHandover();
     } catch (e) { toast(e.message, "error"); }
     ho.saving = false; PK.draw();
@@ -117,7 +117,7 @@
   // ---- pieces ----
   function tabs(t) {
     const admin = PK.can("settings");
-    return PK.ui.tabs("Reports", [["shift", "Shift report"], ["summary", "Summary"], ["settings", "Report setup"]].map(([id, label]) => ({ label, on: t === id, href: "#/reports/" + id })));
+    return PK.ui.tabs(PK.t("Reports"), [["shift", PK.t("Shift report")], ["summary", PK.t("Summary")], ["settings", PK.t("Report setup")]].map(([id, label]) => ({ label, on: t === id, href: "#/reports/" + id })));
   }
 
   // One report tile: the number, what it is, how it was worked out
@@ -131,28 +131,28 @@
   }
 
   function lossTable(losses, total) {
-    if (!losses.length) return `<p class="m-0 muted">No stops or waiting time recorded.</p>`;
+    if (!losses.length) return `<p class="m-0 muted">${PK.t("No stops or waiting time recorded.")}</p>`;
     const max = Math.max(...losses.map((l) => l.minutes), 0.01);
-    return `<table class="tbl rp-loss"><tr><th>Why it was not running</th><th class="num">Times</th><th class="num">Time</th></tr>
-      ${losses.map((l) => `<tr><td><span class="sw" style="background:${(STATE[l.state] || [])[1]}"></span>${l.alarm ? `<a href="#/alarms/${encodeURIComponent(l.alarm)}">${esc(l.why)}</a>` : esc(l.why || STATE[l.state][0])}
+    return `<table class="tbl rp-loss"><tr><th>${PK.t("Why it was not running")}</th><th class="num">${PK.t("Times")}</th><th class="num">${PK.t("Time")}</th></tr>
+      ${losses.map((l) => `<tr><td><span class="sw" style="background:${(STATE[l.state] || [])[1]}"></span>${l.alarm ? `<a href="#/alarms/${encodeURIComponent(l.alarm)}">${esc(l.why)}</a>` : esc(l.why ? PK.srv(l.why) : STATE[l.state][0])}
         <div class="rp-meter"><span style="width:${(l.minutes / max * 100).toFixed(1)}%;background:${(STATE[l.state] || [])[1]}"></span></div></td>
         <td class="num">${l.times}</td><td class="num">${mins(l.minutes)}${total ? `<div class="faint">${Math.round(l.minutes / total * 100)} %</div>` : ""}</td></tr>`).join("")}</table>`;
   }
 
   function faultTable(faults, withFix) {
-    if (!faults.length) return `<p class="m-0 muted">No alarms in this time.</p>`;
-    return `<table class="tbl rp-faults"><tr><th>Alarm</th><th class="num">Times</th><th class="num">Total</th><th class="num">Longest</th></tr>
+    if (!faults.length) return `<p class="m-0 muted">${PK.t("No alarms in this time.")}</p>`;
+    return `<table class="tbl rp-faults"><tr><th>${PK.t("Alarm")}</th><th class="num">${PK.t("Times")}</th><th class="num">${PK.t("Total")}</th><th class="num">${PK.t("Longest")}</th></tr>
       ${faults.map((f) => `<tr><td><a href="#/alarms/${encodeURIComponent(f.id)}"><b>${esc(f.id)}</b></a> ${esc(f.text)}
-          ${f.stillOn ? `<span class="pill bad"><span class="dot"></span>on now</span>` : ""}
-          <div class="faint">${[f.severity === "FAULT" ? "Fault" : f.severity === "WARNING" ? "Warning" : f.severity, f.location, "last " + PK.when(f.last)].filter(Boolean).map(esc).join(" · ")}</div>
-          ${withFix && (f.causes.length || f.fix.length) ? `<details class="more rp-fix"><summary>Likely causes and fix</summary>
-            ${f.causes.length ? `<p class="mt-2 mb-1 small"><b>Likely causes</b></p><ul class="plainlist small">${f.causes.map((c) => `<li>${esc(c)}</li>`).join("")}</ul>` : ""}
-            ${f.fix.length ? `<p class="mt-2 mb-1 small"><b>Fix</b></p><ol class="plainlist small">${f.fix.map((c) => `<li>${esc(c)}</li>`).join("")}</ol>` : ""}</details>` : ""}</td>
-        <td class="num">${f.count}${f.count >= 3 ? `<div class="faint rp-rep">repeats</div>` : ""}</td><td class="num">${mins(f.minutes)}</td><td class="num">${mins(f.longestMinutes)}</td></tr>`).join("")}</table>`;
+          ${f.stillOn ? `<span class="pill bad"><span class="dot"></span>${PK.t("on now")}</span>` : ""}
+          <div class="faint">${[f.severity === "FAULT" ? PK.t("Fault") : f.severity === "WARNING" ? PK.t("Warning") : f.severity, f.location, PK.t("last {when}", { when: PK.when(f.last) })].filter(Boolean).map(esc).join(" · ")}</div>
+          ${withFix && (f.causes.length || f.fix.length) ? `<details class="more rp-fix"><summary>${PK.t("Likely causes and fix")}</summary>
+            ${f.causes.length ? `<p class="mt-2 mb-1 small"><b>${PK.t("Likely causes")}</b></p><ul class="plainlist small">${f.causes.map((c) => `<li>${esc(c)}</li>`).join("")}</ul>` : ""}
+            ${f.fix.length ? `<p class="mt-2 mb-1 small"><b>${PK.t("Fix")}</b></p><ol class="plainlist small">${f.fix.map((c) => `<li>${esc(c)}</li>`).join("")}</ol>` : ""}</details>` : ""}</td>
+        <td class="num">${f.count}${f.count >= 3 ? `<div class="faint rp-rep">${PK.t("repeats")}</div>` : ""}</td><td class="num">${mins(f.minutes)}</td><td class="num">${mins(f.longestMinutes)}</td></tr>`).join("")}</table>`;
   }
 
   function notes(list) {
-    return list && list.length ? `<ul class="plainlist faint rp-notes">${list.map((n) => `<li>${esc(n)}</li>`).join("")}</ul>` : "";
+    return list && list.length ? `<ul class="plainlist faint rp-notes">${list.map((n) => `<li>${esc(PK.srv(n))}</li>`).join("")}</ul>` : "";
   }
 
   // ---- shift report ----
@@ -163,108 +163,108 @@
     const nextStarted = !x.inProgress && new Date(x.to) <= new Date();
     const opts = shifts.map((s, i) => `<option value="${i}" ${i === x.shiftIndex ? "selected" : ""}>${esc(s.name)} ${esc(s.start)}–${esc(s.end)}</option>`).join("");
     return `<div class="toolbar rp-pick no-print">
-      <a class="btn gray small" href="#/reports/shift/${prev[0]}/${prev[1]}" aria-label="Shift before">‹</a>
-      <input type="date" id="rp-day" value="${esc(x.day)}" aria-label="Day the shift started">
-      <select id="rp-shift" aria-label="Shift">${opts}</select>
-      ${nextStarted ? `<a class="btn gray small" href="#/reports/shift/${next[0]}/${next[1]}" aria-label="Next shift">›</a>` : `<span class="btn gray small" aria-disabled="true" style="opacity:.4">›</span>`}
-      ${r.cfg && r.cfg.current && !(r.cfg.current.day === x.day && r.cfg.current.index === x.shiftIndex) ? `<a class="btn b small" href="#/reports/shift">This shift</a>` : ""}
+      <a class="btn gray small" href="#/reports/shift/${prev[0]}/${prev[1]}" aria-label="${PK.t("Shift before")}">‹</a>
+      <input type="date" id="rp-day" value="${esc(x.day)}" aria-label="${PK.t("Day the shift started")}">
+      <select id="rp-shift" aria-label="${PK.t("Shift")}">${opts}</select>
+      ${nextStarted ? `<a class="btn gray small" href="#/reports/shift/${next[0]}/${next[1]}" aria-label="${PK.t("Next shift")}">›</a>` : `<span class="btn gray small" aria-disabled="true" style="opacity:.4">›</span>`}
+      ${r.cfg && r.cfg.current && !(r.cfg.current.day === x.day && r.cfg.current.index === x.shiftIndex) ? `<a class="btn b small" href="#/reports/shift">${PK.t("This shift")}</a>` : ""}
       <span class="spacer"></span>
-      <a class="btn gray small" href="/api/reports/shift.csv?day=${x.day}&shift=${x.shiftIndex}" download>${icon("download")}<span>Download for Excel</span></a>
-      <button class="btn gray small" type="button" data-print>${icon("file")}<span>Print or PDF</span></button>
+      <a class="btn gray small" href="/api/reports/shift.csv?day=${x.day}&shift=${x.shiftIndex}" download>${icon("download")}<span>${PK.t("Download for Excel")}</span></a>
+      <button class="btn gray small" type="button" data-print>${icon("file")}<span>${PK.t("Print or PDF")}</span></button>
     </div>`;
   }
 
   // The shift log's filters: which kinds each one shows (null: all)
-  const LOG_F = [["all", "Everything", null], ["alarms", "Alarms and stops", ["alarm", "halt", "blocked", "state", "cpu", "link", "monitor"]],
-    ["steps", "Steps and outputs", ["step", "output"]], ["changes", "Values changed", ["write"]]];
+  const LOG_F = [["all", PK.T("Everything"), null], ["alarms", PK.T("Alarms and stops"), ["alarm", "halt", "blocked", "state", "cpu", "link", "monitor"]],
+    ["steps", PK.T("Steps and outputs"), ["step", "output"]], ["changes", PK.T("Values changed"), ["write"]]];
   const logShown = () => PK.screenSize() === "phone" ? 30 : 40;
   /** The time asked for in the address (#/reports/shift/day/index/@ms: a mark clicked on Plant), or null. */
   const logTarget = () => { const p = (PK.current && PK.current.params) || []; return p[3] && p[3][0] === "@" ? +p[3].slice(1) : null; };
   function shiftLog(x) {
     const L = r.log && r.log.key === x.from + "|" + x.to ? r.log : null;
-    const h = `<h3 id="shift-log">What happened</h3>`;
-    if (!L || (!L.list && !L.err)) return `<div class="card">${h}${PK.ui.loading("list", { rows: 5, label: "Loading the shift log" })}</div>`;
+    const h = `<h3 id="shift-log">${PK.t("What happened")}</h3>`;
+    if (!L || (!L.list && !L.err)) return `<div class="card">${h}${PK.ui.loading("list", { rows: 5, label: PK.t("Loading the shift log") })}</div>`;
     if (!L.list) return `<div class="card">${h}${PK.ui.error(L.err)}</div>`;
     const [, , kinds] = LOG_F.find(([k]) => k === L.f) || LOG_F[0];
     const count = (ks) => ks ? L.list.filter((e) => ks.includes(e.kind)).length : L.list.length;
-    const pick = PK.ui.choice("Show", LOG_F.map(([k, label, ks]) => ({ label: `${label}&nbsp;<span class="faint">${count(ks)}</span>`, on: L.f === k, data: { "data-logf": k } })));
+    const pick = PK.ui.choice(PK.t("Show"), LOG_F.map(([k, label, ks]) => ({ label: `${PK.t(label)}&nbsp;<span class="faint">${count(ks)}</span>`, on: L.f === k, data: { "data-logf": k } })));
     const csv = `/api/events.csv?from=${encodeURIComponent(x.from)}&to=${encodeURIComponent(x.to)}${kinds ? "&kind=" + kinds.join(",") : ""}`;
-    const bar = PK.ui.toolbar({ left: pick, right: `<a class="btn gray small no-print" href="${csv}" download>${icon("download")}<span>Download for Excel</span></a>` });
+    const bar = PK.ui.toolbar({ left: pick, right: `<a class="btn gray small no-print" href="${csv}" download>${icon("download")}<span>${PK.t("Download for Excel")}</span></a>` });
     const list = kinds ? L.list.filter((e) => kinds.includes(e.kind)) : L.list;
     const hit = logTarget();
     if (hit && L.hitFor !== hit) { L.hitFor = hit; L.hitDone = false; L.f = "all"; L.all = true; }   // the line asked for must be in the list
     const shown = L.all ? list : list.slice(0, logShown());
     const body = !list.length
-      ? PK.ui.empty({ icon: "clock", title: L.list.length ? "Nothing of this kind in this shift." : "Nothing recorded in this shift.",
-        text: L.list.length ? "" : "PLC-Ki records what happens while it runs and is connected to the PLC." })
+      ? PK.ui.empty({ icon: "clock", title: L.list.length ? PK.t("Nothing of this kind in this shift.") : PK.t("Nothing recorded in this shift."),
+        text: L.list.length ? "" : PK.t("PLC-Ki records what happens while it runs and is connected to the PLC.") })
       : PK.ui.events(shown, { cls: "rp-log", hit })
-        + (list.length > shown.length ? `<div class="mt-2 row no-print"><button class="btn gray small" type="button" data-logall>Show all ${list.length}</button></div>` : "")
-        + (L.busyCut && kinds !== LOG_F[1][2] ? `<p class="mt-2 mb-0 faint small">Steps and outputs: the latest ${LOG_MAX}. Download for Excel has every line.</p>` : "");
-    return `<div class="card">${h}<p class="mt-0 muted small">Newest first. Steps, alarms, halts, values changed from PLC-Ki: everything PLC-Ki saw in this shift.</p>${bar}${body}</div>`;
+        + (list.length > shown.length ? `<div class="mt-2 row no-print"><button class="btn gray small" type="button" data-logall>${PK.t("Show all {n}", { n: list.length })}</button></div>` : "")
+        + (L.busyCut && kinds !== LOG_F[1][2] ? `<p class="mt-2 mb-0 faint small">${PK.t("Steps and outputs: the latest {max}. Download for Excel has every line.", { max: LOG_MAX })}</p>` : "");
+    return `<div class="card">${h}<p class="mt-0 muted small">${PK.t("Newest first. Steps, alarms, halts, values changed from PLC-Ki: everything PLC-Ki saw in this shift.")}</p>${bar}${body}</div>`;
   }
 
   /** The shift's handover note: written during this shift or the next one by anyone logged in, then read-only. */
   function handoverCard(x) {
     const ho = r.ho && r.ho.key === x.day + "/" + x.shiftIndex ? r.ho : null;
-    const h = `<h3 class="m-0">Handover note</h3>`;
+    const h = `<h3 class="m-0">${PK.t("Handover note")}</h3>`;
     if (!ho || (!ho.data && !ho.err)) return `<div class="card stack rp-ho">${h}${PK.ui.loading("lines")}</div>`;
     if (!ho.data) return `<div class="card stack rp-ho">${h}${PK.ui.error(ho.err)}</div>`;
     const { note, canWrite, maxLength } = ho.data;
     const hmOf = (t) => hm(t) + (new Date(t).toDateString() !== new Date(x.from).toDateString() ? ` (${esc(dayName(String(t).slice(0, 10)))})` : "");
-    const who = note ? `<span class="faint small">${esc(note.by)}, ${hmOf(note.at)}${note.editedBy ? ` · changed by ${esc(note.editedBy)}, ${hmOf(note.editedAt)}` : ""}</span>` : "";
+    const who = note ? `<span class="faint small">${esc(note.by)}, ${hmOf(note.at)}${note.editedBy ? ` · ${PK.t("changed by {name}, {time}", { name: esc(note.editedBy), time: hmOf(note.editedAt) })}` : ""}</span>` : "";
     const head = `<div class="row">${h}<span class="spacer"></span>${who}</div>`;
     if (canWrite && PK.state.user) {
       const text = ho.draft != null ? ho.draft : note ? note.text : "";
       return `<div class="card stack rp-ho no-print">${head}
-        <label class="field m-0"><span class="sr">Handover note for the next shift</span><textarea id="ho-text" rows="4" maxlength="${maxLength}"
-          placeholder="What the next shift should know: what was done, what is still open, what to watch.">${esc(text)}</textarea></label>
-        <div class="row"><span class="faint small">The next shift sees it on every page when they open PLC-Ki. It can be changed until the next shift ends.</span><span class="spacer"></span>
-          <button class="btn small" type="button" data-ho-save ${ho.saving || ho.draft == null ? "disabled" : ""}>${ho.saving ? "Saving…" : "Save note"}</button></div></div>`
+        <label class="field m-0"><span class="sr">${PK.t("Handover note for the next shift")}</span><textarea id="ho-text" rows="4" maxlength="${maxLength}"
+          placeholder="${PK.t("What the next shift should know: what was done, what is still open, what to watch.")}">${esc(text)}</textarea></label>
+        <div class="row"><span class="faint small">${PK.t("The next shift sees it on every page when they open PLC-Ki. It can be changed until the next shift ends.")}</span><span class="spacer"></span>
+          <button class="btn small" type="button" data-ho-save ${ho.saving || ho.draft == null ? "disabled" : ""}>${ho.saving ? PK.t("Saving…") : PK.t("Save note")}</button></div></div>`
         + (note ? `<div class="card stack rp-ho print-only">${head}<p class="ho-note">${esc(note.text)}</p></div>` : "");
     }
     const body = note ? `<p class="ho-note">${esc(note.text)}</p>`
-      : `<p class="m-0 muted">${canWrite ? "No handover note yet." : "No handover note was left for this shift."}</p>`;
-    const login = canWrite && !PK.state.user ? `<p class="m-0 small no-print"><a href="/login.html">Log in</a> to write the handover note.</p>` : "";
+      : `<p class="m-0 muted">${canWrite ? PK.t("No handover note yet.") : PK.t("No handover note was left for this shift.")}</p>`;
+    const login = canWrite && !PK.state.user ? `<p class="m-0 small no-print">${PK.t("{link} to write the handover note.", { link: `<a href="/login.html">${PK.t("Log in")}</a>` })}</p>` : "";
     return `<div class="card stack rp-ho">${head}${body}${login}</div>`;
   }
 
   function shiftPage() {
     const x = r.shift;
-    if (!x) return PK.sec("tight rp", r.err ? PK.ui.error(r.err) : PK.ui.loading("tiles", { label: "Making the report" }));
+    if (!x) return PK.sec("tight rp", r.err ? PK.ui.error(r.err) : PK.ui.loading("tiles", { label: PK.t("Making the report") }));
     const t = x.totals, o = x.oee, p = x.parts, m = x.maint;
     const watched = t.running + t.idle + t.down;
-    const title = `${esc(x.shift)} shift, ${esc(dayName(x.day))}`;
-    const status = x.inProgress ? `<span class="pill info"><span class="dot"></span>Running now · so far</span>` : `<span class="pill">Finished</span>`;
+    const title = PK.t("{shift} shift, {day}", { shift: esc(x.shift), day: esc(dayName(x.day)) });
+    const status = x.inProgress ? `<span class="pill info"><span class="dot"></span>${PK.t("Running now · so far")}</span>` : `<span class="pill">${PK.t("Finished")}</span>`;
     const head = `<div class="rp-head"><div><div class="eyebrow">${status}<span class="faint">${hm(x.from)}–${hm(x.to)} · ${esc(x.machine)}</span></div><h2 class="m-0">${title}</h2></div></div>`;
 
     const empty = watched < 0.5;
-    const kpis = empty ? `<div class="notice gold">${icon("info")}<div>PLC-Ki has no values for this shift${t.noLink > 0.5 ? " (no PLC connection)" : ""}. It records while it runs and is connected to the PLC.</div></div>`
+    const kpis = empty ? `<div class="notice gold">${icon("info")}<div>${t.noLink > 0.5 ? PK.t("PLC-Ki has no values for this shift (no PLC connection). It records while it runs and is connected to the PLC.") : PK.t("PLC-Ki has no values for this shift. It records while it runs and is connected to the PLC.")}</div></div>`
       : kpiRow([
-        kpi(pct(o.value), "OEE", "Availability × Performance × Quality", oeeCls(o.value)),
-        kpi(pct(o.availability), "Availability", `Ran ${mins(o.runMinutes)} of ${mins(o.plannedMinutes)} planned`),
-        kpi(pct(o.performance), "Performance", p.idealCycleSeconds ? `Ideal cycle ${p.idealCycleSeconds} s${p.idealEstimated ? " (estimated)" : ""}` : "Needs an ideal cycle time"),
-        kpi(pct(o.quality), "Quality", p.badKnown ? `${p.bad} reject${p.bad === 1 ? "" : "s"}` : "No reject counter set"),
+        kpi(pct(o.value), "OEE", PK.t("Availability × Performance × Quality"), oeeCls(o.value)),
+        kpi(pct(o.availability), PK.t("Availability"), PK.t("Ran {run} of {planned} planned", { run: mins(o.runMinutes), planned: mins(o.plannedMinutes) })),
+        kpi(pct(o.performance), PK.t("Performance"), p.idealCycleSeconds ? (p.idealEstimated ? PK.t("Ideal cycle {sec} s (estimated)", { sec: p.idealCycleSeconds }) : PK.t("Ideal cycle {sec} s", { sec: p.idealCycleSeconds })) : PK.t("Needs an ideal cycle time")),
+        kpi(pct(o.quality), PK.t("Quality"), p.badKnown ? PK.t("{n} reject|{n} rejects", { n: p.bad }) : PK.t("No reject counter set")),
       ]);
 
     const L = r.log && r.log.key === x.from + "|" + x.to && r.log.list ? r.log.list : [];
     const marks = L.filter((e) => e.mark).reverse();
-    const time = `<div class="card"><h3>Where the time went</h3>${PK.ui.timeline({ spans: x.timeline, from: x.from, to: x.to, marks, sel: r.markSel ?? -1, label: "Machine state over the shift" })}${marks[r.markSel] ? `<p class="tl-sel"><time>${esc(PK.clock(marks[r.markSel].time))}</time> ${esc(marks[r.markSel].text)}</p>` : ""}${legend(t)}</div>`;
-    const parts = `<div class="card"><h3>Parts</h3><div class="kv">
-        <span>Made</span><span>${p.total}</span>
-        <span>Good</span><span>${p.good}</span>
-        <span>Rejects</span><span>${p.badKnown ? p.bad : "not counted"}</span>
-        <span>Counted from</span><span>${p.from === "counter" ? "part counter" : `finished cycles (${p.cycles})`}</span>
-        <span>Average cycle</span><span>${p.avgCycleSeconds != null ? p.avgCycleSeconds + " s" : "—"}</span>
-        <span>Ideal cycle</span><span>${p.idealCycleSeconds != null ? p.idealCycleSeconds + " s" + (p.idealEstimated ? " (fastest seen)" : "") : "—"}</span></div></div>`;
-    const maint = `<div class="card"><h3>For maintenance</h3><div class="kv">
-        <span>Stops by a fault</span><span>${m.stops}</span>
-        <span>Down time</span><span>${mins(t.down)}</span>
-        <span>Average repair (MTTR)</span><span>${mins(m.mttrMinutes)}</span>
-        <span>Running between faults (MTBF)</span><span>${mins(m.mtbfMinutes)}</span>
-        <span>No PLC connection</span><span>${mins(t.noLink)}</span></div></div>`;
-    const losses = `<div class="card"><h3>Biggest losses</h3>${lossTable(x.losses, t.idle + t.down + t.noLink)}</div>`;
-    const faults = `<div class="card"><h3>Alarms in this shift</h3>${faultTable(x.faults, true)}<p class="mt-3 mb-0 faint small no-print">Every past alarm, with what fixed it: <a href="#/history">History</a>.</p></div>`;
-    const ask = PK.state.user ? `<div class="mt-2 row no-print"><button class="btn b small" type="button" data-rpask>${icon("chat")}<span>Ask ${PK.AI} for a handover note</span></button></div>` : "";
+    const time = `<div class="card"><h3>${PK.t("Where the time went")}</h3>${PK.ui.timeline({ spans: x.timeline, from: x.from, to: x.to, marks, sel: r.markSel ?? -1, label: PK.t("Machine state over the shift") })}${marks[r.markSel] ? `<p class="tl-sel"><time>${esc(PK.clock(marks[r.markSel].time))}</time> ${esc(marks[r.markSel].text)}</p>` : ""}${legend(t)}</div>`;
+    const parts = `<div class="card"><h3>${PK.t("Parts")}</h3><div class="kv">
+        <span>${PK.t("Made")}</span><span>${p.total}</span>
+        <span>${PK.t("Good")}</span><span>${p.good}</span>
+        <span>${PK.t("Rejects")}</span><span>${p.badKnown ? p.bad : PK.t("not counted")}</span>
+        <span>${PK.t("Counted from")}</span><span>${p.from === "counter" ? PK.t("part counter") : PK.t("finished cycles ({n})", { n: p.cycles })}</span>
+        <span>${PK.t("Average cycle")}</span><span>${p.avgCycleSeconds != null ? p.avgCycleSeconds + " s" : "—"}</span>
+        <span>${PK.t("Ideal cycle")}</span><span>${p.idealCycleSeconds != null ? p.idealCycleSeconds + " s" + (p.idealEstimated ? " " + PK.t("(fastest seen)") : "") : "—"}</span></div></div>`;
+    const maint = `<div class="card"><h3>${PK.t("For maintenance")}</h3><div class="kv">
+        <span>${PK.t("Stops by a fault")}</span><span>${m.stops}</span>
+        <span>${PK.t("Down time")}</span><span>${mins(t.down)}</span>
+        <span>${PK.t("Average repair (MTTR)")}</span><span>${mins(m.mttrMinutes)}</span>
+        <span>${PK.t("Running between faults (MTBF)")}</span><span>${mins(m.mtbfMinutes)}</span>
+        <span>${PK.t("No PLC connection")}</span><span>${mins(t.noLink)}</span></div></div>`;
+    const losses = `<div class="card"><h3>${PK.t("Biggest losses")}</h3>${lossTable(x.losses, t.idle + t.down + t.noLink)}</div>`;
+    const faults = `<div class="card"><h3>${PK.t("Alarms in this shift")}</h3>${faultTable(x.faults, true)}<p class="mt-3 mb-0 faint small no-print">${PK.t("Every past alarm, with what fixed it: {link}.", { link: `<a href="#/history">${PK.t("History")}</a>` })}</p></div>`;
+    const ask = PK.state.user ? `<div class="mt-2 row no-print"><button class="btn b small" type="button" data-rpask>${icon("chat")}<span>${PK.t("Ask {ai} for a handover note", { ai: PK.AI })}</span></button></div>` : "";
     return PK.sec("tight rp", shiftPicker(x) + head + handoverCard(x) + `<div class="mt-4"></div>` + kpis + `<div class="rp-grid">${time}<div class="grid two rp-two">${parts}${maint}</div><div class="grid two rp-two">${losses}${faults}</div>${shiftLog(x)}</div>` + notes(x.notes) + ask);
   }
 
@@ -272,25 +272,25 @@
   function faultsPage() {
     const x = r.faults;
     const range = PK.ui.toolbar({ cls: "no-print",
-      left: PK.ui.choice("Time range", [[1, "24 h"], [7, "7 days"], [30, "30 days"], [365, "1 year"]].map(([d, l]) => ({ label: l, on: r.days === d, data: { "data-days": d } }))),
-      right: `<a class="btn gray small" href="/api/reports/faults.csv?days=${r.days}" download>${icon("download")}<span>Download for Excel</span></a>
-      <button class="btn gray small" type="button" data-print>${icon("file")}<span>Print or PDF</span></button>` });
-    if (!x) return PK.sec("tight rp", range + (r.err ? PK.ui.error(r.err) : PK.ui.loading("tiles", { label: "Making the summary" })));
+      left: PK.ui.choice(PK.t("Time range"), [[1, PK.t("24 h")], [7, PK.t("7 days")], [30, PK.t("30 days")], [365, PK.t("1 year")]].map(([d, l]) => ({ label: l, on: r.days === d, data: { "data-days": d } }))),
+      right: `<a class="btn gray small" href="/api/reports/faults.csv?days=${r.days}" download>${icon("download")}<span>${PK.t("Download for Excel")}</span></a>
+      <button class="btn gray small" type="button" data-print>${icon("file")}<span>${PK.t("Print or PDF")}</span></button>` });
+    if (!x) return PK.sec("tight rp", range + (r.err ? PK.ui.error(r.err) : PK.ui.loading("tiles", { label: PK.t("Making the summary") })));
     const t = x.totals, m = x.maint;
     const kpis = kpiRow([
-      kpi(mins(t.down), "Down by faults", `${m.stops} stop${m.stops === 1 ? "" : "s"}`, t.down > 0 ? "bad" : "ok"),
-      kpi(mins(m.mttrMinutes), "Average repair (MTTR)", "Down time per stop"),
-      kpi(mins(m.mtbfMinutes), "Running between faults (MTBF)", "Running time per stop"),
-      kpi(String(x.faults.length), "Different alarms", x.faults.filter((f) => f.count >= 3).length + " repeat 3 times or more"),
+      kpi(mins(t.down), PK.t("Down by faults"), PK.t("{n} stop|{n} stops", { n: m.stops }), t.down > 0 ? "bad" : "ok"),
+      kpi(mins(m.mttrMinutes), PK.t("Average repair (MTTR)"), PK.t("Down time per stop")),
+      kpi(mins(m.mtbfMinutes), PK.t("Running between faults (MTBF)"), PK.t("Running time per stop")),
+      kpi(String(x.faults.length), PK.t("Different alarms"), PK.t("{n} repeat 3 times or more", { n: x.faults.filter((f) => f.count >= 3).length })),
     ]);
-    const shifts = x.shifts.length ? `<table class="tbl rp-shifts"><tr><th>Shift</th><th class="num">OEE</th><th class="num">Avail.</th><th class="num">Parts</th><th class="num">Down</th><th>Biggest loss</th></tr>
-      ${x.shifts.map((s) => `<tr><td><a href="#/reports/shift/${s.day}/${s.shiftIndex}">${esc(dayName(s.day))}, ${esc(s.shift)}</a>${s.inProgress ? ` <span class="tag blue">now</span>` : ""}</td>
+    const shifts = x.shifts.length ? `<table class="tbl rp-shifts"><tr><th>${PK.t("Shift")}</th><th class="num">OEE</th><th class="num">${PK.t("Avail.")}</th><th class="num">${PK.t("Parts")}</th><th class="num">${PK.t("Down")}</th><th>${PK.t("Biggest loss")}</th></tr>
+      ${x.shifts.map((s) => `<tr><td><a href="#/reports/shift/${s.day}/${s.shiftIndex}">${esc(dayName(s.day))}, ${esc(s.shift)}</a>${s.inProgress ? ` <span class="tag blue">${PK.t("now")}</span>` : ""}</td>
         <td class="num"><b class="rp-oee ${oeeCls(s.oee)}">${pct(s.oee)}</b></td><td class="num">${pct(s.availability)}</td><td class="num">${s.parts}</td><td class="num">${mins(s.downMinutes)}</td>
-        <td class="faint">${esc(s.topLoss || "")}</td></tr>`).join("")}</table>` : `<p class="m-0 muted">No shift recorded yet.</p>`;
-    return PK.sec("tight rp", range + `<div class="rp-head"><div><div class="eyebrow"><span class="faint">${esc(PK.date(x.from, false))} to now · ${esc(x.machine)}</span></div><h2 class="m-0">Summary for maintenance</h2></div></div>`
-      + kpis + `<div class="rp-grid"><a class="card plink no-print" href="#/history/ranking/downtime"><span class="ico">${icon("clock")}</span><span><b>Which alarms cost the most time</b><span class="muted small">${x.faults.length ? `${x.faults.length} different alarm${x.faults.length === 1 ? "" : "s"} in this time. History ranks them by how long they were on, with what fixed them.` : "History ranks past alarms by how long they were on, with what fixed them."}</span></span><span class="chev">›</span></a>
-      <div class="card"><h3>Why it was not running</h3>${lossTable(x.losses, t.idle + t.down + t.noLink)}</div>
-      <div class="card"><h3>Shifts</h3><div class="tbl-wrap">${shifts}</div></div></div>` + notes(x.notes));
+        <td class="faint">${esc(PK.srv(s.topLoss || ""))}</td></tr>`).join("")}</table>` : `<p class="m-0 muted">${PK.t("No shift recorded yet.")}</p>`;
+    return PK.sec("tight rp", range + `<div class="rp-head"><div><div class="eyebrow"><span class="faint">${PK.t("{date} to now", { date: esc(PK.date(x.from, false)) })} · ${esc(x.machine)}</span></div><h2 class="m-0">${PK.t("Summary for maintenance")}</h2></div></div>`
+      + kpis + `<div class="rp-grid"><a class="card plink no-print" href="#/history/ranking/downtime"><span class="ico">${icon("clock")}</span><span><b>${PK.t("Which alarms cost the most time")}</b><span class="muted small">${x.faults.length ? PK.t("{n} different alarm in this time. History ranks them by how long they were on, with what fixed them.|{n} different alarms in this time. History ranks them by how long they were on, with what fixed them.", { n: x.faults.length }) : PK.t("History ranks past alarms by how long they were on, with what fixed them.")}</span></span><span class="chev">›</span></a>
+      <div class="card"><h3>${PK.t("Why it was not running")}</h3>${lossTable(x.losses, t.idle + t.down + t.noLink)}</div>
+      <div class="card"><h3>${PK.t("Shifts")}</h3><div class="tbl-wrap">${shifts}</div></div></div>` + notes(x.notes));
   }
 
   // ---- settings ----
@@ -300,44 +300,44 @@
     const admin = PK.can("settings");
     const s = r.draft || c.settings;
     const dis = admin ? "" : "disabled";
-    const counterOpts = (sel, kind) => `<option value="">${kind === "good" ? "None: count finished cycles" : "None: quality not counted"}</option>` +
+    const counterOpts = (sel, kind) => `<option value="">${kind === "good" ? PK.t("None: count finished cycles") : PK.t("None: quality not counted")}</option>` +
       c.counters.map((t) => `<option value="${esc(t.id)}" ${t.id === sel ? "selected" : ""}>${t.suggest === kind ? "★ " : ""}${esc(t.label)} (${esc(t.symbol)})</option>`).join("");
-    const seqOpts = `<option value="">${c.sequences.length ? "The first sequence: " + esc(c.sequences[0].name) : "No sequence in the model"}</option>` +
-      c.sequences.map((q) => `<option value="${esc(q.id)}" ${q.id === s.cycleSequence ? "selected" : ""}>${esc(q.name)} (back to step ${q.home ?? "?"} "${esc(q.homeName || "")}")</option>`).join("");
+    const seqOpts = `<option value="">${c.sequences.length ? PK.t("The first sequence: {name}", { name: esc(c.sequences[0].name) }) : PK.t("No sequence in the model")}</option>` +
+      c.sequences.map((q) => `<option value="${esc(q.id)}" ${q.id === s.cycleSequence ? "selected" : ""}>${PK.t("{name} (back to step {step} \"{stepName}\")", { name: esc(q.name), step: q.home ?? "?", stepName: esc(q.homeName || "") })}</option>`).join("");
     const rows = s.shifts.map((x, i) => `<tr>
-        <td><input type="text" data-sh="${i}" data-f="name" value="${esc(x.name)}" ${dis} aria-label="Shift name"></td>
-        <td><input type="time" data-sh="${i}" data-f="start" value="${esc(x.start)}" ${dis} aria-label="Start"></td>
-        <td><input type="time" data-sh="${i}" data-f="end" value="${esc(x.end)}" ${dis} aria-label="End"></td>
-        <td><input type="number" min="0" max="600" data-sh="${i}" data-f="plannedStopMinutes" value="${x.plannedStopMinutes || 0}" ${dis} aria-label="Planned stops in minutes"></td>
-        <td>${admin && s.shifts.length > 1 ? `<button class="btn gray small" type="button" data-shdel="${i}" aria-label="Remove shift">${icon("x")}</button>` : ""}</td></tr>`).join("");
+        <td><input type="text" data-sh="${i}" data-f="name" value="${esc(x.name)}" ${dis} aria-label="${PK.t("Shift name")}"></td>
+        <td><input type="time" data-sh="${i}" data-f="start" value="${esc(x.start)}" ${dis} aria-label="${PK.t("Start")}"></td>
+        <td><input type="time" data-sh="${i}" data-f="end" value="${esc(x.end)}" ${dis} aria-label="${PK.t("End")}"></td>
+        <td><input type="number" min="0" max="600" data-sh="${i}" data-f="plannedStopMinutes" value="${x.plannedStopMinutes || 0}" ${dis} aria-label="${PK.t("Planned stops in minutes")}"></td>
+        <td>${admin && s.shifts.length > 1 ? `<button class="btn gray small" type="button" data-shdel="${i}" aria-label="${PK.t("Remove shift")}">${icon("x")}</button>` : ""}</td></tr>`).join("");
     const sugg = c.counters.filter((t) => t.suggest);
     return PK.sec("tight rp", `<div class="grid two rp-two">
-      <div class="card stack"><h3 class="m-0">Shifts</h3>
-        <p class="m-0 muted small">An end before the start runs past midnight. Planned stops (breaks, cleaning) are not counted as lost time.</p>
-        <div class="rp-shtbl"><table class="tbl"><tr><th>Name</th><th>Start</th><th>End</th><th>Planned stops, min</th><th></th></tr>${rows}</table></div>
-        ${admin ? `<div class="row"><button class="btn gray small" type="button" data-shadd>${icon("plus")}<span>Add a shift</span></button></div>` : ""}
+      <div class="card stack"><h3 class="m-0">${PK.t("Shifts")}</h3>
+        <p class="m-0 muted small">${PK.t("An end before the start runs past midnight. Planned stops (breaks, cleaning) are not counted as lost time.")}</p>
+        <div class="rp-shtbl"><table class="tbl"><tr><th>${PK.t("Name")}</th><th>${PK.t("Start")}</th><th>${PK.t("End")}</th><th>${PK.t("Planned stops, min")}</th><th></th></tr>${rows}</table></div>
+        ${admin ? `<div class="row"><button class="btn gray small" type="button" data-shadd>${icon("plus")}<span>${PK.t("Add a shift")}</span></button></div>` : ""}
       </div>
-      <div class="card stack"><h3 class="m-0">Parts and cycles</h3>
-        <label class="field">Good part counter<select data-f="goodCountTag" ${dis}>${counterOpts(s.goodCountTag, "good")}</select>
-          <span class="hint">A tag that goes up by one per part. Without one, every finished cycle counts as one part.${sugg.length ? " ★ looks like a counter." : ""}</span></label>
-        <label class="field">Reject counter<select data-f="badCountTag" ${dis}>${counterOpts(s.badCountTag, "bad")}</select>
-          <span class="hint">Without one, quality counts as 100 % and the report says so.</span></label>
-        <label class="field">Cycle sequence<select data-f="cycleSequence" ${dis}>${seqOpts}</select>
-          <span class="hint">One cycle is finished when this sequence comes back to its first step.</span></label>
-        <label class="field">Ideal cycle time, seconds<input type="number" min="0" step="0.1" data-f="idealCycleSeconds" value="${s.idealCycleSeconds ?? ""}" placeholder="Empty: the fastest cycles PLC-Ki has seen" ${dis}>
-          <span class="hint">The fastest the machine can make one part, for Performance.</span></label>
+      <div class="card stack"><h3 class="m-0">${PK.t("Parts and cycles")}</h3>
+        <label class="field">${PK.t("Good part counter")}<select data-f="goodCountTag" ${dis}>${counterOpts(s.goodCountTag, "good")}</select>
+          <span class="hint">${PK.t("A tag that goes up by one per part. Without one, every finished cycle counts as one part.")}${sugg.length ? " " + PK.t("★ looks like a counter.") : ""}</span></label>
+        <label class="field">${PK.t("Reject counter")}<select data-f="badCountTag" ${dis}>${counterOpts(s.badCountTag, "bad")}</select>
+          <span class="hint">${PK.t("Without one, quality counts as 100 % and the report says so.")}</span></label>
+        <label class="field">${PK.t("Cycle sequence")}<select data-f="cycleSequence" ${dis}>${seqOpts}</select>
+          <span class="hint">${PK.t("One cycle is finished when this sequence comes back to its first step.")}</span></label>
+        <label class="field">${PK.t("Ideal cycle time, seconds")}<input type="number" min="0" step="0.1" data-f="idealCycleSeconds" value="${s.idealCycleSeconds ?? ""}" placeholder="${PK.t("Empty: the fastest cycles PLC-Ki has seen")}" ${dis}>
+          <span class="hint">${PK.t("The fastest the machine can make one part, for Performance.")}</span></label>
       </div></div>
-      <div class="mt-4 card stack"><h3 class="m-0">How PLC-Ki counts</h3>
+      <div class="mt-4 card stack"><h3 class="m-0">${PK.t("How PLC-Ki counts")}</h3>
         <ul class="plainlist small">
-          <li><b>Running</b>: a sequence is past its first step and no fault alarm is on. With no sequences in the model, a device switched on.</li>
-          <li><b>Down</b>: a fault alarm is on. The reason is the alarm that came first.</li>
-          <li><b>Waiting or stopped</b>: no fault, but the sequence waits in its first step or is halted.</li>
-          <li><b>No PLC connection</b> and <b>Not watched</b> (PLC-Ki was off) are left out of OEE.</li>
-          <li><b>OEE</b> = Availability (running ÷ planned time) × Performance (ideal cycle × parts ÷ running time) × Quality (good ÷ all parts).</li>
+          <li><b>${PK.t("Running")}</b>: ${PK.t("a sequence is past its first step and no fault alarm is on. With no sequences in the model, a device switched on.")}</li>
+          <li><b>${PK.t("Down")}</b>: ${PK.t("a fault alarm is on. The reason is the alarm that came first.")}</li>
+          <li><b>${PK.t("Waiting or stopped")}</b>: ${PK.t("no fault, but the sequence waits in its first step or is halted.")}</li>
+          <li>${PK.t("{a} and {b} (PLC-Ki was off) are left out of OEE.", { a: `<b>${PK.t("No PLC connection")}</b>`, b: `<b>${PK.t("Not watched")}</b>` })}</li>
+          <li><b>OEE</b> = ${PK.t("Availability (running ÷ planned time) × Performance (ideal cycle × parts ÷ running time) × Quality (good ÷ all parts).")}</li>
         </ul>
-        <p class="m-0 faint small">Recorded in ${esc(c.folder)}, one small file per day.</p>
+        <p class="m-0 faint small">${PK.t("Recorded in {folder}, one small file per day.", { folder: esc(c.folder) })}</p>
       </div>
-      ${admin ? `<div class="mt-4 row end"><button class="btn" type="button" data-rpsave ${r.saving ? "disabled" : ""}>${r.saving ? "Saving…" : "Save"}</button></div>` : ""}`);
+      ${admin ? `<div class="mt-4 row end"><button class="btn" type="button" data-rpsave ${r.saving ? "disabled" : ""}>${r.saving ? PK.t("Saving…") : PK.t("Save")}</button></div>` : ""}`);
   }
 
   async function save() {
@@ -348,7 +348,7 @@
       r.cfg = await api("PUT", "/api/admin/reports/settings", body);
       r.draft = JSON.parse(JSON.stringify(r.cfg.settings));
       PK.dirty(null);
-      toast("Saved. The reports use these settings from now on.");
+      toast(PK.t("Saved. The reports use these settings from now on."));
     } catch (e) { toast(e.message, "error"); }
     r.saving = false; PK.draw();
   }
@@ -358,8 +358,8 @@
     leave() { stopTimer(); },
     render(params) {
       const t = tab(params);
-      const head = PK.hero({ cls: "hero compact", title: "Reports",
-        sub: "Shift report with OEE, and a summary for maintenance. Made from what PLC-Ki records while it watches the machine. Past alarms are in History.", extra: tabs(t) });
+      const head = PK.hero({ cls: "hero compact", title: PK.t("Reports"),
+        sub: PK.t("Shift report with OEE, and a summary for maintenance. Made from what PLC-Ki records while it watches the machine. Past alarms are in History."), extra: tabs(t) });
       const body = t === "shift" ? shiftPage() : t === "summary" ? faultsPage() : settingsPage();
       return head + body;
     },
@@ -416,7 +416,7 @@
           mark();
         }));
         const add = el.querySelector("[data-shadd]");
-        if (add) PK.on(add, "click", () => { r.draft.shifts.push({ name: "Shift " + (r.draft.shifts.length + 1), start: "06:00", end: "14:00", plannedStopMinutes: 0 }); mark(); PK.draw(); });
+        if (add) PK.on(add, "click", () => { r.draft.shifts.push({ name: PK.t("Shift {n}", { n: r.draft.shifts.length + 1 }), start: "06:00", end: "14:00", plannedStopMinutes: 0 }); mark(); PK.draw(); });
         el.querySelectorAll("[data-shdel]").forEach((b) => PK.on(b, "click", () => { r.draft.shifts.splice(+b.dataset.shdel, 1); mark(); PK.draw(); }));
         const sv = el.querySelector("[data-rpsave]");
         if (sv) PK.on(sv, "click", save);

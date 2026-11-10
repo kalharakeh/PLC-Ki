@@ -76,11 +76,11 @@ const PK = (() => {
     if (raw) opt.body = raw;
     else if (body !== undefined) { opt.headers["Content-Type"] = "application/json"; opt.body = JSON.stringify(body); }
     const r = await fetch(url, opt);
-    if (r.status === 401) { location.href = "/login.html?next=" + encodeURIComponent(location.pathname + location.hash); throw new Error("Please log in."); }
+    if (r.status === 401) { location.href = "/login.html?next=" + encodeURIComponent(location.pathname + location.hash); throw new Error(PK.t("Please log in.")); }
     const text = await r.text();
     let data = null;
     try { data = text ? JSON.parse(text) : null; } catch { data = text; }
-    if (!r.ok) throw new Error((data && data.error) || `Request failed (${r.status}).`);
+    if (!r.ok) throw new Error((data && data.error) || PK.t("Request failed ({status}).", { status: r.status }));
     return data;
   }
 
@@ -96,8 +96,11 @@ const PK = (() => {
     operator: ["notes"],
   };
   const can = (what) => !!(state.user && (ROLE_CAN[state.user.role] || []).includes(what));
-  const ROLE_TITLE = { admin: "Administrator", technician: "Technician", operator: "Operator" };
-  const roleTitle = (role) => ROLE_TITLE[role] || "Operator";
+  const ROLE_TITLE = { admin: I18N.T("Administrator"), technician: I18N.T("Technician"), operator: I18N.T("Operator") };
+  const roleTitle = (role) => PK.t(ROLE_TITLE[role] || "Operator");
+  /** The role as a word inside a sentence ("anna · operator"): lower case in English; German nouns keep their capital. */
+  const roleWord = (role) => (I18N.lang === "de" ? roleTitle(role) : roleTitle(role).toLowerCase());
+  const AS_FOR = { admin: I18N.T("As for administrators: {page}"), technician: I18N.T("As for technicians: {page}"), operator: I18N.T("As for operators: {page}") };
 
   // ---- Choices per login (review 52): saved on the server, so they follow the person to another PC or a phone.
   // Logged out (public view) they stay in this browser under the old keys, as before. A login's choices are also
@@ -138,6 +141,12 @@ const PK = (() => {
       prefsOut[key] = v;
       clearTimeout(prefsTimer); prefsTimer = setTimeout(() => sendPrefs(false), 500);
     },
+    /** Sends what is waiting now (before a reload) and waits for the answer. */
+    async flush() {
+      clearTimeout(prefsTimer); prefsTimer = null;
+      const body = prefsOut; prefsOut = {};
+      if (mine && Object.keys(body).length) { try { await api("PUT", "/api/me/prefs", body); } catch { /* the browser's copy still has it */ } }
+    },
     /** True when the choices are kept for the login (and follow the person). */
     get perLogin() { return !!mine; },
   };
@@ -170,10 +179,10 @@ const PK = (() => {
     const out = [...document.querySelectorAll("#nav a[data-route]")].filter((a) => !a.classList.contains("admin-only"))
       .map((a) => [a.getAttribute("href"), (a.title || a.textContent).split(":")[0].trim()]);
     const st = typeof PKStations !== "undefined" && state.status ? PKStations.list(state.status).stations : [];
-    st.filter((x) => x.key).forEach((x) => out.push([PKStations.href(x.key), "Station: " + x.name]));
+    st.filter((x) => x.key).forEach((x) => out.push([PKStations.href(x.key), PK.t("Station: {name}", { name: x.name })]));
     // The line screen (TV, review 44), for a wall PC that opens straight into it: the whole machine, then each station
-    out.push(["#/tv", "Line screen (TV)"]);
-    st.filter((x) => x.key).forEach((x) => out.push(["#/tv/" + encodeURIComponent(x.key), "Line screen (TV): " + x.name]));
+    out.push(["#/tv", PK.t("Line screen (TV)")]);
+    st.filter((x) => x.key).forEach((x) => out.push(["#/tv/" + encodeURIComponent(x.key), PK.t("Line screen (TV): {name}", { name: x.name })]));
     for (const h of also || []) if (h && !out.some(([v]) => v === h)) out.push([h, h.replace(/^#\//, "")]);    // a saved page not listed now
     return out;
   }
@@ -223,7 +232,7 @@ const PK = (() => {
     /** Nothing to show: an icon, one bold line, what it means or what to do, an optional button. */
     /** While data comes: grey placeholders in the shape of what will be there, so nothing jumps (item 34).
      *  shape: "lines" (text), "list" (rows with an icon), "table", "cards", "tiles" (numbers), "chart" (a drawing or plot). */
-    loading(shape = "lines", { rows = 4, label = "Loading" } = {}) {
+    loading(shape = "lines", { rows = 4, label = PK.t("Loading") } = {}) {
       const b = (cls) => `<span class="sk-b ${cls}"></span>`;
       const n = (f) => Array.from({ length: rows }, f).join("");
       const inner = {
@@ -242,32 +251,37 @@ const PK = (() => {
       const raw = String((message && message.message) || message || "");
       const p = plainFor(raw);
       return `<div class="notice ${level === "warn" ? "gold" : "red"} pk-error" role="alert">${icon("warn")}<div><b>${esc(p.text)}</b>${p.todo ? ` ${esc(p.todo)}` : ""}
-        ${p.text !== raw ? `<details class="pk-detail"><summary>Details</summary><code>${esc(raw)}</code></details>` : ""}${action ? `<div class="row mt-2">${action}</div>` : ""}</div></div>`;
+        ${p.text !== raw ? `<details class="pk-detail"><summary>${PK.t("Details")}</summary><code>${esc(raw)}</code></details>` : ""}${action ? `<div class="row mt-2">${action}</div>` : ""}</div></div>`;
     },
     empty({ icon: ic = "check", title, text = "", action = "", cls = "" }) {
       return `<div class="empty ${cls}">${icon(ic)}<b>${title}</b>${text ? `<span>${text}</span>` : ""}${action}</div>`;
     },
     /** The machine's states, the same words and colours on every page: [name, colour]. */
+    // Getters, so every page that reads a name gets it in the language in use
     states: {
-      running: ["Running", "var(--ok)"], idle: ["Waiting or stopped", "var(--steel)"], down: ["Down (fault)", "var(--fault)"],
-      nolink: ["No PLC connection", "var(--warn)"], off: ["Not watched", "var(--line-strong)"],
+      get running() { return [PK.t("Running"), "var(--ok)"]; },
+      get idle() { return [PK.t("Waiting or stopped"), "var(--steel)"]; },
+      get down() { return [PK.t("Down (fault)"), "var(--fault)"]; },
+      get nolink() { return [PK.t("No PLC connection"), "var(--warn)"]; },
+      get off() { return [PK.t("Not watched"), "var(--line-strong)"]; },
     },
     /** What a mark on the timeline stands for (EventLog.Mark on the server). Colour only where it is a state. */
-    marks: { alarm: "Alarm came", warn: "Warning came", halt: "Halted", stop: "PLC in STOP", link: "PLC connection lost", write: "Value changed" },
+    marks: { get alarm() { return PK.t("Alarm came"); }, get warn() { return PK.t("Warning came"); }, get halt() { return PK.t("Halted"); },
+      get stop() { return PK.t("PLC in STOP"); }, get link() { return PK.t("PLC connection lost"); }, get write() { return PK.t("Value changed"); } },
     /**
      * The machine's state over a time as one coloured bar (running, waiting, down, no PLC connection, not watched), time
      * under it, and marks above it for what happened: [{ time, mark, text }]. Each mark is a button with data-tlmk="i";
      * sel is the index shown as picked. Hours under a day or so; days (Mon 9) over longer times.
      */
-    timeline({ spans, from, to, marks = [], sel = -1, label = "Machine state over time" }) {
+    timeline({ spans, from, to, marks = [], sel = -1, label = PK.t("Machine state over time") }) {
       const a = new Date(from).getTime(), b = new Date(to).getTime(), len = Math.max(1, b - a);
       const at = (t) => ((new Date(t).getTime() - a) / len * 100);
       const days = len > 36 * 3600000;
-      const dayName = (t) => { const d = new Date(t); return `${["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d.getDay()]} ${d.getDate()}`; };
+      const dayName = (t) => { const d = new Date(t); return `${WEEKDAYS[d.getDay()]} ${d.getDate()}`; };
       const segs = spans.map((s) => {
         const [name, col] = ui.states[s.state] || [s.state, "var(--muted)"];
         const w = (new Date(s.to).getTime() - new Date(s.from).getTime()) / len * 100;
-        const tip = `${days ? dayName(s.from) + " " : ""}${hm(s.from)}–${hm(s.to)} ${name}${s.why ? ": " + s.why : ""}`;
+        const tip = `${days ? dayName(s.from) + " " : ""}${hm(s.from)}–${hm(s.to)} ${name}${s.why ? ": " + PK.srv(s.why) : ""}`;
         return `<span class="rp-seg rp-${esc(s.state)}" style="left:${at(s.from).toFixed(3)}%;width:${Math.max(w, 0.15).toFixed(3)}%;background:${col}" title="${esc(tip)}"></span>`;
       }).join("");
       const ticks = [];
@@ -282,27 +296,28 @@ const PK = (() => {
       }
       // A window that ends now says "now" at its end; a shift still running shows where now is
       const nowT = Date.now(), endIsNow = Math.abs(b - nowT) < 120000;
-      let endLabel = endIsNow ? "now" : hm(b);
+      let endLabel = endIsNow ? PK.t("now") : hm(b);
       if (!endIsNow && nowT > a && nowT < b) {
         if (at(nowT) > 80) endLabel = "";      // "now" close to the end: the end time would sit on it
         const x = at(nowT);
         for (let i = ticks.length - 1; i >= 0; i--) if (Math.abs(+ticks[i].match(/left:([\d.]+)%/)[1] - x) < 6) ticks.splice(i, 1);   // no overlap
-        ticks.push(`<span class="rp-tick rp-now" style="left:${x.toFixed(2)}%">now</span>`);
+        ticks.push(`<span class="rp-tick rp-now" style="left:${x.toFixed(2)}%">${PK.t("now")}</span>`);
       }
       const mk = marks.map((m, i) => `<button type="button" class="tl-mk tl-${esc(m.mark)}${i === sel ? " on" : ""}" style="left:${at(m.time).toFixed(3)}%" data-tlmk="${i}"
-        title="${esc(`${days ? dayName(m.time) + " " : ""}${clock(m.time)} ${m.text}`)}" aria-label="${esc(`${clock(m.time)} ${ui.marks[m.mark] || m.mark}: ${m.text}`)}"></button>`).join("");
+        title="${esc(`${days ? dayName(m.time) + " " : ""}${clock(m.time)} ${PK.srv(m.text)}`)}" aria-label="${esc(`${clock(m.time)} ${ui.marks[m.mark] || m.mark}: ${PK.srv(m.text)}`)}"></button>`).join("");
       return `<div class="tl">${marks.length ? `<div class="tl-marks">${mk}</div>` : ""}<div class="rp-bar" role="img" aria-label="${esc(label)}">${segs}</div>
         <div class="rp-ticks"><span>${days ? dayName(a) : hm(a)}</span>${ticks.join("")}${endLabel ? `<span class="rp-end">${endLabel}</span>` : ""}</div></div>`;
     },
     /** Each kind of machine event in plain words (the same names as the shift log's spreadsheet). */
-    kinds: { alarm: "Alarm", step: "Step", halt: "Halt", blocked: "Blocked", output: "Output", state: "Device state", cpu: "PLC mode",
-      link: "PLC connection", write: "Value changed", monitor: "PLC-Ki" },
+    kinds: { get alarm() { return PK.t("Alarm"); }, get step() { return PK.t("Step"); }, get halt() { return PK.t("Halt"); }, get blocked() { return PK.t("Blocked"); },
+      get output() { return PK.t("Output"); }, get state() { return PK.t("Device state"); }, get cpu() { return PK.t("PLC mode"); },
+      get link() { return PK.t("PLC connection"); }, get write() { return PK.t("Value changed"); }, monitor: "PLC-Ki" },
     /** Machine events as lines: time, kind, what happened (an alarm id links to its page). day: show the day too.
      *  hit: a time (ms); lines of that moment are marked. */
     events(list, { cls = "", day = false, hit = null } = {}) {
       const t = (x) => day ? date(x) : clock(x);
-      const text = (e) => e.alarm && e.text.startsWith(e.alarm)
-        ? `<a href="#/alarms/${encodeURIComponent(e.alarm)}">${esc(e.alarm)}</a>${esc(e.text.slice(e.alarm.length))}` : esc(e.text);
+      const text = (e) => { const tx = PK.srv(e.text); return e.alarm && tx.startsWith(e.alarm)
+        ? `<a href="#/alarms/${encodeURIComponent(e.alarm)}">${esc(e.alarm)}</a>${esc(tx.slice(e.alarm.length))}` : esc(tx); };
       return `<ul class="tl-list ${cls}">${list.map((e) => `<li${hit != null && new Date(e.time).getTime() === hit ? ` class="hit"` : ""}><span class="tl-dot${e.mark ? " tl-" + esc(e.mark) : ""}"></span><time datetime="${esc(e.time)}">${t(e.time)}</time>
         <span class="tl-k">${esc(ui.kinds[e.kind] || e.kind)}</span><span class="tl-t">${text(e)}</span></li>`).join("")}</ul>`;
     },
@@ -352,7 +367,7 @@ const PK = (() => {
     if (dirty && location.hash !== shownHash) {
       const target = location.hash;
       history.replaceState(current ? { pkBack: current.back || null } : null, "", shownHash || location.pathname);
-      const leave = await confirmSheet({ title: "Leave without saving?", text: "Your changes on this page are not saved yet.", ok: "Leave without saving", cancel: "Stay", danger: true });
+      const leave = await confirmSheet({ title: PK.t("Leave without saving?"), text: PK.t("Your changes on this page are not saved yet."), ok: PK.t("Leave without saving"), cancel: PK.t("Stay"), danger: true });
       if (!leave) return;
       setDirty(null);
       location.hash = target;
@@ -413,28 +428,28 @@ const PK = (() => {
    * badge is null while an administrator's answer is not known yet (the badge stays hidden rather than guess).
    */
   function access(name = current ? current.name : "alarm") {
-    const reads = (text) => ({ badge: "Reads only", short: "Reads only", level: "", text });
-    if (!state.user) return reads("Without a login, PLC-Ki only reads the PLC.");
-    if (!can("plcsim")) return reads("With an operator login, PLC-Ki only reads the PLC.");
+    const reads = (text) => ({ badge: PK.t("Reads only"), short: PK.t("Reads only"), level: "", text });
+    if (!state.user) return reads(PK.t("Without a login, PLC-Ki only reads the PLC."));
+    if (!can("plcsim")) return reads(PK.t("With an operator login, PLC-Ki only reads the PLC."));
     const ch = state.changes;
     if (!ch) return { badge: null, short: null, level: "", text: "" };
-    const plc = ch.plc || "the PLC";
+    const plc = ch.plc || PK.t("the PLC");
     const valuePage = name === "tags" || name === "program";
     let a;
-    if (name === "setup/generator") a = { badge: "Loads blocks here", short: "Blocks", level: "except",
-      text: "The block generator on this page loads blocks into PLCSIM, or into a real PLC after two people confirm." };
-    else if (valuePage && ch.values === "plcsim") a = { badge: "Can change values here", short: "Can change", level: "except",
-      text: "On this page you can change a value with the pen, on PLCSIM: inputs, outputs, memory and data values, safety ones after a warning, never F-blocks. Every change is logged." };
-    else if (valuePage && ch.values === "real") a = { badge: "Can change values here", short: "Can change", level: "except",
-      text: `On this page you can change memory and data values on the real PLC ${plc} with the pen, after typing a reason and the PLC address; never inputs, outputs or values the safety program reads. Every change is logged.` };
-    else if (name === "plc" && ch.startStop && !["racks", "diagnostics"].includes((current && current.params[0]) || "")) a = { badge: "Can start and stop PLCSIM", short: "Start/Stop", level: "except",
-      text: "Start and Stop on this page switch the PLCSIM CPU, after you confirm. A real PLC is never started or stopped." };
-    else a = reads("This page only reads the PLC."
-      + (ch.values === "plcsim" ? " On Tags and Program, you can change values on PLCSIM."
-        : ch.values === "real" ? ` On Tags and Program, administrators can change values on the real PLC ${plc}.`
-        : !can("real") && ch.plc ? " A technician login changes values on PLCSIM only." : ""));
+    if (name === "setup/generator") a = { badge: PK.t("Loads blocks here"), short: PK.t("Blocks"), level: "except",
+      text: PK.t("The block generator on this page loads blocks into PLCSIM, or into a real PLC after two people confirm.") };
+    else if (valuePage && ch.values === "plcsim") a = { badge: PK.t("Can change values here"), short: PK.t("Can change"), level: "except",
+      text: PK.t("On this page you can change a value with the pen, on PLCSIM: inputs, outputs, memory and data values, safety ones after a warning, never F-blocks. Every change is logged.") };
+    else if (valuePage && ch.values === "real") a = { badge: PK.t("Can change values here"), short: PK.t("Can change"), level: "except",
+      text: PK.t("On this page you can change memory and data values on the real PLC {plc} with the pen, after typing a reason and the PLC address; never inputs, outputs or values the safety program reads. Every change is logged.", { plc }) };
+    else if (name === "plc" && ch.startStop && !["racks", "diagnostics"].includes((current && current.params[0]) || "")) a = { badge: PK.t("Can start and stop PLCSIM"), short: PK.t("Start/Stop"), level: "except",
+      text: PK.t("Start and Stop on this page switch the PLCSIM CPU, after you confirm. A real PLC is never started or stopped.") };
+    else a = reads(PK.t("This page only reads the PLC.")
+      + (ch.values === "plcsim" ? " " + PK.t("On Tags and Program, you can change values on PLCSIM.")
+        : ch.values === "real" ? " " + PK.t("On Tags and Program, administrators can change values on the real PLC {plc}.", { plc })
+        : !can("real") && ch.plc ? " " + PK.t("A technician login changes values on PLCSIM only.") : ""));
     // A real PLC that may be changed is said on every page, in amber
-    if (ch.values === "real") { a.badge = `Changes allowed on the real PLC ${plc}`; a.short = "Real PLC"; a.level = "real"; }
+    if (ch.values === "real") { a.badge = PK.t("Changes allowed on the real PLC {plc}", { plc }); a.short = PK.t("Real PLC"); a.level = "real"; }
     return a;
   }
 
@@ -468,14 +483,14 @@ const PK = (() => {
   }
   /** A short name for a page, as the chip says it: "A02", "FB_Station", "Plant". */
   function crumbOf(name, params) {
-    const page = (HELP[name] || [""])[0] || name;
+    const page = PK.t((HELP[name] || [""])[0] || name);
     const p = (params || []).filter((x) => !/^(as-(rungs|text)|network-\d+|line-\d+|alarm-.+|@.*)$/.test(x));
     let label = page;
     if (name === "alarm") { const al = (state.status && state.status.activeAlarms) || []; if (al.length) label = al[0].id; }
     else if (name === "plant" && p[0] === "devices" && p[1]) label = p[1];
     else if (name === "tags" && p[0] === "db" && p[1]) label = p[1];
     else if (name === "plc" && p[0] === "racks" && p[1]) label = p[1];
-    else if (name === "history" && p[0] && !["ranking", "recordings"].includes(p[0])) label = p[0] + " history";
+    else if (name === "history" && p[0] && !["ranking", "recordings"].includes(p[0])) label = PK.t("{name} history", { name: p[0] });
     else if (["alarms", "program", "sequence", "station"].includes(name) && p[0]) label = p[0];
     return label.length > 28 ? label.slice(0, 27) + "…" : label;
   }
@@ -488,7 +503,7 @@ const PK = (() => {
     if (!b) return;
     const a = bar.querySelector("a");
     a.href = b.hash || "#/";
-    a.querySelector(".back-l").textContent = "Back to " + b.label;
+    a.querySelector(".back-l").textContent = PK.t("Back to {label}", { label: b.label });
   }
 
   /** Change the address shown (e.g. #/alarms/A02 for an opened alarm) without leaving the page, so it can be shared. */
@@ -564,8 +579,8 @@ const PK = (() => {
     if (!current || !current.view.render) return;
     let html;
     try { html = current.view.render(current.params); }
-    catch (e) { html = sec("", `<div class="notice red" role="alert">${icon("warn")}<div><b>This page hit a problem.</b> Reload the page. If it happens again, tell an administrator what you clicked.
-      <details class="pk-detail"><summary>Details</summary><code>${esc(e.message)}</code></details></div></div>`); console.error(e); }
+    catch (e) { html = sec("", `<div class="notice red" role="alert">${icon("warn")}<div><b>${PK.t("This page hit a problem.")}</b> ${PK.t("Reload the page. If it happens again, tell an administrator what you clicked.")}
+      <details class="pk-detail"><summary>${PK.t("Details")}</summary><code>${esc(e.message)}</code></details></div></div>`); console.error(e); }
     if (html === lastHtml) return;
     const page = $("page");
     const y = window.scrollY;
@@ -608,7 +623,7 @@ const PK = (() => {
     const c = state.status && state.status.connection;
     if (!state.lastOk || !c || !["connected", "snapshot"].includes(c.state)) { el.textContent = ""; return; }
     const s = Math.max(1, Math.round((Date.now() - state.lastOk) / 1000));
-    const text = s < 60 ? `updated ${s} s ago` : `updated ${ago(state.lastOk)}`;
+    const text = s < 60 ? PK.t("updated {s} s ago", { s }) : PK.t("updated {ago}", { ago: ago(state.lastOk) });
     if (el.textContent !== text) el.textContent = text;
     el.classList.toggle("stale", s > 5);
   }
@@ -619,15 +634,15 @@ const PK = (() => {
     const c = state.status && state.status.connection;
     const stale = Date.now() - state.lastOk > 5000;
     let text, cls;
-    if (!state.status || stale) { text = "PLC-Ki not reachable"; cls = "bad"; }
+    if (!state.status || stale) { text = PK.t("PLC-Ki not reachable"); cls = "bad"; }
     else {
       const map = {
-        connected: ["Live|" + c.address, "ok"],
-        snapshot: ["Test values|" + c.address.split(/[\\/]/).pop(), "warn"],
-        connecting: ["Connecting|" + c.address, "warn"],
-        disconnected: ["Not connected|" + c.address, "bad"],
-        waiting: ["Waiting for Link|", "warn"],
-        notset: ["No PLC set yet|", "warn"],
+        connected: [PK.t("Live") + "|" + c.address, "ok"],
+        snapshot: [PK.t("Test values") + "|" + c.address.split(/[\\/]/).pop(), "warn"],
+        connecting: [PK.t("Connecting") + "|" + c.address, "warn"],
+        disconnected: [PK.t("Not connected") + "|" + c.address, "bad"],
+        waiting: [PK.t("Waiting for Link") + "|", "warn"],
+        notset: [PK.t("No PLC set yet") + "|", "warn"],
       };
       [text, cls] = map[c.state] || [c.state, "warn"];
     }
@@ -636,7 +651,7 @@ const PK = (() => {
     // Short in the bar; the address or test file is in the tooltip (a long file name wrapped into the menu).
     // A mode read that failed is only said here, quietly: it is not a STOP.
     const cpu = !stale && state.status && state.status.cpu;
-    pill.title = (extra ? main + ": " + extra + ". " : "") + (cpu && cpu.error ? "PLC mode unknown. " : "") + "What does this mean?";
+    pill.title = (extra ? main + ": " + extra + ". " : "") + (cpu && cpu.error ? PK.t("PLC mode unknown.") + " " : "") + PK.t("What does this mean?");
     renderCpuPill(stale);
     const html = `<span class="dot"></span><span>${esc(main)}</span>`;
     if (pill.innerHTML !== html) pill.innerHTML = html;
@@ -670,12 +685,13 @@ const PK = (() => {
     const admin = can("settings");
     const html = list.map((n) => {
       const items = n.items || [];
-      const shown = items.slice(0, 4).map((i) => `<span class="mono">${esc(i)}</span>`).join(", ") + (items.length > 4 ? `, and ${items.length - 4} more` : "");
+      const first = items.slice(0, 4).map((i) => `<span class="mono">${esc(i)}</span>`).join(", ");
+      const shown = items.length > 4 ? PK.t("{list}, and {n} more", { list: first, n: items.length - 4 }) : first;
       const link = n.link && (n.kind !== "program" || can("settings"))
-        ? `<a class="btn gray small" href="${esc(n.link)}">${n.kind === "program" ? "Import again" : "Show"}</a>` : "";
-      const who = n.kind === "program" && !admin ? " Tell an administrator." : "";
+        ? `<a class="btn gray small" href="${esc(n.link)}">${n.kind === "program" ? PK.t("Import again") : PK.t("Show")}</a>` : "";
+      const who = n.kind === "program" && !admin ? " " + PK.t("Tell an administrator.") : "";
       return `<div class="notice gold notice-strip" role="status" data-kind="${esc(n.kind)}">${icon(n.kind === "program" ? "file" : "warn")}
-        <div><b>${esc(n.text)}</b>${who}${shown ? `<div class="small">${shown}</div>` : ""}</div>${link}</div>`;
+        <div><b>${esc(PK.srv(n.text))}</b>${who}${shown ? `<div class="small">${shown}</div>` : ""}</div>${link}</div>`;
     }).join("");
     const all = (ho ? handoverHtml(ho) : "") + html;
     const full = all ? `<div class="wrap">${all}</div>` : "";
@@ -686,9 +702,9 @@ const PK = (() => {
   /** Under the machine name in the top bar: the CPU and the program it was read from, as far as known. */
   function machineLine() {
     const i = state.info || {}, p = state.program || {};
-    const plc = p.cpu ? p.cpu : i.plc && i.plc.address ? "PLC " + i.plc.address : "";
+    const plc = p.cpu ? p.cpu : i.plc && i.plc.address ? PK.t("PLC {address}", { address: i.plc.address }) : "";
     const prog = p.archive || p.project || (i.model ? String(i.model).split(/[\\/]/).pop() : "");
-    const t = [plc, prog && "program " + prog].filter(Boolean).join(" · ");
+    const t = [plc, prog && PK.t("program {name}", { name: prog })].filter(Boolean).join(" · ");
     const el = $("machine-sub");
     if (el && el.textContent !== t) { el.textContent = t; el.title = t; }
   }
@@ -699,7 +715,8 @@ const PK = (() => {
   function cpuSince(c) {
     if (!c || !c.since) return "";
     const d = new Date(c.since), today = d.toDateString() === new Date().toDateString();
-    return (c.atStart ? "since at least " : "since ") + (today ? hm(d) : date(c.since));
+    const at = today ? hm(d) : date(c.since);
+    return c.atStart ? PK.t("since at least {time}", { time: at }) : PK.t("since {time}", { time: at });
   }
 
   /** The red STOP chip next to the connection: only for a mode that was really read and is not RUN. */
@@ -711,7 +728,7 @@ const PK = (() => {
     if (!c) return;
     const html = `<span class="dot"></span><span>${esc(c.word || "STOP")}</span>`;
     if (p.innerHTML !== html) p.innerHTML = html;
-    p.title = `The PLC is in ${c.word || "STOP"} ${cpuSince(c)}: the program is not running. Open the PLC page.`;
+    p.title = PK.t("The PLC is in {word} {since}: the program is not running. Open the PLC page.", { word: c.word || "STOP", since: cpuSince(c) });
   }
 
   /** Says loudly when the values on the page are not live: PLC-Ki not answering, PLC not read, PLC in STOP, or test values. */
@@ -719,15 +736,15 @@ const PK = (() => {
     const c = state.status && state.status.connection;
     const stop = cpuStop();
     let text = "", kind = "", link = "";
-    if (state.lastOk && stale) { text = `PLC-Ki is not answering. Values frozen since ${clock(state.lastOk)}.`; kind = "frozen"; }
+    if (state.lastOk && stale) { text = PK.t("PLC-Ki is not answering. Values frozen since {time}.", { time: clock(state.lastOk) }); kind = "frozen"; }
     else if (c && (c.state === "disconnected" || c.state === "connecting" || c.state === "waiting") && c.lastGoodRead) {
-      text = `No connection to the PLC. Values are from the last good read at ${clock(c.lastGoodRead)}.`; kind = "frozen";
+      text = PK.t("No connection to the PLC. Values are from the last good read at {time}.", { time: clock(c.lastGoodRead) }); kind = "frozen";
     }
     else if (stop) {
-      text = `PLC in ${stop.word || "STOP"} ${cpuSince(stop)}. The program is not running; what you see is its last state.`;
-      kind = "stop"; link = `<a href="#/plc">PLC page</a>`;
+      text = PK.t("PLC in {word} {since}. The program is not running; what you see is its last state.", { word: stop.word || "STOP", since: cpuSince(stop) });
+      kind = "stop"; link = `<a href="#/plc">${PK.t("PLC page")}</a>`;
     }
-    else if (c && c.state === "snapshot") { text = "Test values from a file, not the real machine."; kind = "test"; }
+    else if (c && c.state === "snapshot") { text = PK.t("Test values from a file, not the real machine."); kind = "test"; }
     document.documentElement.classList.toggle("test-values", !!c && c.state === "snapshot" && !(state.lastOk && stale));
     document.documentElement.classList.toggle("cpu-stop", kind === "stop");
     const b = $("banner");
@@ -745,7 +762,7 @@ const PK = (() => {
    */
   function setTitle() {
     const al = (state.status && state.status.activeAlarms) || [];
-    const page = current ? (HELP[current.name] || [""])[0] : "";
+    const page = current ? PK.t((HELP[current.name] || [""])[0]) : "";
     const stop = Date.now() - state.lastOk <= 5000 && cpuStop();
     const t = [stop ? stop.word || "STOP" : "", al.length ? `(${al.length}) ${al[0].id}` : "", page, "PLC-Ki"].filter(Boolean).join(" · ");
     if (document.title !== t) document.title = t;
@@ -797,6 +814,8 @@ const PK = (() => {
   //   all = beep and notice (each as switched on), notice = a notice only, none = nothing. Default: all, as before.
   const soundRule = () => ({ fault: "all", warning: "all", quiet: [], ...prefs.get("alarmSound", {}) });
   const isWarning = (a) => String(a.severity || "").toUpperCase() === "WARNING";
+  /** FAULT and WARNING as the server sends them, in the language in use (only for showing them). */
+  const sevWord = (s) => { const u = String(s || "").toUpperCase(); return u === "FAULT" ? PK.t("FAULT") : u === "WARNING" ? PK.t("WARNING") : s; };
   /** "all", "notice" or null (nothing) for one alarm. */
   function alarmWants(a, rule = soundRule()) {
     const level = isWarning(a) ? rule.warning : rule.fault;
@@ -820,7 +839,7 @@ const PK = (() => {
     if (screenOpt.sound && beeps.length) beep(beeps.some((a) => !isWarning(a)));
     if (screenOpt.notify && "Notification" in window && Notification.permission === "granted") {
       const a = fresh[0];
-      try { const n = new Notification(`${a.severity} ${a.id}: ${a.text}`, { body: state.status.machine || "PLC-Ki", tag: "plcki-" + a.id }); n.onclick = () => { window.focus(); if (!tvOn) go("#/alarm"); }; } catch { /* not allowed here */ }
+      try { const n = new Notification(`${sevWord(a.severity)} ${a.id}: ${a.text}`, { body: state.status.machine || "PLC-Ki", tag: "plcki-" + a.id }); n.onclick = () => { window.focus(); if (!tvOn) go("#/alarm"); }; } catch { /* not allowed here */ }
     }
   }
   // The CPU going to STOP alerts like a new fault alarm. The first status only sets where things are, as for alarms.
@@ -836,7 +855,7 @@ const PK = (() => {
     if (screenOpt.sound && level === "all") beep(true);
     if (screenOpt.notify && "Notification" in window && Notification.permission === "granted") {
       try {
-        const n = new Notification(`The PLC is in ${c.word || "STOP"}`, { body: `${state.status.machine || "PLC-Ki"}: the program is not running.`, tag: "plcki-cpu" });
+        const n = new Notification(PK.t("The PLC is in {word}", { word: c.word || "STOP" }), { body: PK.t("{machine}: the program is not running.", { machine: state.status.machine || "PLC-Ki" }), tag: "plcki-cpu" });
         n.onclick = () => { window.focus(); if (!tvOn) go("#/alarm"); };
       } catch { /* not allowed here */ }
     }
@@ -889,13 +908,13 @@ const PK = (() => {
    */
   function passwordSheet(forName) {
     const own = !forName;
-    const s = sheet(`<h2>${own ? "Change my password" : "New password for " + esc(forName)}</h2>
+    const s = sheet(`<h2>${own ? PK.t("Change my password") : PK.t("New password for {name}", { name: esc(forName) })}</h2>
       <form class="gap-3 stack" data-pw-form>
-        ${own ? `<label class="field">Current password<input type="password" id="pw-cur" autocomplete="current-password" required></label>` : ""}
-        <label class="field">New password <span class="hint">at least 8 characters</span><input type="password" id="pw-new" autocomplete="new-password" minlength="8" required ${own ? "" : "autofocus"}></label>
-        <label class="field">New password again<input type="password" id="pw-rep" autocomplete="new-password" required></label>
+        ${own ? `<label class="field">${PK.t("Current password")}<input type="password" id="pw-cur" autocomplete="current-password" required></label>` : ""}
+        <label class="field">${PK.t("New password")} <span class="hint">${PK.t("at least 8 characters")}</span><input type="password" id="pw-new" autocomplete="new-password" minlength="8" required ${own ? "" : "autofocus"}></label>
+        <label class="field">${PK.t("New password again")}<input type="password" id="pw-rep" autocomplete="new-password" required></label>
         <p class="m-0 ink-fault muted small" id="pw-err" role="alert"></p>
-        <div class="row end"><button type="button" class="btn gray" data-close>Cancel</button><button type="submit" class="btn">Set password</button></div>
+        <div class="row end"><button type="button" class="btn gray" data-close>${PK.t("Cancel")}</button><button type="submit" class="btn">${PK.t("Set password")}</button></div>
       </form>`);
     const f = s.el.querySelector("[data-pw-form]");
     const err = (t) => { s.el.querySelector("#pw-err").textContent = t; };
@@ -903,14 +922,14 @@ const PK = (() => {
     f.onsubmit = async (e) => {
       e.preventDefault();
       const pw = f.querySelector("#pw-new").value, rep = f.querySelector("#pw-rep").value;
-      if (pw.length < 8) return err("The new password needs at least 8 characters.");
-      if (pw !== rep) return err("The two new passwords are not the same. Type them again.");
+      if (pw.length < 8) return err(PK.t("The new password needs at least 8 characters."));
+      if (pw !== rep) return err(PK.t("The two new passwords are not the same. Type them again."));
       try {
         if (own) await api("POST", "/api/auth/password", { current: f.querySelector("#pw-cur").value, password: pw });
         else await api("PUT", `/api/admin/users/${encodeURIComponent(forName)}/password`, { password: pw });
         s.close();
-        toast(own ? "Your password is changed." : `Password for ${forName} is changed.`);
-      } catch (x) { err(x.message); }
+        toast(own ? PK.t("Your password is changed.") : PK.t("Password for {name} is changed.", { name: forName }));
+      } catch (x) { err(PK.srv(x.message)); }
     };
   }
 
@@ -932,7 +951,7 @@ const PK = (() => {
     if (!b) return;
     const dark = darkNow();
     b.innerHTML = icon(dark ? "sun" : "moon");
-    b.title = dark ? "Switch to a light screen" : "Switch to a dark screen";
+    b.title = dark ? PK.t("Switch to a light screen") : PK.t("Switch to a dark screen");
     b.setAttribute("aria-label", b.title);
   }
   if (sysDark.addEventListener) sysDark.addEventListener("change", showTheme);
@@ -940,15 +959,18 @@ const PK = (() => {
   /** "Which alarms" in the sound sheet: faults and warnings each beep, notice only or nothing; stations kept quiet. */
   function soundRulesHtml() {
     const r = soundRule();
-    const pick = (key, label) => `<label class="field small">${label}<select data-sound="${key}">${[["all", "Beep"], ["notice", "Notice only"], ["none", "Nothing"]]
+    const pick = (key, label) => `<label class="field small">${label}<select data-sound="${key}">${[["all", PK.t("Beep")], ["notice", PK.t("Notice only")], ["none", PK.t("Nothing")]]
       .map(([v, l]) => `<option value="${v}" ${r[key] === v ? "selected" : ""}>${l}</option>`).join("")}</select></label>`;
     const stations = typeof PKStations !== "undefined" && state.status ? PKStations.list(state.status).stations.filter((s) => s.key) : [];
-    const quiet = stations.length > 1 ? `<details class="quiet-st"${(r.quiet || []).length ? " open" : ""}><summary>Quiet stations</summary>
-      <p class="muted small m-0">No beep or notice for alarms that only concern these stations. Alarms of the whole machine always count.</p>
+    const quiet = stations.length > 1 ? `<details class="quiet-st"${(r.quiet || []).length ? " open" : ""}><summary>${PK.t("Quiet stations")}</summary>
+      <p class="muted small m-0">${PK.t("No beep or notice for alarms that only concern these stations. Alarms of the whole machine always count.")}</p>
       ${stations.map((s) => `<label class="row small"><input type="checkbox" data-quiet="${esc(s.key)}" ${(r.quiet || []).includes(s.key) ? "checked" : ""}> ${esc(s.name)}</label>`).join("")}</details>` : "";
-    return `<div class="opt-row" style="cursor:default;flex-wrap:wrap"><span class="grow"><b>Which alarms</b><br><span class="muted small">For example warnings silent and faults beep. Beep also shows a notice when notices are on. A CPU STOP counts as a fault.</span></span>
-      <div class="sound-rules">${pick("fault", "Faults")}${pick("warning", "Warnings")}</div>${quiet}</div>`;
+    return `<div class="opt-row" style="cursor:default;flex-wrap:wrap"><span class="grow"><b>${PK.t("Which alarms")}</b><br><span class="muted small">${PK.t("For example warnings silent and faults beep. Beep also shows a notice when notices are on. A CPU STOP counts as a fault.")}</span></span>
+      <div class="sound-rules">${pick("fault", PK.t("Faults"))}${pick("warning", PK.t("Warnings"))}</div>${quiet}</div>`;
   }
+
+  /** A language in its own words, the same in both languages. */
+  const langName = (k) => (k === "de" ? "Deutsch" : "English");
 
   function screenSheet() {
     const secure = window.isSecureContext;
@@ -956,36 +978,39 @@ const PK = (() => {
     const canWake = secure && "wakeLock" in navigator;
     const row = (key, title, text, ok, why) => `<label class="opt-row ${ok ? "" : "off"}"><input type="checkbox" data-opt="${key}" ${screenOpt[key] && ok ? "checked" : ""} ${ok ? "" : "disabled"}>
       <span><b>${esc(title)}</b><br><span class="muted small">${esc(ok ? text : why)}</span></span></label>`;
-    const notHere = "Not possible on this connection: the browser allows it only on the PLC-Ki PC itself (localhost) or over https.";
+    const notHere = PK.t("Not possible on this connection: the browser allows it only on the PLC-Ki PC itself (localhost) or over https.");
     const tvStations = typeof PKStations !== "undefined" && state.status ? PKStations.list(state.status).stations.filter((x) => x.key) : [];
-    const s = sheet(`<span class="eyebrow">This screen</span><h2>Alarm sound and screen</h2>
-      <p class="m-0 muted">${prefs.perLogin ? `Saved for ${esc(state.user.name)}, on every device you log in on. "Keep this screen on" is for this device only.` : "Only for this browser on this device."} Nothing here changes the machine.</p>
+    const s = sheet(`<span class="eyebrow">${PK.t("This screen")}</span><h2>${PK.t("Alarm sound and screen")}</h2>
+      <p class="m-0 muted">${prefs.perLogin ? PK.t("Saved for {name}, on every device you log in on. \"Keep this screen on\" is for this device only.", { name: esc(state.user.name) }) : PK.t("Only for this browser on this device.")} ${PK.t("Nothing here changes the machine.")}</p>
       <div class="gap-3 stack">
-        ${row("sound", "Beep when a new alarm comes", "A short tone: three beeps for a fault, one for a warning. Leave this page open in a tab.", true, "")}
-        ${row("notify", "Show a notice when a new alarm comes", "A message from the browser, also when PLC-Ki is in a background tab.", canNotify, notHere)}
-        ${row("awake", "Keep this screen on", "For a screen on the line: the display does not go dark while this page is open.", canWake, notHere)}
-        <div class="opt-row" style="cursor:default;flex-wrap:wrap"><span class="grow"><b>Line screen (TV)</b><br><span class="muted small">For a TV on the line: no menu, the state in big letters and the machine picture. It turns to the alarm when one comes and keeps the screen on. Esc leaves it.</span></span>
-          <span class="row end" style="flex-basis:100%">${tvStations.length ? `<select id="tv-pick" class="start-sel" style="flex:1 1 12em;width:auto" aria-label="Line screen for"><option value="#/tv">Whole machine</option>${tvStations.map((x) => `<option value="#/tv/${esc(encodeURIComponent(x.key))}">${esc(x.name)}</option>`).join("")}</select>` : ""}
-          <button type="button" class="btn" data-tv-open>Line screen (TV)</button></span></div>
-        <div class="opt-row" style="cursor:default"><span class="grow"><b>Screen colours</b><br><span class="muted small">Dark suits a wall screen in a bright hall.</span></span>
-          ${ui.choice("Screen colours", [["auto", "Like this PC"], ["light", "Light"], ["dark", "Dark"]].map(([k, l]) => ({ label: l, on: themeChoice() === k, data: { "data-theme-set": k } })))}</div>
+        ${row("sound", PK.t("Beep when a new alarm comes"), PK.t("A short tone: three beeps for a fault, one for a warning. Leave this page open in a tab."), true, "")}
+        ${row("notify", PK.t("Show a notice when a new alarm comes"), PK.t("A message from the browser, also when PLC-Ki is in a background tab."), canNotify, notHere)}
+        ${row("awake", PK.t("Keep this screen on"), PK.t("For a screen on the line: the display does not go dark while this page is open."), canWake, notHere)}
+        <div class="opt-row" style="cursor:default;flex-wrap:wrap"><span class="grow"><b>${PK.t("Line screen (TV)")}</b><br><span class="muted small">${PK.t("For a TV on the line: no menu, the state in big letters and the machine picture. It turns to the alarm when one comes and keeps the screen on. Esc leaves it.")}</span></span>
+          <span class="row end" style="flex-basis:100%">${tvStations.length ? `<select id="tv-pick" class="start-sel" style="flex:1 1 12em;width:auto" aria-label="${PK.t("Line screen for")}"><option value="#/tv">${PK.t("Whole machine")}</option>${tvStations.map((x) => `<option value="#/tv/${esc(encodeURIComponent(x.key))}">${esc(x.name)}</option>`).join("")}</select>` : ""}
+          <button type="button" class="btn" data-tv-open>${PK.t("Line screen (TV)")}</button></span></div>
+        <div class="opt-row" style="cursor:default"><span class="grow"><b>${PK.t("Screen colours")}</b><br><span class="muted small">${PK.t("Dark suits a wall screen in a bright hall.")}</span></span>
+          ${ui.choice(PK.t("Screen colours"), [["auto", PK.t("Like this PC")], ["light", PK.t("Light")], ["dark", PK.t("Dark")]].map(([k, l]) => ({ label: l, on: themeChoice() === k, data: { "data-theme-set": k } })))}</div>
         ${soundRulesHtml()}
-        <label class="opt-row" style="cursor:default;flex-wrap:wrap"><span class="grow"><b>Dates and numbers</b><br><span class="muted small">How times, dates and decimals are written on every page.</span></span>
-          <select id="fmt-pick" class="start-sel" aria-label="Dates and numbers"><option value="">As for this plant: ${esc(FORMATS[(state.info && state.info.format) || "text"] ? FORMATS[(state.info && state.info.format) || "text"].label : FORMATS.text.label)}</option>
+        <label class="opt-row" style="cursor:default;flex-wrap:wrap"><span class="grow"><b>${PK.t("Language")}</b><br><span class="muted small">${PK.t("The language of the menus, buttons and messages. Alarm texts, step names and tag comments stay as the PLC program has them.")}</span></span>
+          <select id="lang-pick" class="start-sel" aria-label="${PK.t("Language")}"><option value="">${PK.t("As for this plant: {language}", { language: langName(state.info && state.info.language) })}</option>
+            ${["en", "de"].map((k) => `<option value="${k}" ${prefs.get("language", "") === k ? "selected" : ""}>${langName(k)}</option>`).join("")}</select></label>
+        <label class="opt-row" style="cursor:default;flex-wrap:wrap"><span class="grow"><b>${PK.t("Dates and numbers")}</b><br><span class="muted small">${PK.t("How times, dates and decimals are written on every page.")}</span></span>
+          <select id="fmt-pick" class="start-sel" aria-label="${PK.t("Dates and numbers")}"><option value="">${PK.t("As for this plant: {format}", { format: esc(FORMATS[plantFormat()].label) })}</option>
             ${Object.entries(FORMATS).map(([k, f]) => `<option value="${k}" ${prefs.get("format", "") === k ? "selected" : ""}>${esc(f.label)}</option>`).join("")}</select></label>
-        ${state.user ? `<label class="opt-row" style="cursor:default;flex-wrap:wrap"><span class="grow"><b>Start page</b><br><span class="muted small">Where PLC-Ki opens for you when no page is in the address. A link or a bookmark still opens its own page.</span></span>
-          <select id="start-page" class="start-sel" aria-label="Start page"><option value="">As for ${esc(roleTitle(state.user.role).toLowerCase())}s: ${esc(startLabel(state.roleStart || "#/alarm"))}</option>
+        ${state.user ? `<label class="opt-row" style="cursor:default;flex-wrap:wrap"><span class="grow"><b>${PK.t("Start page")}</b><br><span class="muted small">${PK.t("Where PLC-Ki opens for you when no page is in the address. A link or a bookmark still opens its own page.")}</span></span>
+          <select id="start-page" class="start-sel" aria-label="${PK.t("Start page")}"><option value="">${esc(PK.t(AS_FOR[state.user.role] || "As for operators: {page}", { page: startLabel(state.roleStart || "#/alarm") }))}</option>
             ${startChoices([prefs.get("startPage", "")]).map(([h, l]) => `<option value="${esc(h)}" ${prefs.get("startPage", "") === h ? "selected" : ""}>${esc(l)}</option>`).join("")}</select></label>` : ""}
-        <div class="opt-row" style="cursor:default"><span class="grow"><b>Spacing</b><br><span class="muted small">Compact fits more on a control-room PC. Touch makes buttons bigger for a tablet or gloves.</span></span>
-          ${ui.choice("Spacing", [["auto", "Like this device"], ["compact", "Compact"], ["touch", "Touch"]].map(([k, l]) => ({ label: l, on: densityChoice() === k, data: { "data-density-set": k } })))}</div>
+        <div class="opt-row" style="cursor:default"><span class="grow"><b>${PK.t("Spacing")}</b><br><span class="muted small">${PK.t("Compact fits more on a control-room PC. Touch makes buttons bigger for a tablet or gloves.")}</span></span>
+          ${ui.choice(PK.t("Spacing"), [["auto", PK.t("Like this device")], ["compact", PK.t("Compact")], ["touch", PK.t("Touch")]].map(([k, l]) => ({ label: l, on: densityChoice() === k, data: { "data-density-set": k } })))}</div>
       </div>
-      <div class="row end"><button class="btn plain" type="button" data-test-beep>Test the beep</button><button class="btn" data-close>Done</button></div>`);
+      <div class="row end"><button class="btn plain" type="button" data-test-beep>${PK.t("Test the beep")}</button><button class="btn" data-close>${PK.t("Done")}</button></div>`);
     s.el.addEventListener("change", async (e) => {
       const box = e.target.closest("[data-opt]"); if (!box) return;
       const key = box.dataset.opt;
       if (key === "notify" && box.checked && Notification.permission !== "granted") {
         const p = await Notification.requestPermission().catch(() => "denied");
-        if (p !== "granted") { box.checked = false; toast("The browser did not allow notices. Allow them in the browser's site settings.", "error"); return; }
+        if (p !== "granted") { box.checked = false; toast(PK.t("The browser did not allow notices. Allow them in the browser's site settings."), "error"); return; }
       }
       screenOpt[key] = box.checked; saveScreenOpt();
       if (key === "awake") keepAwake(box.checked);
@@ -993,8 +1018,11 @@ const PK = (() => {
     });
     s.el.querySelector("[data-test-beep]").onclick = () => beep(true);
     s.el.querySelector("[data-tv-open]").onclick = () => { const p = s.el.querySelector("#tv-pick"); s.close(); go(p ? p.value : "#/tv"); };
+    const lp = s.el.querySelector("#lang-pick");
+    // The pages are drawn again in the new language: a reload is the simple way, after the choice reached the server
+    lp.onchange = async () => { prefs.set("language", lp.value || null); await prefs.flush(); location.reload(); };
     const fp = s.el.querySelector("#fmt-pick");
-    fp.onchange = () => { prefs.set("format", fp.value || null); draw(); toast("Saved: " + date(Date.now()) + "."); };
+    fp.onchange = () => { prefs.set("format", fp.value || null); draw(); toast(PK.t("Saved: {date}.", { date: date(Date.now()) })); };
     s.el.querySelectorAll("[data-sound]").forEach((sel) => sel.onchange = () => { const r = soundRule(); r[sel.dataset.sound] = sel.value; prefs.set("alarmSound", r); });
     s.el.querySelectorAll("[data-quiet]").forEach((box) => box.onchange = () => {
       const r = soundRule();
@@ -1004,7 +1032,7 @@ const PK = (() => {
       prefs.set("alarmSound", r);
     });
     const sp = s.el.querySelector("#start-page");
-    if (sp) sp.onchange = () => { prefs.set("startPage", sp.value || null); toast("Start page saved."); };
+    if (sp) sp.onchange = () => { prefs.set("startPage", sp.value || null); toast(PK.t("Start page saved.")); };
     s.el.querySelectorAll("[data-theme-set]").forEach((b) => b.onclick = () => {
       setTheme(b.dataset.themeSet);
       s.el.querySelectorAll("[data-theme-set]").forEach((x) => { x.classList.toggle("on", x === b); x.setAttribute("aria-pressed", x === b); });
@@ -1024,7 +1052,7 @@ const PK = (() => {
       if (run && state.run && run !== state.run) {
         // PLC-Ki was restarted (maybe with another model or program): start this page fresh
         if (!dirty) { location.reload(); return; }
-        toast("PLC-Ki was restarted. Save, then reload the page to see the current program.", "error");
+        toast(PK.t("PLC-Ki was restarted. Save, then reload the page to see the current program."), "error");
       }
       if (run) state.run = run;
     } catch { /* shown as not reachable */ }
@@ -1059,8 +1087,9 @@ const PK = (() => {
         const pill = $("job-pill");
         pill.classList.toggle("hidden", !run);
         if (run) {
-          const text = run.waiting ? "Needs you: " + run.title : run.title;
-          pill.innerHTML = `<span class="dot"></span><span class="jp-t">${esc(text)}</span><span class="jp-s">${run.waiting ? "Needs you" : "Job"}</span>`;
+          const title = PK.srv(run.title);
+          const text = run.waiting ? PK.t("Needs you: {title}", { title }) : title;
+          pill.innerHTML = `<span class="dot"></span><span class="jp-t">${esc(text)}</span><span class="jp-s">${run.waiting ? PK.t("Needs you") : PK.t("Job")}</span>`;
           pill.title = text;
           pill.className = "pill " + (run.waiting ? "bad" : "info");
           pill.style.cursor = "pointer";
@@ -1128,6 +1157,7 @@ const PK = (() => {
   let toastTimer;
   /** A short message at the bottom. An error (text or Error) is said in plain words with what to do (item 33). */
   function toast(text, kind) {
+    if (kind !== "error" && typeof text === "string") text = PK.srv(text);    // a message the server wrote
     if (kind === "error") {
       const p = plainFor(text);
       if (p.text !== String((text && text.message) || text)) console.warn("PLC-Ki:", (text && text.message) || text);   // the original, for whoever debugs
@@ -1200,7 +1230,7 @@ const PK = (() => {
     return { el, close };
   }
 
-  function confirmSheet({ title, text, ok = "OK", cancel = "Cancel", danger = false }) {
+  function confirmSheet({ title, text, ok = PK.t("OK"), cancel = PK.t("Cancel"), danger = false }) {
     return new Promise((resolve) => {
       let answer = false;
       const s = sheet(`<h2>${esc(title)}</h2><div class="muted">${text}</div>
@@ -1215,8 +1245,8 @@ const PK = (() => {
 
   function cond(c) {
     const [cls, sym] = c.met === true ? ["yes", "✓"] : c.met === false ? ["no", "✗"] : ["unk", "?"];
-    const now = c.values && c.values.length ? `<span class="now">now ${c.values.map((v) => esc(v.label) + " <span class=val>" + esc(v.text) + "</span>").join(", ")}</span>` : "";
-    return `<li><span class="mark ${cls}" aria-label="${cls === "yes" ? "met" : cls === "no" ? "not met" : "unknown"}">${sym}</span><span>${esc(c.text)} ${now}</span></li>`;
+    const now = c.values && c.values.length ? `<span class="now">${PK.t("now")} ${c.values.map((v) => esc(v.label) + " <span class=val>" + esc(v.text) + "</span>").join(", ")}</span>` : "";
+    return `<li><span class="mark ${cls}" aria-label="${cls === "yes" ? PK.t("met") : cls === "no" ? PK.t("not met") : PK.t("unknown")}">${sym}</span><span>${esc(c.text)} ${now}</span></li>`;
   }
 
   /**
@@ -1296,17 +1326,27 @@ const PK = (() => {
 
   // ---- Dates, times and numbers: one format everywhere (review 57). The plant picks one (Setup, Settings), each
   // login may pick its own (Alarm sound and screen). "text" is the default: "3 Nov 2026, 14:02", no ambiguous 03/11.
-  const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const MONTHS_EN = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const MONTHS_DE = ["Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"];
+  const WEEKDAYS_EN = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const WEEKDAYS_DE = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
+  const MONTHS = new Proxy([], { get: (_, i) => (I18N.lang === "de" ? MONTHS_DE : MONTHS_EN)[i] });
+  const WEEKDAYS = new Proxy([], { get: (_, i) => (I18N.lang === "de" ? WEEKDAYS_DE : WEEKDAYS_EN)[i] });
   const pad = (n) => String(n).padStart(2, "0");
   const FORMATS = {
-    text: { h12: false, order: "text", comma: false, label: "3 Nov 2026, 14:02 · 12.5" },
+    text: { h12: false, order: "text", comma: false, get label() { return I18N.lang === "de" ? "3. Nov 2026, 14:02 · 12.5" : "3 Nov 2026, 14:02 · 12.5"; } },
     dot: { h12: false, order: "dot", comma: true, label: "03.11.2026, 14:02 · 12,5" },
     iso: { h12: false, order: "iso", comma: false, label: "2026-11-03 14:02 · 12.5" },
     us: { h12: true, order: "us", comma: false, label: "11/03/2026, 2:02 pm · 12.5" },
   };
-  /** The format in use: this login's choice, else the plant's, else "text". */
-  const fmtKey = () => { const k = prefs.get("format", "") || (state.info && state.info.format) || "text"; return FORMATS[k] ? k : "text"; };
+  /** The format in use: this login's choice, else the plant's. While nobody chose, German pages use the German
+   *  way (03.11.2026, 24 h, decimal comma) and English pages "3 Nov 2026, 14:02" (review 49). */
+  const plantFormat = () => {
+    const i = state.info || {};
+    const k = (i.formatChosen === false && I18N.lang === "de" ? "dot" : i.format) || "text";
+    return FORMATS[k] ? k : "text";
+  };
+  const fmtKey = () => { const k = prefs.get("format", ""); return FORMATS[k] ? k : plantFormat(); };
   const fmt = () => FORMATS[fmtKey()];
   /** "14:02", or "2:02 pm" with the 12-hour clock */
   const hm = (t, secs) => {
@@ -1323,7 +1363,7 @@ const PK = (() => {
   const dayMonth = (t) => {
     const d = new Date(t), o = fmt().order;
     return o === "dot" ? `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.` : o === "iso" ? `${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
-      : o === "us" ? `${pad(d.getMonth() + 1)}/${pad(d.getDate())}` : `${d.getDate()} ${MONTHS[d.getMonth()]}`;
+      : o === "us" ? `${pad(d.getMonth() + 1)}/${pad(d.getDate())}` : `${d.getDate()}${I18N.lang === "de" ? "." : ""} ${MONTHS[d.getMonth()]}`;
   };
   /** "Tue 3 Nov" */
   const weekdayDay = (t) => `${WEEKDAYS[new Date(t).getDay()]} ${dayMonth(t)}`;
@@ -1333,7 +1373,7 @@ const PK = (() => {
     const d = new Date(t);
     if (isNaN(d)) return "";
     const o = fmt().order, y = d.getFullYear(), m = pad(d.getMonth() + 1), day = pad(d.getDate());
-    const ds = o === "dot" ? `${day}.${m}.${y}` : o === "iso" ? `${y}-${m}-${day}` : o === "us" ? `${m}/${day}/${y}` : `${d.getDate()} ${MONTHS[d.getMonth()]} ${y}`;
+    const ds = o === "dot" ? `${day}.${m}.${y}` : o === "iso" ? `${y}-${m}-${day}` : o === "us" ? `${m}/${day}/${y}` : `${d.getDate()}${I18N.lang === "de" ? "." : ""} ${MONTHS[d.getMonth()]} ${y}`;
     return ds + (withTime ? joint() + hm(d) : "");
   };
   /** "14:02:13" today, "3 Nov, 14:02" before */
@@ -1368,9 +1408,9 @@ const PK = (() => {
 
   const ago = (t) => {
     const s = Math.round((Date.now() - new Date(t).getTime()) / 1000);
-    if (s < 60) return s + " s ago";
-    if (s < 3600) return Math.round(s / 60) + " min ago";
-    if (s < 86400) return Math.round(s / 3600) + " h ago";
+    if (s < 60) return PK.t("{n} s ago", { n: s });
+    if (s < 3600) return PK.t("{n} min ago", { n: Math.round(s / 60) });
+    if (s < 86400) return PK.t("{n} h ago", { n: Math.round(s / 3600) });
     return date(t, false);
   };
 
@@ -1378,44 +1418,46 @@ const PK = (() => {
   /** Turns a technical error into { text, todo } a person can act on. */
   function plain(message, where = {}) {
     const m = String(message || "");
-    const plc = where.plc || (state.status && state.status.connection && state.status.connection.address) || "the PLC";
-    if (/failed to fetch|networkerror|load failed/i.test(m)) return { text: "PLC-Ki itself is not answering.", todo: "Check that the PLC-Ki window on the PC is still open. Start it again with Start-PLC-Ki in the PLC-Ki folder." };
-    if (/timed out|timeout|within \d+ s|no answer/i.test(m) && /5090|tia|helper|importer/i.test(m)) return { text: "The TIA helper did not answer.", todo: "On the VM (or TIA PC): check the window \"PLC-Ki TIA helper\" is open. If not, double-click Start-TIA-helper in C:\\PLCKi\\PLC-Ki\\tools\\TiaImporter." };
-    if (/refused the token|401/i.test(m)) return { text: "The TIA helper does not accept the token.", todo: "Type the same token here as the one shown in the TIA helper window on the VM." };
-    if (/timed out|timeout|no answer|unreachable|no route|host is down/i.test(m)) return { text: `${plc} does not answer.`, todo: `Check the PLC is on and the cable or virtual switch is connected. On the PC, ping ${plc} should answer. For PLCSIM: is the virtual PLC started in PLCSIM Advanced?` };
-    if (/no such host|name or service not known|nodename nor servname|not known on this network|host not found/i.test(m)) return { text: `${plc} is not known on the network.`, todo: "Check the spelling. Use the PLC's IP address from TIA (Device configuration › PROFINET interface), for example 192.168.0.10." };
-    if (/is not an IP address/i.test(m)) return { text: m, todo: "" };
-    if (/refused/i.test(m)) return { text: `Something is at ${plc}, but it does not accept the connection.`, todo: "Check it is really the PLC's address, and that PUT/GET or the access level allows reading (TIA: CPU properties, Protection & Security)." };
-    if (/already been opened|project\/library .* cannot be accessed/i.test(m)) return { text: "TIA could not open the project: it is open in TIA Portal.", todo: "Close the project in TIA Portal on the TIA PC (or wait 2 minutes after a crash), then start the job again. Nothing was imported." };
-    if (/password|access.?(level|protection|denied|rights)|legitimation|protection/i.test(m)) return { text: "The PLC asks for a password.", todo: "Enter the CPU's access password under Setup, Connections (More PLC options).", op: "Ask an administrator to enter the PLC's access password in PLC-Ki." };
-    if (/api key|anthropic/i.test(m)) return { text: "No Claude API key is set.", todo: "Add it under Setup, Settings (Assistant). It starts with sk-ant-." };
+    const plc = where.plc || (state.status && state.status.connection && state.status.connection.address) || PK.t("the PLC");
+    // "the PLC" / "die SPS" starts a sentence below: German needs the capital there
+    const Plc = plc === PK.t("the PLC") && I18N.lang === "de" ? plc.charAt(0).toUpperCase() + plc.slice(1) : plc;
+    if (/failed to fetch|networkerror|load failed/i.test(m)) return { text: PK.t("PLC-Ki itself is not answering."), todo: PK.t("Check that the PLC-Ki window on the PC is still open. Start it again with Start-PLC-Ki in the PLC-Ki folder.") };
+    if (/timed out|timeout|within \d+ s|no answer/i.test(m) && /5090|tia|helper|importer/i.test(m)) return { text: PK.t("The TIA helper did not answer."), todo: PK.t("On the VM (or TIA PC): check the window \"PLC-Ki TIA helper\" is open. If not, double-click Start-TIA-helper in C:\\PLCKi\\PLC-Ki\\tools\\TiaImporter.") };
+    if (/refused the token|401/i.test(m)) return { text: PK.t("The TIA helper does not accept the token."), todo: PK.t("Type the same token here as the one shown in the TIA helper window on the VM.") };
+    if (/timed out|timeout|no answer|unreachable|no route|host is down/i.test(m)) return { text: PK.t("{plc} does not answer.", { plc: Plc }), todo: PK.t("Check the PLC is on and the cable or virtual switch is connected. On the PC, ping {plc} should answer. For PLCSIM: is the virtual PLC started in PLCSIM Advanced?", { plc }) };
+    if (/no such host|name or service not known|nodename nor servname|not known on this network|host not found/i.test(m)) return { text: PK.t("{plc} is not known on the network.", { plc: Plc }), todo: PK.t("Check the spelling. Use the PLC's IP address from TIA (Device configuration › PROFINET interface), for example 192.168.0.10.") };
+    if (/is not an IP address/i.test(m)) return { text: PK.srv(m), todo: "" };
+    if (/refused/i.test(m)) return { text: PK.t("Something is at {plc}, but it does not accept the connection.", { plc: Plc }), todo: PK.t("Check it is really the PLC's address, and that PUT/GET or the access level allows reading (TIA: CPU properties, Protection & Security).") };
+    if (/already been opened|project\/library .* cannot be accessed/i.test(m)) return { text: PK.t("TIA could not open the project: it is open in TIA Portal."), todo: PK.t("Close the project in TIA Portal on the TIA PC (or wait 2 minutes after a crash), then start the job again. Nothing was imported.") };
+    if (/password|access.?(level|protection|denied|rights)|legitimation|protection/i.test(m)) return { text: PK.t("The PLC asks for a password."), todo: PK.t("Enter the CPU's access password under Setup, Connections (More PLC options)."), op: PK.t("Ask an administrator to enter the PLC's access password in PLC-Ki.") };
+    if (/api key|anthropic/i.test(m)) return { text: PK.t("No Claude API key is set."), todo: PK.t("Add it under Setup, Settings (Assistant). It starts with sk-ant-.") };
     return { text: m, todo: "" };
   }
   // The server only said a status code (it had no words of its own)
   function plainHttp(m) {
-    const http = /Request failed \((\d+)\)/i.exec(m);
+    const http = /(?:Request failed|Anfrage fehlgeschlagen) \((\d+)\)/i.exec(m);    // api() writes it in the language in use
     if (!http) return null;
-    if (http[1] === "403") return { text: "Your login is not allowed to do this.", todo: "" };
-    if (http[1] === "404") return { text: "PLC-Ki could not find that.", todo: "Reload the page. If it stays, it may have been removed." };
-    if (+http[1] >= 500) return { text: "PLC-Ki hit a problem doing this.", todo: "Try again. If it keeps happening, the PLC-Ki window on the PC shows what went wrong." };
-    return { text: "PLC-Ki did not accept this.", todo: "Reload the page and try again." };
+    if (http[1] === "403") return { text: PK.t("Your login is not allowed to do this."), todo: "" };
+    if (http[1] === "404") return { text: PK.t("PLC-Ki could not find that."), todo: PK.t("Reload the page. If it stays, it may have been removed.") };
+    if (+http[1] >= 500) return { text: PK.t("PLC-Ki hit a problem doing this."), todo: PK.t("Try again. If it keeps happening, the PLC-Ki window on the PC shows what went wrong.") };
+    return { text: PK.t("PLC-Ki did not accept this."), todo: PK.t("Reload the page and try again.") };
   }
   // plain()'s rules are about reaching the PLC, the TIA helper or Ki. Other messages ("The new password needs at least
   // 8 characters.", "The PLC refused the value…") are already written for people and must not be rewritten by them.
   const ABOUT_A_LINK = /failed to fetch|networkerror|load failed|timed out|timeout|within \d+ s|unreachable|no route|host is down|no such host|not known|name or service|connection|connect|tia helper|5090|importer|token|401|already been opened|cannot be accessed|api key|anthropic|legitimation/i;
   // The program export: Hardware, Tags, Documents and Program all read it, and say the same when it is missing
   function plainProgram(m) {
-    if (/No program export is set|No program loaded/i.test(m)) return { text: "No PLC program is loaded yet.", todo: "Import it under Setup, Import a program.", op: "Ask an administrator to import the PLC program into PLC-Ki." };
-    if (/Cannot read the program export/i.test(m)) return { text: "PLC-Ki cannot read the program file.", todo: "Import the program again under Setup, Import a program.", op: "Ask an administrator to import the PLC program again." };
-    if (/program export has no PLC/i.test(m)) return { text: "The imported program has no PLC in it.", todo: "Import the program again and choose the PLC.", op: "Ask an administrator to import the PLC program again." };
-    if (/is not in the program export/i.test(m)) return { text: m.replace(/program export/i, "loaded program"), todo: "The program may have changed since it was imported. Import it again under Setup, Import a program.", op: "The program may have changed. Ask an administrator to import it again." };
+    if (/No program export is set|No program loaded/i.test(m)) return { text: PK.t("No PLC program is loaded yet."), todo: PK.t("Import it under Setup, Import a program."), op: PK.t("Ask an administrator to import the PLC program into PLC-Ki.") };
+    if (/Cannot read the program export/i.test(m)) return { text: PK.t("PLC-Ki cannot read the program file."), todo: PK.t("Import the program again under Setup, Import a program."), op: PK.t("Ask an administrator to import the PLC program again.") };
+    if (/program export has no PLC/i.test(m)) return { text: PK.t("The imported program has no PLC in it."), todo: PK.t("Import the program again and choose the PLC."), op: PK.t("Ask an administrator to import the PLC program again.") };
+    if (/is not in the program export/i.test(m)) return { text: PK.srv(m.replace(/program export/i, "loaded program")), todo: PK.t("The program may have changed since it was imported. Import it again under Setup, Import a program."), op: PK.t("The program may have changed. Ask an administrator to import it again.") };
     return null;
   }
   /** plain() for the person looking: operators cannot open Setup, so they read who to ask instead. */
   function plainFor(message, where) {
     const m = String((message && message.message) || message || "");
-    const p = plainProgram(m) || plainHttp(m) || ((where && where.plc) || ABOUT_A_LINK.test(m) ? plain(m, where) : { text: m, todo: "" });
-    if (!can("settings") && p.op != null && /Setup/.test(p.todo)) p.todo = p.op;
+    const p = plainProgram(m) || plainHttp(m) || ((where && where.plc) || ABOUT_A_LINK.test(m) ? plain(m, where) : { text: PK.srv(m), todo: "" });
+    if (!can("settings") && p.op != null && /Setup|Einrichtung/.test(p.todo)) p.todo = p.op;
     return p;
   }
 
@@ -1423,146 +1465,146 @@ const PK = (() => {
   function connInfo() {
     const i = connInfoAll();
     if (can("settings")) return i;
-    if (i.todo && /Setup|Connections|Link/.test(i.todo)) i.todo = i.op || "Ask an administrator of PLC-Ki to check the connection to the PLC.";
+    if (i.todo && /Setup|Einrichtung|Connections|Verbindungen|Link/.test(i.todo)) i.todo = i.op || PK.t("Ask an administrator of PLC-Ki to check the connection to the PLC.");
     return i;
   }
   function connInfoAll() {
     const c = state.status && state.status.connection;
     const stale = Date.now() - state.lastOk > 5000;
-    if (!state.status || stale) return { level: "bad", title: "PLC-Ki is not answering.", text: "This page cannot reach PLC-Ki.", todo: "Check that the PLC-Ki window on the PC is still open. If it was closed, double-click Start-PLC-Ki in the PLC-Ki folder, then reload this page." };
-    if (c.state === "connected") return { level: "ok", title: `Reading the PLC at ${c.address}.`, text: "Values are live, read once a second.", todo: "" };
-    if (c.state === "snapshot") return { level: "info", title: "Showing test values, not a PLC.", text: "PLC-Ki reads values from a test file.", todo: "To read a real PLC, choose Live PLC under Setup, Connections (More PLC options).", op: "Ask an administrator to switch PLC-Ki to the real PLC." };
-    if (c.state === "notset") return { level: "warn", title: "No PLC is set yet.", text: "PLC-Ki does not know which PLC to read, so there are no live values.", todo: "Enter the PLC's address under Setup, Connections.", op: "Ask an administrator to set up the connection to the PLC." };
-    if (c.state === "connecting") return { level: "warn", title: `Connecting to ${c.address}…`, text: "This takes a few seconds.", todo: "" };
-    if (c.state === "waiting") return { level: "warn", title: "Waiting for PLC-Ki Link.", text: "The PLC is read by PLC-Ki Link on your laptop, and it is not connected.", todo: "On the laptop, start PLC-Ki Link (Setup, Connections shows the command).", op: "Ask an administrator to start PLC-Ki Link on the laptop that is connected to the PLC." };
+    if (!state.status || stale) return { level: "bad", title: PK.t("PLC-Ki is not answering."), text: PK.t("This page cannot reach PLC-Ki."), todo: PK.t("Check that the PLC-Ki window on the PC is still open. If it was closed, double-click Start-PLC-Ki in the PLC-Ki folder, then reload this page.") };
+    if (c.state === "connected") return { level: "ok", title: PK.t("Reading the PLC at {address}.", { address: c.address }), text: PK.t("Values are live, read once a second."), todo: "" };
+    if (c.state === "snapshot") return { level: "info", title: PK.t("Showing test values, not a PLC."), text: PK.t("PLC-Ki reads values from a test file."), todo: PK.t("To read a real PLC, choose Live PLC under Setup, Connections (More PLC options)."), op: PK.t("Ask an administrator to switch PLC-Ki to the real PLC.") };
+    if (c.state === "notset") return { level: "warn", title: PK.t("No PLC is set yet."), text: PK.t("PLC-Ki does not know which PLC to read, so there are no live values."), todo: PK.t("Enter the PLC's address under Setup, Connections."), op: PK.t("Ask an administrator to set up the connection to the PLC.") };
+    if (c.state === "connecting") return { level: "warn", title: PK.t("Connecting to {address}…", { address: c.address }), text: PK.t("This takes a few seconds."), todo: "" };
+    if (c.state === "waiting") return { level: "warn", title: PK.t("Waiting for PLC-Ki Link."), text: PK.t("The PLC is read by PLC-Ki Link on your laptop, and it is not connected."), todo: PK.t("On the laptop, start PLC-Ki Link (Setup, Connections shows the command)."), op: PK.t("Ask an administrator to start PLC-Ki Link on the laptop that is connected to the PLC.") };
     const p = plain(c.error, { plc: c.address });
-    return { level: "bad", title: `No connection to the PLC at ${c.address}.`, text: p.text === c.error ? "" : p.text, todo: p.todo, op: p.op, detail: c.error };
+    return { level: "bad", title: PK.t("No connection to the PLC at {address}.", { address: c.address }), text: p.text === c.error ? "" : p.text, todo: p.todo, op: p.op, detail: c.error };
   }
 
   function connSheet() {
     const i = connInfo();
     const admin = can("settings");
     const a = access();
-    sheet(`<span class="pill ${i.level}" style="align-self:flex-start;justify-self:start"><span class="dot"></span>${{ ok: "Connected", bad: "Not connected", warn: "Waiting", info: "Test values" }[i.level]}</span>
+    sheet(`<span class="pill ${i.level}" style="align-self:flex-start;justify-self:start"><span class="dot"></span>${{ ok: PK.t("Connected"), bad: PK.t("Not connected"), warn: PK.t("Waiting"), info: PK.t("Test values") }[i.level]}</span>
       <h2>${esc(i.title)}</h2>${i.text ? `<p class="m-0 muted">${esc(i.text)}</p>` : ""}
       ${a.text ? `<p class="m-0 ${a.level === "real" ? "notice gold" : "muted"}">${esc(a.text)}</p>` : ""}
-      ${i.todo ? `<div class="notice ${i.level === "bad" ? "red" : "gold"}">${icon("info")}<div><b>What to do</b><br>${esc(i.todo)}</div></div>` : ""}
-      ${i.detail ? `<details class="more"><summary>Technical detail</summary><p class="mt-2 mb-0 faint small">${esc(i.detail)}</p></details>` : ""}
-      <div class="row end">${admin && i.level !== "ok" ? `<a class="btn b" href="#/setup/connections" data-close>Open Connections</a>` : ""}<button class="btn" data-close>Done</button></div>`);
+      ${i.todo ? `<div class="notice ${i.level === "bad" ? "red" : "gold"}">${icon("info")}<div><b>${PK.t("What to do")}</b><br>${esc(i.todo)}</div></div>` : ""}
+      ${i.detail ? `<details class="more"><summary>${PK.t("Technical detail")}</summary><p class="mt-2 mb-0 faint small">${esc(i.detail)}</p></details>` : ""}
+      <div class="row end">${admin && i.level !== "ok" ? `<a class="btn b" href="#/setup/connections" data-close>${PK.t("Open Connections")}</a>` : ""}<button class="btn" data-close>${PK.t("Done")}</button></div>`);
   }
 
   /** A command to type, with where to type it ("On the VM") and a Copy button. One line where possible. */
   function cmd(where, text, note = "") {
     const id = "c" + Math.random().toString(36).slice(2, 8);
-    return `<div class="cmd"><div class="cmd-head"><span class="where where-${esc(where.split(" ").pop().toLowerCase())}">${esc(where)}</span>${note ? `<span class="faint small">${note}</span>` : ""}<span class="spacer"></span>
-      <button type="button" class="btn plain small" data-copy="${id}">Copy</button></div><pre id="${id}">${esc(text)}</pre></div>`;
+    return `<div class="cmd"><div class="cmd-head"><span class="where where-${esc(where.split(" ").pop().toLowerCase())}">${esc(PK.t(where))}</span>${note ? `<span class="faint small">${note}</span>` : ""}<span class="spacer"></span>
+      <button type="button" class="btn plain small" data-copy="${id}">${PK.t("Copy")}</button></div><pre id="${id}">${esc(text)}</pre></div>`;
   }
   document.addEventListener("click", async (e) => {
     const b = e.target.closest("[data-copy]");
     if (!b) return;
     const el = document.getElementById(b.dataset.copy);
-    try { await navigator.clipboard.writeText(el.textContent); b.textContent = "Copied"; setTimeout(() => { b.textContent = "Copy"; }, 1600); }
-    catch { const r = document.createRange(); r.selectNodeContents(el); getSelection().removeAllRanges(); getSelection().addRange(r); toast("Selected. Press Ctrl+C to copy."); }
+    try { await navigator.clipboard.writeText(el.textContent); b.textContent = PK.t("Copied"); setTimeout(() => { b.textContent = PK.t("Copy"); }, 1600); }
+    catch { const r = document.createRange(); r.selectNodeContents(el); getSelection().removeAllRanges(); getSelection().addRange(r); toast(PK.t("Selected. Press Ctrl+C to copy.")); }
   });
 
   // ---- Help: what the current page shows and how to read it ----
   const HELP = {
-    documents: ["Documents", "Device manuals, fault lists and electrical drawings. Ask and the Active alarm page look things up in them.", [
-      "Search: type words, a fault code as the device shows it (F07801, SRVO-062, 0x8C10), a terminal (X2:14) or an address (%I12.3). Fault codes come first, then the pages that match. A page opens in the browser at that page.",
-      "For this machine: documents only this machine uses, such as its EPLAN drawing. For every machine: manuals you use everywhere, such as the SINAMICS list manual.",
-      "Administrators add files by dropping them on the page. PDFs need text in them: a scanned paper page has none. A fault list can also be a CSV file with code, text, cause and remedy columns.",
-      "Built in: general Siemens, FANUC and IO-Link knowledge. When a manual knows the same code, the manual comes first."]],
-    alarm: ["Active alarm", "The start page. It shows the alarm that matters most right now and how to get the machine going again.", [
-      "With several alarms, the first chip is the first-out: the alarm that came first, as PLC-Ki saw them come. Fix that one first; the others often follow from it.",
-      "Fix it: work down the list and tap each step when done. The ticks are only on this screen.",
-      "Where in the machine: the device behind the alarm and the chain Requested › Interlocks › Output › Feedback. The first red link is why it is not working.",
-      "Where in the software: from the main cycle (OB1) down to the bit that sets the alarm. Show where it is set opens that network as rungs with live values.",
-      "The seconds before it came: every change of the machine's tags in the 10 s before the alarm, recorded much finer than the normal reads. Short pulses (amber) are signals the once-a-second reads would miss.",
-      "History of this alarm: how often it came, how long it stayed, and the cause and fix technicians noted last time. When you have found the cause, tap Note cause and fix so the next person sees it.",
-      "Ask about this alarm: Ki looks at the live values, the last minutes, History and the program, and says why it is on and what to check."]],
-    plant: ["Plant", "What the machine is doing now. The top shows the step, what it waits for and the key values; the tabs below hold the rest.", [
-      "Overview: Needs attention lists active alarms and blocked or faulted devices first; tap one to go to it. Below it the sequence: the blue step is where it is now, red means halted, ✓ is met, ✗ is missing.",
-      "The machine at a glance: every device as a symbol. Green runs, grey is off, a dashed amber edge means the program asks for it but an interlock blocks it, red is a fault. Tap one to open it on Devices.",
-      "Devices: the list on the left (needs attention first), the picked device on the right with the chain Requested › Interlocks › Output › Feedback. The first red link is why it is not running.",
-      "Values over time: the measured values of the last minutes, with the step band and alarm marks under them. Move along a chart to read every value at that moment.",
-      "Machine settings: the values an operator or engineer sets on the HMI panel or in the recipe, with what they are now. ✗ means the machine cannot work with that value.",
-      "Data exchange: signals to and from MES, a filler and so on, with their live values."]],
-    sequence: ["Step chart", "One sequence as a chain of steps, read like the GRAPH editor, with how long each step took.", [
-      "Step timeline: which step ran when in the last minutes, and the last and average time of each step. A step that takes longer than usual is where the machine waits.",
-      "Step chart: each box is a step, the bar under it is the transition to the next one with its conditions. ↷ marks a jump to another step; \"from 12\" above a step says which steps jump to it.",
-      "The blue step is where it is now. Its conditions are live: ✓ is met, ✗ is missing. Tap any step for what it does."]],
-    alarms: ["Alarms", "Every alarm the program can raise, active or not, with its meaning, where it is set, likely causes and the fix.", [
-      "Search by number, text or device. Active alarms are at the top.",
-      "Click an alarm to open its causes and fix. Red tags are faults (they stop the machine), gold tags are warnings.",
-      "Past alarms, what fixed them and the seconds before each one are in History."]],
-    history: ["History", "The one place for past alarms: every alarm PLC-Ki saw on this machine, what it was doing then, and what the technicians found and did.", [
-      "The time window at the top (24 h, 7 days, 30 days, 1 year) applies to Log and Ranking.",
-      "Log: every alarm that came, newest first. Waiting for a note lists alarms of the last 12 hours that nobody wrote anything for yet. PLC and connection lists when the CPU stopped or the link to the PLC dropped.",
-      "What fixed it? After an alarm goes, write down the cause and the fix in one line. The next time it comes, the Active alarm page and Ask show it first: \"last time it was a dirty sensor\".",
-      "Ranking: the alarms that came most often, or that were on longest in total. Tap one for its own history.",
-      "Recordings: the seconds before each alarm came, from every change the PLC sends (usually sampled every 100 ms). Amber marks a short pulse the normal reads would miss; a Blip is an alarm that went again before a normal read saw it. The last 100 are kept.",
-      "Download for Excel: the log as a file for the maintenance team. The history is kept on this PC in the PLC-Ki data folder and survives restarts."]],
-    program: ["Program", "Every block of the PLC program with live values, as rungs or as text.", [
-      "Pick a block on the left. At the top, \"Why outputs are off right now\" names each output that is off and the signal that stops it.",
-      "Rungs: each network drawn as a rung. Green passes power, grey does not, a dashed ? has no live value. Read from left to right: the amber contact is the first one that stops the output.",
-      "Click a contact or a signal to see what sets it: the network in this block, the block that writes it, or the block that calls this one for an input. Click an output to see where it is used.",
-      "Text: the code as written in TIA (LAD and GRAPH as readable text with the same meaning), with the live value after each signal.",
-      "LAD, FBD and GRAPH blocks open as rungs, SCL blocks as text. Switch with Rungs / Text. Coming from an alarm, the network that sets it is marked.",
-      "Values update every two seconds."]],
-    tags: ["Tags", "The PLC tag tables with addresses, and every data block's values, live.", [
-      "Tag tables: every tag with its address (%I, %Q, %M), type and comment. Search by name, address or comment.",
-      "Data blocks: pick one on the left to see all its values. Optimized blocks have no addresses; values are read by name.",
-      "Up to 300 rows are read live at a time, about once a second."]],
-    plc: ["PLC", "The PLC in three tabs: the CPU, its racks with every input and output, and what it reports.", [
-      "CPU: RUN, STOP or STARTUP as the CPU reports it, with the position of the mode switch where the CPU tells it. The picture is drawn from the order number; page through its display with the keys under it.",
-      "Start and Stop work only when PLC-Ki reads the PLCSIM CPU of the TIA helper, and only for administrators. You confirm first. A real PLC is never started or stopped from PLC-Ki.",
-      "ERROR and MAINT come from PLCSIM where it tells them; on a real CPU they are not read and stay dark here.",
-      "Racks and I/O: pick a device at the top (PLC, I/O stations, drives, robots), then tap a module for its channels. Channels are matched to the PLC tags by address, so you see the tag, its comment and the live value.",
-      "If only the CPU shows, the program export has no hardware yet: Read the hardware from TIA (administrators) takes a minute or two and changes nothing else.",
-      "Diagnostics: what the CPU reports for PROFINET devices, modules, channels and drives, read live, with what it means and what to check."]],
-    reports: ["Reports", "Shift report with OEE, and a summary for maintenance, from what PLC-Ki records while it watches the machine.", [
-      "Shift report: OEE and its three parts, a bar of where the time went (running, waiting, down by a fault, no PLC connection), parts made, the biggest losses and the alarms of that shift.",
-      "Summary: down time, average repair time (MTTR), running time between faults (MTBF), why the machine was not running, and every shift's OEE, over 24 h, 7 days, 30 days or 1 year. Which alarms cost the most time is in History, Ranking.",
-      "Download for Excel saves a CSV file; Print or PDF prints the page.",
-      "PLC-Ki records only while it runs and reads the PLC. Time it was off or without connection is shown and left out of OEE.",
-      "Report setup (administrators): shift times, planned stops, the part and reject counters and the ideal cycle time. Without a counter every finished sequence cycle counts as one part."]],
-    "setup/start": ["Get started", "Sets PLC-Ki up one question at a time. You can come back here any time.", [
-      "Each step is saved when you press Continue. Skip what you don't need now: TIA Portal is only needed to import a program or build blocks.",
-      "At the end, Apply restarts PLC-Ki with the new settings (a few seconds)."]],
-    "setup/connections": ["Connections", "Where PLC-Ki, TIA Portal and the PLC are, and whether each link works.", [
-      "The drawing turns each line green when it works and red when it does not. Grey means not checked yet.",
-      "Test the address checks that something answers on the PLC's S7 port. It sends nothing to the PLC.",
-      "Save, then Apply: PLC-Ki uses new connection settings after a quick restart."]],
-    "setup/program": ["Import a program", "Teaches PLC-Ki a machine from its TIA program.", [
-      "1. Drop the TIA archive (.zap20). 2. TIA exports it on the TIA PC (needs the TIA helper). 3. Ki builds the model: a few minutes, about a dollar. 4. Check the numbers and press Use this program.",
-      "Import again when the program in the PLC changes, so the explanations match."]],
-    "setup/generator": ["Block generator", "Say what you need; Ki, PLC-Ki's block writer, writes the blocks, TIA imports and compiles them, PLCSIM runs them.", [
-      "New blocks: say what you need, pick the TIA project and press Generate. The package name is made from your words if you leave it empty.",
-      "Made before: pick a package on the left to see its versions, what Ki changed, Ki's notes and the files. \"Change it\" makes the next version (v002, v003 …); older versions stay.",
-      "When a job ends, \"What Ki did\" lists the blocks and tags it made, changed or removed against the version before.",
-      "Ki runs on Claude, with the API key from Settings.",
-      "Use a copy of the TIA project, not the plant's master.",
-      "A real PLC needs two confirmations: you type the version here, and someone types the PLC address in the TIA helper window. The CPU must be in STOP."]],
-    station: ["Stations", "One page per station, made for a phone: is it OK, its alarms with the fix, its sequence step and its devices.", [
-      "Scan the QR label on the machine to open its station here. Administrators print the labels in Setup › QR labels.",
-      "The stations come from the program: each device and sequence belongs to the station (instance) named in its location. An alarm belongs to the station of its device.",
-      "Tap a device for its values and interlocks. Open the alarm for the full fix list and where it is set in the program.",
-      "Values update every second."]],
-    tv: ["Line screen (TV)", "A page for a TV on the line, readable from a few metres: the state, the step and the machine picture. It turns to the alarm when one comes.", [
-      "Open it from Alarm sound and screen, or bookmark #/tv (the whole machine) or #/tv/<station> (one station). It can also be a start page.",
-      "When an alarm comes, the screen shows that alarm large: its text, the station and since when. It goes back to the picture when no alarm is on.",
-      "The screen stays on and is dark unless Light was chosen. Everything moves a few pixels every few minutes so nothing burns into the TV.",
-      "It only reads. No login is needed when viewing without login is on. Press Esc or the × in the corner to leave."]],
-    "setup/qr": ["QR labels", "Print a QR label per station or device. A phone that scans it opens that station's live page.", [
-      "Pick the address phones use: the PC's address on the plant network, not localhost. Open it on a phone once to check it works.",
-      "Phones only reach PLC-Ki when Settings › Other computers may open PLC-Ki is on.",
-      "Print on sticker paper or laminate the labels. They keep working after a new program import as long as the station keeps its name."]],
-    "setup/settings": ["Settings", "The machine model, the Claude key, who may open PLC-Ki, and logins.", [
-      "Operators see every machine page; administrators also see Setup.",
-      "Other computers may open PLC-Ki: off means only this PC."]],
-    notfound: ["Page not found", "The address in the browser does not match a page of PLC-Ki.", [
-      "Pick a page in the menu, or use one of the links on the page.",
-      "An old bookmark or a mistyped address leads here. Nothing is wrong with the machine."]],
+    documents: [I18N.T("Documents"), I18N.T("Device manuals, fault lists and electrical drawings. Ask and the Active alarm page look things up in them."), [
+      I18N.T("Search: type words, a fault code as the device shows it (F07801, SRVO-062, 0x8C10), a terminal (X2:14) or an address (%I12.3). Fault codes come first, then the pages that match. A page opens in the browser at that page."),
+      I18N.T("For this machine: documents only this machine uses, such as its EPLAN drawing. For every machine: manuals you use everywhere, such as the SINAMICS list manual."),
+      I18N.T("Administrators add files by dropping them on the page. PDFs need text in them: a scanned paper page has none. A fault list can also be a CSV file with code, text, cause and remedy columns."),
+      I18N.T("Built in: general Siemens, FANUC and IO-Link knowledge. When a manual knows the same code, the manual comes first.")]],
+    alarm: [I18N.T("Active alarm"), I18N.T("The start page. It shows the alarm that matters most right now and how to get the machine going again."), [
+      I18N.T("With several alarms, the first chip is the first-out: the alarm that came first, as PLC-Ki saw them come. Fix that one first; the others often follow from it."),
+      I18N.T("Fix it: work down the list and tap each step when done. The ticks are only on this screen."),
+      I18N.T("Where in the machine: the device behind the alarm and the chain Requested › Interlocks › Output › Feedback. The first red link is why it is not working."),
+      I18N.T("Where in the software: from the main cycle (OB1) down to the bit that sets the alarm. Show where it is set opens that network as rungs with live values."),
+      I18N.T("The seconds before it came: every change of the machine's tags in the 10 s before the alarm, recorded much finer than the normal reads. Short pulses (amber) are signals the once-a-second reads would miss."),
+      I18N.T("History of this alarm: how often it came, how long it stayed, and the cause and fix technicians noted last time. When you have found the cause, tap Note cause and fix so the next person sees it."),
+      I18N.T("Ask about this alarm: Ki looks at the live values, the last minutes, History and the program, and says why it is on and what to check.")]],
+    plant: [I18N.T("Plant"), I18N.T("What the machine is doing now. The top shows the step, what it waits for and the key values; the tabs below hold the rest."), [
+      I18N.T("Overview: Needs attention lists active alarms and blocked or faulted devices first; tap one to go to it. Below it the sequence: the blue step is where it is now, red means halted, ✓ is met, ✗ is missing."),
+      I18N.T("The machine at a glance: every device as a symbol. Green runs, grey is off, a dashed amber edge means the program asks for it but an interlock blocks it, red is a fault. Tap one to open it on Devices."),
+      I18N.T("Devices: the list on the left (needs attention first), the picked device on the right with the chain Requested › Interlocks › Output › Feedback. The first red link is why it is not running."),
+      I18N.T("Values over time: the measured values of the last minutes, with the step band and alarm marks under them. Move along a chart to read every value at that moment."),
+      I18N.T("Machine settings: the values an operator or engineer sets on the HMI panel or in the recipe, with what they are now. ✗ means the machine cannot work with that value."),
+      I18N.T("Data exchange: signals to and from MES, a filler and so on, with their live values.")]],
+    sequence: [I18N.T("Step chart"), I18N.T("One sequence as a chain of steps, read like the GRAPH editor, with how long each step took."), [
+      I18N.T("Step timeline: which step ran when in the last minutes, and the last and average time of each step. A step that takes longer than usual is where the machine waits."),
+      I18N.T("Step chart: each box is a step, the bar under it is the transition to the next one with its conditions. ↷ marks a jump to another step; \"from 12\" above a step says which steps jump to it."),
+      I18N.T("The blue step is where it is now. Its conditions are live: ✓ is met, ✗ is missing. Tap any step for what it does.")]],
+    alarms: [I18N.T("Alarms"), I18N.T("Every alarm the program can raise, active or not, with its meaning, where it is set, likely causes and the fix."), [
+      I18N.T("Search by number, text or device. Active alarms are at the top."),
+      I18N.T("Click an alarm to open its causes and fix. Red tags are faults (they stop the machine), gold tags are warnings."),
+      I18N.T("Past alarms, what fixed them and the seconds before each one are in History.")]],
+    history: [I18N.T("History"), I18N.T("The one place for past alarms: every alarm PLC-Ki saw on this machine, what it was doing then, and what the technicians found and did."), [
+      I18N.T("The time window at the top (24 h, 7 days, 30 days, 1 year) applies to Log and Ranking."),
+      I18N.T("Log: every alarm that came, newest first. Waiting for a note lists alarms of the last 12 hours that nobody wrote anything for yet. PLC and connection lists when the CPU stopped or the link to the PLC dropped."),
+      I18N.T("What fixed it? After an alarm goes, write down the cause and the fix in one line. The next time it comes, the Active alarm page and Ask show it first: \"last time it was a dirty sensor\"."),
+      I18N.T("Ranking: the alarms that came most often, or that were on longest in total. Tap one for its own history."),
+      I18N.T("Recordings: the seconds before each alarm came, from every change the PLC sends (usually sampled every 100 ms). Amber marks a short pulse the normal reads would miss; a Blip is an alarm that went again before a normal read saw it. The last 100 are kept."),
+      I18N.T("Download for Excel: the log as a file for the maintenance team. The history is kept on this PC in the PLC-Ki data folder and survives restarts.")]],
+    program: [I18N.T("Program"), I18N.T("Every block of the PLC program with live values, as rungs or as text."), [
+      I18N.T("Pick a block on the left. At the top, \"Why outputs are off right now\" names each output that is off and the signal that stops it."),
+      I18N.T("Rungs: each network drawn as a rung. Green passes power, grey does not, a dashed ? has no live value. Read from left to right: the amber contact is the first one that stops the output."),
+      I18N.T("Click a contact or a signal to see what sets it: the network in this block, the block that writes it, or the block that calls this one for an input. Click an output to see where it is used."),
+      I18N.T("Text: the code as written in TIA (LAD and GRAPH as readable text with the same meaning), with the live value after each signal."),
+      I18N.T("LAD, FBD and GRAPH blocks open as rungs, SCL blocks as text. Switch with Rungs / Text. Coming from an alarm, the network that sets it is marked."),
+      I18N.T("Values update every two seconds.")]],
+    tags: [I18N.T("Tags"), I18N.T("The PLC tag tables with addresses, and every data block's values, live."), [
+      I18N.T("Tag tables: every tag with its address (%I, %Q, %M), type and comment. Search by name, address or comment."),
+      I18N.T("Data blocks: pick one on the left to see all its values. Optimized blocks have no addresses; values are read by name."),
+      I18N.T("Up to 300 rows are read live at a time, about once a second.")]],
+    plc: [I18N.T("PLC"), I18N.T("The PLC in three tabs: the CPU, its racks with every input and output, and what it reports."), [
+      I18N.T("CPU: RUN, STOP or STARTUP as the CPU reports it, with the position of the mode switch where the CPU tells it. The picture is drawn from the order number; page through its display with the keys under it."),
+      I18N.T("Start and Stop work only when PLC-Ki reads the PLCSIM CPU of the TIA helper, and only for administrators. You confirm first. A real PLC is never started or stopped from PLC-Ki."),
+      I18N.T("ERROR and MAINT come from PLCSIM where it tells them; on a real CPU they are not read and stay dark here."),
+      I18N.T("Racks and I/O: pick a device at the top (PLC, I/O stations, drives, robots), then tap a module for its channels. Channels are matched to the PLC tags by address, so you see the tag, its comment and the live value."),
+      I18N.T("If only the CPU shows, the program export has no hardware yet: Read the hardware from TIA (administrators) takes a minute or two and changes nothing else."),
+      I18N.T("Diagnostics: what the CPU reports for PROFINET devices, modules, channels and drives, read live, with what it means and what to check.")]],
+    reports: [I18N.T("Reports"), I18N.T("Shift report with OEE, and a summary for maintenance, from what PLC-Ki records while it watches the machine."), [
+      I18N.T("Shift report: OEE and its three parts, a bar of where the time went (running, waiting, down by a fault, no PLC connection), parts made, the biggest losses and the alarms of that shift."),
+      I18N.T("Summary: down time, average repair time (MTTR), running time between faults (MTBF), why the machine was not running, and every shift's OEE, over 24 h, 7 days, 30 days or 1 year. Which alarms cost the most time is in History, Ranking."),
+      I18N.T("Download for Excel saves a CSV file; Print or PDF prints the page."),
+      I18N.T("PLC-Ki records only while it runs and reads the PLC. Time it was off or without connection is shown and left out of OEE."),
+      I18N.T("Report setup (administrators): shift times, planned stops, the part and reject counters and the ideal cycle time. Without a counter every finished sequence cycle counts as one part.")]],
+    "setup/start": [I18N.T("Get started"), I18N.T("Sets PLC-Ki up one question at a time. You can come back here any time."), [
+      I18N.T("Each step is saved when you press Continue. Skip what you don't need now: TIA Portal is only needed to import a program or build blocks."),
+      I18N.T("At the end, Apply restarts PLC-Ki with the new settings (a few seconds).")]],
+    "setup/connections": [I18N.T("Connections"), I18N.T("Where PLC-Ki, TIA Portal and the PLC are, and whether each link works."), [
+      I18N.T("The drawing turns each line green when it works and red when it does not. Grey means not checked yet."),
+      I18N.T("Test the address checks that something answers on the PLC's S7 port. It sends nothing to the PLC."),
+      I18N.T("Save, then Apply: PLC-Ki uses new connection settings after a quick restart.")]],
+    "setup/program": [I18N.T("Import a program"), I18N.T("Teaches PLC-Ki a machine from its TIA program."), [
+      I18N.T("1. Drop the TIA archive (.zap20). 2. TIA exports it on the TIA PC (needs the TIA helper). 3. Ki builds the model: a few minutes, about a dollar. 4. Check the numbers and press Use this program."),
+      I18N.T("Import again when the program in the PLC changes, so the explanations match.")]],
+    "setup/generator": [I18N.T("Block generator"), I18N.T("Say what you need; Ki, PLC-Ki's block writer, writes the blocks, TIA imports and compiles them, PLCSIM runs them."), [
+      I18N.T("New blocks: say what you need, pick the TIA project and press Generate. The package name is made from your words if you leave it empty."),
+      I18N.T("Made before: pick a package on the left to see its versions, what Ki changed, Ki's notes and the files. \"Change it\" makes the next version (v002, v003 …); older versions stay."),
+      I18N.T("When a job ends, \"What Ki did\" lists the blocks and tags it made, changed or removed against the version before."),
+      I18N.T("Ki runs on Claude, with the API key from Settings."),
+      I18N.T("Use a copy of the TIA project, not the plant's master."),
+      I18N.T("A real PLC needs two confirmations: you type the version here, and someone types the PLC address in the TIA helper window. The CPU must be in STOP.")]],
+    station: [I18N.T("Stations"), I18N.T("One page per station, made for a phone: is it OK, its alarms with the fix, its sequence step and its devices."), [
+      I18N.T("Scan the QR label on the machine to open its station here. Administrators print the labels in Setup › QR labels."),
+      I18N.T("The stations come from the program: each device and sequence belongs to the station (instance) named in its location. An alarm belongs to the station of its device."),
+      I18N.T("Tap a device for its values and interlocks. Open the alarm for the full fix list and where it is set in the program."),
+      I18N.T("Values update every second.")]],
+    tv: [I18N.T("Line screen (TV)"), I18N.T("A page for a TV on the line, readable from a few metres: the state, the step and the machine picture. It turns to the alarm when one comes."), [
+      I18N.T("Open it from Alarm sound and screen, or bookmark #/tv (the whole machine) or #/tv/<station> (one station). It can also be a start page."),
+      I18N.T("When an alarm comes, the screen shows that alarm large: its text, the station and since when. It goes back to the picture when no alarm is on."),
+      I18N.T("The screen stays on and is dark unless Light was chosen. Everything moves a few pixels every few minutes so nothing burns into the TV."),
+      I18N.T("It only reads. No login is needed when viewing without login is on. Press Esc or the × in the corner to leave.")]],
+    "setup/qr": [I18N.T("QR labels"), I18N.T("Print a QR label per station or device. A phone that scans it opens that station's live page."), [
+      I18N.T("Pick the address phones use: the PC's address on the plant network, not localhost. Open it on a phone once to check it works."),
+      I18N.T("Phones only reach PLC-Ki when Settings › Other computers may open PLC-Ki is on."),
+      I18N.T("Print on sticker paper or laminate the labels. They keep working after a new program import as long as the station keeps its name.")]],
+    "setup/settings": [I18N.T("Settings"), I18N.T("The machine model, the Claude key, who may open PLC-Ki, and logins."), [
+      I18N.T("Operators see every machine page; administrators also see Setup."),
+      I18N.T("Other computers may open PLC-Ki: off means only this PC.")]],
+    notfound: [I18N.T("Page not found"), I18N.T("The address in the browser does not match a page of PLC-Ki."), [
+      I18N.T("Pick a page in the menu, or use one of the links on the page."),
+      I18N.T("An old bookmark or a mistyped address leads here. Nothing is wrong with the machine.")]],
   };
   // ---- Page not found: an unknown address says so, with a way out, instead of quietly showing Active alarm ----
   /** The page an unknown address most likely meant, only when it is obvious ("generator" → Block generator). */
@@ -1585,12 +1627,12 @@ const PK = (() => {
       const typed = location.hash.replace(/^#\/?/, "");
       const near = closestPage(typed.split("/").slice(0, typed.startsWith("setup/") ? 2 : 1).join("/"));
       const links = [
-        near ? `<a class="btn" href="#/${near}">Open ${esc(HELP[near][0])}</a>` : "",
-        near === "alarm" ? "" : `<a class="btn${near ? " gray" : ""}" href="#/alarm">Active alarm</a>`,
-        near === "plant" ? "" : `<a class="btn gray" href="#/plant">Plant</a>`,
+        near ? `<a class="btn" href="#/${near}">${PK.t("Open {page}", { page: esc(PK.t(HELP[near][0])) })}</a>` : "",
+        near === "alarm" ? "" : `<a class="btn${near ? " gray" : ""}" href="#/alarm">${PK.t("Active alarm")}</a>`,
+        near === "plant" ? "" : `<a class="btn gray" href="#/plant">${PK.t("Plant")}</a>`,
       ].join("");
-      return hero({ title: "Page not found", actions: links,
-        sub: `There is no page at <code>#/${esc(typed)}</code>.${near ? ` Did you mean ${esc(HELP[near][0])}?` : " It may be an old bookmark or a typo."}` });
+      return hero({ title: PK.t("Page not found"), actions: links,
+        sub: `${PK.t("There is no page at {address}.", { address: `<code>#/${esc(typed)}</code>` })}${near ? " " + PK.t("Did you mean {page}?", { page: esc(PK.t(HELP[near][0])) }) : " " + PK.t("It may be an old bookmark or a typo.")}` });
     },
   });
 
@@ -1599,13 +1641,13 @@ const PK = (() => {
     const [title, intro, tips] = HELP[name] || HELP.alarm;
     const admin = can("settings");
     const a = access(name);
-    const h = sheet(`<span class="eyebrow">Help</span><h2>${esc(title)}</h2><p class="m-0 muted">${esc(intro)}</p>
-      <ul class="plainlist">${tips.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>
+    const h = sheet(`<span class="eyebrow">${PK.t("Help")}</span><h2>${esc(PK.t(title))}</h2><p class="m-0 muted">${esc(PK.t(intro))}</p>
+      <ul class="plainlist">${tips.map((t) => `<li>${esc(PK.t(t))}</li>`).join("")}</ul>
       ${a.text ? `<p class="m-0 small">${esc(a.text)}</p>` : ""}
-      <p class="m-0 faint small">The light at the top right shows the PLC connection; click it for what it means. Ask answers questions about the machine on every page.</p>
-      <p class="m-0 faint small"><button type="button" class="linkbtn" data-screen>Alarm sound and screen</button>: beep or show a notice when an alarm comes, keep a line screen on.</p>
-      <p class="m-0 faint small keys"><kbd>Ctrl K</kbd> search · <kbd>?</kbd> this help · <kbd>/</kbd> ask Ki · <kbd>Esc</kbd> close</p>
-      <div class="row end">${admin && name !== "setup/start" ? `<a class="btn b" href="#/setup/start" data-close>Get started</a>` : ""}<button class="btn" data-close>Done</button></div>`);
+      <p class="m-0 faint small">${PK.t("The light at the top right shows the PLC connection; click it for what it means. Ask answers questions about the machine on every page.")}</p>
+      <p class="m-0 faint small"><button type="button" class="linkbtn" data-screen>${PK.t("Alarm sound and screen")}</button>: ${PK.t("beep or show a notice when an alarm comes, keep a line screen on.")}</p>
+      <p class="m-0 faint small keys"><kbd>${PK.t("Ctrl K")}</kbd> ${PK.t("search")} · <kbd>?</kbd> ${PK.t("this help")} · <kbd>/</kbd> ${PK.t("ask Ki")} · <kbd>Esc</kbd> ${PK.t("close")}</p>
+      <div class="row end">${admin && name !== "setup/start" ? `<a class="btn b" href="#/setup/start" data-close>${PK.t("Get started")}</a>` : ""}<button class="btn" data-close>${PK.t("Done")}</button></div>`);
     h.el.querySelector("[data-screen]").onclick = () => { h.close(); screenSheet(); };
   }
 
@@ -1624,17 +1666,17 @@ const PK = (() => {
       `href="${a.getAttribute("href")}" data-close`, a.classList.contains("active"));
     // The same groups as the side menu (Find out, Over time, Admin), each with a small heading
     const groups = [...new Set(pages.map((a) => a.dataset.group || ""))];
-    const pageLists = groups.map((g) => `${g ? `<h3 class="more-group">${esc(g)}</h3>` : ""}<ul class="mlist" aria-label="${esc(g || "Pages")}">${pages.filter((a) => (a.dataset.group || "") === g).map(pageRow).join("")}</ul>`).join("");
+    const pageLists = groups.map((g) => `${g ? `<h3 class="more-group">${esc(PK.t(g))}</h3>` : ""}<ul class="mlist" aria-label="${esc(g ? PK.t(g) : PK.t("Pages"))}">${pages.filter((a) => (a.dataset.group || "") === g).map(pageRow).join("")}</ul>`).join("");
     const acct = [
-      row(item("sound", "Alarm sound and screen"), 'data-m="screen"'),
-      row(item("moon", darkNow() ? "Light screen" : "Dark screen"), 'data-m="theme"'),
-      state.user ? row(item("key", "Change my password"), 'data-m="pw"') : "",
-      row(item("logout", state.user ? "Log out" : "Log in"), 'data-m="logout"'),
+      row(item("sound", PK.t("Alarm sound and screen")), 'data-m="screen"'),
+      row(item("moon", darkNow() ? PK.t("Light screen") : PK.t("Dark screen")), 'data-m="theme"'),
+      state.user ? row(item("key", PK.t("Change my password")), 'data-m="pw"') : "",
+      row(item("logout", state.user ? PK.t("Log out") : PK.t("Log in")), 'data-m="logout"'),
     ].join("");
-    const who = state.user ? `<p class="faint small more-who">${esc(state.user.name)} · ${roleTitle(state.user.role).toLowerCase()}</p>` : "";
-    const s = sheet(`<div class="more-head"><h2>More</h2><button class="btn plain small" type="button" data-close>Done</button></div>
+    const who = state.user ? `<p class="faint small more-who">${esc(state.user.name)} · ${roleWord(state.user.role)}</p>` : "";
+    const s = sheet(`<div class="more-head"><h2>${PK.t("More")}</h2><button class="btn plain small" type="button" data-close>${PK.t("Done")}</button></div>
       ${pageLists}
-      ${who}<ul class="mlist" aria-label="Account">${acct}</ul>`);
+      ${who}<ul class="mlist" aria-label="${PK.t("Account")}">${acct}</ul>`);
     s.el.classList.add("more-sheet");
     s.el.addEventListener("click", (e) => {
       const b = e.target.closest("[data-m]");
@@ -1662,10 +1704,11 @@ const PK = (() => {
     if (!items.length) { bar.innerHTML = ""; return; }
     const admin = can("plcsim");     // who may release (technicians too: holds are PLCSIM only)
     const list = items.slice(0, 3).map((h) => `<b class="mono">${esc(String(h.symbol).replace(/^"|"$/g, ""))}</b> = ${esc(h.value)}`).join(", ")
-      + (items.length > 3 ? `, and ${items.length - 3} more` : "");
+      ;
+    const listAll = items.length > 3 ? PK.t("{list}, and {n} more", { list, n: items.length - 3 }) : list;
     bar.innerHTML = `<div class="wrap"><div class="notice gold held-strip" role="status">${icon("warn")}
-      <div><b>${items.length === 1 ? "1 input held" : items.length + " inputs held"} on PLCSIM</b>: ${list}. ${items.length === 1 ? "It stays" : "They stay"} until released.</div>
-      ${admin ? `<div class="held-acts"><a class="btn gray small" href="#/tags">Show</a><button type="button" class="btn small" data-release-all>Release all</button></div>` : ""}</div></div>`;
+      <div><b>${PK.t("{n} input held on PLCSIM|{n} inputs held on PLCSIM", { n: items.length })}</b>: ${listAll}. ${items.length === 1 ? PK.t("It stays until released.") : PK.t("They stay until released.")}</div>
+      ${admin ? `<div class="held-acts"><a class="btn gray small" href="#/tags">${PK.t("Show")}</a><button type="button" class="btn small" data-release-all>${PK.t("Release all")}</button></div>` : ""}</div></div>`;
     const b = bar.querySelector("[data-release-all]");
     if (b) b.onclick = releaseAll;
   }
@@ -1689,9 +1732,9 @@ const PK = (() => {
     const at = new Date(n.editedAt || n.at);
     const text = n.text.length > 220 ? n.text.slice(0, 219).trimEnd() + "…" : n.text;
     return `<div class="notice notice-strip ho-strip" role="status" data-kind="handover">${icon("chat")}
-      <div><b>Handover from the ${esc(n.shift)} shift</b> <span class="small">(${esc(n.editedBy || n.by)}, ${hm(at)})</span>
+      <div><b>${PK.t("Handover from the {shift} shift", { shift: esc(n.shift) })}</b> <span class="small">(${esc(n.editedBy || n.by)}, ${hm(at)})</span>
         <div class="ho-text">${esc(text)}</div></div>
-      <a class="btn gray small" href="#/reports/shift/${esc(n.day)}/${n.shiftIndex}">Read</a><button type="button" class="btn small" data-ho-ok>Got it</button></div>`;
+      <a class="btn gray small" href="#/reports/shift/${esc(n.day)}/${n.shiftIndex}">${PK.t("Read")}</a><button type="button" class="btn small" data-ho-ok>${PK.t("Got it")}</button></div>`;
   }
   function handoverSeen() {
     if (handover) prefs.set("handoverSeen", hoKey(handover));
@@ -1703,26 +1746,35 @@ const PK = (() => {
   /** Puts every held input back to the value it had before its hold (administrators). */
   async function releaseAll() {
     const n = ((held && held.items) || []).length;
-    const ok = await confirmSheet({ title: n === 1 ? "Release the held input?" : `Release all ${n} held inputs?`,
-      text: n === 1 ? "PLC-Ki puts the input back to the value it had before the hold." : "PLC-Ki puts each input back to the value it had before the hold.", ok: n === 1 ? "Release" : "Release all" });
+    const ok = await confirmSheet({ title: n === 1 ? PK.t("Release the held input?") : PK.t("Release all {n} held inputs?", { n }),
+      text: n === 1 ? PK.t("PLC-Ki puts the input back to the value it had before the hold.") : PK.t("PLC-Ki puts each input back to the value it had before the hold."), ok: n === 1 ? PK.t("Release") : PK.t("Release all") });
     if (!ok) return;
     try {
       const r = await api("POST", "/api/admin/hold/release", { all: true });
       const bad = r.results.filter((x) => !x.ok);
-      toast(bad.length ? `${bad.length} could not be released: ${bad[0].error}` : "Released. The inputs have their earlier values again.", bad.length ? "error" : undefined);
+      toast(bad.length ? PK.t("{n} could not be released: {error}", { n: bad.length, error: PK.srv(bad[0].error) }) : PK.t("Released. The inputs have their earlier values again."), bad.length ? "error" : undefined);
     } catch (e) { toast(e.message, "error"); }
     await loadHeld();
     window.dispatchEvent(new Event("pk:held-changed"));
   }
 
   async function start() {
+    let st0Language = "";
     fillIcons();
     try {
       const st = await api("GET", "/api/auth/state");
       state.user = st.user;
       state.roleStart = st.roleStart || "";
+      st0Language = st.language || "";
     } catch { /* public view */ }
     await loadPrefs();
+    // The language (review 49): this login's choice (this browser's when logged out), else the plant's, else English.
+    try { state.info = await api("GET", "/api/info"); } catch { /* PLC-Ki not answering: English */ }
+    I18N.setLang(prefs.get("language", "") || (state.info && state.info.language) || (state.user ? "" : st0Language) || "en");
+    I18N.dom(document.body);
+    document.dispatchEvent(new Event("pk:lang"));     // what a script drew before the language was known draws itself again
+    // "Ask Ki" reads "Ki fragen" in German; the narrow bar keeps just "Ki"
+    if (I18N.lang === "de") $("ask-open").innerHTML = `Ki<span class="ask-ki"> fragen</span><kbd>/</kbd>`;
     readScreenOpt();
     applyDensity();
     applyTheme(prefs.get("theme", "auto"));
@@ -1731,9 +1783,9 @@ const PK = (() => {
     // Public view without a login: Ask needs a login (it spends Claude credit), so its buttons are hidden
     document.documentElement.classList.toggle("anon", !state.user);
     if (can("plcsim")) setInterval(loadChanges, 60000);   // "changes allowed" can change without a restart
-    const who = state.user ? state.user.name + " · " + roleTitle(state.user.role).toLowerCase() : "Not logged in";
+    const who = state.user ? state.user.name + " · " + roleWord(state.user.role) : PK.t("Not logged in");
     document.querySelectorAll(".who").forEach((el) => { el.textContent = who; });
-    document.querySelectorAll(".act-logout").forEach((el) => { el.textContent = state.user ? "Log out" : "Log in"; });
+    document.querySelectorAll(".act-logout").forEach((el) => { el.textContent = state.user ? PK.t("Log out") : PK.t("Log in"); });
     const acts = {
       logout: async () => { if (state.user) await fetch("/api/auth/logout", { method: "POST" }); location.href = "/login.html"; },
       screen: () => screenSheet(),
@@ -1749,13 +1801,13 @@ const PK = (() => {
     const tick = () => { const c = $("clock"); if (c) c.textContent = clock(Date.now()); };
     tick(); setInterval(tick, 1000);
     try { state.model = await api("GET", "/api/model"); } catch { /* shown on pages */ }
-    try { state.info = await api("GET", "/api/info"); $("machine").textContent = state.info.machine; machineLine(); } catch { /* */ }
+    if (state.info) { $("machine").textContent = state.info.machine; machineLine(); }
     loadProgram().then(machineLine);   // the top bar names the CPU and the program file
     $("help-open").onclick = helpSheet;
     if (screenOpt.awake) keepAwake(true);
     $("conn").setAttribute("role", "button");
     $("conn").tabIndex = 0;
-    $("conn").title = "What does this mean?";
+    $("conn").title = PK.t("What does this mean?");
     $("conn").onclick = connSheet;
     const cpuPill = $("cpu-pill");
     if (cpuPill) {
@@ -1796,8 +1848,8 @@ const PK = (() => {
     bar.id = "dirty-bar";
     bar.className = "dirty-bar";
     bar.setAttribute("role", "region");
-    bar.setAttribute("aria-label", "Unsaved changes");
-    bar.innerHTML = `<span class="dot"></span><span>Unsaved changes</span><button type="button" class="btn gray small" data-discard>Discard</button><button type="button" class="btn small" data-save-now>Save</button>`;
+    bar.setAttribute("aria-label", PK.t("Unsaved changes"));
+    bar.innerHTML = `<span class="dot"></span><span>${PK.t("Unsaved changes")}</span><button type="button" class="btn gray small" data-discard>${PK.t("Discard")}</button><button type="button" class="btn small" data-save-now>${PK.t("Save")}</button>`;
     document.body.append(bar);
     bar.querySelector("[data-discard]").onclick = () => { setDirty(null); route(); };
     bar.querySelector("[data-save-now]").onclick = () => dirty && dirty.save();
@@ -1850,6 +1902,6 @@ const PK = (() => {
     loadHandover(); setInterval(loadHandover, 60000);
   }
 
-  return { AI, ui, BP, can, roleTitle, prefs, startPage, startChoices, startLabel, hm, num, numText, dayMonth, weekdayDay, FORMATS, fmtKey, alarmWants, screenSize, dirty: setDirty, get isDirty() { return !!dirty; }, plain, connInfo, connSheet, helpSheet, screenSheet, passwordSheet, setHash, cmd, sec, hero, on, $, esc, icon, fillIcons, kindIcon, api, state, view, go, draw, route, toast, copyText, sheet, confirmSheet, cond, md, ago, clock, date, when,
+  return { AI, ui, t: I18N.t, T: I18N.T, srv: I18N.srv, get lang() { return I18N.lang; }, BP, can, roleTitle, prefs, startPage, startChoices, startLabel, hm, num, numText, dayMonth, weekdayDay, FORMATS, fmtKey, plantFormat, alarmWants, screenSize, dirty: setDirty, get isDirty() { return !!dirty; }, plain, connInfo, connSheet, helpSheet, screenSheet, passwordSheet, setHash, cmd, sec, hero, on, $, esc, icon, fillIcons, kindIcon, api, state, view, go, draw, route, toast, copyText, sheet, confirmSheet, cond, md, ago, clock, date, when,
     loadProgram, blockOf, valueBySymbol, norm, start, cpuStop, cpuSince, loadHeld, releaseAll, loadHandover, tvMode, get current() { return current; } };
 })();

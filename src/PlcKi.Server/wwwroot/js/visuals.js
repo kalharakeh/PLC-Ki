@@ -44,6 +44,8 @@
     });
   }
   const stepName = (def, no) => { const s = def && def.steps.find((x) => x.no === no); return s ? s.name : ""; };
+  /** The only state word the server writes itself is "unknown"; the others are the model's own texts and stay as they are. */
+  const stT = (text) => (text === "unknown" ? PK.t("unknown") : text);
 
   // ---------- trend data, fetched while a page that shows it is open ----------
   let trend = null, trendAt = 0, trendBusy = false, trendMin = null;
@@ -167,8 +169,8 @@
     return `<div class="tr-row">
       <div class="tr-lab"><span class="tr-name" title="${esc(sr.id)}">${esc(sr.label)}</span>
         <b class="tr-now">${num(hover != null ? hv : last, tag)}${unit}</b>
-        <span class="tr-rng">${cmp ? `<span class="tr-cmp-k" aria-hidden="true"></span>previous cycle ${num(cmpNow, tag)}${unit}` : sp ? `<span class="tr-sp-k" aria-hidden="true"></span>setpoint ${num(spNow, tagOf(sp.id))}${unit}` : vals.length ? `${num(Math.min(...vals), tag)} to ${num(Math.max(...vals), tag)}` : "no values yet"}</span>
-        <button type="button" class="tr-x" data-tr-remove="${esc(sr.id)}" aria-label="Remove ${esc(sr.label)} from the chart" title="Remove from the chart">×</button></div>
+        <span class="tr-rng">${cmp ? `<span class="tr-cmp-k" aria-hidden="true"></span>${PK.t("previous cycle {value}", { value: num(cmpNow, tag) + unit })}` : sp ? `<span class="tr-sp-k" aria-hidden="true"></span>${PK.t("setpoint {value}", { value: num(spNow, tagOf(sp.id)) + unit })}` : vals.length ? PK.t("{a} to {b}", { a: num(Math.min(...vals), tag), b: num(Math.max(...vals), tag) }) : PK.t("no values yet")}</span>
+        <button type="button" class="tr-x" data-tr-remove="${esc(sr.id)}" aria-label="${PK.t("Remove {label} from the chart", { label: esc(sr.label) })}" title="${PK.t("Remove from the chart")}">×</button></div>
       <div class="tr-plot" data-plot>
         <svg viewBox="0 0 1000 100" preserveAspectRatio="none" aria-hidden="true">
           <line x1="0" y1="50" x2="1000" y2="50" class="tr-grid"/>
@@ -189,26 +191,27 @@
       const to = i === seq.spans.length - 1 ? (tr.endAt || tr.to) : s.to;       // the step it is in now runs to "now"
       const l = Math.max(0, x(s.from, tr)), w = Math.max(0.3, x(to, tr) - l);
       const name = stepName(def, s.step);
-      return `<span class="tr-span ${stepColour(def, s.step)}" style="left:${l.toFixed(2)}%;width:${w.toFixed(2)}%" title="${esc(`Step ${s.step} ${name}: ${dur(to - s.from)}, from ${stampAt(s.from, tr.to - tr.from, tr)}`)}">${w > 4 ? s.step : ""}</span>`;
+      return `<span class="tr-span ${stepColour(def, s.step)}" style="left:${l.toFixed(2)}%;width:${w.toFixed(2)}%" title="${esc(PK.t("Step {n} {name}: {dur}, from {from}", { n: s.step, name, dur: dur(to - s.from), from: stampAt(s.from, tr.to - tr.from, tr) }))}">${w > 4 ? s.step : ""}</span>`;
     }).join("");
     const t = hover != null ? tr.from + hover * (tr.to - tr.from) : null;
     const at = t != null ? [...seq.spans].reverse().find((s) => s.from <= t) : null;
     const show = at ? at.step : now ? now.step : null;
     return `<div class="tr-row band ${label ? "" : "nolab"}">
-      ${label ? `<div class="tr-lab"><span class="tr-name">${esc(seq.name)}</span><b class="tr-now small">${show != null ? `Step ${show}` : "–"}</b><span class="tr-rng">${esc(show != null ? stepName(def, show) : "")}</span></div>` : ""}
-      <div class="tr-plot band" data-plot>${spans || `<span class="tr-empty">No step values yet</span>`}
+      ${label ? `<div class="tr-lab"><span class="tr-name">${esc(seq.name)}</span><b class="tr-now small">${show != null ? PK.t("Step {n}", { n: show }) : "–"}</b><span class="tr-rng">${esc(show != null ? stepName(def, show) : "")}</span></div>` : ""}
+      <div class="tr-plot band" data-plot>${spans || `<span class="tr-empty">${PK.t("No step values yet")}</span>`}
         ${hover != null ? `<i class="tr-cur" style="left:${(hover * 100).toFixed(2)}%"></i>` : ""}</div></div>`;
   }
 
+  const WEEKDAY_SHORT = [PK.T("Sun"), PK.T("Mon"), PK.T("Tue"), PK.T("Wed"), PK.T("Thu"), PK.T("Fri"), PK.T("Sat")];
   function axisRow(tr, label = true) {
     const span = tr.to - tr.from;
     // Clock times ("18:12"), with seconds when the window is short; the right end is "now"
     const cycle = !!tr.cycle;
     const clock = (ms) => cycle ? elapsed(ms - tr.from) : span > 36 * 3600000 ? PK.weekdayDay(ms)
-      : span > 20 * 3600000 ? `${["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][new Date(ms).getDay()]} ${PK.hm(ms)}`
+      : span > 20 * 3600000 ? `${PK.t(WEEKDAY_SHORT[new Date(ms).getDay()])} ${PK.hm(ms)}`
       : span <= 600000 ? PK.clock(ms) : PK.hm(ms);
     const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) =>
-      `<span class="tr-tick" style="left:${f * 100}%">${f === 1 && !cycle ? "now" : clock(tr.from + f * span)}</span>`).join("");
+      `<span class="tr-tick" style="left:${f * 100}%">${f === 1 && !cycle ? PK.t("now") : clock(tr.from + f * span)}</span>`).join("");
     const t = hover != null ? tr.from + hover * span : null;
     return `<div class="tr-row axis ${label ? "" : "nolab"}">${label ? `<div class="tr-lab"></div>` : ""}<div class="tr-plot axis">${ticks}
       ${t != null ? `<span class="tr-tick at" style="left:${(hover * 100).toFixed(2)}%">${stampAt(t, span, tr)}</span>` : ""}</div></div>`;
@@ -226,9 +229,9 @@
     const label = (m) => m < 60 ? m + " min" : m < 2880 ? Math.round(m / 60) + " h" : Math.round(m / 1440) + " d";
     const items = opts.map((m) => ({ label: label(m), on: !mode && m === cur, data: { "data-tr-min": m } }));
     // The cycle of the machine (concept view 6: This batch, Compare with the previous batch)
-    if (cycInfo.count >= 1) items.push({ label: "This cycle", on: mode === "cycle", data: { "data-tr-mode": "cycle" } });
-    if (cycInfo.count >= 2) items.push({ label: "Compare with the previous cycle", on: mode === "compare", data: { "data-tr-mode": "compare" } });
-    return items.length > 1 ? PK.ui.choice("Time shown", items) : "";
+    if (cycInfo.count >= 1) items.push({ label: PK.t("This cycle"), on: mode === "cycle", data: { "data-tr-mode": "cycle" } });
+    if (cycInfo.count >= 2) items.push({ label: PK.t("Compare with the previous cycle"), on: mode === "compare", data: { "data-tr-mode": "compare" } });
+    return items.length > 1 ? PK.ui.choice(PK.t("Time shown"), items) : "";
   }
 
   /** "Last 15 minutes": the measured values stacked over one time axis, the step band and alarm marks. */
@@ -238,42 +241,45 @@
       if (Date.now() - cycAt > 5000) setTimeout(loadCycle, 0);
       tr = cyc;
       if (!tr && cycAsked && !cycBusy) {
-        const none = mode === "compare" ? "There are not two cycles with saved values yet." : "No cycle with saved values yet.";
-        return `<div class="trends"><div class="toolbar tr-tools">${windowChoice(trend || { keepMinutes: 15 })}</div><p class="muted">${none} A cycle is one run of the sequence${cycInfo.sequence ? ` "${esc(cycInfo.sequence)}"` : ""}, from its first step and back (set on the Reports page).</p></div>`;
+        const none = mode === "compare" ? PK.t("There are not two cycles with saved values yet.") : PK.t("No cycle with saved values yet.");
+        const what = cycInfo.sequence ? PK.t(`A cycle is one run of the sequence "{name}", from its first step and back (set on the Reports page).`, { name: esc(cycInfo.sequence) })
+          : PK.t("A cycle is one run of the sequence, from its first step and back (set on the Reports page).");
+        return `<div class="trends"><div class="toolbar tr-tools">${windowChoice(trend || { keepMinutes: 15 })}</div><p class="muted">${none} ${what}</p></div>`;
       }
     } else {
       if (Date.now() - cycInfoAt > 20000) setTimeout(loadCycleCount, 0);
       tr = needTrend();
     }
-    if (!tr) return PK.ui.loading("chart", { label: "Loading the values" });
+    if (!tr) return PK.ui.loading("chart", { label: PK.t("Loading the values") });
     const short = !tr.cycle && (trendMin || tr.keepMinutes) * 60000 - (tr.to - tr.from) > 30000;
     const cy = tr.cycle;
     const clockAt = (ms) => PK.clock(ms);
-    const cycNote = cy ? `${cy.a.running ? "The cycle running now" : "The last finished cycle"}: ${clockAt(cy.a.start)} to ${cy.a.running ? "now" : clockAt(cy.a.end)}, ${dur(cy.a.end - cy.a.start)}.`
-      + (cy.b ? ` Grey dashed: the previous cycle, ${clockAt(cy.b.start)} to ${clockAt(cy.b.end)}, ${dur(cy.b.end - cy.b.start)}.` : "")
-      + " The time axis starts at 0:00 with the cycle." : "";
-    const note = cy ? cycNote : short ? (tr.source === "disk" ? `PLC-Ki has values from ${dur(tr.to - tr.from)} back, so the charts start there.`
-      : `PLC-Ki started watching ${dur(tr.to - tr.from)} ago, so the charts start there.`) : "";
+    const cycNote = cy ? (cy.a.running ? PK.t("The cycle running now: {from} to now, {dur}.", { from: clockAt(cy.a.start), dur: dur(cy.a.end - cy.a.start) })
+        : PK.t("The last finished cycle: {from} to {to}, {dur}.", { from: clockAt(cy.a.start), to: clockAt(cy.a.end), dur: dur(cy.a.end - cy.a.start) }))
+      + (cy.b ? " " + PK.t("Grey dashed: the previous cycle, {from} to {to}, {dur}.", { from: clockAt(cy.b.start), to: clockAt(cy.b.end), dur: dur(cy.b.end - cy.b.start) }) : "")
+      + " " + PK.t("The time axis starts at 0:00 with the cycle.") : "";
+    const note = cy ? cycNote : short ? (tr.source === "disk" ? PK.t("PLC-Ki has values from {dur} back, so the charts start there.", { dur: dur(tr.to - tr.from) })
+      : PK.t("PLC-Ki started watching {dur} ago, so the charts start there.", { dur: dur(tr.to - tr.from) })) : "";
     const ids = tr.series.map((s) => s.id);
     // A setpoint goes on its value's chart as a dashed line, not on a chart of its own
     const spFor = new Map(), onBase = new Set();
     tr.series.forEach((s) => { const b = baseOf(s, tr.series); if (b && !spFor.has(b.id)) { spFor.set(b.id, s); onBase.add(s.id); } });
     const admin = PK.can("settings");
-    const res = tr.source === "disk" && tr.resolutionSec && !cy ? ` One point on a chart is ${dur(tr.resolutionSec * 1000)}; a step shorter than that does not show.` : "";
-    const keep = `${res} Values are saved on this PC (every read for the newest days, a minute at a time for older ones), so charts survive a restart.`
-      + (admin ? ` <a href="#/setup/settings">How long they are kept is set in Setup › Settings › Storage.</a>` : " An administrator sets how long they are kept.");
+    const res = tr.source === "disk" && tr.resolutionSec && !cy ? PK.t("One point on a chart is {dur}; a step shorter than that does not show.", { dur: dur(tr.resolutionSec * 1000) }) + " " : "";
+    const keep = `${res}${PK.t("Values are saved on this PC (every read for the newest days, a minute at a time for older ones), so charts survive a restart.")}`
+      + (admin ? ` <a href="#/setup/settings">${PK.t("How long they are kept is set in Setup › Settings › Storage.")}</a>` : " " + PK.t("An administrator sets how long they are kept."));
     return `<div class="trends">
       <div class="toolbar tr-tools">${windowChoice(tr)}
-        <input type="search" list="tr-choices" id="tr-add" placeholder="Add a value to the chart" aria-label="Add a value to the chart" autocomplete="off">
+        <input type="search" list="tr-choices" id="tr-add" placeholder="${esc(PK.t("Add a value to the chart"))}" aria-label="${esc(PK.t("Add a value to the chart"))}" autocomplete="off">
         <datalist id="tr-choices">${tr.choices.filter((c) => !ids.includes(c.id)).map((c) => `<option value="${esc(c.id)}">${esc(c.label)}${c.unit ? " (" + esc(c.unit) + ")" : ""}</option>`).join("")}</datalist>
-        ${picked ? `<button type="button" class="linkbtn" data-tr-reset>Back to the usual values</button>` : ""}
+        ${picked ? `<button type="button" class="linkbtn" data-tr-reset>${PK.t("Back to the usual values")}</button>` : ""}
       </div>
       <div class="tr-rows" data-tr-rows>
-        ${tr.series.length ? tr.series.filter((s) => !onBase.has(s.id)).map((s) => chartRow(s, tr, spFor.get(s.id))).join("") : `<p class="muted">No measured values in this machine model to draw. Add one above.</p>`}
+        ${tr.series.length ? tr.series.filter((s) => !onBase.has(s.id)).map((s) => chartRow(s, tr, spFor.get(s.id))).join("") : `<p class="muted">${PK.t("No measured values in this machine model to draw. Add one above.")}</p>`}
         ${tr.steps.map((q) => bandRow(q, tr)).join("")}
         ${axisRow(tr)}
       </div>
-      <p class="mt-3 mb-0 faint small">${note ? esc(note) + " " : ""}Move along a chart to read the values at that time. Dashed line: the setpoint. Red marks: an alarm came. Grey marks: it went. ${keep}</p>
+      <p class="mt-3 mb-0 faint small">${note ? esc(note) + " " : ""}${PK.t("Move along a chart to read the values at that time. Dashed line: the setpoint. Red marks: an alarm came. Grey marks: it went.")} ${keep}</p>
     </div>`;
   }
 
@@ -308,7 +314,7 @@
     if (add) add.onchange = () => {
       const v = add.value.trim();
       const c = trend && trend.choices.find((x) => x.id === v || x.label.toLowerCase() === v.toLowerCase());
-      if (!c) { if (v) PK.toast("No number value with that name. Pick one from the list."); return; }
+      if (!c) { if (v) PK.toast(PK.t("No number value with that name. Pick one from the list.")); return; }
       const cur = mode ? cyc : trend;
       picked = [...new Set([...(cur ? cur.series.map((s) => s.id) : []), c.id])];
       add.value = "";
@@ -335,18 +341,18 @@
   }
 
   function timeline(def, spans, tr) {
-    if (!spans.length) return `<p class="muted">No step values in the last ${tr.keepMinutes} minutes yet.</p>`;
+    if (!spans.length) return `<p class="muted">${PK.t("No step values in the last {n} minutes yet.", { n: tr.keepMinutes })}</p>`;
     const st = stepStats(spans, tr);
     const rows = def.steps.filter((s) => st.has(s.no));
     const maxAvg = Math.max(1, ...rows.map((s) => { const e = st.get(s.no); return e.done ? e.total / e.done : 0; }));
     const changes = spans.length - 1;
     return `<div class="tr-rows" data-tr-rows>${bandRow({ id: def.id, name: def.name, spans }, tr, false)}${axisRow(tr, false)}</div>
-      <p class="mt-2 mb-4 faint small">${changes ? `${changes} step change${changes > 1 ? "s" : ""}` : "No step change"} in the last ${Math.round((tr.to - tr.from) / 60000)} minutes. Move along the band to see which step ran when.</p>
-      <table class="tbl steptimes"><tr><th>Step</th><th>Ran</th><th>Last</th><th>Average</th><th class="bar-h"></th></tr>
+      <p class="mt-2 mb-4 faint small">${changes ? PK.t("{n} step change in the last {m} minutes.|{n} step changes in the last {m} minutes.", { n: changes, m: Math.round((tr.to - tr.from) / 60000) }) : PK.t("No step change in the last {m} minutes.", { m: Math.round((tr.to - tr.from) / 60000) })} ${PK.t("Move along the band to see which step ran when.")}</p>
+      <table class="tbl steptimes"><tr><th>${PK.t("Step")}</th><th>${PK.t("Ran")}</th><th>${PK.t("Last")}</th><th>${PK.t("Average")}</th><th class="bar-h"></th></tr>
       ${rows.map((s) => {
         const e = st.get(s.no), avg = e.done ? e.total / e.done : null;
         return `<tr><td><button type="button" class="linkbtn" data-gs-go="${s.no}"><b>${s.no}</b> ${esc(s.name)}</button></td>
-          <td>${e.n}×</td><td>${e.last != null ? dur(e.last) : "–"}${e.open ? ` <span class="now-tag">now</span>` : ""}</td><td>${avg != null ? dur(avg) : "–"}</td>
+          <td>${e.n}×</td><td>${e.last != null ? dur(e.last) : "–"}${e.open ? ` <span class="now-tag">${PK.t("now")}</span>` : ""}</td><td>${avg != null ? dur(avg) : "–"}</td>
           <td class="bar-c"><i class="tbar ${stepColour(def, s.no)}" style="width:${avg != null ? Math.max(2, (avg / maxAvg) * 100).toFixed(1) : 0}%"></i></td></tr>`;
       }).join("")}</table>`;
   }
@@ -360,22 +366,22 @@
     const main = s.next.find((t) => nextInList && t.to === nextInList.no);
     const jumps = s.next.filter((t) => t !== main);
     const e = stats.get(s.no);
-    const time = isCur ? (q.timeInStep ? "now, " + q.timeInStep : "now") : e && e.last != null ? "took " + dur(e.last) : "";
+    const time = isCur ? (q.timeInStep ? PK.t("now, {time}", { time: q.timeInStep }) : PK.t("now")) : e && e.last != null ? PK.t("took {dur}", { dur: dur(e.last) }) : "";
     const condsOf = (t) => {
       const l = live.find((n) => n.to === t.to);
       if (l) return `<ul class="conds gt-conds">${l.conditions.map(cond).join("")}</ul>`;
       const cs = t.conditions || [];
-      if (!cs.length) return `<span class="gt-text faint">no condition</span>`;
+      if (!cs.length) return `<span class="gt-text faint">${PK.t("no condition")}</span>`;
       const shown = sel ? cs : cs.slice(0, 1);
-      return `<span class="gt-text">${shown.map((c) => esc(fill(c.text))).join("; ")}${cs.length > shown.length ? ` <span class="faint">+${cs.length - shown.length} more</span>` : ""}</span>`;
+      return `<span class="gt-text">${shown.map((c) => esc(fill(c.text))).join("; ")}${cs.length > shown.length ? ` <span class="faint">${PK.t("+{n} more", { n: cs.length - shown.length })}</span>` : ""}</span>`;
     };
     const ready = (t) => { const l = live.find((n) => n.to === t.to); return l ? (l.ready ? "ready" : l.ready === false ? "wait" : "") : ""; };
     const from = incoming.get(s.no) || [];
     return `<li class="gs ${isCur ? "cur" + (q.halted ? " halted" : "") : ""} ${sel ? "sel" : ""} ${i === 0 ? "init" : ""} ${main ? "link" : "end"}" id="gs-${s.no}">
-      ${from.length ? `<div class="gs-in">${from.map((f) => `<button type="button" class="linkbtn" data-gs-go="${f}">from ${f}</button>`).join(", ")} <span aria-hidden="true">↴</span></div>` : ""}
+      ${from.length ? `<div class="gs-in">${from.map((f) => `<button type="button" class="linkbtn" data-gs-go="${f}">${PK.t("from {n}", { n: f })}</button>`).join(", ")} <span aria-hidden="true">↴</span></div>` : ""}
       <button type="button" class="gs-box" data-gs="${s.no}" aria-expanded="${sel}"><b class="gs-no">${s.no}</b><span class="gs-name">${esc(s.name)}</span>${time ? `<span class="gs-t">${esc(time)}</span>` : ""}</button>
       ${jumps.map((t) => `<div class="gt jump ${ready(t)}"><i class="gt-bar" aria-hidden="true"></i>${condsOf(t)}
-        <button type="button" class="gt-to" data-gs-go="${t.to}" title="Jump to step ${t.to}">↷ ${t.to} ${esc(stepName(def, t.to))}</button></div>`).join("")}
+        <button type="button" class="gt-to" data-gs-go="${t.to}" title="${esc(PK.t("Jump to step {n}", { n: t.to }))}">↷ ${t.to} ${esc(stepName(def, t.to))}</button></div>`).join("")}
       ${main ? `<div class="gt main ${ready(main)}"><i class="gt-bar" aria-hidden="true"></i>${condsOf(main)}</div>` : ""}
     </li>`;
   }
@@ -402,30 +408,30 @@
   /** The selected step on the right of the chart: its time against the limit, what it does, and one row per condition. */
   function stepPanel(def, q, stats, no) {
     const s = def.steps.find((x) => x.no === no);
-    if (!s) return `<div class="card"><p class="m-0 muted">Tap a step in the chart to see it here.</p></div>`;
+    if (!s) return `<div class="card"><p class="m-0 muted">${PK.t("Tap a step in the chart to see it here.")}</p></div>`;
     const isCur = q && q.step === s.no;
     const e = stats.get(s.no);
     const lim = limitMs(s);
     const t = isCur ? msOf(q.timeInStep) : e && e.last != null ? e.last : null;
     const over = lim && t != null && t > lim;
-    const bar = t != null && lim ? `<div class="sp-time"><div class="row"><span>${isCur ? "In this step" : "Last time it took"} <b>${dur(t)}</b></span><span class="spacer"></span><span class="faint">limit ${dur(lim)}</span></div>
+    const bar = t != null && lim ? `<div class="sp-time"><div class="row"><span>${isCur ? PK.t("In this step") : PK.t("Last time it took")} <b>${dur(t)}</b></span><span class="spacer"></span><span class="faint">${PK.t("limit {dur}", { dur: dur(lim) })}</span></div>
         <div class="vb-track"><i class="vb-fill ${over ? "bad" : t > lim * 0.8 ? "warn" : ""}" style="width:${Math.min(100, (t / lim) * 100).toFixed(1)}%"></i></div></div>`
-      : t != null ? `<p class="m-0">${isCur ? "In this step for" : "Last time it took"} <b>${dur(t)}</b>. No time limit is known.</p>` : "";
+      : t != null ? `<p class="m-0">${isCur ? PK.t("In this step for") : PK.t("Last time it took")} <b>${dur(t)}</b>. ${PK.t("No time limit is known.")}</p>` : "";
     const live = isCur ? q.next : [];
     const trans = s.next.map((tn) => {
       const l = live.find((n) => n.to === tn.to);
       const rows = l ? l.conditions.map((c) => PK.condHeld(c)).join("")
-        : (tn.conditions || []).map((c) => `<li><span class="mark unk" aria-label="not checked now">·</span><span>${esc(fill(c.text))}</span></li>`).join("");
-      return `<div class="sp-tr"><div class="row"><b>To step ${tn.to} ${esc(stepName(def, tn.to))}</b><span class="spacer"></span>${l ? `<span class="pill ${l.ready ? "ok" : l.ready === false ? "warn" : ""} small-pill">${l.ready ? "ready" : l.ready === false ? "waiting" : "not known"}</span>` : ""}</div>
-        ${rows ? `<ul class="conds">${rows}</ul>` : `<p class="mt-1 mb-0 faint small">No condition.</p>`}</div>`;
+        : (tn.conditions || []).map((c) => `<li><span class="mark unk" aria-label="${esc(PK.t("not checked now"))}">·</span><span>${esc(fill(c.text))}</span></li>`).join("");
+      return `<div class="sp-tr"><div class="row"><b>${PK.t("To step {n} {name}", { n: tn.to, name: esc(stepName(def, tn.to)) })}</b><span class="spacer"></span>${l ? `<span class="pill ${l.ready ? "ok" : l.ready === false ? "warn" : ""} small-pill">${l.ready ? PK.t("ready") : l.ready === false ? PK.t("waiting") : PK.t("not known")}</span>` : ""}</div>
+        ${rows ? `<ul class="conds">${rows}</ul>` : `<p class="mt-1 mb-0 faint small">${PK.t("No condition.")}</p>`}</div>`;
     }).join("");
     return `<div class="card stack sp-card">
-      <div class="row"><h3 class="m-0">Step ${s.no} ${esc(s.name)}</h3>${isCur ? `<span class="now-tag">now</span>` : ""}</div>
+      <div class="row"><h3 class="m-0">${PK.t("Step {n} {name}", { n: s.no, name: esc(s.name) })}</h3>${isCur ? `<span class="now-tag">${PK.t("now")}</span>` : ""}</div>
       ${bar}
-      ${s.does ? `<p class="m-0"><span class="muted">This step should:</span> ${esc(fill(s.does))}</p>` : ""}
+      ${s.does ? `<p class="m-0"><span class="muted">${PK.t("This step should:")}</span> ${esc(fill(s.does))}</p>` : ""}
       ${s.limit ? `<p class="m-0 faint small">${esc(fill(s.limit))}</p>` : ""}
-      ${e ? `<p class="m-0 faint small">In the last minutes: ran ${e.n}×${e.done ? `, on average ${dur(e.total / e.done)}, longest ${dur(e.max)}` : ""}.</p>` : ""}
-      ${trans ? `<div class="gap-3 stack">${trans}</div>` : `<p class="m-0 faint small">The last step: no transition goes on from here.</p>`}
+      ${e ? `<p class="m-0 faint small">${PK.t("In the last minutes: ran {n}×{more}.", { n: e.n, more: e.done ? PK.t(", on average {avg}, longest {max}", { avg: dur(e.total / e.done), max: dur(e.max) }) : "" })}</p>` : ""}
+      ${trans ? `<div class="gap-3 stack">${trans}</div>` : `<p class="m-0 faint small">${PK.t("The last step: no transition goes on from here.")}</p>`}
     </div>`;
   }
 
@@ -435,9 +441,9 @@
   /** The step chart with the selected step beside it, then the step timeline. "" when the machine has no sequence. */
   function sequenceBody(id, step) {
     const s = state.status, m = state.model;
-    if (!s || !m) return PK.ui.loading("chart", { label: "Loading the sequence" });
+    if (!s || !m) return PK.ui.loading("chart", { label: PK.t("Loading the sequence") });
     const def = seqDef(id) || m.sequences[0];
-    if (!def) return `<p class="muted">The imported program has no GRAPH sequence or step chain.</p>`;
+    if (!def) return `<p class="muted">${PK.t("The imported program has no GRAPH sequence or step chain.")}</p>`;
     const q = s.sequences.find((x) => x.id === def.id);
     if (step !== stepParam || def.id !== seqShown) {
       stepParam = step; seqShown = def.id;
@@ -451,15 +457,15 @@
     const blk = PK.blockOf(def.block);
     const shown = selStep != null ? selStep : q ? q.step : null;
     return `<div class="row seq-tools">${m.sequences.length > 1 ? `<span class="small">${[def, ...others].map((d) => d === def ? `<b>${esc(d.name)}</b>` : `<a href="${seqBase(d)}">${esc(d.name)}</a>`).join(" · ")}</span>` : `<b>${esc(def.name)}</b>`}
-        <span class="spacer"></span>${q && q.step != null ? `<button class="btn b small" data-gs-go="${q.step}">Go to step ${q.step}</button>` : ""}
-        ${blk ? `<a class="btn b small" href="#/program/${encodeURIComponent(blk)}/as-rungs">Show in the program</a>` : ""}
-        <button class="btn b small" data-ask="Explain what ${esc(def.name)} does, step by step, and where it is now.">Ask</button></div>
+        <span class="spacer"></span>${q && q.step != null ? `<button class="btn b small" data-gs-go="${q.step}">${PK.t("Go to step {n}", { n: q.step })}</button>` : ""}
+        ${blk ? `<a class="btn b small" href="#/program/${encodeURIComponent(blk)}/as-rungs">${PK.t("Show in the program")}</a>` : ""}
+        <button class="btn b small" data-ask="${esc(PK.t("Explain what {name} does, step by step, and where it is now.", { name: def.name }))}">${PK.t("Ask")}</button></div>
       <div class="seq-cols">
-        <div><p class="mt-0 mb-3 faint small">${def.steps.length} steps, read like the GRAPH editor: each step, the transition under it, and jumps (↷) to other steps. Tap a step to see it on the right.</p>
+        <div><p class="mt-0 mb-3 faint small">${PK.t("{n} steps, read like the GRAPH editor: each step, the transition under it, and jumps (↷) to other steps. Tap a step to see it on the right.", { n: def.steps.length })}</p>
           <div class="gwrap">${stepChart(def, q, stats)}</div></div>
         <aside class="seq-side">${stepPanel(def, q, stats, shown)}</aside>
       </div>
-      <h2 class="mt-6">Step timeline</h2><p class="sub">Which step ran when, and how long each one took.</p>${tr ? timeline(def, spans, tr) : PK.ui.loading("chart")}`;
+      <h2 class="mt-6">${PK.t("Step timeline")}</h2><p class="sub">${PK.t("Which step ran when, and how long each one took.")}</p>${tr ? timeline(def, spans, tr) : PK.ui.loading("chart")}`;
   }
   /** Clicks on the step chart (called from the Plant page's after()). */
   function bindSequence(page, id) {
@@ -534,10 +540,10 @@
     const alarms = deviceAlarms(e, s);
     const fault = alarms.find((a) => a.severity !== "WARNING");
     if (fault || e.level === "fault" || e.level === "bad")
-      return { lvl: "fault", word: fault ? fault.id : e.state, alarms };
+      return { lvl: "fault", word: fault ? fault.id : stT(e.state), alarms };
     if (alarms.length) return { lvl: "warn", word: alarms[0].id, alarms };
-    if (e.blockedBy) return { lvl: "blocked", word: "blocked", alarms };
-    return { lvl: e.level, word: e.state, alarms };
+    if (e.blockedBy) return { lvl: "blocked", word: PK.t("blocked"), alarms };
+    return { lvl: e.level, word: stT(e.state), alarms };
   }
   PK.deviceAlarms = deviceAlarms;
   PK.devLook = devLook;
@@ -573,29 +579,29 @@
     const permOk = !blocking.length;
     const by = (id) => (s && s.equipment.find((x) => x.id === id)) || null;
     const steps = [];
-    steps.push(e.requested === true ? { k: "Requested", v: "yes", st: "ok" }
-      : e.requested === false ? { k: "Requested", v: "no", st: "off", note: halted ? `${halted.name} is halted${fault ? " by " + fault.id : ""}` : "not in this step" }
-      : { k: "Requested", v: "not known", st: "off" });
-    if (permOk) steps.push({ k: "Interlocks", v: e.permits.length ? "OK" : "none", st: e.permits.length ? "ok" : "off" });
+    steps.push(e.requested === true ? { k: PK.T("Requested"), v: PK.t("yes"), st: "ok" }
+      : e.requested === false ? { k: PK.T("Requested"), v: PK.t("no"), st: "off", note: halted ? (fault ? PK.t("{name} is halted by {id}", { name: halted.name, id: fault.id }) : PK.t("{name} is halted", { name: halted.name })) : PK.t("not in this step") }
+      : { k: PK.T("Requested"), v: PK.t("not known"), st: "off" });
+    if (permOk) steps.push({ k: PK.T("Interlocks"), v: e.permits.length ? PK.t("OK") : PK.t("none"), st: e.permits.length ? "ok" : "off" });
     else {
       const p = blocking[0], held = p.heldBy && by(p.heldBy);
-      steps.push({ k: "Interlocks", v: blocking.length === 1 ? "1 missing" : `${blocking.length} missing`, st: e.requested === true ? "bad" : "warn",
-        note: p.text + (held ? ` (waits for ${held.name})` : "") });
+      steps.push({ k: PK.T("Interlocks"), v: PK.t("{n} missing", { n: blocking.length }), st: e.requested === true ? "bad" : "warn",
+        note: p.text + (held ? " " + PK.t("(waits for {name})", { name: held.name }) : "") });
     }
-    steps.push(e.commanded === true ? { k: "Output", v: "on", st: "ok" }
-      : e.commanded === false ? { k: "Output", v: "off", st: e.requested === true && permOk ? "warn" : "off", note: e.requested === true && permOk ? "interlocks are OK, but it stays off" : "" }
-      : { k: "Output", v: "not known", st: "off" });
+    steps.push(e.commanded === true ? { k: PK.T("Output"), v: PK.t("on"), st: "ok" }
+      : e.commanded === false ? { k: PK.T("Output"), v: PK.t("off"), st: e.requested === true && permOk ? "warn" : "off", note: e.requested === true && permOk ? PK.t("interlocks are OK, but it stays off") : "" }
+      : { k: PK.T("Output"), v: PK.t("not known"), st: "off" });
     const fb = e.feedback || [];
     if (fb.length) {
       // Feedback only counts while the output is on: a closed valve nobody asked to open is not "missing" its open switch
       const on = e.commanded === true;
       const miss = fb.filter((f) => f.met === false), f = miss[0] || fb[0], v = f.values && f.values[0];
       const st = !miss.length ? (on ? "ok" : "off") : on ? (look.lvl === "fault" ? "bad" : "warn") : "off";
-      steps.push({ k: "Feedback", v: `${sigName(f.text, e, v)}: ${v ? v.text : f.met ? "yes" : f.met === false ? "no" : "not known"}`, st,
-        mark: on ? (f.met === false ? "✗" : f.met ? "✓" : "") : "", note: on && miss.length > 1 ? `and ${miss.length - 1} more` : "" });
+      steps.push({ k: PK.T("Feedback"), v: `${sigName(f.text, e, v)}: ${v ? v.text : f.met ? PK.t("yes") : f.met === false ? PK.t("no") : PK.t("not known")}`, st,
+        mark: on ? (f.met === false ? "✗" : f.met ? "✓" : "") : "", note: on && miss.length > 1 ? PK.t("and {n} more", { n: miss.length - 1 }) : "" });
     } else {
       const map = { ok: "ok", idle: "off", info: "off", warn: "warn", blocked: "warn", fault: "bad", bad: "bad" };
-      steps.push({ k: "State", v: e.state, st: map[look.lvl] || "off" });
+      steps.push({ k: PK.T("State"), v: stT(e.state), st: map[look.lvl] || "off" });
     }
     if (fault && !steps.some((x) => x.st === "bad")) {
       const last = steps[steps.length - 1];
@@ -607,9 +613,9 @@
   }
   /** The device's steps as one full-width strip; the first broken step is red. */
   function devStrip(e) {
-    return `<ol class="dstrip" aria-label="Why ${esc(e.name)} runs or not">${devSteps(e).map((x) => `<li class="ds ${x.st}">
-        <span class="ds-k">${esc(x.k)}</span><b>${esc(x.v)}${x.mark ? ` <span class="ds-m">${x.mark}</span>` : ""}</b>
-        ${x.alarm ? `<span class="ds-n">alarm ${esc(x.alarm)}</span>` : x.note ? `<span class="ds-n">${esc(x.note)}</span>` : ""}</li>`).join("")}</ol>`;
+    return `<ol class="dstrip" aria-label="${PK.t("Why {name} runs or not", { name: esc(e.name) })}">${devSteps(e).map((x) => `<li class="ds ${x.st}">
+        <span class="ds-k">${esc(PK.t(x.k))}</span><b>${esc(x.v)}${x.mark ? ` <span class="ds-m">${x.mark}</span>` : ""}</b>
+        ${x.alarm ? `<span class="ds-n">${PK.t("alarm {id}", { id: esc(x.alarm) })}</span>` : x.note ? `<span class="ds-n">${esc(x.note)}</span>` : ""}</li>`).join("")}</ol>`;
   }
 
   /**
@@ -633,25 +639,25 @@
       return { why, devices, waits };
     });
   }
-  const devWord = (e) => e.blockedBy ? "blocked" : devLook(e).lvl === "fault" ? "fault" : e.state;
+  const devWord = (e) => e.blockedBy ? PK.t("blocked") : devLook(e).lvl === "fault" ? PK.t("fault") : stT(e.state);
   /** One chain as a line of links: Level 15 % (needs above 20 %) → M201 blocked → E301 blocked → step 30 can't finish. */
   function chainHtml(ch) {
     const parts = [];
     if (ch.why) {
       const val = ch.why.values && ch.why.values.length ? ch.why.values.map((v) => `${esc(v.label)} <b>${esc(v.text)}</b>`).join(", ") : "";
-      parts.push(`<li class="cc cc-root"><span class="cc-box"><span class="cc-t">${val || esc(cap(ch.why.text))}</span><span class="cc-n">${val ? "needs: " + esc(ch.why.text.charAt(0).toLowerCase() + ch.why.text.slice(1)) : "missing"}</span></span></li>`);
+      parts.push(`<li class="cc cc-root"><span class="cc-box"><span class="cc-t">${val || esc(cap(ch.why.text))}</span><span class="cc-n">${val ? PK.t("needs: {what}", { what: esc(ch.why.text.charAt(0).toLowerCase() + ch.why.text.slice(1)) }) : PK.t("missing")}</span></span></li>`);
     }
     ch.devices.forEach((e) => parts.push(`<li class="cc cc-dev"><a href="#/plant/devices/${encodeURIComponent(e.id)}"><span class="cc-t">${esc(e.name)}</span><span class="cc-n">${esc(devWord(e))}</span></a></li>`));
     const bySeq = new Map();
     ch.waits.forEach((w) => bySeq.set(w.seq, [...(bySeq.get(w.seq) || []), w.cond]));
-    bySeq.forEach((conds, q) => parts.push(`<li class="cc cc-step"><a href="#/plant/sequence/${encodeURIComponent(q.id)}${q.step != null ? "/" + q.step : ""}"><span class="cc-t">Step ${esc(q.step ?? "?")} can't go on</span><span class="cc-n">${conds.map((c) => esc(c.text)).join("; ")}</span></a></li>`));
-    return `<ol class="cchain" aria-label="Cause, root first">${parts.join("")}</ol>`;
+    bySeq.forEach((conds, q) => parts.push(`<li class="cc cc-step"><a href="#/plant/sequence/${encodeURIComponent(q.id)}${q.step != null ? "/" + q.step : ""}"><span class="cc-t">${PK.t("Step {n} can't go on", { n: esc(q.step ?? "?") })}</span><span class="cc-n">${conds.map((c) => esc(c.text)).join("; ")}</span></a></li>`));
+    return `<ol class="cchain" aria-label="${PK.t("Cause, root first")}">${parts.join("")}</ol>`;
   }
   /** A condition line (PK.cond) that also says which blocked device it waits for. */
   function condHeld(c, s = state.status) {
     const html = PK.cond(c);
     const d = c.heldBy && s && s.equipment.find((e) => e.id === c.heldBy);
-    return d ? html.replace(/<\/span><\/li>$/, `<span class="held">Can't come while <a href="#/plant/devices/${encodeURIComponent(d.id)}">${esc(d.name)}</a> is ${esc(devWord(d))}.</span></span></li>`) : html;
+    return d ? html.replace(/<\/span><\/li>$/, `<span class="held">${PK.t("Can't come while {link} is {word}.", { link: `<a href="#/plant/devices/${encodeURIComponent(d.id)}">${esc(d.name)}</a>`, word: esc(devWord(d)) })}</span></span></li>`) : html;
   }
   Object.assign(PK, { devSteps, devStrip, causeChains, chainHtml, condHeld });
 
@@ -665,12 +671,12 @@
     const tile = (e) => {
       const look = devLook(e);
       const kv = keyValue(e);
-      const said = `${e.name}: ${e.state}${kv ? `, ${kv.label} ${kv.text}` : ""}` + look.alarms.map((a) => `. ${a.severity === "WARNING" ? "Warning" : "Alarm"} ${a.id}: ${a.text}`).join("");
+      const said = `${e.name}: ${stT(e.state)}${kv ? `, ${kv.label} ${kv.text}` : ""}` + look.alarms.map((a) => ". " + (a.severity === "WARNING" ? PK.t("Warning {id}: {text}", { id: a.id, text: a.text }) : PK.t("Alarm {id}: {text}", { id: a.id, text: a.text }))).join("");
       return `<div class="pm-dev lv-${esc(look.lvl)} ${e.id === selected ? "sel" : ""} ${ring && ring.includes(e.id) ? "ring" : ""}" data-eq="${esc(e.id)}" role="button" tabindex="0" aria-label="${esc(said)}" title="${esc(said)}">
         <span class="pm-sym">${symbolFor(e.kind, e.id)}</span><b>${esc(e.id)}</b><span class="pm-st">${esc(look.word)}</span>${kv ? `<span class="pm-v" title="${esc(kv.label)}">${esc(kv.text)}</span>` : ""}</div>`;
     };
-    return `<div class="pmap">${[...groups].map(([g, list]) => `<div class="pm-grp">${many ? `<div class="pm-h">${esc(g || "Other devices")}</div>` : ""}<div class="pm-devs">${list.map(tile).join("")}</div></div>`).join("")}
-      <div class="pm-key small"><span class="lv-ok">running or fine</span><span class="lv-idle">off</span><span class="lv-blocked">asked for but blocked</span><span class="lv-warn">warning</span><span class="lv-fault">fault</span></div></div>`;
+    return `<div class="pmap">${[...groups].map(([g, list]) => `<div class="pm-grp">${many ? `<div class="pm-h">${esc(g || PK.t("Other devices"))}</div>` : ""}<div class="pm-devs">${list.map(tile).join("")}</div></div>`).join("")}
+      <div class="pm-key small"><span class="lv-ok">${PK.t("running or fine")}</span><span class="lv-idle">${PK.t("off")}</span><span class="lv-blocked">${PK.t("asked for but blocked")}</span><span class="lv-warn">${PK.t("warning")}</span><span class="lv-fault">${PK.t("fault")}</span></div></div>`;
   }
 
   // ---------- the Plant header: measured values as bars ----------
@@ -722,14 +728,14 @@
       // The limit to name: one that is not met for a device the program asks for now. A limit of a device that is
       // not asked for (the agitator in the fill step) is only marked on the bar: it holds nothing back yet.
       const miss = lims.find((l) => l.met === false && l.asked);
-      const need = miss ? `${miss.v} ${unit} ${miss.op.startsWith(">") ? "needed" : "at most"} for ${miss.dev.name}` : "";
+      const need = miss ? (miss.op.startsWith(">") ? PK.t("{v} {unit} needed for {name}", { v: miss.v, unit, name: miss.dev.name }) : PK.t("{v} {unit} at most for {name}", { v: miss.v, unit, name: miss.dev.name })) : "";
       return `<div class="vbar ${miss ? "short" : ""}">
           <div class="vb-h"><span class="vb-l">${esc(v.label)}</span><b>${esc(v.text)}</b></div>
-          <div class="vb-track" title="${esc(lims.map((l) => `${l.dev.name} needs ${v.label} ${l.op} ${l.v} ${unit}`).join("\n"))}">
+          <div class="vb-track" title="${esc(lims.map((l) => PK.t("{name} needs {label} {op} {v} {unit}", { name: l.dev.name, label: v.label, op: l.op, v: l.v, unit })).join("\n"))}">
             <i class="vb-fill ${miss ? "warn" : ""}" style="width:${pos(Math.max(0, v.raw))}%"></i>
             ${lims.map((l) => `<i class="vb-lim ${l.met === false ? "no" : ""}" style="left:${pos(l.v)}%"></i>`).join("")}
-            ${sp != null ? `<i class="vb-sp" style="left:${pos(sp)}%" title="Setpoint ${esc(num(sp, tag))} ${esc(unit)}"></i>` : ""}</div>
-          <div class="vb-f"><span>${need ? `<span class="vb-need">▏${esc(need)}</span>` : sp != null ? `setpoint ${esc(num(sp, tag))} ${esc(unit)}` : ""}</span>${sparkline(sr)}</div>
+            ${sp != null ? `<i class="vb-sp" style="left:${pos(sp)}%" title="${esc(PK.t("Setpoint {v} {unit}", { v: num(sp, tag), unit }))}"></i>` : ""}</div>
+          <div class="vb-f"><span>${need ? `<span class="vb-need">▏${esc(need)}</span>` : sp != null ? esc(PK.t("setpoint {v} {unit}", { v: num(sp, tag), unit })) : ""}</span>${sparkline(sr)}</div>
         </div>`;
     }).join("");
     // Switches and counters share the row with the bars, as a small block of numbers, so the header stays short

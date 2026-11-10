@@ -7,8 +7,8 @@
   const { esc, state, icon } = PK;
   const PER_GROUP = 6;
   const GROUPS = [
-    ["alarms", "Alarms"], ["devices", "Devices"], ["model", "Machine values"], ["blocks", "Blocks"],
-    ["values", "Data block values"], ["code", "In the program"], ["docs", "Documents"],
+    ["alarms", PK.T("Alarms")], ["devices", PK.T("Devices")], ["model", PK.T("Machine values")], ["blocks", PK.T("Blocks")],
+    ["values", PK.T("Data block values")], ["code", PK.T("In the program")], ["docs", PK.T("Documents")],
   ];
   let open = null;            // the sheet while it is shown
   let q = "", seq = 0, timer = null;
@@ -29,7 +29,7 @@
       const on = new Set(((s && s.activeAlarms) || []).map((a) => a.id));
       out.alarms = m.alarms.filter((a) => has(words, a.id, a.text, a.location))
         .sort((a, b) => on.has(b.id) - on.has(a.id))
-        .map((a) => ({ icon: "bell", title: `${a.id} · ${a.text}`, sub: on.has(a.id) ? "Active now" : a.location || "", href: "#/alarms/" + encodeURIComponent(a.id), hot: on.has(a.id) }));
+        .map((a) => ({ icon: "bell", title: `${a.id} · ${a.text}`, sub: on.has(a.id) ? PK.t("Active now") : a.location || "", href: "#/alarms/" + encodeURIComponent(a.id), hot: on.has(a.id) }));
       out.devices = m.equipment.filter((e) => has(words, e.id, e.name, e.kind))
         .map((e) => { const live = s && s.equipment.find((x) => x.id === e.id);
           return { icon: PK.kindIcon(e.kind), title: e.name, sub: [e.id, live && live.state].filter(Boolean).join(" · "), href: "#/plant/devices/" + encodeURIComponent(e.id) }; });
@@ -52,17 +52,17 @@
     const fail = (group) => () => done(group, []);
     PK.api("GET", "/api/program/tags/find?q=" + encodeURIComponent(text)).then((r) => done("values", (r.values || []).map((v) => ({
       icon: "table", title: v.symbol, mono: true,
-      sub: [v.db ? "in " + v.db : v.table ? "tag table " + v.table : "", v.address, v.comment].filter(Boolean).join(" · "),
+      sub: [v.db ? PK.t("in {db}", { db: v.db }) : v.table ? PK.t("tag table {table}", { table: v.table }) : "", v.address, v.comment].filter(Boolean).join(" · "),
       href: v.db ? "#/tags/db/" + encodeURIComponent(v.db) : "#/tags",
     })))).catch(fail("values"));
     PK.api("GET", "/api/program/search?q=" + encodeURIComponent(text)).then((r) => done("code", (r.results || []).map((x) => ({
-      icon: "code", title: x.block, sub: `${x.count} line${x.count === 1 ? "" : "s"}${x.lines && x.lines[0] ? ": " + x.lines[0].text : ""}`,
+      icon: "code", title: x.block, sub: PK.t("{n} line|{n} lines", { n: x.count }) + (x.lines && x.lines[0] ? ": " + x.lines[0].text : ""),
       href: "#/program/" + encodeURIComponent(x.block), mono: false,
     })))).catch(fail("code"));
     PK.api("GET", "/api/documents/search?q=" + encodeURIComponent(text)).then((r) => done("docs", [
-      ...(r.faults || []).map((f) => ({ icon: "warn", title: `${f.code} · ${f.title}`, sub: f.device || "Fault code",
+      ...(r.faults || []).map((f) => ({ icon: "warn", title: `${f.code} · ${f.title}`, sub: f.device || PK.t("Fault code"),
         href: f.documentId ? `/api/documents/${encodeURIComponent(f.documentId)}/file${f.page ? "#page=" + f.page : ""}` : "#/documents", external: !!f.documentId })),
-      ...(r.pages || []).map((p) => ({ icon: "book", title: `${p.file}, page ${p.page}`, sub: p.text || "",
+      ...(r.pages || []).map((p) => ({ icon: "book", title: PK.t("{file}, page {page}", { file: p.file, page: p.page }), sub: p.text || "",
         href: `/api/documents/${encodeURIComponent(p.id)}/file#page=${p.page}`, external: true })),
     ])).catch(fail("docs"));
   }
@@ -86,14 +86,14 @@
       return `<li><a class="sr-row${n === active ? " on" : ""}" id="sr-${n}" role="option" aria-selected="${n === active}" data-n="${n}" href="${esc(r.href)}"${r.external ? ' target="_blank" rel="noopener"' : ""}>
         <span class="mrow-i" data-icon="${esc(r.icon)}"></span>
         <span class="mrow-t"><span class="sr-title${r.mono ? " mono" : ""}">${esc(r.title)}</span>${r.sub ? `<small>${esc(r.sub)}</small>` : ""}</span>
-        ${r.hot ? `<span class="pill bad"><span class="dot"></span>on</span>` : ""}</a></li>`;
+        ${r.hot ? `<span class="pill bad"><span class="dot"></span>${PK.t("on")}</span>` : ""}</a></li>`;
     };
-    const busy = waiting.size ? `<p class="faint small sr-wait">Looking in ${[...waiting].map((k) => ({ values: "the data blocks", code: "the program", docs: "the documents" })[k]).join(", ")}…</p>` : "";
+    const busy = waiting.size ? `<p class="faint small sr-wait">${esc(PK.t("Looking in {places}…", { places: [...waiting].map((k) => ({ values: PK.t("the data blocks"), code: PK.t("the program"), docs: PK.t("the documents") })[k]).join(", ") }))}</p>` : "";
     box.innerHTML = !q.trim()
-      ? `<p class="muted small sr-hint">Find an alarm (A02), a device (XV101), a value, a block, or words from a manual. Enter opens the first result.</p>`
+      ? `<p class="muted small sr-hint">${PK.t("Find an alarm (A02), a device (XV101), a value, a block, or words from a manual. Enter opens the first result.")}</p>`
       : groups.length
-        ? groups.map((g) => `<h3 class="more-group">${esc(g.label)}${g.more ? ` <span class="faint">· ${g.more} more</span>` : ""}</h3><ul class="mlist" role="listbox" aria-label="${esc(g.label)}">${g.list.map(row).join("")}</ul>`).join("") + busy
-        : busy || `<p class="muted sr-hint">Nothing found for “${esc(q)}”. Try fewer letters, an alarm number or a tag name.</p>`;
+        ? groups.map((g) => `<h3 class="more-group">${esc(PK.t(g.label))}${g.more ? ` <span class="faint">· ${PK.t("{n} more", { n: g.more })}</span>` : ""}</h3><ul class="mlist" role="listbox" aria-label="${esc(PK.t(g.label))}">${g.list.map(row).join("")}</ul>`).join("") + busy
+        : busy || `<p class="muted sr-hint">${PK.t("Nothing found for “{q}”. Try fewer letters, an alarm number or a tag name.", { q: esc(q) })}</p>`;
     PK.fillIcons(box);
     const input = open.el.querySelector("#sr-q");
     if (input) input.setAttribute("aria-activedescendant", flat.length ? "sr-" + active : "");
@@ -129,8 +129,8 @@
     // The block list is read once; it is small and makes block names searchable without asking the server
     PK.loadProgram().then(() => { if (open) draw(); });
     active = 0;
-    open = PK.sheet(`<div class="more-head"><h2>Search</h2><button class="btn plain small" type="button" data-close>Done</button></div>
-      <div class="sr-box">${icon("search")}<input type="search" id="sr-q" placeholder="Alarm, device, value, block or manual" aria-label="Search the machine" role="combobox" aria-expanded="true" aria-controls="sr-results" autocomplete="off" value="${esc(q)}"></div>
+    open = PK.sheet(`<div class="more-head"><h2>${PK.t("Search")}</h2><button class="btn plain small" type="button" data-close>${PK.t("Done")}</button></div>
+      <div class="sr-box">${icon("search")}<input type="search" id="sr-q" placeholder="${esc(PK.t("Alarm, device, value, block or manual"))}" aria-label="${esc(PK.t("Search the machine"))}" role="combobox" aria-expanded="true" aria-controls="sr-results" autocomplete="off" value="${esc(q)}"></div>
       <div id="sr-results" data-results></div>`, { onClose: () => { open = null; } });
     open.el.classList.add("more-sheet", "search-sheet");
     const input = open.el.querySelector("#sr-q");

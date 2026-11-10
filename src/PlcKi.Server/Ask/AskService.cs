@@ -10,7 +10,7 @@ using PlcKi.Server.Live;
 
 namespace PlcKi.Server.Ask;
 
-public sealed record AskRequest(string? ConversationId, string? Question);
+public sealed record AskRequest(string? ConversationId, string? Question, string? Language = null);
 
 /// <summary>A lookup Claude made while answering, shown under the answer ("Looked at: live status, alarm A07").</summary>
 public sealed record AskStep(string Tool, string Label);
@@ -101,7 +101,7 @@ public sealed class AskService
         {
             conv.LastUsed = DateTimeOffset.Now;
             conv.Messages.Add(new BetaUserMessageParam { Content = UserTurn(question) });
-            var result = await RunLoop(id, conv, ct);
+            var result = await RunLoop(id, conv, SystemPrompt.LanguageNote(req.Language), ct);
             if (result.Rollback) conv.Messages.RemoveRange(rollback, conv.Messages.Count - rollback);
             return result.Answer;
         }
@@ -117,7 +117,15 @@ public sealed class AskService
         }
     }
 
-    private async Task<(AskAnswer Answer, bool Rollback)> RunLoop(string id, Conversation conv, CancellationToken ct)
+    /// <summary>The cached system prompt, plus a short uncached line when the person chose a language (EN/DE, review 49).</summary>
+    private List<BetaTextBlockParam> SystemBlocks(string? languageNote)
+    {
+        var blocks = new List<BetaTextBlockParam> { new() { Text = _system, CacheControl = new BetaCacheControlEphemeral() } };
+        if (languageNote != null) blocks.Add(new() { Text = languageNote });
+        return blocks;
+    }
+
+    private async Task<(AskAnswer Answer, bool Rollback)> RunLoop(string id, Conversation conv, string? languageNote, CancellationToken ct)
     {
         var client = _client ??= new AnthropicClient();   // reads ANTHROPIC_API_KEY
         var started = DateTimeOffset.Now;
@@ -133,7 +141,7 @@ public sealed class AskService
             {
                 Model = _opt.Model,
                 MaxTokens = _opt.MaxTokens,
-                System = new List<BetaTextBlockParam> { new() { Text = _system, CacheControl = new BetaCacheControlEphemeral() } },
+                System = SystemBlocks(languageNote),
                 Tools = _toolDefs,
                 // On the last round Claude must answer with what it has
                 ToolChoice = lastRound ? new BetaToolChoiceNone() : new BetaToolChoiceAuto(),

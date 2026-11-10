@@ -35,7 +35,7 @@
     loading = true;
     try {
       const r = await PK.api("GET", "/api/program/tags");
-      if (r.available) data = r; else dataError = r.error || "No program loaded.";
+      if (r.available) data = r; else dataError = r.error || PK.t("No program loaded.");
     } catch (e) { dataError = e.message; }
     loading = false;
     PK.draw();
@@ -68,7 +68,7 @@
     for (const a of (s && s.activeAlarms) || []) {
       const def = m.alarms.find((x) => x.id === a.id) || a;
       const hit = [...dbsIn(def.location), ...dbsIn(tagSym(def.tag))].find((n) => known.has(n));
-      if (hit) return { name: hit, why: `alarm ${a.id}` };
+      if (hit) return { name: hit, why: PK.t("alarm {id}", { id: a.id }) };
     }
     const devId = window.PKLive && PKLive.selectedDevice();
     const dev = devId && m.equipment.find((e) => e.id === devId);
@@ -95,7 +95,7 @@
   function live(t) {
     const v = W.values[t.symbol];
     if (!v) return `<span class="faint">…</span>`;
-    if (v.error) return `<span class="nowrap faint small" title="${esc(v.error)}">not read</span>`;
+    if (v.error) return `<span class="nowrap faint small" title="${esc(PK.srv(v.error))}">${PK.t("not read")}</span>`;
     if (v.value === "True" || v.value === "False") v.value = v.value === "True";
     if (v.value === true || v.value === false) return `<span class="m-0 chip ${v.value ? "t" : "f"}">${v.value ? "TRUE" : "FALSE"}</span>`;
     if (v.value == null) return `<span class="faint">…</span>`;
@@ -113,23 +113,23 @@
       more += tags.length - take.length; rows += take.length;
       shown.push(...take);
       if (!take.length) return "";
-      return `<div class="card"><h3 class="mt-0 mb-2">${esc(tb.name)} <span class="faint small">${tags.length} tag${tags.length > 1 ? "s" : ""}</span></h3>
-        <div class="tbl-wrap"><table class="tbl tags-tbl"><tr><th>Name</th><th>Address</th><th>Type</th><th>Now</th><th>Comment</th></tr>
+      return `<div class="card"><h3 class="mt-0 mb-2">${esc(tb.name)} <span class="faint small">${PK.t("{n} tag|{n} tags", { n: tags.length })}</span></h3>
+        <div class="tbl-wrap"><table class="tbl tags-tbl"><tr><th>${PK.t("Name")}</th><th>${PK.t("Address")}</th><th>${PK.t("Type")}</th><th>${PK.t("Now")}</th><th>${PK.t("Comment")}</th></tr>
         ${take.map((t) => `<tr><td class="mono">${esc(t.name)}</td><td class="mono">${esc(t.address || "")}</td><td class="mono muted">${esc(t.datatype)}</td><td>${now(t)}</td><td class="muted">${esc(t.comment || "")}</td></tr>`).join("")}
         </table></div></div>`;
     }).join("");
-    const none = query.trim() ? `No tag matches “${esc(query)}”.` : "This program export has no PLC tag tables.";
+    const none = query.trim() ? PK.t("No tag matches “{query}”.", { query: esc(query) }) : PK.t("This program export has no PLC tag tables.");
     return (html || `<div class="card"><p class="m-0 muted">${none}</p></div>`)
-      + (more ? `<p class="faint small">${more} more tag${more > 1 ? "s" : ""} not shown. Search to narrow the list.</p>` : "");
+      + (more ? `<p class="faint small">${PK.t("{n} more tag not shown. Search to narrow the list.|{n} more tags not shown. Search to narrow the list.", { n: more })}</p>` : "");
   }
 
   function dbsHtml(q) {
     const list = data.dbs.filter((d) => match(q, d.name, d.title, d.instanceOf, d.number));
     const nav = list.map((d) => `<a href="#/tags/db/${encodeURIComponent(d.name)}" class="${d.name === db ? "on" : ""}">${esc(d.name)}<span class="tag">${d.number != null ? "DB" + d.number : ""}</span></a>`).join("")
-      || `<p class="faint small" style="padding:8px 10px">${q ? "No data block matches." : "This program export has no data blocks."}</p>`;
+      || `<p class="faint small" style="padding:8px 10px">${q ? PK.t("No data block matches.") : PK.t("This program export has no data blocks.")}</p>`;
     let right;
     shown = [];
-    if (!db) right = `<div class="card">${data.dbs.length ? PK.ui.loading("table") : PK.ui.empty({ icon: "file", title: "This program has no data blocks.", cls: "small" })}</div>`;
+    if (!db) right = `<div class="card">${data.dbs.length ? PK.ui.loading("table") : PK.ui.empty({ icon: "file", title: PK.t("This program has no data blocks."), cls: "small" })}</div>`;
     else if (dbError) right = PK.ui.error(dbError);
     else if (!dbData) right = `<div class="card">${PK.ui.loading("table")}</div>`;
     else {
@@ -140,20 +140,20 @@
       const short = (s) => s.startsWith(`"${dbData.db}".`) ? s.slice(dbData.db.length + 3) : s;
       const inModel = modelSymbols();
       const nModel = dbData.values.filter((t) => inModel.has(PK.norm(t.symbol))).length;
-      const mark = (t) => { const l = inModel.get(PK.norm(t.symbol)); return l ? ` <span class="tag blue in-model" title="In the machine model: ${esc(l)}">model</span>` : ""; };
+      const mark = (t) => { const l = inModel.get(PK.norm(t.symbol)); return l ? ` <span class="tag blue in-model" title="${esc(PK.t("In the machine model: {label}", { label: l }))}">${PK.t("model")}</span>` : ""; };
       right = `<div class="card">
         <div class="row"><h2 style="margin:0;font-size:24px">${esc(dbData.db)}</h2><span class="tag">${dbData.number != null ? "DB " + dbData.number : ""}</span>
-          ${dbData.instanceOf ? `<span class="faint small">instance of <a href="#/program/${encodeURIComponent(dbData.instanceOf)}">${esc(dbData.instanceOf)}</a></span>` : ""}
-          <span class="spacer"></span><a class="btn plain small" href="#/program/${encodeURIComponent(dbData.db)}">Show in the program ›</a></div>
-        ${startWhy && startWhy.db === dbData.db ? `<p class="mt-2 mb-0 small">${icon("bell")} Opened here because of ${esc(startWhy.why)}.</p>` : ""}
+          ${dbData.instanceOf ? `<span class="faint small">${PK.t("instance of {name}", { name: `<a href="#/program/${encodeURIComponent(dbData.instanceOf)}">${esc(dbData.instanceOf)}</a>` })}</span>` : ""}
+          <span class="spacer"></span><a class="btn plain small" href="#/program/${encodeURIComponent(dbData.db)}">${PK.t("Show in the program ›")}</a></div>
+        ${startWhy && startWhy.db === dbData.db ? `<p class="mt-2 mb-0 small">${icon("bell")} ${PK.t("Opened here because of {why}.", { why: esc(startWhy.why) })}</p>` : ""}
         ${dbData.title || dbData.comment ? `<p class="mt-2 mb-0 muted">${esc([dbData.title, dbData.comment].filter(Boolean).join(" · "))}</p>` : ""}
-        <div class="mt-3 gap-3 row"><input type="search" id="val-q" placeholder="Find a value" aria-label="Find a value" value="${esc(valQuery)}" style="max-width:300px">
-          <span class="faint small">Optimized data blocks have no fixed addresses: values are read by name.${nModel ? ` <span class="tag blue">model</span> marks the ${nModel} value${nModel === 1 ? "" : "s"} the machine model explains.` : ""}</span></div>
-        <div class="tbl-wrap"><table class="mt-3 tbl tags-tbl"><tr><th>Value</th><th>Type</th><th>Now</th><th>Comment</th></tr>
+        <div class="mt-3 gap-3 row"><input type="search" id="val-q" placeholder="${esc(PK.t("Find a value"))}" aria-label="${esc(PK.t("Find a value"))}" value="${esc(valQuery)}" style="max-width:300px">
+          <span class="faint small">${PK.t("Optimized data blocks have no fixed addresses: values are read by name.")}${nModel ? ` <span class="tag blue">${PK.t("model")}</span> ${PK.t("marks the {n} value the machine model explains.|marks the {n} values the machine model explains.", { n: nModel })}` : ""}</span></div>
+        <div class="tbl-wrap"><table class="mt-3 tbl tags-tbl"><tr><th>${PK.t("Value")}</th><th>${PK.t("Type")}</th><th>${PK.t("Now")}</th><th>${PK.t("Comment")}</th></tr>
         ${take.map((t) => `<tr><td class="mono">${esc(short(t.symbol))}${mark(t)}</td><td class="mono muted">${esc(t.datatype)}</td><td>${now(t)}</td><td class="muted">${esc(t.comment || "")}</td></tr>`).join("")}
         </table></div>
-        ${vals.length > take.length ? `<p class="faint small">Showing the first ${take.length} of ${vals.length} values.</p>` : ""}
-        ${!vals.length ? `<p class="muted">No readable values in this data block.</p>` : ""}</div>`;
+        ${vals.length > take.length ? `<p class="faint small">${PK.t("Showing the first {shown} of {total} values.", { shown: take.length, total: vals.length })}</p>` : ""}
+        ${!vals.length ? `<p class="muted">${PK.t("No readable values in this data block.")}</p>` : ""}</div>`;
     }
     return `<div class="split"><nav class="blocklist">${nav}</nav><div class="stack">${right}</div></div>`;
   }
@@ -175,8 +175,8 @@
     const rows = syms.filter((s) => !blocks.has(s) && !dbNames.has(s)).slice(0, 150).map((s) => byName.get(s) || { symbol: s, type: null });
     blockShown = rows;
     if (!rows.length) return "";
-    return `<div class="card"><details class="more" style="border:0;margin:0;padding:0" open><summary>Tags in this block (${rows.length})</summary>
-      <table class="mt-2 tbl tags-tbl"><tr><th>Tag</th><th>Address</th><th>Type</th><th>Now</th><th>Comment</th></tr>
+    return `<div class="card"><details class="more" style="border:0;margin:0;padding:0" open><summary>${PK.t("Tags in this block ({n})", { n: rows.length })}</summary>
+      <table class="mt-2 tbl tags-tbl"><tr><th>${PK.t("Tag")}</th><th>${PK.t("Address")}</th><th>${PK.t("Type")}</th><th>${PK.t("Now")}</th><th>${PK.t("Comment")}</th></tr>
       ${rows.map((t) => `<tr><td class="mono">${dbLink(t.symbol)}</td><td class="mono">${esc(t.address || "")}</td><td class="mono muted">${esc(t.datatype || "")}</td><td>${now(t)}</td><td class="muted">${esc(t.comment || "")}</td></tr>`).join("")}
       </table></details></div>`;
   }
@@ -213,10 +213,10 @@
     leave() { shown = []; },
     render(params) {
       if (params[0] === "db" && params[1] && params[1] !== db) { tab = "dbs"; query = ""; openDb(params[1]); }
-      const head = PK.hero({ cls: "hero compact", title: "Tags",
-        sub: "Every tag of the PLC tag tables with its address, and every value of the data blocks, read live from the PLC."
-          + (PK.can("real") ? " Change a value with the pen: on PLCSIM (safety values after a warning), on a real PLC only memory and data values, when allowed and confirmed."
-            : PK.can("plcsim") ? " Change a value with the pen on PLCSIM (safety values after a warning)." : "") });
+      const head = PK.hero({ cls: "hero compact", title: PK.t("Tags"),
+        sub: PK.t("Every tag of the PLC tag tables with its address, and every value of the data blocks, read live from the PLC.")
+          + (PK.can("real") ? " " + PK.t("Change a value with the pen: on PLCSIM (safety values after a warning), on a real PLC only memory and data values, when allowed and confirmed.")
+            : PK.can("plcsim") ? " " + PK.t("Change a value with the pen on PLCSIM (safety values after a warning).") : "") });
       if (dataError) return head + PK.sec("", PK.ui.error(dataError, { level: "warn" }));
       if (!data) return head + PK.sec("", PK.ui.loading("table", { rows: 8 }));
       const q = query.trim().toLowerCase();
@@ -231,11 +231,11 @@
       // The data blocks tab always shows one: the first, when none is picked
       if (tab === "dbs" && !db && data.dbs.length) openDb(data.dbs[0].name);
       const status = W.connection && W.connection !== "connected"
-        ? `<div class="mb-4 notice gold">${icon("warn")}<div>${W.connection === "snapshot" ? "PLC-Ki runs on test values, so tags outside the machine model show no value." : "PLC-Ki is not reading the PLC right now, so there are no live values."}</div></div>` : "";
+        ? `<div class="mb-4 notice gold">${icon("warn")}<div>${W.connection === "snapshot" ? PK.t("PLC-Ki runs on test values, so tags outside the machine model show no value.") : PK.t("PLC-Ki is not reading the PLC right now, so there are no live values.")}</div></div>` : "";
       const bar = PK.ui.toolbar({
-          left: PK.ui.choice("Show", [{ label: `Tag tables · ${nTags}`, on: tab === "tables", data: { "data-tab": "tables" } }, { label: `Data blocks · ${data.dbs.length}`, on: tab === "dbs", data: { "data-tab": "dbs" } }]),
-          search: { id: "tag-q", placeholder: tab === "tables" ? "Find a tag, address or comment" : "Find a data block", label: "Find", value: query },
-          right: `<span class="faint small">${W.at ? "Read " + PK.clock(W.at) : ""}</span>` });
+          left: PK.ui.choice(PK.t("Show"), [{ label: PK.t("Tag tables · {n}", { n: nTags }), on: tab === "tables", data: { "data-tab": "tables" } }, { label: PK.t("Data blocks · {n}", { n: data.dbs.length }), on: tab === "dbs", data: { "data-tab": "dbs" } }]),
+          search: { id: "tag-q", placeholder: tab === "tables" ? PK.t("Find a tag, address or comment") : PK.t("Find a data block"), label: PK.t("Find"), value: query },
+          right: `<span class="faint small">${W.at ? PK.t("Read {time}", { time: PK.clock(W.at) }) : ""}</span>` });
       return head + PK.sec("", status + bar + (tab === "tables" ? tablesHtml(q) : dbsHtml(q)) + (window.PKWrite ? PKWrite.logHtml() : ""));
     },
     after(page) {
