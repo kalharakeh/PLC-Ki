@@ -867,6 +867,10 @@ const PKSetup = (() => {
           <div class="grid three">${ROLES.map(([r]) => { const now = (lists.startPages || {})[r] || "";
             return `<label class="field">${esc(PK.roleTitle(r))}s<select data-start-role="${r}">${PK.startChoices([now]).map(([h, l]) => `<option value="${esc(h)}" ${(now || "#/alarm") === h ? "selected" : ""}>${esc(l)}</option>`).join("")}</select></label>`; }).join("")}</div>
           <div class="mt-3 row end"><button class="btn gray" data-save-start>Save start pages</button></div>
+          <h3 class="mt-5">Dates and numbers</h3>
+          <p class="sub">How times, dates and decimals are written for everyone. Each person can choose their own under Alarm sound and screen.</p>
+          <div class="row"><select id="plant-format" aria-label="Dates and numbers for this plant" style="max-width:100%">${Object.entries(PK.FORMATS).map(([k, f]) =>
+            `<option value="${k}" ${((state.info && state.info.format) || "text") === k ? "selected" : ""}>${esc(f.label)}</option>`).join("")}</select></div>
           <h3 class="mt-5">Add a login</h3>
           <div class="grid three"><label class="field">Name<input id="nu-name" autocomplete="off"></label>
             <label class="field">Password <span class="hint">at least 8 characters</span><input id="nu-pw" type="password" autocomplete="new-password"></label>
@@ -907,6 +911,11 @@ const PKSetup = (() => {
           if (o.dataset.to !== now) act(() => api("PUT", `/api/admin/users/${encodeURIComponent(name)}/role`, { role: o.dataset.to }), `${name} is now ${PK.roleTitle(o.dataset.to).toLowerCase()}.`);
         });
       });
+      const pf = page.querySelector("#plant-format");
+      pf.onchange = async () => {
+        try { const r = await api("PUT", "/api/admin/format", { format: pf.value }); if (state.info) state.info.format = r.format; PK.draw(); toast("Saved for this plant."); }
+        catch (e) { toast(e.message, "error"); }
+      };
       page.querySelector("[data-save-start]").onclick = async () => {
         const pages = {};
         page.querySelectorAll("[data-start-role]").forEach((sel) => { pages[sel.dataset.startRole] = sel.value === "#/alarm" ? "" : sel.value; });

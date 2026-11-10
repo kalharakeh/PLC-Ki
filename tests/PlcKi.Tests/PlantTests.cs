@@ -305,6 +305,26 @@ public class PlantTests : IDisposable
         await newBen.Send(HttpMethod.Post, "/api/auth/login", new { name = "ben", password = OperatorPw });
         Assert.Equal("{}", (await (await newBen.Send(HttpMethod.Get, "/api/me/prefs")).Content.ReadAsStringAsync()).Trim());
     }
+
+    [Fact]
+    public async Task The_plant_format_is_set_by_an_administrator_and_read_live()
+    {
+        await using var app = await Start();
+        var admin = new Client(app.GetTestClient());
+        await admin.Send(HttpMethod.Post, "/api/auth/setup", new { name = "anna", password = AdminPw });
+        await admin.Send(HttpMethod.Post, "/api/admin/users", new { name = "ben", password = OperatorPw, role = "operator" });
+        var ben = new Client(app.GetTestClient());
+        await ben.Send(HttpMethod.Post, "/api/auth/login", new { name = "ben", password = OperatorPw });
+        var store = app.Services.GetRequiredService<SettingsStore>();
+
+        Assert.Equal("text", store.Format);                                   // "3 Nov 2026, 14:02" until chosen
+        Assert.Equal(HttpStatusCode.OK, (await admin.Send(HttpMethod.Put, "/api/admin/format", new { format = "dot" })).StatusCode);
+        Assert.Equal("dot", store.Format);                                    // no restart
+        Assert.Equal(HttpStatusCode.BadRequest, (await admin.Send(HttpMethod.Put, "/api/admin/format", new { format = "dd/mm" })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await ben.Send(HttpMethod.Put, "/api/admin/format", new { format = "us" })).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await ben.Send(HttpMethod.Put, "/api/me/prefs", new { format = "us" })).StatusCode);   // their own
+        Assert.Equal("dot", store.Format);
+    }
 }
 
 public class PlcAddressTests
