@@ -1328,9 +1328,10 @@ const PK = (() => {
   function localTexts(o, depth = 0) {
     if (!fmt().comma || !o || typeof o !== "object" || depth > 12) return o;
     if (Array.isArray(o)) { o.forEach((x) => localTexts(x, depth + 1)); return o; }
+    const textual = typeof o.type === "string" && /string|char/i.test(o.type);     // a String tag's text is not a number
     for (const k of Object.keys(o)) {
       const v = o[k];
-      if (typeof v === "string") { if (k === "text") o[k] = numText(v); }
+      if (typeof v === "string") { if (k === "text" && !textual) o[k] = numText(v); }
       else if (v && typeof v === "object") localTexts(v, depth + 1);
     }
     return o;
