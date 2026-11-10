@@ -115,7 +115,7 @@
 
   // ---- pieces ----
   function tabs(t) {
-    const admin = PK.state.user && PK.state.user.role === "admin";
+    const admin = PK.can("settings");
     return PK.ui.tabs("Reports", [["shift", "Shift report"], ["summary", "Summary"], ["settings", "Report setup"]].map(([id, label]) => ({ label, on: t === id, href: "#/reports/" + id })));
   }
 
@@ -296,7 +296,7 @@
   function settingsPage() {
     const c = r.cfg;
     if (!c) return PK.sec("tight rp", r.err ? PK.ui.error(r.err) : PK.ui.loading("tiles"));
-    const admin = PK.state.user && PK.state.user.role === "admin";
+    const admin = PK.can("settings");
     const s = r.draft || c.settings;
     const dis = admin ? "" : "disabled";
     const counterOpts = (sel, kind) => `<option value="">${kind === "good" ? "None: count finished cycles" : "None: quality not counted"}</option>` +

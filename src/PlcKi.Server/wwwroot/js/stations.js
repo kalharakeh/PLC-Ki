@@ -196,7 +196,7 @@ const PKStations = (() => {
       const p = (PK.current && PK.current.params) || [];
       if (p.length) return stationPage(fromParam(p[0]), p[1]);
       const { stations, machineAlarms } = list(s);
-      const admin = state.user && state.user.role === "admin";
+      const admin = PK.can("settings");
       return hero({ eyebrow: `<span class="faint">${esc(s.machine || "")}</span>`, title: "Stations", sub: "Each station on one page, made for a phone. Scan the QR label on the machine to jump straight to it.",
         actions: admin ? `<a class="btn b" href="#/setup/qr">Print QR labels</a>` : "" })
         + sec("", grid(stations, machineAlarms));

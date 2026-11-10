@@ -11,7 +11,7 @@ public sealed record ReleaseRequest(string? Symbol, bool? All);
 /// <summary>
 /// "Hold on PLCSIM": an input set through the PLCSIM Advanced API stays until it is set again, unlike a one-time
 /// change of %I, which the next cycle overwrites. This is not a CPU force: TIA's force table does not see it, and
-/// it cannot hold an output. Administrators only (/api/admin/hold); the rules are ChangeRules (shared with
+/// it cannot hold an output. Administrators and technicians (/api/admin/hold, Roles); the rules are ChangeRules (shared with
 /// "Change a value"): PLCSIM only, confirmed by the TIA helper (a running instance at that address, RUN/STOP
 /// agreeing); inputs only; safety inputs after "I understand" under the warning.
 /// Every hold, release and refusal goes into the change log (value-changes.jsonl) and the machine's events.
@@ -36,11 +36,11 @@ public static class HoldEndpoints
         var api = app.MapGroup("/api/admin/hold");     // administrators only (UsePlant)
 
         api.MapGet("/check", async (string? symbol, PlcKiOptions opt, ProgramService program, HardwareService hardware, TiaConnection tia,
-            LiveState live, PlcsimInputs inputs, CancellationToken ct) =>
+            LiveState live, PlcsimInputs inputs, HttpContext http, CancellationToken ct) =>
         {
             var s = (symbol ?? "").Trim();
             var p = await PlanAsync(s, opt, program, hardware, tia, live, ct);
-            string? now = null, refused = p.Refused;
+            string? now = null, refused = p.Refused ?? Roles.ValueChangeRefused(WriteEndpoints.RoleOf(http), "plcsim");
             if (refused == null)
             {
                 try { now = await inputs.ReadAsync(p.Plc, p.Address!, p.Datatype, ct); }
@@ -90,7 +90,8 @@ public static class HoldEndpoints
             var text = (req.Value ?? "").Trim();
             var reason = string.IsNullOrWhiteSpace(req.Reason) ? null : req.Reason.Trim();
             var p = await PlanAsync(symbol, opt, program, hardware, tia, live, ct);
-            var refused = p.Refused ?? (text.Length == 0 ? "Type the value to hold."
+            // Hold works on confirmed PLCSIM only (PlanAsync refuses anything else), so the role rule is the PLCSIM one
+            var refused = p.Refused ?? Roles.ValueChangeRefused(WriteEndpoints.RoleOf(http), "plcsim") ?? (text.Length == 0 ? "Type the value to hold."
                 : p.Warning != null && req.Understood != true ? p.Warning + " Click \"I understand\" to hold it anyway." : null);
             object? value = null;
             if (refused == null)

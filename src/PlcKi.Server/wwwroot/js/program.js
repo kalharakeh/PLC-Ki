@@ -977,10 +977,10 @@
       render(params) {
         if (!state.program) {
           if (state.programError) return PK.hero({ title: "No program loaded yet.",
-            sub: "This page explains the PLC program in plain words, with live values, once PLC-Ki has read it from a TIA archive. " + (state.user && state.user.role === "admin"
+            sub: "This page explains the PLC program in plain words, with live values, once PLC-Ki has read it from a TIA archive. " + (PK.can("settings")
               ? "Import it under Setup, Import a program: it takes a few minutes." : "Ask an administrator to import it into PLC-Ki."),
             extra: `<details class="pk-detail mt-3"><summary>Details</summary><code>${esc(state.programError)}</code></details>`,
-            actions: state.user && state.user.role === "admin" ? `<a class="btn" href="#/setup/program">Import the program</a>` : "" });
+            actions: PK.can("settings") ? `<a class="btn" href="#/setup/program">Import the program</a>` : "" });
           return PK.hero({ title: "Program" }) + PK.sec("", PK.ui.loading("cards", { rows: 4, label: "Loading the program" }));
         }
         if (params.join("/") !== (sel ? sel.params.join("/") : "") && loading == null) select(params);

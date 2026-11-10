@@ -3,6 +3,12 @@
 "use strict";
 
 const PKSetup = (() => {
+  // The three roles (review 55): [role, what it may do, short text for the role list]. The server enforces the same (Roles.cs).
+  const ROLES = [
+    ["operator", "Sees every machine page and writes alarm notes. Only reads the PLC.", "sees the machine pages"],
+    ["technician", "Also adds documents and changes or holds values on PLCSIM. Cannot open Setup or change a real PLC.", "also documents and PLCSIM values"],
+    ["admin", "Also opens Setup: connections, program, settings and logins, and may change allowed values on a real PLC.", "also Setup"],
+  ];
   const { $, esc, icon, api, state, toast } = PK;
 
   // ---------- settings (shared by Connections and Settings) ----------
@@ -851,15 +857,15 @@ const PKSetup = (() => {
         </div>
         <div class="mt-5 actions"><button class="btn big" data-save-settings>Save</button><span class="muted small">Saves Machine, Assistant and Access. Logins below save on their own.</span></div>`)
         + storageHtml()
-        + PK.sec("", `<h2>Logins</h2><p class="sub">Operators see every machine page. Administrators also see Setup.</p>
+        + PK.sec("", `<h2>Logins</h2><p class="sub">Operators see every machine page. Technicians also add documents and change values on PLCSIM. Administrators also see Setup.</p>
           <ul class="list logins">${(users || []).map((u) => `<li><span class="ico">${icon("user")}</span>
-            <span class="grow"><b class="semibold">${esc(u.name)}</b>${state.user && u.name === state.user.name ? " (you)" : ""}<div class="faint">${u.role === "admin" ? "Administrator" : "Operator"}</div></span>
-            <span class="li-acts">${state.user && u.name !== state.user.name ? `<button class="btn plain small" data-role="${esc(u.name)}" data-to="${u.role === "admin" ? "operator" : "admin"}">Make ${u.role === "admin" ? "operator" : "administrator"}</button>
+            <span class="grow"><b class="semibold">${esc(u.name)}</b>${state.user && u.name === state.user.name ? " (you)" : ""}<div class="faint">${esc(PK.roleTitle(u.role))}</div></span>
+            <span class="li-acts">${state.user && u.name !== state.user.name ? `<button class="btn plain small" data-role="${esc(u.name)}" data-now="${esc(u.role)}">Change role</button>
               <button class="btn plain small" data-pw="${esc(u.name)}">New password</button><button class="fg-fault btn plain small" data-del="${esc(u.name)}">Delete</button>` : `<button class="btn plain small" data-pw-own>Change my password</button>`}</span></li>`).join("")}</ul>
           <h3 class="mt-5">Add a login</h3>
           <div class="grid three"><label class="field">Name<input id="nu-name" autocomplete="off"></label>
             <label class="field">Password <span class="hint">at least 8 characters</span><input id="nu-pw" type="password" autocomplete="new-password"></label>
-            <label class="field">Role<select id="nu-role"><option value="operator">Operator: sees the machine pages</option><option value="admin">Administrator: also Setup</option></select></label></div>
+            <label class="field">Role<select id="nu-role">${ROLES.map(([r, , short]) => `<option value="${r}">${esc(PK.roleTitle(r))}: ${esc(short)}</option>`).join("")}</select></label></div>
           <div class="mt-3 row end"><button class="btn" data-add-user>Add login</button></div>
           <p class="mt-4 mb-0 faint">Data folder: ${esc(info.dataDir)}</p>`);
     },
@@ -884,12 +890,17 @@ const PKSetup = (() => {
         saveBtn.disabled = false;
       };
       const act = async (fn, ok) => { try { await fn(); toast(ok); users = await api("GET", "/api/admin/users"); PK.draw(); } catch (e) { toast(e.message, "error"); } };
-      page.querySelectorAll("[data-role]").forEach((b) => b.onclick = async () => {
-        const toAdmin = b.dataset.to === "admin";
-        if (await PK.confirmSheet({ title: `Make ${b.dataset.role} ${toAdmin ? "an administrator" : "an operator"}?`,
-          text: toAdmin ? "Administrators can open Setup: change the connections, the program, the settings and the logins." : "Operators see every machine page but cannot open Setup.",
-          ok: toAdmin ? "Make administrator" : "Make operator", danger: toAdmin }))
-          act(() => api("PUT", `/api/admin/users/${encodeURIComponent(b.dataset.role)}/role`, { role: b.dataset.to }), "Role changed.");
+      page.querySelectorAll("[data-role]").forEach((b) => b.onclick = () => {
+        const name = b.dataset.role, now = b.dataset.now;
+        const s = PK.sheet(`<span class="eyebrow">Login</span><h2>Role of ${esc(name)}</h2>
+          <p class="m-0 muted">They are logged out on their devices and log in again with the new role.</p>
+          <div class="stack gap-2">${ROLES.map(([r, text]) => `<button type="button" class="opt-row role-pick ${r === now ? "on" : ""}" data-to="${r}" ${r === now ? 'aria-current="true"' : ""}>
+            <span><b>${esc(PK.roleTitle(r))}</b>${r === now ? ' <span class="faint">(now)</span>' : ""}<br><span class="muted small">${esc(text)}</span></span></button>`).join("")}</div>
+          <div class="row end"><button class="btn gray" type="button" data-close>Cancel</button></div>`);
+        s.el.querySelectorAll("[data-to]").forEach((o) => o.onclick = () => {
+          s.close();
+          if (o.dataset.to !== now) act(() => api("PUT", `/api/admin/users/${encodeURIComponent(name)}/role`, { role: o.dataset.to }), `${name} is now ${PK.roleTitle(o.dataset.to).toLowerCase()}.`);
+        });
       });
       const own = page.querySelector("[data-pw-own]");
       if (own) own.onclick = () => PK.passwordSheet();

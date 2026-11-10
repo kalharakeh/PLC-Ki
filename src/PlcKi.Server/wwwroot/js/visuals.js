@@ -257,7 +257,7 @@
     // A setpoint goes on its value's chart as a dashed line, not on a chart of its own
     const spFor = new Map(), onBase = new Set();
     tr.series.forEach((s) => { const b = baseOf(s, tr.series); if (b && !spFor.has(b.id)) { spFor.set(b.id, s); onBase.add(s.id); } });
-    const admin = state.user && state.user.role === "admin";
+    const admin = PK.can("settings");
     const res = tr.source === "disk" && tr.resolutionSec && !cy ? ` One point on a chart is ${dur(tr.resolutionSec * 1000)}; a step shorter than that does not show.` : "";
     const keep = `${res} Values are saved on this PC (every read for the newest days, a minute at a time for older ones), so charts survive a restart.`
       + (admin ? ` <a href="#/setup/settings">How long they are kept is set in Setup › Settings › Storage.</a>` : " An administrator sets how long they are kept.");

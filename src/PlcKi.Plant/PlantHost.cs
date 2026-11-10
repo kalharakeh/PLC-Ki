@@ -144,12 +144,17 @@ public static class PlantHost
         || p.Equals("/settings.js", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
-    /// Public view shows the machine to anyone, but asking a question spends Claude credit, so it needs a login.
-    /// Only reading whether Ask is on (GET /api/ask) stays open, so the page can hide the button.
-    /// POST /api/watch stays open: it only picks which values the page shows (read-only, capped by WatchList.Max).
+    /// Public view shows the machine to anyone, read-only: everything that writes (notes, the handover note, Ask,
+    /// which spends Claude credit) needs a login. Reading whether Ask is on (GET /api/ask) stays open, so the page
+    /// can hide the button, and POST /api/watch stays open: it only picks which values the page shows
+    /// (read-only, capped by WatchList.Max).
     /// </summary>
-    private static bool NeedsLoginInPublicView(HttpRequest req) =>
-        req.Path.StartsWithSegments("/api/ask") && !(HttpMethods.IsGet(req.Method) && req.Path.Equals("/api/ask"));
+    internal static bool NeedsLoginInPublicView(HttpRequest req)
+    {
+        if (req.Path.StartsWithSegments("/api/ask")) return !(HttpMethods.IsGet(req.Method) && req.Path.Equals("/api/ask"));
+        if (HttpMethods.IsGet(req.Method) || HttpMethods.IsHead(req.Method)) return false;
+        return !(HttpMethods.IsPost(req.Method) && req.Path.Equals("/api/watch", StringComparison.OrdinalIgnoreCase));
+    }
 
     private static bool IsPage(PathString p) => p == "/" || p.Value!.EndsWith(".html", StringComparison.OrdinalIgnoreCase);
 
@@ -162,12 +167,16 @@ public static class PlantHost
 
         var users = http.RequestServices.GetRequiredService<UserStore>();
         var user = http.User.Identity?.IsAuthenticated == true ? http.User : null;
-        bool admin = user?.IsInRole(UserStore.Admin) == true;
+        var role = user?.FindFirstValue(RoleClaim);
 
         if (IsAdminPath(path))
         {
-            if (admin) { await next(); return; }
-            await Deny(http, user == null ? 401 : 403, user == null ? null : "Only an administrator can change the settings.");
+            // Administrators only, except the few calls Roles lets a technician make (values on PLCSIM, documents)
+            if (user != null && Roles.MayCallAdminPath(role, http.Request.Method, path)) { await next(); return; }
+            await Deny(http, user == null ? 401 : 403, user == null ? null
+                : path.StartsWithSegments("/api/admin/write") || path.StartsWithSegments("/api/admin/hold")
+                    ? Roles.ValueChangeRefused(role, "plcsim") ?? "Only an administrator can do this."
+                    : "Only an administrator can do this.");
             return;
         }
         if (user != null) { await next(); return; }

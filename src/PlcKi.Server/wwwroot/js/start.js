@@ -63,7 +63,7 @@ const PKStart = (() => {
 
   /** The "Getting started" card at the top of the machine pages, for administrators, until everything needed is done. */
   function card() {
-    if (!state.user || state.user.role !== "admin") return "";
+    if (!PK.can("settings")) return "";
     if (!ready) { readiness().then((r) => r && PK.draw()); return ""; }
     // The disk nearly full: shown to administrators even when everything is set up (Setup › Settings › Storage)
     const disk = ready.disk && ready.disk.low ? `<section class="guide-sec"><div class="wrap"><div class="notice red" role="alert">${icon("info")}

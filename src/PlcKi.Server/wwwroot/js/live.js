@@ -31,7 +31,7 @@
   /** The PLC is not read (not connected, or waiting for Link): explain instead of showing old values. */
   function offlinePage() {
     const i = PK.connInfo();
-    const admin = state.user && state.user.role === "admin";
+    const admin = PK.can("settings");
     return hero({
       cls: "hero offline-page",
       eyebrow: `<span class="pill ${i.level}"><span class="dot"></span>${i.level === "warn" ? "Waiting" : "Not connected"}</span>`,
@@ -305,7 +305,7 @@
       <br><span class="small">Set it on the HMI (or in the recipe). <a href="#/plant/settings">All settings</a></span></div></div>`;
   }
   /** "This is wrong" for administrators: correct the model entry with Ki (Setup > Program has the live check). */
-  const modelFix = (target) => state.user && state.user.role === "admin" && typeof PKModel !== "undefined"
+  const modelFix = (target) => PK.can("settings") && typeof PKModel !== "undefined"
     ? `<button type="button" class="btn gray small" data-modelfix="${esc(target)}">This is wrong</button>` : "";
   /** Opening the full step list shows the current step in the middle of it, not step 1. */
   function bindSteps(page) {

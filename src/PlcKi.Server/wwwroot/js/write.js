@@ -11,12 +11,14 @@
   const { esc, icon, api, toast } = PK;
   const TYPES = new Set(["Bool", "Byte", "Word", "DWord", "LWord", "SInt", "USInt", "Int", "UInt", "DInt", "UDInt", "LInt", "ULInt",
     "Real", "LReal", "Time", "String", "WString"]);
-  const isAdmin = () => !!(PK.state.user && PK.state.user.role === "admin");
+  const isAdmin = () => PK.can("plcsim");     // may change and hold values (on a real PLC only an administrator; the server decides)
   const typeOf = (t) => String(t.datatype || t.type || "").replace(/\[.*$/, "").trim();
 
   /** The small "Change" button next to a live value, or nothing (operators, arrays, structs, unknown types). */
   function button(t) {
     if (!isAdmin() || !TYPES.has(typeOf(t)) || !t.symbol) return "";
+    // A technician only gets the pen while the PLC is confirmed PLCSIM (the server refuses anything else anyway)
+    if (!PK.can("real") && !(PK.state.changes && PK.state.changes.values === "plcsim")) return "";
     return `<button type="button" class="btn plain small write-btn" data-write="${esc(t.symbol)}" data-wtype="${esc(typeOf(t))}" title="Change this value in the PLC" aria-label="Change ${esc(t.symbol)}">${icon("pen")}</button>`;
   }
 

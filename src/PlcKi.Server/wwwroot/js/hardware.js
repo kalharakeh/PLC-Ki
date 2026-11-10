@@ -468,7 +468,7 @@
       if (params[0] && params[0] !== stationName) { stationName = params[0]; slotSel = params[1] ?? null; }
       if (hwError) return PK.sec("", PK.ui.error(hwError, { level: "warn" }));
       if (!hw) return PK.sec("", PK.ui.loading("chart"));
-      const admin = PK.state.user && PK.state.user.role === "admin";
+      const admin = PK.can("settings");
       const st = hw.stations.find((s) => s.name === stationName) || hw.stations.find((s) => s.name === hw.plcStation) || hw.stations[0];
       if (!st) return PK.sec("", `<div class="notice gold">${icon("warn")}<div>The project has no devices.</div></div>`);
       stationName = st.name;

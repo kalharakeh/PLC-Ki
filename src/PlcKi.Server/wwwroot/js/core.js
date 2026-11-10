@@ -85,6 +85,18 @@ const PK = (() => {
 
   // ---- shared state ----
   const state = { status: null, model: null, values: null, info: null, user: null, program: null, programError: null, lastOk: 0, jobs: [] };
+
+  // ---- What this login may do (review 55). The server checks the same (Roles.cs); this only hides what would be refused.
+  //   settings: Setup, logins, imports, PLCSIM Start/Stop · plcsim: change and hold values on PLCSIM
+  //   real: change values on a real PLC · docs: add documents and change their details · notes: alarm and handover notes
+  const ROLE_CAN = {
+    admin: ["settings", "plcsim", "real", "docs", "notes"],
+    technician: ["plcsim", "docs", "notes"],
+    operator: ["notes"],
+  };
+  const can = (what) => !!(state.user && (ROLE_CAN[state.user.role] || []).includes(what));
+  const ROLE_TITLE = { admin: "Administrator", technician: "Technician", operator: "Operator" };
+  const roleTitle = (role) => ROLE_TITLE[role] || "Operator";
   const views = {};
   let current = null;       // { name, view, params }
   let lastHtml = "";
@@ -296,7 +308,7 @@ const PK = (() => {
     window.scrollTo(0, 0);
     showAccess();
     showHandover();
-    if (state.user && state.user.role === "admin" && (!state.changes || Date.now() - state.changes.at > 30000)) loadChanges();
+    if (can("plcsim") && (!state.changes || Date.now() - state.changes.at > 30000)) loadChanges();
     setTitle();
   }
 
@@ -305,7 +317,7 @@ const PK = (() => {
   // Operators and visitors can never change anything, so they need no question.
   let changesBusy = false;
   async function loadChanges() {
-    if (changesBusy || !state.user || state.user.role !== "admin") return;
+    if (changesBusy || !can("plcsim")) return;
     changesBusy = true;
     try { state.changes = { ...(await api("GET", "/api/admin/write/state")), at: Date.now() }; }
     catch { /* keeps the last answer */ }
@@ -321,7 +333,7 @@ const PK = (() => {
   function access(name = current ? current.name : "alarm") {
     const reads = (text) => ({ badge: "Reads only", short: "Reads only", level: "", text });
     if (!state.user) return reads("Without a login, PLC-Ki only reads the PLC.");
-    if (state.user.role !== "admin") return reads("With an operator login, PLC-Ki only reads the PLC.");
+    if (!can("plcsim")) return reads("With an operator login, PLC-Ki only reads the PLC.");
     const ch = state.changes;
     if (!ch) return { badge: null, short: null, level: "", text: "" };
     const plc = ch.plc || "the PLC";
@@ -336,8 +348,9 @@ const PK = (() => {
     else if (name === "plc" && ch.startStop && !["racks", "diagnostics"].includes((current && current.params[0]) || "")) a = { badge: "Can start and stop PLCSIM", short: "Start/Stop", level: "except",
       text: "Start and Stop on this page switch the PLCSIM CPU, after you confirm. A real PLC is never started or stopped." };
     else a = reads("This page only reads the PLC."
-      + (ch.values === "plcsim" ? " On Tags and Program, administrators can change values on PLCSIM."
-        : ch.values === "real" ? ` On Tags and Program, administrators can change values on the real PLC ${plc}.` : ""));
+      + (ch.values === "plcsim" ? " On Tags and Program, you can change values on PLCSIM."
+        : ch.values === "real" ? ` On Tags and Program, administrators can change values on the real PLC ${plc}.`
+        : !can("real") && ch.plc ? " A technician login changes values on PLCSIM only." : ""));
     // A real PLC that may be changed is said on every page, in amber
     if (ch.values === "real") { a.badge = `Changes allowed on the real PLC ${plc}`; a.short = "Real PLC"; a.level = "real"; }
     return a;
@@ -572,11 +585,11 @@ const PK = (() => {
     if (!bar) return;
     const list = (!stale && state.status && state.status.notices) || [];
     const ho = handoverShown();     // the last shift's handover note: one entry in the same strip (review 47)
-    const admin = state.user && state.user.role === "admin";
+    const admin = can("settings");
     const html = list.map((n) => {
       const items = n.items || [];
       const shown = items.slice(0, 4).map((i) => `<span class="mono">${esc(i)}</span>`).join(", ") + (items.length > 4 ? `, and ${items.length - 4} more` : "");
-      const link = n.link && (n.kind !== "program" || admin)
+      const link = n.link && (n.kind !== "program" || can("settings"))
         ? `<a class="btn gray small" href="${esc(n.link)}">${n.kind === "program" ? "Import again" : "Show"}</a>` : "";
       const who = n.kind === "program" && !admin ? " Tell an administrator." : "";
       return `<div class="notice gold notice-strip" role="status" data-kind="${esc(n.kind)}">${icon(n.kind === "program" ? "file" : "warn")}
@@ -852,7 +865,7 @@ const PK = (() => {
 
   const refreshing = new Set();
   async function pollJobs() {
-    if (state.user && state.user.role === "admin") {
+    if (can("settings")) {
       try {
         state.jobs = await api("GET", "/api/admin/jobs");
         // A "Refresh from TIA" finished (also the one the block generator starts by itself): show the new program
@@ -1169,15 +1182,14 @@ const PK = (() => {
   function plainFor(message, where) {
     const m = String((message && message.message) || message || "");
     const p = plainProgram(m) || plainHttp(m) || ((where && where.plc) || ABOUT_A_LINK.test(m) ? plain(m, where) : { text: m, todo: "" });
-    const admin = state.user && state.user.role === "admin";
-    if (!admin && p.op != null && /Setup/.test(p.todo)) p.todo = p.op;
+    if (!can("settings") && p.op != null && /Setup/.test(p.todo)) p.todo = p.op;
     return p;
   }
 
   /** What the PLC connection state means, for the pill sheet and empty pages. Operators cannot open Setup, so they read who to ask. */
   function connInfo() {
     const i = connInfoAll();
-    if (state.user && state.user.role === "admin") return i;
+    if (can("settings")) return i;
     if (i.todo && /Setup|Connections|Link/.test(i.todo)) i.todo = i.op || "Ask an administrator of PLC-Ki to check the connection to the PLC.";
     return i;
   }
@@ -1196,7 +1208,7 @@ const PK = (() => {
 
   function connSheet() {
     const i = connInfo();
-    const admin = state.user && state.user.role === "admin";
+    const admin = can("settings");
     const a = access();
     sheet(`<span class="pill ${i.level}" style="align-self:flex-start;justify-self:start"><span class="dot"></span>${{ ok: "Connected", bad: "Not connected", warn: "Waiting", info: "Test values" }[i.level]}</span>
       <h2>${esc(i.title)}</h2>${i.text ? `<p class="m-0 muted">${esc(i.text)}</p>` : ""}
@@ -1317,7 +1329,7 @@ const PK = (() => {
   // ---- Page not found: an unknown address says so, with a way out, instead of quietly showing Active alarm ----
   /** The page an unknown address most likely meant, only when it is obvious ("generator" → Block generator). */
   function closestPage(typed) {
-    const admin = state.user && state.user.role === "admin";
+    const admin = can("settings");
     const t = String(typed || "").toLowerCase();
     const want = t.split("/").pop();
     const names = Object.keys(views).filter((n) => n !== "notfound" && HELP[n] && (admin || !n.startsWith("setup/")));
@@ -1347,7 +1359,7 @@ const PK = (() => {
   function helpSheet() {
     const name = current ? current.name : "alarm";
     const [title, intro, tips] = HELP[name] || HELP.alarm;
-    const admin = state.user && state.user.role === "admin";
+    const admin = can("settings");
     const a = access(name);
     const h = sheet(`<span class="eyebrow">Help</span><h2>${esc(title)}</h2><p class="m-0 muted">${esc(intro)}</p>
       <ul class="plainlist">${tips.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>
@@ -1381,7 +1393,7 @@ const PK = (() => {
       state.user ? row(item("key", "Change my password"), 'data-m="pw"') : "",
       row(item("logout", state.user ? "Log out" : "Log in"), 'data-m="logout"'),
     ].join("");
-    const who = state.user ? `<p class="faint small more-who">${esc(state.user.name)} · ${state.user.role === "admin" ? "administrator" : "operator"}</p>` : "";
+    const who = state.user ? `<p class="faint small more-who">${esc(state.user.name)} · ${roleTitle(state.user.role).toLowerCase()}</p>` : "";
     const s = sheet(`<div class="more-head"><h2>More</h2><button class="btn plain small" type="button" data-close>Done</button></div>
       ${pageLists}
       ${who}<ul class="mlist" aria-label="Account">${acct}</ul>`);
@@ -1410,7 +1422,7 @@ const PK = (() => {
     const items = (held && held.items) || [];
     bar.classList.toggle("hidden", !items.length);
     if (!items.length) { bar.innerHTML = ""; return; }
-    const admin = state.user && state.user.role === "admin";
+    const admin = can("plcsim");     // who may release (technicians too: holds are PLCSIM only)
     const list = items.slice(0, 3).map((h) => `<b class="mono">${esc(String(h.symbol).replace(/^"|"$/g, ""))}</b> = ${esc(h.value)}`).join(", ")
       + (items.length > 3 ? `, and ${items.length - 3} more` : "");
     bar.innerHTML = `<div class="wrap"><div class="notice gold held-strip" role="status">${icon("warn")}
@@ -1471,11 +1483,11 @@ const PK = (() => {
       const st = await api("GET", "/api/auth/state");
       state.user = st.user;
     } catch { /* public view */ }
-    const admin = state.user && state.user.role === "admin";
+    const admin = can("settings");
     document.querySelectorAll(".admin-only").forEach((el) => el.classList.toggle("hidden", !admin));
     // Public view without a login: Ask needs a login (it spends Claude credit), so its buttons are hidden
     document.documentElement.classList.toggle("anon", !state.user);
-    if (admin) setInterval(loadChanges, 60000);   // "changes allowed" can change without a restart
+    if (can("plcsim")) setInterval(loadChanges, 60000);   // "changes allowed" can change without a restart
     const who = state.user ? state.user.name + (admin ? " · administrator" : " · operator") : "Not logged in";
     document.querySelectorAll(".who").forEach((el) => { el.textContent = who; });
     document.querySelectorAll(".act-logout").forEach((el) => { el.textContent = state.user ? "Log out" : "Log in"; });
@@ -1590,6 +1602,6 @@ const PK = (() => {
     loadHandover(); setInterval(loadHandover, 60000);
   }
 
-  return { AI, ui, BP, screenSize, dirty: setDirty, get isDirty() { return !!dirty; }, plain, connInfo, connSheet, helpSheet, screenSheet, passwordSheet, setHash, cmd, sec, hero, on, $, esc, icon, fillIcons, kindIcon, api, state, view, go, draw, route, toast, copyText, sheet, confirmSheet, cond, md, ago, clock, date, when,
+  return { AI, ui, BP, can, roleTitle, screenSize, dirty: setDirty, get isDirty() { return !!dirty; }, plain, connInfo, connSheet, helpSheet, screenSheet, passwordSheet, setHash, cmd, sec, hero, on, $, esc, icon, fillIcons, kindIcon, api, state, view, go, draw, route, toast, copyText, sheet, confirmSheet, cond, md, ago, clock, date, when,
     loadProgram, blockOf, valueBySymbol, norm, start, cpuStop, cpuSince, loadHeld, releaseAll, loadHandover, get current() { return current; } };
 })();
