@@ -163,6 +163,25 @@ public sealed class SettingsStore
     public Dictionary<string, string> StartPages() =>
         Roles.All.ToDictionary(r => r, r => _config[$"Plant:StartPages:{r}"] is { } p && StartPageProblem(p) == null ? p : "");
 
+    /// <summary>How dates, times and numbers are written (review 57): text "3 Nov 2026, 14:02 · 12.5", dot "03.11.2026 · 12,5",
+    /// iso "2026-11-03", us "11/03/2026, 2:02 pm". The page knows how each looks.</summary>
+    public static readonly IReadOnlyList<string> Formats = new[] { "text", "dot", "iso", "us" };
+
+    /// <summary>The plant's format; each login may choose its own. Read live.</summary>
+    public string Format => _config["Plant:Format"] is { } f && Formats.Contains(f) ? f : "text";
+
+    public void SaveFormat(string? format)
+    {
+        if (format == null || !Formats.Contains(format)) throw new PlantException("The format is text, dot, iso or us.");
+        lock (_lock)
+        {
+            var root = Load();
+            Obj(root, "Plant")["Format"] = format;
+            AtomicFile.Save(_ctx.SettingsFile, root.ToJsonString(Json));
+            (_config as IConfigurationRoot)?.Reload();
+        }
+    }
+
     /// <summary>Why this is not a page address PLC-Ki can open, or null.</summary>
     public static string? StartPageProblem(string? page) =>
         string.IsNullOrEmpty(page) || System.Text.RegularExpressions.Regex.IsMatch(page, @"^#/[A-Za-z0-9/_.%~-]{0,120}$") ? null

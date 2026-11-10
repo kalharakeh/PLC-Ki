@@ -298,8 +298,9 @@ static async Task<int> RunAppAsync(string[] appArgs, bool probe, JobService jobs
     });
 
     // What the pages show around every view: machine, where the values come from, the program
-    app.MapGet("/api/info", (MachineModel m, PlcKiOptions o, ProgramService program) => Results.Ok(new
+    app.MapGet("/api/info", (MachineModel m, PlcKiOptions o, ProgramService program, SettingsStore settings) => Results.Ok(new
     {
+        format = settings.Format,     // dates, times and numbers for everyone who has not chosen their own (review 57)
         machine = m.Name,
         description = m.Description,
         source = o.Source,

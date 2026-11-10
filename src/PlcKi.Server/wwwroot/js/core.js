@@ -258,7 +258,6 @@ const PK = (() => {
     timeline({ spans, from, to, marks = [], sel = -1, label = "Machine state over time" }) {
       const a = new Date(from).getTime(), b = new Date(to).getTime(), len = Math.max(1, b - a);
       const at = (t) => ((new Date(t).getTime() - a) / len * 100);
-      const hm = (t) => { const d = new Date(t); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
       const days = len > 36 * 3600000;
       const dayName = (t) => { const d = new Date(t); return `${["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d.getDay()]} ${d.getDate()}`; };
       const segs = spans.map((s) => {
@@ -694,7 +693,7 @@ const PK = (() => {
   function cpuSince(c) {
     if (!c || !c.since) return "";
     const d = new Date(c.since), today = d.toDateString() === new Date().toDateString();
-    return (c.atStart ? "since at least " : "since ") + (today ? `${pad(d.getHours())}:${pad(d.getMinutes())}` : date(c.since));
+    return (c.atStart ? "since at least " : "since ") + (today ? hm(d) : date(c.since));
   }
 
   /** The red STOP chip next to the connection: only for a mode that was really read and is not RUN. */
@@ -787,14 +786,32 @@ const PK = (() => {
   }
   applyDensity();
   coarse.addEventListener("change", applyDensity);
+  // Which alarms beep or show a notice (review 56), kept per login: per severity and per station.
+  //   { fault: "all" | "notice" | "none", warning: same, quiet: [station keys] }
+  //   all = beep and notice (each as switched on), notice = a notice only, none = nothing. Default: all, as before.
+  const soundRule = () => ({ fault: "all", warning: "all", quiet: [], ...prefs.get("alarmSound", {}) });
+  const isWarning = (a) => String(a.severity || "").toUpperCase() === "WARNING";
+  /** "all", "notice" or null (nothing) for one alarm. */
+  function alarmWants(a, rule = soundRule()) {
+    const level = isWarning(a) ? rule.warning : rule.fault;
+    if (level === "none") return null;
+    if ((rule.quiet || []).length && typeof PKStations !== "undefined" && state.status) {
+      const at = PKStations.list(state.status).stations.filter((s) => s.alarms.some((x) => x.id === a.id));
+      if (at.length && at.every((s) => rule.quiet.includes(s.key))) return null;     // only at quiet stations
+    }
+    return level === "notice" ? "notice" : "all";
+  }
   let seenAlarms = null;
   function alertNew(al) {
     if (!state.status || Date.now() - state.lastOk > 5000) return;
     const ids = new Set(al.map((a) => a.id));
-    const fresh = seenAlarms ? al.filter((a) => !seenAlarms.has(a.id)) : [];
+    const news = seenAlarms ? al.filter((a) => !seenAlarms.has(a.id)) : [];
     seenAlarms = ids;
+    const rule = soundRule();
+    const fresh = news.filter((a) => alarmWants(a, rule));
     if (!fresh.length) return;
-    if (screenOpt.sound) beep(fresh.some((a) => a.severity === "FAULT"));
+    const beeps = fresh.filter((a) => alarmWants(a, rule) === "all");
+    if (screenOpt.sound && beeps.length) beep(beeps.some((a) => !isWarning(a)));
     if (screenOpt.notify && "Notification" in window && Notification.permission === "granted") {
       const a = fresh[0];
       try { const n = new Notification(`${a.severity} ${a.id}: ${a.text}`, { body: state.status.machine || "PLC-Ki", tag: "plcki-" + a.id }); n.onclick = () => { window.focus(); go("#/alarm"); }; } catch { /* not allowed here */ }
@@ -808,7 +825,9 @@ const PK = (() => {
     const was = seenStop;
     seenStop = !!c;
     if (!c || was !== false) return;
-    if (screenOpt.sound) beep(true);
+    const level = soundRule().fault;      // STOP counts as a fault
+    if (level === "none") return;
+    if (screenOpt.sound && level === "all") beep(true);
     if (screenOpt.notify && "Notification" in window && Notification.permission === "granted") {
       try {
         const n = new Notification(`The PLC is in ${c.word || "STOP"}`, { body: `${state.status.machine || "PLC-Ki"}: the program is not running.`, tag: "plcki-cpu" });
@@ -894,6 +913,19 @@ const PK = (() => {
   }
   if (sysDark.addEventListener) sysDark.addEventListener("change", showTheme);
 
+  /** "Which alarms" in the sound sheet: faults and warnings each beep, notice only or nothing; stations kept quiet. */
+  function soundRulesHtml() {
+    const r = soundRule();
+    const pick = (key, label) => `<label class="field small">${label}<select data-sound="${key}">${[["all", "Beep"], ["notice", "Notice only"], ["none", "Nothing"]]
+      .map(([v, l]) => `<option value="${v}" ${r[key] === v ? "selected" : ""}>${l}</option>`).join("")}</select></label>`;
+    const stations = typeof PKStations !== "undefined" && state.status ? PKStations.list(state.status).stations.filter((s) => s.key) : [];
+    const quiet = stations.length > 1 ? `<details class="quiet-st"${(r.quiet || []).length ? " open" : ""}><summary>Quiet stations</summary>
+      <p class="muted small m-0">No beep or notice for alarms that only concern these stations. Alarms of the whole machine always count.</p>
+      ${stations.map((s) => `<label class="row small"><input type="checkbox" data-quiet="${esc(s.key)}" ${(r.quiet || []).includes(s.key) ? "checked" : ""}> ${esc(s.name)}</label>`).join("")}</details>` : "";
+    return `<div class="opt-row" style="cursor:default;flex-wrap:wrap"><span class="grow"><b>Which alarms</b><br><span class="muted small">For example warnings silent and faults beep. Beep also shows a notice when notices are on. A CPU STOP counts as a fault.</span></span>
+      <div class="sound-rules">${pick("fault", "Faults")}${pick("warning", "Warnings")}</div>${quiet}</div>`;
+  }
+
   function screenSheet() {
     const secure = window.isSecureContext;
     const canNotify = secure && "Notification" in window;
@@ -909,6 +941,10 @@ const PK = (() => {
         ${row("awake", "Keep this screen on", "For a screen on the line: the display does not go dark while this page is open.", canWake, notHere)}
         <div class="opt-row" style="cursor:default"><span class="grow"><b>Screen colours</b><br><span class="muted small">Dark suits a wall screen in a bright hall.</span></span>
           ${ui.choice("Screen colours", [["auto", "Like this PC"], ["light", "Light"], ["dark", "Dark"]].map(([k, l]) => ({ label: l, on: themeChoice() === k, data: { "data-theme-set": k } })))}</div>
+        ${soundRulesHtml()}
+        <label class="opt-row" style="cursor:default;flex-wrap:wrap"><span class="grow"><b>Dates and numbers</b><br><span class="muted small">How times, dates and decimals are written on every page.</span></span>
+          <select id="fmt-pick" class="start-sel" aria-label="Dates and numbers"><option value="">As for this plant: ${esc(FORMATS[(state.info && state.info.format) || "text"] ? FORMATS[(state.info && state.info.format) || "text"].label : FORMATS.text.label)}</option>
+            ${Object.entries(FORMATS).map(([k, f]) => `<option value="${k}" ${prefs.get("format", "") === k ? "selected" : ""}>${esc(f.label)}</option>`).join("")}</select></label>
         ${state.user ? `<label class="opt-row" style="cursor:default;flex-wrap:wrap"><span class="grow"><b>Start page</b><br><span class="muted small">Where PLC-Ki opens for you when no page is in the address. A link or a bookmark still opens its own page.</span></span>
           <select id="start-page" class="start-sel" aria-label="Start page"><option value="">As for ${esc(roleTitle(state.user.role).toLowerCase())}s: ${esc(startLabel(state.roleStart || "#/alarm"))}</option>
             ${startChoices([prefs.get("startPage", "")]).map(([h, l]) => `<option value="${esc(h)}" ${prefs.get("startPage", "") === h ? "selected" : ""}>${esc(l)}</option>`).join("")}</select></label>` : ""}
@@ -928,6 +964,16 @@ const PK = (() => {
       if (key === "sound" && box.checked) beep(false);
     });
     s.el.querySelector("[data-test-beep]").onclick = () => beep(true);
+    const fp = s.el.querySelector("#fmt-pick");
+    fp.onchange = () => { prefs.set("format", fp.value || null); draw(); toast("Saved: " + date(Date.now()) + "."); };
+    s.el.querySelectorAll("[data-sound]").forEach((sel) => sel.onchange = () => { const r = soundRule(); r[sel.dataset.sound] = sel.value; prefs.set("alarmSound", r); });
+    s.el.querySelectorAll("[data-quiet]").forEach((box) => box.onchange = () => {
+      const r = soundRule();
+      const q = new Set(r.quiet || []);
+      if (box.checked) q.add(box.dataset.quiet); else q.delete(box.dataset.quiet);
+      r.quiet = [...q];
+      prefs.set("alarmSound", r);
+    });
     const sp = s.el.querySelector("#start-page");
     if (sp) sp.onchange = () => { prefs.set("startPage", sp.value || null); toast("Start page saved."); };
     s.el.querySelectorAll("[data-theme-set]").forEach((b) => b.onclick = () => {
@@ -944,7 +990,7 @@ const PK = (() => {
     try {
       const r = await fetch("/api/status", { cache: "no-store" });
       if (r.status === 401) { location.href = "/login.html?next=" + encodeURIComponent("/" + location.hash); return; }
-      if (r.ok) { state.status = await r.json(); state.lastOk = Date.now(); }
+      if (r.ok) { state.status = localTexts(await r.json()); state.lastOk = Date.now(); }
       const run = r.headers.get("X-PlcKi-Run");
       if (run && state.run && run !== state.run) {
         // PLC-Ki was restarted (maybe with another model or program): start this page fresh
@@ -960,7 +1006,7 @@ const PK = (() => {
 
   async function pollValues() {
     if (current && current.view.needsValues) {
-      try { state.values = await api("GET", "/api/values"); } catch { /* next time */ }
+      try { state.values = localTexts(await api("GET", "/api/values")); } catch { /* next time */ }
       draw();
     }
     setTimeout(pollValues, 2000);
@@ -1219,22 +1265,76 @@ const PK = (() => {
     return out.join("");
   }
 
-  // ---- dates: one format everywhere, "3 Nov 2026, 14:02" (no ambiguous 03/11) ----
+  // ---- Dates, times and numbers: one format everywhere (review 57). The plant picks one (Setup, Settings), each
+  // login may pick its own (Alarm sound and screen). "text" is the default: "3 Nov 2026, 14:02", no ambiguous 03/11.
   const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const pad = (n) => String(n).padStart(2, "0");
+  const FORMATS = {
+    text: { h12: false, order: "text", comma: false, label: "3 Nov 2026, 14:02 · 12.5" },
+    dot: { h12: false, order: "dot", comma: true, label: "03.11.2026, 14:02 · 12,5" },
+    iso: { h12: false, order: "iso", comma: false, label: "2026-11-03 14:02 · 12.5" },
+    us: { h12: true, order: "us", comma: false, label: "11/03/2026, 2:02 pm · 12.5" },
+  };
+  /** The format in use: this login's choice, else the plant's, else "text". */
+  const fmtKey = () => { const k = prefs.get("format", "") || (state.info && state.info.format) || "text"; return FORMATS[k] ? k : "text"; };
+  const fmt = () => FORMATS[fmtKey()];
+  /** "14:02", or "2:02 pm" with the 12-hour clock */
+  const hm = (t, secs) => {
+    const d = new Date(t);
+    if (isNaN(d)) return "";
+    const s = secs ? ":" + pad(d.getSeconds()) : "";
+    if (!fmt().h12) return `${pad(d.getHours())}:${pad(d.getMinutes())}${s}`;
+    const h = d.getHours() % 12 || 12;
+    return `${h}:${pad(d.getMinutes())}${s} ${d.getHours() < 12 ? "am" : "pm"}`;
+  };
   /** "14:02:13" */
-  const clock = (t) => { const d = new Date(t); return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; };
-  /** "3 Nov 2026" or, with time, "3 Nov 2026, 14:02" */
+  const clock = (t) => hm(t, true);
+  /** The day without the year: "3 Nov", "03.11.", "11-03", "11/03" */
+  const dayMonth = (t) => {
+    const d = new Date(t), o = fmt().order;
+    return o === "dot" ? `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.` : o === "iso" ? `${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+      : o === "us" ? `${pad(d.getMonth() + 1)}/${pad(d.getDate())}` : `${d.getDate()} ${MONTHS[d.getMonth()]}`;
+  };
+  /** "Tue 3 Nov" */
+  const weekdayDay = (t) => `${WEEKDAYS[new Date(t).getDay()]} ${dayMonth(t)}`;
+  const joint = () => (fmt().order === "iso" ? " " : ", ");
+  /** "3 Nov 2026" or, with time, "3 Nov 2026, 14:02" (in the format in use) */
   const date = (t, withTime = true) => {
     const d = new Date(t);
     if (isNaN(d)) return "";
-    return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}` + (withTime ? `, ${pad(d.getHours())}:${pad(d.getMinutes())}` : "");
+    const o = fmt().order, y = d.getFullYear(), m = pad(d.getMonth() + 1), day = pad(d.getDate());
+    const ds = o === "dot" ? `${day}.${m}.${y}` : o === "iso" ? `${y}-${m}-${day}` : o === "us" ? `${m}/${day}/${y}` : `${d.getDate()} ${MONTHS[d.getMonth()]} ${y}`;
+    return ds + (withTime ? joint() + hm(d) : "");
   };
   /** "14:02:13" today, "3 Nov, 14:02" before */
   const when = (t) => {
     const d = new Date(t), now = new Date();
-    return d.toDateString() === now.toDateString() ? clock(d) : `${d.getDate()} ${MONTHS[d.getMonth()]}, ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    return d.toDateString() === now.toDateString() ? clock(d) : dayMonth(d) + joint() + hm(d);
   };
+  /** A number for people: 12.5 or 12,5. digits: fixed decimals (optional). */
+  const num = (x, digits) => {
+    if (x == null || x === "" || !isFinite(x)) return "–";
+    const s = digits == null ? String(Number(x)) : Number(x).toFixed(digits);
+    return fmt().comma ? s.replace(".", ",") : s;
+  };
+  /**
+   * A value text from the server ("12.5 bar") in the format in use ("12,5 bar"). Only a whole text that is one
+   * decimal number with an optional unit is changed; addresses (%I4.2), IPs, versions and sentences stay as they are.
+   */
+  const VALUE_TEXT = /^(-?\d+)\.(\d+)((?: ?[^\d.,:\s][^\d.,:]{0,11})?)$/;
+  const numText = (s) => (typeof s === "string" && fmt().comma ? s.replace(VALUE_TEXT, "$1,$2$3") : s);
+  /** Every "text" of a value from /api/values or /api/status, in place. */
+  function localTexts(o, depth = 0) {
+    if (!fmt().comma || !o || typeof o !== "object" || depth > 12) return o;
+    if (Array.isArray(o)) { o.forEach((x) => localTexts(x, depth + 1)); return o; }
+    for (const k of Object.keys(o)) {
+      const v = o[k];
+      if (typeof v === "string") { if (k === "text") o[k] = numText(v); }
+      else if (v && typeof v === "object") localTexts(v, depth + 1);
+    }
+    return o;
+  }
 
   const ago = (t) => {
     const s = Math.round((Date.now() - new Date(t).getTime()) / 1000);
@@ -1554,7 +1654,7 @@ const PK = (() => {
     const at = new Date(n.editedAt || n.at);
     const text = n.text.length > 220 ? n.text.slice(0, 219).trimEnd() + "…" : n.text;
     return `<div class="notice notice-strip ho-strip" role="status" data-kind="handover">${icon("chat")}
-      <div><b>Handover from the ${esc(n.shift)} shift</b> <span class="small">(${esc(n.editedBy || n.by)}, ${pad(at.getHours())}:${pad(at.getMinutes())})</span>
+      <div><b>Handover from the ${esc(n.shift)} shift</b> <span class="small">(${esc(n.editedBy || n.by)}, ${hm(at)})</span>
         <div class="ho-text">${esc(text)}</div></div>
       <a class="btn gray small" href="#/reports/shift/${esc(n.day)}/${n.shiftIndex}">Read</a><button type="button" class="btn small" data-ho-ok>Got it</button></div>`;
   }
@@ -1715,6 +1815,6 @@ const PK = (() => {
     loadHandover(); setInterval(loadHandover, 60000);
   }
 
-  return { AI, ui, BP, can, roleTitle, prefs, startPage, startChoices, startLabel, screenSize, dirty: setDirty, get isDirty() { return !!dirty; }, plain, connInfo, connSheet, helpSheet, screenSheet, passwordSheet, setHash, cmd, sec, hero, on, $, esc, icon, fillIcons, kindIcon, api, state, view, go, draw, route, toast, copyText, sheet, confirmSheet, cond, md, ago, clock, date, when,
+  return { AI, ui, BP, can, roleTitle, prefs, startPage, startChoices, startLabel, hm, num, numText, dayMonth, weekdayDay, FORMATS, fmtKey, alarmWants, screenSize, dirty: setDirty, get isDirty() { return !!dirty; }, plain, connInfo, connSheet, helpSheet, screenSheet, passwordSheet, setHash, cmd, sec, hero, on, $, esc, icon, fillIcons, kindIcon, api, state, view, go, draw, route, toast, copyText, sheet, confirmSheet, cond, md, ago, clock, date, when,
     loadProgram, blockOf, valueBySymbol, norm, start, cpuStop, cpuSince, loadHeld, releaseAll, loadHandover, get current() { return current; } };
 })();

@@ -94,7 +94,7 @@
       }).catch(() => { /* no program search: say nothing */ });
     }
     let boolVal = isBool ? (el.querySelector("[data-b].on") || {}).dataset?.b || null : null;
-    const val = () => isBool ? boolVal : (el.querySelector("#w-val").value || "").trim();
+    const val = () => isBool ? boolVal : (el.querySelector("#w-val").value || "").trim().replace(/^(-?\d+),(\d+)$/, "$1.$2");   // 12,5 = 12.5
     const why = () => el.querySelector("#w-why").value.trim();
     let acked = () => true;
     const ready = () => !!val() && acked() && (!real || (why().length >= 5 && (el.querySelector("#w-ok").value || "").trim() === check.plc));
@@ -168,7 +168,7 @@
       <div class="row end"><button class="btn gray" data-close>Cancel</button><button class="btn" data-go>Hold</button></div>`);
     const el = s.el, go = el.querySelector("[data-go]");
     let boolVal = isBool ? (el.querySelector("[data-b].on") || {}).dataset?.b || null : null;
-    const val = () => isBool ? boolVal : (el.querySelector("#h-val").value || "").trim();
+    const val = () => isBool ? boolVal : (el.querySelector("#h-val").value || "").trim().replace(/^(-?\d+),(\d+)$/, "$1.$2");   // 12,5 = 12.5
     let acked = () => true;
     const ready = () => !!val() && acked();
     const update = () => { go.disabled = !ready(); };

@@ -16,6 +16,7 @@ public sealed record PasswordRequest(string? Current, string? Password);
 public sealed record NewUserRequest(string? Name, string? Password, string? Role);
 public sealed record RoleRequest(string? Role);
 public sealed record TestPlcRequest(string? Address);
+public sealed record FormatRequest(string? Format);
 
 public static class PlantEndpoints
 {
@@ -39,6 +40,13 @@ public static class PlantEndpoints
         me.MapGet("/prefs", (HttpContext http, PreferenceStore prefs) => Results.Ok(prefs.Get(Me(http))));
         me.MapPut("/prefs", (System.Text.Json.Nodes.JsonObject changes, HttpContext http, PreferenceStore prefs) =>
             Results.Ok(prefs.Set(Me(http), changes)));
+
+        // How dates, times and numbers are written for the whole plant (review 57); each login may choose its own
+        admin.MapPut("/format", (FormatRequest req, SettingsStore store) =>
+        {
+            store.SaveFormat(req.Format);
+            return Results.Ok(new { format = store.Format });
+        });
 
         // Start page per role (review 53); each login may override it with its "startPage" preference
         admin.MapPut("/start-pages", (Dictionary<string, string?> pages, SettingsStore store) =>
