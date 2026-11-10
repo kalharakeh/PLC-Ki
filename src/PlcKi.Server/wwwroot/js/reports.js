@@ -50,8 +50,12 @@
     const same = r.log && r.log.key === key;
     const keep = same ? r.log : { key, list: null, err: null, f: (r.log && r.log.f) || "all", all: false };
     if (!same) r.markSel = -1;
+    // Two lists: steps and outputs are many, so they are capped on their own and never push an alarm out
+    const q = (kinds) => api("GET", `/api/events?from=${encodeURIComponent(x.from)}&to=${encodeURIComponent(x.to)}&max=${LOG_MAX}&kind=${kinds}`);
     try {
-      keep.list = await api("GET", `/api/events?from=${encodeURIComponent(x.from)}&to=${encodeURIComponent(x.to)}&max=${LOG_MAX}`);
+      const [rare, busy] = await Promise.all([q("alarm,halt,blocked,state,cpu,link,write,monitor"), q("step,output")]);
+      keep.busyCut = busy.length >= LOG_MAX;
+      keep.list = rare.concat(busy).sort((a, b) => new Date(b.time) - new Date(a.time));
       keep.err = null;
     } catch (e) { keep.err = e.message; }
     r.log = keep;
@@ -147,7 +151,9 @@
   // The shift log's filters: which kinds each one shows (null: all)
   const LOG_F = [["all", "Everything", null], ["alarms", "Alarms and stops", ["alarm", "halt", "blocked", "state", "cpu", "link", "monitor"]],
     ["steps", "Steps and outputs", ["step", "output"]], ["changes", "Values changed", ["write"]]];
-  const LOG_SHOWN = 40;
+  const logShown = () => PK.screenSize() === "phone" ? 30 : 40;
+  /** The time asked for in the address (#/reports/shift/day/index/@ms: a mark clicked on Plant), or null. */
+  const logTarget = () => { const p = (PK.current && PK.current.params) || []; return p[3] && p[3][0] === "@" ? +p[3].slice(1) : null; };
   function shiftLog(x) {
     const L = r.log && r.log.key === x.from + "|" + x.to ? r.log : null;
     const h = `<h3 id="shift-log">What happened</h3>`;
@@ -159,13 +165,15 @@
     const csv = `/api/events.csv?from=${encodeURIComponent(x.from)}&to=${encodeURIComponent(x.to)}${kinds ? "&kind=" + kinds.join(",") : ""}`;
     const bar = PK.ui.toolbar({ left: pick, right: `<a class="btn gray small no-print" href="${csv}" download>${icon("download")}<span>Download for Excel</span></a>` });
     const list = kinds ? L.list.filter((e) => kinds.includes(e.kind)) : L.list;
-    const shown = L.all ? list : list.slice(0, LOG_SHOWN);
+    const hit = logTarget();
+    if (hit && L.hitFor !== hit) { L.hitFor = hit; L.hitDone = false; L.f = "all"; L.all = true; }   // the line asked for must be in the list
+    const shown = L.all ? list : list.slice(0, logShown());
     const body = !list.length
       ? PK.ui.empty({ icon: "clock", title: L.list.length ? "Nothing of this kind in this shift." : "Nothing recorded in this shift.",
         text: L.list.length ? "" : "PLC-Ki records what happens while it runs and is connected to the PLC." })
-      : PK.ui.events(shown, { cls: "rp-log" })
+      : PK.ui.events(shown, { cls: "rp-log", hit })
         + (list.length > shown.length ? `<div class="mt-2 row no-print"><button class="btn gray small" type="button" data-logall>Show all ${list.length}</button></div>` : "")
-        + (L.list.length >= LOG_MAX ? `<p class="mt-2 mb-0 faint small">The latest ${LOG_MAX.toLocaleString()} lines. Download for Excel has every line.</p>` : "");
+        + (L.busyCut && kinds !== LOG_F[1][2] ? `<p class="mt-2 mb-0 faint small">Steps and outputs: the latest ${LOG_MAX.toLocaleString()}. Download for Excel has every line.</p>` : "");
     return `<div class="card">${h}<p class="mt-0 muted small">Newest first. Steps, alarms, halts, values changed from PLC-Ki: everything PLC-Ki saw in this shift.</p>${bar}${body}</div>`;
   }
 
@@ -311,6 +319,12 @@
       if (day) PK.on(day, "change", pick);
       if (sh) PK.on(sh, "change", pick);
       el.querySelectorAll("[data-days]").forEach((b) => PK.on(b, "click", () => { r.days = +b.dataset.days; loadFaults(); }));
+      const hitLi = el.querySelector(".tl-list li.hit");
+      if (hitLi && r.log && !r.log.hitDone) {
+        r.log.hitDone = true;
+        // At once, not smooth: a redraw during a smooth scroll would leave the page somewhere else
+        setTimeout(() => { const li = document.querySelector(".tl-list li.hit"); if (li) window.scrollTo({ top: li.getBoundingClientRect().top + scrollY - innerHeight / 2, behavior: "instant" }); }, 0);
+      }
       el.querySelectorAll("[data-logf]").forEach((b) => PK.on(b, "click", () => { r.log.f = b.dataset.logf; r.log.all = false; PK.draw(); }));
       const all = el.querySelector("[data-logall]");
       if (all) PK.on(all, "click", () => { r.log.all = true; PK.draw(); });

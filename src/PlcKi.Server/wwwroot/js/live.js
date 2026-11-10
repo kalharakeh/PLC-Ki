@@ -500,7 +500,7 @@
     const head = `<div class="tl-head"><h3>Timeline</h3>${d ? `<span class="faint small">${esc(d.label)}</span>` : ""}<span class="spacer"></span>${pick}</div>`;
     if (!d) return `<div class="card stack">${head}${TL.err ? PK.ui.error(TL.err) : PK.ui.loading("chart", { label: "Loading the timeline" })}</div>`;
     const m = d.marks[TL.sel];
-    const sel = m ? `<p class="tl-sel"><time>${esc(PK.when(m.time))}</time> ${esc(m.text)}</p>` : "";
+    const sel = m ? `<p class="tl-sel"><time>${esc(PK.when(m.time))}</time> ${esc(m.text)}${m.shift ? ` <a class="nowrap" href="#/reports/shift/${m.shift.day}/${m.shift.index}/@${new Date(m.time).getTime()}">In the shift log ›</a>` : ""}</p>` : "";
     const logHref = d.shift ? `#/reports/shift/${d.shift.day}/${d.shift.index}` : "#/reports/shift";
     const recent = d.recent.length ? PK.ui.events(d.recent, { cls: "tl-recent" })
       : `<p class="m-0 muted small">Nothing has happened yet in the last 24 hours.</p>`;

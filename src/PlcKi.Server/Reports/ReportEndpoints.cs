@@ -92,15 +92,22 @@ public static class ReportEndpoints
             var now = DateTimeOffset.Now;
             var w = TimelineWindow(r.Settings, window, now);
             var end = w.To < now ? w.To : now;
+            var cfg = r.Settings;
+            // Each mark says its shift, so a click opens that shift's log at that time
             var marks = log.Read(w.From, end, EventLog.Marked)
                 .Select(e => (e, mark: EventLog.Mark(e))).Where(x => x.mark != null).TakeLast(1500)
-                .Select(x => new { time = x.e.Time, mark = x.mark, kind = x.e.Kind, text = x.e.Text, alarm = x.e.Alarm });
-            var recent = log.Read(now.AddHours(-24), now).TakeLast(6).Reverse().Select(EventEndpoints.Dto);
+                .Select(x => (x.e, x.mark, sh: cfg.Shifts.Count > 0 ? ReportBuilder.ShiftAt(cfg, x.e.Time) : null))
+                .Select(x => new { time = x.e.Time, mark = x.mark, kind = x.e.Kind, text = x.e.Text, alarm = x.e.Alarm,
+                    shift = x.sh is { } s ? new { day = s.Day.ToString("yyyy-MM-dd"), index = s.Index } : null });
+            // The latest lines: the last hour is enough most of the time (steps are many), else the last day
+            var recent = log.Read(now.AddHours(-1), now);
+            if (recent.Count < 6) recent = log.Read(now.AddHours(-24), now);
+            var latest = recent.TakeLast(6).Reverse().Select(EventEndpoints.Dto);
             return Results.Ok(new
             {
                 window = w.Window, label = w.Label, from = w.From, to = w.To, now,
                 shift = w.Day is { } d ? new { day = d.ToString("yyyy-MM-dd"), index = w.Index } : null,
-                spans = r.Builder.States(w.From, w.To, now), marks, recent,
+                spans = r.Builder.States(w.From, w.To, now), marks, recent = latest,
             });
         });
 

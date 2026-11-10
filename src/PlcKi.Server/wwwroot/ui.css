@@ -1545,6 +1545,7 @@ section.rp { padding-top: 8px; }
 .tl-list { list-style: none; margin: var(--sp-3) 0 0; padding: 0; }
 .tl-list li { display: flex; gap: var(--sp-2); align-items: baseline; padding: 6px 0; border-top: 1px solid var(--line); font-size: 14px; line-height: 1.4; }
 .tl-list li:first-child { border-top: 0; }
+.tl-list li.hit { background: var(--accent-soft); border-radius: 8px; padding-left: 8px; padding-right: 8px; }
 .tl-list .tl-dot { align-self: flex-start; margin-top: 6px; }
 .tl-list .tl-k { color: var(--muted); font-size: 12.5px; white-space: nowrap; min-width: 92px; }
 .tl-list .tl-t { min-width: 0; overflow-wrap: anywhere; }

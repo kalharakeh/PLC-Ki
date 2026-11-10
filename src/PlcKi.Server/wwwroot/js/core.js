@@ -205,12 +205,13 @@ const PK = (() => {
     /** Each kind of machine event in plain words (the same names as the shift log's spreadsheet). */
     kinds: { alarm: "Alarm", step: "Step", halt: "Halt", blocked: "Blocked", output: "Output", state: "Device state", cpu: "PLC mode",
       link: "PLC connection", write: "Value changed", monitor: "PLC-Ki" },
-    /** Machine events as lines: time, kind, what happened (an alarm id links to its page). day: show the day too. */
-    events(list, { cls = "", day = false } = {}) {
+    /** Machine events as lines: time, kind, what happened (an alarm id links to its page). day: show the day too.
+     *  hit: a time (ms); lines of that moment are marked. */
+    events(list, { cls = "", day = false, hit = null } = {}) {
       const t = (x) => day ? date(x) : clock(x);
       const text = (e) => e.alarm && e.text.startsWith(e.alarm)
         ? `<a href="#/alarms/${encodeURIComponent(e.alarm)}">${esc(e.alarm)}</a>${esc(e.text.slice(e.alarm.length))}` : esc(e.text);
-      return `<ul class="tl-list ${cls}">${list.map((e) => `<li><span class="tl-dot${e.mark ? " tl-" + esc(e.mark) : ""}"></span><time datetime="${esc(e.time)}">${t(e.time)}</time>
+      return `<ul class="tl-list ${cls}">${list.map((e) => `<li${hit != null && new Date(e.time).getTime() === hit ? ` class="hit"` : ""}><span class="tl-dot${e.mark ? " tl-" + esc(e.mark) : ""}"></span><time datetime="${esc(e.time)}">${t(e.time)}</time>
         <span class="tl-k">${esc(ui.kinds[e.kind] || e.kind)}</span><span class="tl-t">${text(e)}</span></li>`).join("")}</ul>`;
     },
     /** Search, filters and actions over a list: { search: { id, placeholder, value, label }, left, right }. */

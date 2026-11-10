@@ -61,20 +61,18 @@ public sealed class EventLog
     public List<MachineEvent> Read(DateTimeOffset from, DateTimeOffset to, IReadOnlySet<string>? kinds = null)
     {
         bool Want(MachineEvent e) => e.Time >= from && e.Time <= to && (kinds == null || kinds.Contains(e.Kind));
-        lock (_lock)
+        if (_mem != null) lock (_lock) return _mem.Where(Want).OrderBy(e => e.Time).ToList();
+        // The files are read without the lock, so a long read never holds up the polling loop's writes
+        bool rare = kinds == null || kinds.Any(k => !Busy.Contains(k));
+        bool busy = kinds == null || kinds.Any(Busy.Contains);
+        var list = new List<MachineEvent>();
+        for (var day = from.ToLocalTime().Date; day <= to.ToLocalTime().Date; day = day.AddDays(1))
         {
-            if (_mem != null) return _mem.Where(Want).OrderBy(e => e.Time).ToList();
-            bool rare = kinds == null || kinds.Any(k => !Busy.Contains(k));
-            bool busy = kinds == null || kinds.Any(Busy.Contains);
-            var list = new List<MachineEvent>();
-            for (var day = from.ToLocalTime().Date; day <= to.ToLocalTime().Date; day = day.AddDays(1))
-            {
-                if (rare) ReadFile(FileFor(day, false), list, Want);
-                if (busy) ReadFile(FileFor(day, true), list, Want);
-            }
-            // Stable: events of the same moment keep the order they were written in
-            return list.OrderBy(e => e.Time).ToList();
+            if (rare) ReadFile(FileFor(day, false), list, Want);
+            if (busy) ReadFile(FileFor(day, true), list, Want);
         }
+        // Stable: events of the same moment keep the order they were written in
+        return list.OrderBy(e => e.Time).ToList();
     }
 
     private static void ReadFile(string f, List<MachineEvent> into, Func<MachineEvent, bool> want)
@@ -82,7 +80,10 @@ public sealed class EventLog
         if (!File.Exists(f)) return;
         try
         {
-            foreach (var line in File.ReadLines(f))
+            // Shared with the writer: an append going on now must not fail (a half-written last line is skipped below)
+            using var fs = new FileStream(f, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            using var rd = new StreamReader(fs);
+            while (rd.ReadLine() is { } line)
             {
                 if (string.IsNullOrWhiteSpace(line)) continue;
                 try { if (JsonSerializer.Deserialize<Line>(line, Json)?.ToEvent() is { } e && want(e)) into.Add(e); }
@@ -113,6 +114,8 @@ public sealed class EventLog
     /// </summary>
     public static string? Mark(MachineEvent e) => e.Kind switch
     {
+        // What was already so when PLC-Ki started watching did not happen then: every restart would add a mark
+        _ when e.Text.Contains("when watching started", StringComparison.Ordinal) => null,
         "alarm" when e.Text.Contains(" went:", StringComparison.Ordinal) => null,
         "alarm" => e.Text.Contains("(WARNING)", StringComparison.OrdinalIgnoreCase) ? "warn" : "alarm",
         "halt" when e.Text.Contains(" halted in step", StringComparison.Ordinal) => "halt",
