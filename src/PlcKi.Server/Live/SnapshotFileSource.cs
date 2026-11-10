@@ -132,6 +132,25 @@ public sealed class SnapshotFileSource : IPlcSource
         catch (Exception) { return null; }
     }
 
+    /// <summary>
+    /// Test files may list the PLC's blocks, to test "program changed":
+    ///   "$blocks": [ { "name": "FB_Valve", "kind": "FB", "language": "SCL" }, ... ]   (no "$blocks": not checked)
+    /// </summary>
+    public IReadOnlyList<PlcKi.Core.Status.PlcBlock>? BrowseBlocks()
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(File.ReadAllText(_path), new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true });
+            if (!doc.RootElement.TryGetProperty("$blocks", out var arr) || arr.ValueKind != JsonValueKind.Array) return null;
+            return arr.EnumerateArray().Select(b =>
+            {
+                string? S(string k) => b.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+                return new PlcKi.Core.Status.PlcBlock(S("name") ?? "", S("kind") ?? "", S("language"));
+            }).Where(b => b.Name != "").ToList();
+        }
+        catch (Exception) { return null; }
+    }
+
     public void Disconnect() => _connected = false;
     public void Dispose() => Disconnect();
 }

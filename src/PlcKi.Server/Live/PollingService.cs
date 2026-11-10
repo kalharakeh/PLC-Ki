@@ -134,10 +134,13 @@ public sealed class PollingService : BackgroundService
     private readonly FastRecorder _fast;
     private readonly AlarmCaptureBook _captures;
     private readonly LinkGrace _grace;
+    private readonly PlantNoticeService _notices;
+    private DateTime _lastSwitches = DateTime.MinValue, _lastBlocks = DateTime.MinValue;
 
     public PollingService(IPlcSource source, StatusEngine engine, LiveState state, PlcKiOptions opt, ILogger<PollingService> log, WatchList watch, DeviceWatch devices,
-        FastRecorder fast, AlarmCaptureBook captures)
+        FastRecorder fast, AlarmCaptureBook captures, PlantNoticeService notices)
     {
+        _notices = notices;
         _grace = new LinkGrace(LinkGrace.WindowFor(opt.Plc.PollMs));
         _devices = devices;
         _watch = watch;
@@ -259,6 +262,8 @@ public sealed class PollingService : BackgroundService
                 _source.Disconnect();
                 _fast.Break(DateTimeOffset.Now);
                 _devices.Clear();
+                _notices.Clear();
+                _lastBlocks = DateTime.MinValue;   // look at the blocks again after the next connect
                 // What the CPU said before the link dropped is no longer true now
                 _state.Cpu = null;
                 _state.CpuMode.Clear();
@@ -283,6 +288,7 @@ public sealed class PollingService : BackgroundService
             try { _devices.PublishValues(_source.ReadSymbols(symbols), DateTimeOffset.Now); }
             catch (Exception ex) { _log.LogDebug(ex, "Reading the drive values failed."); }
         }
+        ReadNotices();
         var every = alarmFailures >= 3 ? TimeSpan.FromSeconds(60) : TimeSpan.FromSeconds(5);
         if (DateTime.UtcNow - lastAlarms > every)
         {
@@ -297,6 +303,27 @@ public sealed class PollingService : BackgroundService
                 if (alarmFailures++ == 0) _log.LogInformation("The CPU's alarm list cannot be read: {Error}", ex.Message);
                 _devices.PublishAlarms(null, "The CPU's alarm list cannot be read: " + ex.Message, DateTimeOffset.Now);
             }
+        }
+    }
+
+    /// <summary>
+    /// For the notices on every page (review 43): the test switches every 2 s, the PLC's block list after a connect and
+    /// then every 10 minutes. Both are reads; a failure only leaves the notice out.
+    /// </summary>
+    private void ReadNotices()
+    {
+        var defs = _notices.Switches().Defs;
+        if (defs.Count > 0 && DateTime.UtcNow - _lastSwitches > TimeSpan.FromSeconds(2))
+        {
+            _lastSwitches = DateTime.UtcNow;
+            try { _notices.PublishSwitches(_source.ReadSymbols(defs)); }
+            catch (Exception ex) { _log.LogDebug(ex, "Reading the test switches failed."); }
+        }
+        if (DateTime.UtcNow - _lastBlocks > TimeSpan.FromMinutes(10))
+        {
+            _lastBlocks = DateTime.UtcNow;
+            try { _notices.PublishBlocks(_source.BrowseBlocks()); }
+            catch (Exception ex) { _log.LogDebug(ex, "Listing the PLC's blocks failed."); _lastBlocks = DateTime.UtcNow.AddMinutes(-9); }
         }
     }
 

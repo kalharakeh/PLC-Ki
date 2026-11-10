@@ -1861,3 +1861,16 @@ section.hero.aa .card { background: var(--panel); }
 .conn-age.stale { color: var(--fault); font-weight: 600; }
 /* No room in the bar on phones and tablets: there the pill turning "not reachable" after 5 s says it instead */
 @media (max-width: 1100px) { .conn-age { display: none; } }
+
+/* Test switches on, program differs from the import (review 43): one strip under the banner on every page */
+.notice-bar { padding-top: 14px; }
+.notice-bar .wrap { display: grid; gap: 8px; }
+.notice-strip { align-items: center; flex-wrap: wrap; }
+.notice-strip > div { flex: 1 1 260px; min-width: 0; }
+.notice-strip div.small { margin-top: 2px; overflow-wrap: anywhere; }
+.notice-strip .btn { flex: none; }
+@media (max-width: 600px) {
+  .notice-bar { padding-top: 10px; }
+  .notice-strip { font-size: 14px; padding: 10px 12px; gap: 8px 10px; }
+  .notice-strip div.small { display: none; }   /* the names are one tap away (Show) */
+}

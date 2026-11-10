@@ -154,6 +154,7 @@ static async Task<int> RunAppAsync(string[] appArgs, bool probe, JobService jobs
     builder.Services.AddHostedService<PlcKi.Server.Storage.StoragePruning>();
     builder.Services.AddSingleton<WatchList>();
     builder.Services.AddSingleton<DeviceWatch>();
+    builder.Services.AddSingleton<PlantNoticeService>();
     builder.Services.AddSingleton<PlcKi.Server.Hardware.DiagnosticsService>();
     builder.Services.AddSingleton<PlcWriter>();
     builder.Services.AddSingleton<PlcsimInputs>();
@@ -194,10 +195,10 @@ static async Task<int> RunAppAsync(string[] appArgs, bool probe, JobService jobs
     // Each start of PLC-Ki gets its own id: an open page that sees a new one reloads, so it never shows the
     // program or model of the previous run next to the new one.
     var runId = Guid.NewGuid().ToString("N")[..10];
-    app.MapGet("/api/status", (LiveState s, HttpContext http) =>
+    app.MapGet("/api/status", (LiveState s, PlantNoticeService notices, HttpContext http) =>
     {
         http.Response.Headers["X-PlcKi-Run"] = runId;
-        return s.Status is { } st ? Results.Ok(st) : Results.Json(new { state = "starting" }, statusCode: 503);
+        return s.Status is { } st ? Results.Ok(st with { Notices = notices.Current() }) : Results.Json(new { state = "starting" }, statusCode: 503);
     });
 
     app.MapGet("/api/model", (MachineModel m) => Results.Json(m, MachineModel.JsonOptions));

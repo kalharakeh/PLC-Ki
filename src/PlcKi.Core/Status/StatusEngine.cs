@@ -57,6 +57,9 @@ public sealed record MachineStatus(
     /// <summary>The raw values of this read, by tag id, for the machine memory and the production log (not sent to the pages).</summary>
     [System.Text.Json.Serialization.JsonIgnore]
     public IReadOnlyDictionary<string, object?>? Raw { get; init; }
+
+    /// <summary>Notices for every page (test switches on, the PLC's blocks differ from the import), added by /api/status.</summary>
+    public List<PlantNotice>? Notices { get; init; }
 }
 
 /// <summary>
