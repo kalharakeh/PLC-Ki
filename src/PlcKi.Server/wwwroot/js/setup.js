@@ -19,7 +19,8 @@ const PKSetup = (() => {
   }
 
   /** Saved settings that differ from what this PLC-Ki is running with (for example changed by another copy). */
-  const RUN_LABELS = { source: "Values from", address: "PLC address", plcVia: "PLC read", model: "Machine model", export: "Program export", port: "Port", tiaMode: "TIA", tiaUrl: "TIA PC" };
+  const RUN_LABELS = { source: "Values from", address: "PLC address", plcVia: "PLC read", model: "Machine model", export: "Program export", port: "Port", tiaMode: "TIA", tiaUrl: "TIA PC",
+    username: "PLC user name", askModel: "Ask model", askMaxTokens: "Answer length", askMaxToolRounds: "Lookups per question" };
   const short = (v) => (v === "" || v == null ? "not set" : String(v).split(/[\\/]/).pop());
   function runDiff() {
     const r = info && info.running;
@@ -293,7 +294,8 @@ const PKSetup = (() => {
           <label class="field">PLCSIM address (downloads for testing)<input id="tiaPlcsimIp" value="${esc(c.tiaPlcsimIp)}" placeholder="e.g. 192.168.0.10, empty = no PLCSIM downloads"></label>
           <label class="field">Real PLCs that may be loaded<input id="tiaAllowReal" value="${esc(c.tiaAllowReal)}" placeholder="empty = never"><span class="hint">Each download is still confirmed by typing the address in the TiaImporter window, with the CPU in STOP.</span></label>
         </div>
-        <div class="mt-3 row"><button class="btn b small" data-start-helper>${tiaStatus && tiaStatus.helperRunning ? "Restart" : "Start"} the TIA helper</button></div>`
+        <div class="mt-3 row"><button class="btn b small" data-start-helper>${tiaStatus && tiaStatus.helperRunning ? "Restart" : "Start"} the TIA helper</button>
+          <span class="faint small">It listens on port ${esc(info.tiaPort || 5090)} on this PC (set in appsettings.json, <code>PlcKi:Tia:Port</code>).</span></div>`
       : c.tiaMode === "remote" ? `
         <div class="grid two">
           <label class="field">TIA PC address<input id="tiaUrl" value="${esc(c.tiaUrl)}" placeholder="http://192.168.0.20:5090"></label>
@@ -346,6 +348,7 @@ const PKSetup = (() => {
         <details class="mt-0 more"><summary>More PLC options</summary>
           <div class="mt-3 grid three">
             <label class="field">Security<select id="security">${["Auto", "Tls", "LegacyChallenge"].map((x) => `<option ${c.security === x ? "selected" : ""}>${x}</option>`).join("")}</select></label>
+            ${c.plcVia === "link" ? "" : `<label class="field">PLC user name <span class="hint">only when the CPU has users set up in TIA (access control); empty = the password alone</span><input id="username" value="${esc(c.username || "")}" autocomplete="off" spellcheck="false">${runNote("username")}</label>`}
             <label class="field">Read the PLC every <span class="hint">milliseconds; 1000 = once a second</span><input id="pollMs" type="number" min="100" max="60000" step="100" value="${c.pollMs}"></label>
             <label class="field">Fast capture: the PLC sends every change, sampled every <span class="hint">milliseconds; 100 is a good start, 0 = off. Used for the seconds before each alarm.</span><input id="fastMs" type="number" min="0" max="10000" step="10" value="${c.fastMs ?? 100}"></label>
             <label class="field">Wait for an answer up to <span class="hint">milliseconds; 5000 = 5 seconds</span><input id="timeoutMs" type="number" min="500" max="60000" step="500" value="${c.timeoutMs}"></label>
@@ -408,7 +411,7 @@ const PKSetup = (() => {
   function readConn(page) {
     if (!conn) return;      // still loading
     const v = (id) => { const el = page.querySelector("#" + id); return el ? el.value : undefined; };
-    for (const k of ["address", "security", "source", "snapshotFile", "tiaUrl", "tiaImporterPath", "tiaPlcsimIp", "tiaAllowReal", "tiaProject", "plcAllowWrites"]) {
+    for (const k of ["address", "security", "username", "source", "snapshotFile", "tiaUrl", "tiaImporterPath", "tiaPlcsimIp", "tiaAllowReal", "tiaProject", "plcAllowWrites"]) {
       const x = v(k); if (x !== undefined) conn[k] = x.trim();
     }
     for (const k of ["pollMs", "fastMs", "timeoutMs"]) { const x = v(k); if (x !== undefined) conn[k] = Number(x); }
@@ -799,10 +802,22 @@ const PKSetup = (() => {
   }
 
   // ---------- Settings ----------
-  let users = null;
+  let users = null, askUse = null;
+  const LENGTHS = [[4000, "Short"], [8000, "Normal"], [16000, "Long"]];
+  const money = (x) => "$" + (Number(x) || 0).toFixed(2);
+  /** "This month: 12 questions, about $3.40 of $50." for the Assistant card (admins only). */
+  function askUseHtml(limit) {
+    if (!askUse) return "";
+    const m = askUse.month || {};
+    const pct = limit > 0 ? Math.min(100, (m.cost || 0) / limit * 100) : 0;
+    return `<div class="ask-use"><div class="small"><b class="semibold">This month:</b> ${m.questions || 0} question${m.questions === 1 ? "" : "s"}, about ${money(m.cost)}${limit > 0 ? ` of ${money(limit)}` : ""}.${pct >= 100 ? ` <b class="ink-fault">Ask is off until next month or a higher limit.</b>` : ""}</div>
+      ${limit > 0 ? `<div class="ask-bar ${pct >= 100 ? "full" : pct >= 80 ? "near" : ""}" role="img" aria-label="${Math.round(pct)}% of the monthly limit"><span style="width:${pct.toFixed(1)}%"></span></div>` : ""}
+      <div class="faint small">An estimate from the words (tokens) Ask sent and got, at Anthropic's list prices. The bill comes from Anthropic.</div></div>`;
+  }
   PK.view("setup/settings", {
     async mount() {
       try { await loadSettings(); users = await api("GET", "/api/admin/users"); } catch (e) { toast(e.message, "error"); }
+      try { askUse = await api("GET", "/api/admin/ask/usage"); } catch { askUse = null; }
       await loadStorage();
       PK.draw();
     },
@@ -821,7 +836,14 @@ const PKSetup = (() => {
           <div class="card stack"><h3>Assistant</h3>
             ${sw("askEnabled", s.askEnabled, "Ask box", "Ki answers questions about the machine.")}
             <label class="field">Claude API key <span class="hint">${esc(keyText)}</span><input id="apiKey" type="password" autocomplete="new-password" placeholder="sk-ant-…"></label>
-            <label class="field">How hard Ki thinks<select id="askEffort">${["low", "medium", "high", "max"].map((x) => `<option ${s.askEffort === x ? "selected" : ""}>${x}</option>`).join("")}</select></label></div>
+            <label class="field">Model<select id="askModel">${(askUse ? askUse.models : [{ id: s.askModel, name: s.askModel, note: "" }]).concat(askUse && !askUse.models.some((m) => m.id === s.askModel) ? [{ id: s.askModel, name: s.askModel, note: "set in the config file" }] : [])
+              .map((m) => `<option value="${esc(m.id)}" ${m.id === s.askModel ? "selected" : ""}>${esc(m.name)}${m.note ? " · " + esc(m.note) : ""}</option>`).join("")}</select>${runNote("askModel")}</label>
+            <label class="field">How hard Ki thinks<select id="askEffort">${["low", "medium", "high", "max"].map((x) => `<option ${s.askEffort === x ? "selected" : ""}>${x}</option>`).join("")}</select><span class="hint">Higher gives better answers to hard questions, but slower and dearer.</span></label>
+            <div class="grid two"><label class="field">Answer length<select id="askMaxTokens">${LENGTHS.concat(LENGTHS.some(([n]) => n === s.askMaxTokens) ? [] : [[s.askMaxTokens, s.askMaxTokens + " tokens"]])
+              .map(([n, t]) => `<option value="${n}" ${n === s.askMaxTokens ? "selected" : ""}>${esc(t)}</option>`).join("")}</select>${runNote("askMaxTokens")}</label>
+            <label class="field">Lookups per question<input id="askMaxToolRounds" type="number" min="2" max="30" value="${s.askMaxToolRounds}"><span class="hint">2 to 30. More lets Ki look further, at more cost.</span>${runNote("askMaxToolRounds")}</label></div>
+            <label class="field" style="max-width:240px">Monthly limit in dollars<input id="askLimit" type="number" min="0" step="1" inputmode="decimal" value="${s.askMonthlyLimitUsd > 0 ? s.askMonthlyLimitUsd : ""}" placeholder="No limit"><span class="hint">When it is reached, Ask stops until next month. Works at once.</span></label>
+            ${askUseHtml(s.askMonthlyLimitUsd)}</div>
           <div class="card stack"><h3>Access</h3>
             ${sw("allowRemote", s.allowRemote, "Other computers may open PLC-Ki", "Off: only this PC. On: anyone on the network who has a login.")}
             ${sw("publicView", s.publicView, "Viewing without login", "For a screen on the line. Setup still needs an administrator.")}
@@ -853,8 +875,10 @@ const PKSetup = (() => {
         saveBtn.disabled = true;
         try {
           await saveSettings({ model: v("model").value, historyMinutes: Number(v("historyMinutes").value), askEnabled: v("askEnabled").checked,
-            apiKey: v("apiKey").value.trim() || null, askEffort: v("askEffort").value, allowRemote: v("allowRemote").checked, publicView: v("publicView").checked, port: Number(v("port").value) });
+            apiKey: v("apiKey").value.trim() || null, askEffort: v("askEffort").value, askModel: v("askModel").value, askMaxTokens: Number(v("askMaxTokens").value),
+            askMaxToolRounds: Number(v("askMaxToolRounds").value), askMonthlyLimitUsd: Number(v("askLimit").value) || 0, allowRemote: v("allowRemote").checked, publicView: v("publicView").checked, port: Number(v("port").value) });
           PK.dirty(null);
+          try { askUse = await api("GET", "/api/admin/ask/usage"); } catch { /* keeps the last */ }
           toast(info.restartNeeded ? "Saved. Apply to use the new settings." : "Saved."); PK.draw();
         } catch (e) { toast(e.message, "error"); }
         saveBtn.disabled = false;

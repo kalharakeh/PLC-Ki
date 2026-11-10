@@ -1936,3 +1936,10 @@ section.hero.aa .card { background: var(--panel); }
 .rp-ho .ho-note { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; }
 .print-only { display: none !important; }
 @media print { .print-only { display: grid !important; } .ho-strip { display: none !important; } }
+
+/* Ask usage on Settings (review 54): this month's estimate against the monthly limit */
+.ask-use { display: grid; gap: 6px; }
+.ask-bar { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.ask-bar span { display: block; height: 100%; background: var(--accent); }
+.ask-bar.near span { background: var(--warn, #c27c0e); }
+.ask-bar.full span { background: var(--fault, #d93025); }

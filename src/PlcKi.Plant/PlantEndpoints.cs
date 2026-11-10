@@ -221,12 +221,15 @@ public static class PlantEndpoints
         running = ctx.Running is { } r ? new
         {
             r.Source, r.Address, r.Model, r.Export, r.SnapshotFile, r.PlcVia, r.PollMs, r.TimeoutMs, r.TiaMode, r.TiaUrl, r.AllowRemote,
+            r.Username, r.AskModel, r.AskMaxTokens, r.AskMaxToolRounds,
             port = http.Request.Host.Port ?? r.Port,
         } : null,
         apiKey = ctx.ApiKeyInSettings ? "settings" : ctx.ApiKeyInEnvironment ? "environment" : "none",
         plcPassword = ctx.PlcPasswordInEnvironment ? "environment" : ctx.PlcPasswordInSettings ? "settings" : "none",
         tiaToken = ctx.TiaTokenInSettings || !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("PLCKI_VM_TOKEN")) ? "set" : "none",
         canRestart = ctx.IsService || ctx.RestartInProcess != null,
+        // Shown read-only on the settings page (set in appsettings.json or on the command line)
+        tiaPort = store.TiaPort,
     };
 
     /// <summary>Files shipped with the app (relative paths) and, optionally, uploaded ones (absolute paths).</summary>

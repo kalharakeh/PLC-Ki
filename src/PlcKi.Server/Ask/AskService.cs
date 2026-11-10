@@ -49,8 +49,16 @@ public sealed class AskService
         public DateTimeOffset LastUsed = DateTimeOffset.Now;
     }
 
-    public AskService(AskOptions opt, MachineTools tools, LiveState live, ILogger<AskService> log, PlcKi.Core.Knowledge.DocumentLibrary? docs = null)
+    private readonly AskUsage? _usage;
+    private readonly Func<double> _monthlyLimit;
+
+    /// <param name="usage">Counts tokens and cost per month (null: not counted, no limit).</param>
+    /// <param name="monthlyLimitUsd">Read for every question, so a new limit on the settings page works at once. 0 = no limit.</param>
+    public AskService(AskOptions opt, MachineTools tools, LiveState live, ILogger<AskService> log, PlcKi.Core.Knowledge.DocumentLibrary? docs = null,
+        AskUsage? usage = null, Func<double>? monthlyLimitUsd = null)
     {
+        _usage = usage;
+        _monthlyLimit = monthlyLimitUsd ?? (() => 0);
         _docs = docs;
         _opt = opt;
         _tools = tools;
@@ -69,6 +77,7 @@ public sealed class AskService
         if (!_opt.Enabled) return (false, "Ask is switched off for this PLC-Ki.");
         if (_client == null && string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY")))
             return (false, "Ask needs a Claude key, and none is set yet.");
+        if (_usage?.LimitReached(_monthlyLimit()) is { } limit) return (false, limit);
         return (true, null);
     }
 
@@ -81,6 +90,7 @@ public sealed class AskService
         var question = req.Question?.Trim();
         if (string.IsNullOrEmpty(question)) throw new AskException("Type a question first.", 400);
         if (question.Length > 4000) throw new AskException("The question is too long (4000 characters max).", 400);
+        _usage?.Question();
 
         Cleanup();
         var id = req.ConversationId is { Length: > 0 } cid && _conversations.ContainsKey(cid) ? cid : Guid.NewGuid().ToString("N");
@@ -158,6 +168,9 @@ public sealed class AskService
                 throw new AskException($"Cannot reach the Claude API (internet connection or proxy?): {ex.Message}", 502);
             }
 
+            // Counted per answer, priced by the model that answered (the fallback model can answer instead)
+            _usage?.Add(resp.Model.ToString()?.Trim('"'), resp.Usage.InputTokens, resp.Usage.OutputTokens,
+                resp.Usage.CacheCreationInputTokens ?? 0, resp.Usage.CacheReadInputTokens ?? 0);
             inTok += resp.Usage.InputTokens + (resp.Usage.CacheCreationInputTokens ?? 0) + (resp.Usage.CacheReadInputTokens ?? 0);
             outTok += resp.Usage.OutputTokens;
             cacheTok += resp.Usage.CacheReadInputTokens ?? 0;

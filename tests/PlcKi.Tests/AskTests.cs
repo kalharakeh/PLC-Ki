@@ -46,14 +46,16 @@ public class AskTests
         usage = new { input_tokens = 100, output_tokens = 20, cache_creation_input_tokens = 0, cache_read_input_tokens = 50 },
     });
 
-    private static (AskService Ask, FakeApi Api) Make(params string[] responses)
+    private static (AskService Ask, FakeApi Api) Make(params string[] responses) => MakeWith(null, null, responses);
+
+    private static (AskService Ask, FakeApi Api) MakeWith(AskUsage? usage, Func<double>? limit, params string[] responses)
     {
         var history = new MachineHistory();
         var live = new LiveState(history, new LiveModelCheck(TestData.Model));
         var snap = TestData.Snapshot("step10-xv101-not-open");
         live.Publish(snap, TestData.Evaluate(snap));
         var tools = new MachineTools(TestData.Model, () => new LiveView(live.Status, live.Snapshot, history, DateTimeOffset.Now));
-        var ask = new AskService(new AskOptions(), tools, live, NullLogger<AskService>.Instance);
+        var ask = new AskService(new AskOptions(), tools, live, NullLogger<AskService>.Instance, null, usage, limit);
         var api = new FakeApi(responses);
         ask.UseClient(new AnthropicClient
         {
@@ -146,6 +148,41 @@ public class AskTests
         Assert.Contains("declined", a1.Answer);
         await ask.AskAsync(new AskRequest(a1.ConversationId, "Normal question"), default);
         Assert.Equal(1, api.Requests[1].GetProperty("messages").GetArrayLength());
+    }
+
+    [Fact]
+    public async Task Every_answer_is_counted_and_the_monthly_limit_stops_new_questions()
+    {
+        var file = Path.Combine(Path.GetTempPath(), "plcki-ask-usage-" + Guid.NewGuid().ToString("N") + ".json");
+        try
+        {
+            var usage = new AskUsage(file);
+            double limit = 0;
+            var (ask, api) = MakeWith(usage, () => limit,
+                Message("tool_use", new { type = "tool_use", id = "toolu_1", name = "get_alarm", input = new { id = "A02" } }),
+                Message("end_turn", new { type = "text", text = "Done." }));
+            await ask.AskAsync(new AskRequest(null, "Why?"), default);
+
+            var m = usage.ThisMonth();
+            Assert.Equal(1, m.Questions);
+            Assert.Equal(200, m.Input);           // two answers of 100 input tokens each
+            Assert.Equal(40, m.Output);
+            Assert.Equal(100, m.CacheRead);
+            Assert.Equal(AskUsage.Cost("claude-opus-5-5", 200, 40, 0, 100), m.Cost, 9);
+            Assert.True(File.Exists(file));
+
+            limit = m.Cost;                       // reached: Ask switches off with a plain reason, at once
+            var (on, why) = ask.Availability();
+            Assert.False(on);
+            Assert.Contains("limit", why);
+            var refused = await Assert.ThrowsAsync<AskException>(() => ask.AskAsync(new AskRequest(null, "And now?"), default));
+            Assert.Equal(2, api.Requests.Count);  // nothing more was sent to Claude
+            Assert.Equal(1, new AskUsage(file).ThisMonth().Questions);     // read back from the file
+
+            limit = 0;                            // no limit
+            Assert.True(ask.Availability().Enabled);
+        }
+        finally { File.Delete(file); }
     }
 
     [Fact]
