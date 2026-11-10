@@ -383,13 +383,14 @@
       const path = callPath(where.block || loc.block);
       const checks = a.checks || [];
       const failed = checks.filter((c) => c.met === false);
-      // Follow-ups fold under the alarm they came right after: one chip per first alarm, with "+1 after it"
+      // Follow-ups fold under the alarm they came right after: one chip per first alarm, with "+1 after it".
+      // The chip is red when any alarm in it is a fault, so a fault after a warning is not hidden behind amber.
       const { groups, rootOf } = foldAlarms(alarms);
       const follow = rootOf.get(a.id) || null;
       const after = (groups.find((g) => g.root.id === a.id) || { after: [] }).after;
 
       const chips = alarms.length > 1 ? `<div class="alarm-chips">${groups.map((g, i) => { const x = g.root; return `
-        <button class="alarm-chip ${x.severity === "WARNING" ? "warning" : ""} ${x.id === a.id ? "sel" : ""}" data-alarm="${esc(x.id)}"${g.after.length ? ` title="${esc(g.after.map((f) => f.alarm.id + " came " + laterText(f.ms)).join(", "))}"` : ""}>
+        <button class="alarm-chip ${[x, ...g.after.map((f) => f.alarm)].every((y) => y.severity === "WARNING") ? "warning" : ""} ${x.id === a.id ? "sel" : ""}" data-alarm="${esc(x.id)}"${g.after.length ? ` title="${esc(g.after.map((f) => f.alarm.id + " came " + laterText(f.ms)).join(", "))}"` : ""}>
           <span class="d"></span>${i === 0 && firstKnown && groups.length > 1 ? "First · " : ""}${esc(x.id)} ${esc(x.text.length > 40 ? x.text.slice(0, 38) + "…" : x.text)}${g.after.length ? `<span class="chip-n">+${g.after.length} after it</span>` : ""}</button>`; }).join("")}</div>
           ${atStart > 1 ? `<p class="faint small" style="margin:-12px 0 18px">${atStart} alarms were already on when PLC-Ki started watching, so which of those came first is not known.</p>` : ""}` : "";
 
