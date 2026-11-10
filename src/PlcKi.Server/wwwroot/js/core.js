@@ -862,6 +862,24 @@ const PK = (() => {
   }
 
   /**
+   * Puts text on the clipboard; true when it worked. The clipboard API exists only on HTTPS and localhost, and
+   * PLC-Ki is usually opened over plain HTTP at the plant's address, so the old copy command is the fallback.
+   */
+  async function copyText(text) {
+    try { if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(text); return true; } } catch { /* try the old way */ }
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.cssText = "position:fixed;top:0;left:0;opacity:0";
+    document.body.append(ta);
+    ta.select();
+    let ok = false;
+    try { ok = document.execCommand("copy"); } catch { /* not allowed here */ }
+    ta.remove();
+    return ok;
+  }
+
+  /**
    * A modal sheet; returns {el, close}. Esc, a click outside it and any [data-close] button close it,
    * unless dismiss is false (sheets that wait for a job, such as a real-PLC confirmation or a restart).
    */
@@ -1442,6 +1460,6 @@ const PK = (() => {
     if (state.user) { loadHeld(); setInterval(loadHeld, 15000); }
   }
 
-  return { AI, ui, BP, screenSize, dirty: setDirty, get isDirty() { return !!dirty; }, plain, connInfo, connSheet, helpSheet, screenSheet, passwordSheet, setHash, cmd, sec, hero, on, $, esc, icon, fillIcons, kindIcon, api, state, view, go, draw, route, toast, sheet, confirmSheet, cond, md, ago, clock, date, when,
+  return { AI, ui, BP, screenSize, dirty: setDirty, get isDirty() { return !!dirty; }, plain, connInfo, connSheet, helpSheet, screenSheet, passwordSheet, setHash, cmd, sec, hero, on, $, esc, icon, fillIcons, kindIcon, api, state, view, go, draw, route, toast, copyText, sheet, confirmSheet, cond, md, ago, clock, date, when,
     loadProgram, blockOf, valueBySymbol, norm, start, cpuStop, cpuSince, loadHeld, releaseAll, get current() { return current; } };
 })();
