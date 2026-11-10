@@ -1809,6 +1809,8 @@ section.hero.aa { padding-block: 26px 30px; }
 /* Values over time: a setpoint is a dashed line on its value's chart */
 .tr-sp { fill: none; stroke: var(--ok); stroke-width: 1.5; stroke-dasharray: 6 4; }
 .tr-sp-k { display: inline-block; width: 14px; margin-right: 5px; vertical-align: middle; border-top: 2px dashed var(--ok); }
+.tr-cmp { fill: none; stroke: var(--muted); stroke-width: 1.5; stroke-dasharray: 5 4; }
+.tr-cmp-k { display: inline-block; width: 14px; margin-right: 5px; vertical-align: middle; border-top: 2px dashed var(--muted); }
 
 /* Map tiles: the device's key value under its state */
 .pm-v { font-size: 12.5px; font-weight: 650; color: var(--ink); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
