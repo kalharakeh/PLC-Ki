@@ -1,0 +1,335 @@
+{
+  // Test model with TWO stations (review item 50): a Mixer and a Filler Line on one machine.
+  // PLC-Ki groups devices and sequences into stations by the instance named in their "location"
+  // ("FB_Valve, instance \"Mixer\".XV101" -> station Mixer; "Filler_Line" -> "Filler Line"), and a sequence by
+  // "(called in FB_Mixer)". Alarms L01 and L02 name no station on purpose: they show as machine alarms.
+  // There is no PLC program behind this file. Use it with the snapshot files models/snapshots/two-stations-*.json:
+  //   dotnet run --project src\PlcKi.Server -- --PlcKi:Model=models/demo-two-stations.json --PlcKi:Export= --PlcKi:Source=snapshot --PlcKi:SnapshotFile=models/snapshots/two-stations-alarms-both.json
+  "name": "Demo two stations",
+  "description": "Test machine with two stations: a Mixer (fill, mix and heat, hand over) and a Filler Line (index, fill, cap).",
+  "source": "hand-written test model (PLC-Ki review item 50)",
+
+  "tags": [
+    // --- Machine ---
+    { "id": "EStop_OK", "symbol": "\"DB_IO\".EStop_OK", "type": "Bool", "label": "Emergency stop circuit", "trueText": "healthy", "falseText": "E-stop pressed" },
+    { "id": "SW_Auto", "symbol": "\"DB_IO\".SW_Auto", "type": "Bool", "label": "Mode selector", "trueText": "Auto", "falseText": "Manual" },
+    { "id": "Air_Low", "symbol": "\"DB_IO\".Air_Low", "type": "Bool", "label": "Compressed air pressure", "trueText": "too low", "falseText": "ok" },
+
+    // --- Station Mixer: sequence ---
+    { "id": "Mx_Step", "symbol": "\"DB_MixerSeq\".Step", "type": "Int", "label": "Mixer step" },
+    { "id": "Mx_StepTime", "symbol": "\"DB_MixerSeq\".StepTime", "type": "Time", "label": "Mixer time in step" },
+    { "id": "Mx_Halted", "symbol": "\"DB_MixerSeq\".Halted", "type": "Bool", "label": "Mixer sequence halted", "trueText": "halted", "falseText": "running" },
+    { "id": "Seq_OpenXV101", "symbol": "\"DB_MixerSeq\".OpenXV101", "type": "Bool", "label": "Sequence asks XV101 open" },
+    { "id": "Seq_RunM201", "symbol": "\"DB_MixerSeq\".RunM201", "type": "Bool", "label": "Sequence asks M201 run" },
+    { "id": "Seq_HeatE301", "symbol": "\"DB_MixerSeq\".HeatE301", "type": "Bool", "label": "Sequence asks E301 heat" },
+    { "id": "LevelSP", "symbol": "\"DB_Recipe\".LevelSP", "type": "Real", "label": "Fill to", "unit": "%", "decimals": 0 },
+    { "id": "TempSP", "symbol": "\"DB_Recipe\".TempSP", "type": "Real", "label": "Temperature setpoint", "unit": "°C", "decimals": 0 },
+    { "id": "MixTime", "symbol": "\"DB_Recipe\".MixTime", "type": "Time", "label": "Mixing time" },
+    { "id": "Batch_Ready", "symbol": "\"DB_LineInterface\".Mixer_BatchReady", "type": "Bool", "label": "Batch ready (Mixer to Filler Line)", "trueText": "ready", "falseText": "not ready" },
+
+    // --- Station Mixer: devices ---
+    { "id": "XV101_OpenCmd", "symbol": "\"DB_IO\".XV101_OpenCmd", "type": "Bool", "label": "XV101 open command", "trueText": "on", "falseText": "off" },
+    { "id": "XV101_ZSO", "symbol": "\"DB_IO\".XV101_ZSO", "type": "Bool", "label": "XV101 open switch", "trueText": "reached", "falseText": "not reached" },
+    { "id": "XV101_ZSC", "symbol": "\"DB_IO\".XV101_ZSC", "type": "Bool", "label": "XV101 closed switch", "trueText": "reached", "falseText": "not reached" },
+    { "id": "M201_RunCmd", "symbol": "\"DB_IO\".M201_RunCmd", "type": "Bool", "label": "M201 run command", "trueText": "on", "falseText": "off" },
+    { "id": "M201_SpeedSP", "symbol": "\"DB_IO\".M201_SpeedSP", "type": "Real", "label": "M201 speed setpoint", "unit": "rpm", "decimals": 0 },
+    { "id": "M201_SpeedPV", "symbol": "\"DB_IO\".M201_SpeedPV", "type": "Real", "label": "M201 actual speed", "unit": "rpm", "decimals": 0 },
+    { "id": "M201_DriveReady", "symbol": "\"DB_IO\".M201_DriveReady", "type": "Bool", "label": "M201 drive ready", "trueText": "ready", "falseText": "not ready" },
+    { "id": "M201_DriveFault", "symbol": "\"DB_IO\".M201_DriveFault", "type": "Bool", "label": "M201 drive fault", "trueText": "fault", "falseText": "no fault" },
+    { "id": "M201_AtSpeed", "symbol": "\"Mixer\".M201.AtSpeed", "type": "Bool", "label": "M201 at speed", "trueText": "yes", "falseText": "no" },
+    { "id": "E301_OnCmd", "symbol": "\"DB_IO\".E301_OnCmd", "type": "Bool", "label": "E301 on command", "trueText": "on", "falseText": "off" },
+    { "id": "E301_OverTemp", "symbol": "\"DB_IO\".E301_OverTemp", "type": "Bool", "label": "E301 overtemperature switch", "trueText": "tripped", "falseText": "ok" },
+    { "id": "Level", "symbol": "\"Mixer\".LT101.Value", "type": "Real", "label": "Tank level LT101", "unit": "%", "decimals": 1 },
+    { "id": "Temp", "symbol": "\"Mixer\".TT301.Value", "type": "Real", "label": "Tank temperature TT301", "unit": "°C", "decimals": 1 },
+
+    // --- Station Filler Line: sequence ---
+    { "id": "Fl_Step", "symbol": "\"DB_FillerSeq\".Step", "type": "Int", "label": "Filler Line step" },
+    { "id": "Fl_StepTime", "symbol": "\"DB_FillerSeq\".StepTime", "type": "Time", "label": "Filler Line time in step" },
+    { "id": "Fl_Halted", "symbol": "\"DB_FillerSeq\".Halted", "type": "Bool", "label": "Filler Line sequence halted", "trueText": "halted", "falseText": "running" },
+    { "id": "Seq_RunCV501", "symbol": "\"DB_FillerSeq\".RunCV501", "type": "Bool", "label": "Sequence asks CV501 run" },
+    { "id": "Seq_OpenXV601", "symbol": "\"DB_FillerSeq\".OpenXV601", "type": "Bool", "label": "Sequence asks XV601 open" },
+    { "id": "Seq_RunCP701", "symbol": "\"DB_FillerSeq\".RunCP701", "type": "Bool", "label": "Sequence asks CP701 run" },
+    { "id": "Filler_Ready", "symbol": "\"DB_LineInterface\".Filler_Ready", "type": "Bool", "label": "Filler Line ready (to Mixer)", "trueText": "ready", "falseText": "not ready" },
+    { "id": "Bottles_Filled", "symbol": "\"DB_FillerSeq\".BottlesFilled", "type": "DInt", "label": "Bottles filled" },
+    { "id": "Bottle_Present", "symbol": "\"DB_IO\".Bottle_Present", "type": "Bool", "label": "Bottle at the filling position", "trueText": "present", "falseText": "none" },
+    { "id": "Fill_Done", "symbol": "\"DB_IO\".Fill_Done", "type": "Bool", "label": "Fill volume reached", "trueText": "reached", "falseText": "not reached" },
+
+    // --- Station Filler Line: devices ---
+    { "id": "CV501_RunCmd", "symbol": "\"DB_IO\".CV501_RunCmd", "type": "Bool", "label": "CV501 run command", "trueText": "on", "falseText": "off" },
+    { "id": "CV501_RunFb", "symbol": "\"DB_IO\".CV501_RunFb", "type": "Bool", "label": "CV501 running feedback", "trueText": "running", "falseText": "no feedback" },
+    { "id": "CV501_MotorTrip", "symbol": "\"DB_IO\".CV501_MotorTrip", "type": "Bool", "label": "CV501 motor protection", "trueText": "tripped", "falseText": "ok" },
+    { "id": "XV601_OpenCmd", "symbol": "\"DB_IO\".XV601_OpenCmd", "type": "Bool", "label": "XV601 open command", "trueText": "on", "falseText": "off" },
+    { "id": "XV601_ZSO", "symbol": "\"DB_IO\".XV601_ZSO", "type": "Bool", "label": "XV601 open switch", "trueText": "reached", "falseText": "not reached" },
+    { "id": "XV601_ZSC", "symbol": "\"DB_IO\".XV601_ZSC", "type": "Bool", "label": "XV601 closed switch", "trueText": "reached", "falseText": "not reached" },
+    { "id": "CP701_RunCmd", "symbol": "\"DB_IO\".CP701_RunCmd", "type": "Bool", "label": "CP701 run command", "trueText": "on", "falseText": "off" },
+    { "id": "CP701_RunFb", "symbol": "\"DB_IO\".CP701_RunFb", "type": "Bool", "label": "CP701 running feedback", "trueText": "running", "falseText": "no feedback" },
+    { "id": "Caps_Low", "symbol": "\"DB_IO\".Caps_Low", "type": "Bool", "label": "Cap magazine", "trueText": "nearly empty", "falseText": "ok" },
+
+    // --- Alarms (latched bits in DB_Alarms) ---
+    { "id": "M01", "symbol": "\"DB_Alarms\".M01_XV101_NotOpen", "type": "Bool" },
+    { "id": "M02", "symbol": "\"DB_Alarms\".M02_M201_DriveFault", "type": "Bool" },
+    { "id": "M03", "symbol": "\"DB_Alarms\".M03_E301_OverTemp", "type": "Bool" },
+    { "id": "M04", "symbol": "\"DB_Alarms\".M04_Mixer_WaitFillerTooLong", "type": "Bool" },
+    { "id": "F01", "symbol": "\"DB_Alarms\".F01_CV501_Trip", "type": "Bool" },
+    { "id": "F02", "symbol": "\"DB_Alarms\".F02_XV601_NotOpen", "type": "Bool" },
+    { "id": "F03", "symbol": "\"DB_Alarms\".F03_CP701_CapsLow", "type": "Bool" },
+    { "id": "F04", "symbol": "\"DB_Alarms\".F04_Filler_WaitBatchTooLong", "type": "Bool" },
+    { "id": "L01", "symbol": "\"DB_Alarms\".L01_AirPressureLow", "type": "Bool" },
+    { "id": "L02", "symbol": "\"DB_Alarms\".L02_EStop", "type": "Bool" },
+    { "id": "AnyFault", "symbol": "\"DB_Alarms\".AnyFault", "type": "Bool", "label": "Any fault active", "trueText": "yes", "falseText": "no" },
+    { "id": "AnyWarning", "symbol": "\"DB_Alarms\".AnyWarning", "type": "Bool", "label": "Any warning active", "trueText": "yes", "falseText": "no" }
+  ],
+
+  "overview": [ "Level", "Temp", "Mx_Step", "Fl_Step", "Bottles_Filled", "SW_Auto", "EStop_OK" ],
+
+  "sequences": [
+    {
+      "id": "Mixer",
+      "name": "Mixer sequence",
+      "block": "FB_MixerSequence (GRAPH), instance \"DB_MixerSeq\" (called in FB_Mixer)",
+      "stepTag": "Mx_Step",
+      "stepTimeTag": "Mx_StepTime",
+      "haltedTag": "Mx_Halted",
+      "haltReasons": [
+        { "expr": "AnyFault", "text": "a FAULT alarm is active (clear the cause, press Reset, then Start)" },
+        { "expr": "NOT EStop_OK", "text": "the emergency stop is pressed (release it, press Reset, then Start)" },
+        { "expr": "NOT SW_Auto", "text": "the selector is in Manual" }
+      ],
+      "steps": [
+        {
+          "no": 0, "name": "Idle",
+          "does": "Keeps all outputs off and waits for the Filler Line to be ready.",
+          "next": [ { "to": 10, "conditions": [
+            { "expr": "Filler_Ready", "text": "Filler Line ready to receive" },
+            { "expr": "SW_Auto", "text": "Selector in Auto" },
+            { "expr": "NOT AnyFault", "text": "No FAULT alarm active" }
+          ] } ]
+        },
+        {
+          "no": 10, "name": "Fill",
+          "does": "Opens inlet valve XV101 until the level reaches {LevelSP}.",
+          "limit": "If XV101 does not reach its open switch within 10 s, M01 comes first.",
+          "next": [ { "to": 20, "conditions": [
+            { "expr": "Level >= LevelSP", "text": "Level reached {LevelSP}" }
+          ] } ]
+        },
+        {
+          "no": 20, "name": "Mix and heat",
+          "does": "Runs agitator M201 and heats with E301 to {TempSP} once the agitator is at speed.",
+          "next": [ { "to": 30, "conditions": [
+            { "expr": "Temp >= TempSP", "text": "Temperature reached {TempSP}" },
+            { "expr": "Mx_StepTime >= MixTime", "text": "Mixed for at least {MixTime}" }
+          ] } ]
+        },
+        {
+          "no": 30, "name": "Hand over",
+          "does": "Tells the Filler Line that the batch is ready and waits until it has taken it.",
+          "limit": "Waiting longer than 60 s raises warning M04.",
+          "next": [ { "to": 0, "conditions": [
+            { "expr": "NOT Batch_Ready", "text": "Filler Line has taken the batch" }
+          ] } ]
+        }
+      ]
+    },
+    {
+      "id": "Filler",
+      "name": "Filler sequence",
+      "block": "FB_FillerSequence (GRAPH), instance \"DB_FillerSeq\" (called in FB_Filler_Line)",
+      "stepTag": "Fl_Step",
+      "stepTimeTag": "Fl_StepTime",
+      "haltedTag": "Fl_Halted",
+      "haltReasons": [
+        { "expr": "AnyFault", "text": "a FAULT alarm is active (clear the cause, press Reset, then Start)" },
+        { "expr": "NOT EStop_OK", "text": "the emergency stop is pressed (release it, press Reset, then Start)" },
+        { "expr": "NOT SW_Auto", "text": "the selector is in Manual" }
+      ],
+      "steps": [
+        {
+          "no": 0, "name": "Wait for batch",
+          "does": "Keeps all outputs off and waits for the Mixer to offer a batch.",
+          "limit": "Waiting longer than 60 s raises warning F04.",
+          "next": [ { "to": 10, "conditions": [
+            { "expr": "Batch_Ready", "text": "Mixer has a batch ready" },
+            { "expr": "NOT AnyFault", "text": "No FAULT alarm active" }
+          ] } ]
+        },
+        {
+          "no": 10, "name": "Index bottle",
+          "does": "Runs conveyor CV501 until a bottle is at the filling position.",
+          "next": [ { "to": 20, "conditions": [
+            { "expr": "Bottle_Present", "text": "Bottle at the filling position" }
+          ] } ]
+        },
+        {
+          "no": 20, "name": "Fill bottle",
+          "does": "Opens filling valve XV601 until the fill volume is reached.",
+          "limit": "If XV601 does not reach its open switch within 10 s, F02 comes first.",
+          "next": [ { "to": 30, "conditions": [
+            { "expr": "Fill_Done", "text": "Fill volume reached" }
+          ] } ]
+        },
+        {
+          "no": 30, "name": "Cap bottle",
+          "does": "Runs capper CP701 and counts the bottle, then takes the next one.",
+          "next": [ { "to": 10, "conditions": [
+            { "expr": "CP701_RunFb", "text": "Capper has run" }
+          ] } ]
+        }
+      ]
+    }
+  ],
+
+  "equipment": [
+    {
+      "id": "XV101", "name": "Inlet valve XV101", "kind": "valve",
+      "location": "FB_Valve, instance \"Mixer\".XV101",
+      "request": "Seq_OpenXV101", "command": "XV101_OpenCmd",
+      "permits": [
+        { "expr": "Level < 95", "text": "Level below 95 %" }
+      ],
+      "states": [
+        { "when": "XV101_OpenCmd AND XV101_ZSO AND NOT XV101_ZSC", "text": "open", "level": "ok" },
+        { "when": "XV101_OpenCmd", "text": "opening: command on, open switch not reached yet", "level": "warn" },
+        { "when": "XV101_ZSC AND NOT XV101_ZSO", "text": "closed", "level": "idle" },
+        { "when": "TRUE", "text": "closing: closed switch not reached yet", "level": "warn" }
+      ],
+      "values": [ "XV101_ZSO", "XV101_ZSC" ]
+    },
+    {
+      "id": "M201", "name": "Agitator M201", "kind": "drive",
+      "location": "FB_VFD, instance \"Mixer\".M201",
+      "request": "Seq_RunM201", "command": "M201_RunCmd",
+      "permits": [
+        { "expr": "Level > 20", "text": "Level above 20 % (blades covered)" },
+        { "expr": "EStop_OK", "text": "Emergency stop circuit healthy" },
+        { "expr": "M201_DriveReady", "text": "Drive ready" }
+      ],
+      "states": [
+        { "when": "M201_DriveFault", "text": "drive fault", "level": "fault" },
+        { "when": "M201_RunCmd AND M201_AtSpeed", "text": "running at {M201_SpeedPV} (setpoint {M201_SpeedSP})", "level": "ok" },
+        { "when": "M201_RunCmd", "text": "speeding up: {M201_SpeedPV} of {M201_SpeedSP}", "level": "warn" },
+        { "when": "TRUE", "text": "stopped", "level": "idle" }
+      ],
+      "values": [ "M201_SpeedSP", "M201_SpeedPV", "M201_DriveReady" ]
+    },
+    {
+      "id": "E301", "name": "Heater E301", "kind": "heater",
+      "location": "FB_Heater, instance \"Mixer\".E301",
+      "request": "Seq_HeatE301", "command": "E301_OnCmd",
+      "permits": [
+        { "expr": "M201_AtSpeed", "text": "Agitator M201 at speed (prevents local overheating)" },
+        { "expr": "NOT E301_OverTemp", "text": "Overtemperature switch not tripped" }
+      ],
+      "states": [
+        { "when": "E301_OverTemp", "text": "overtemperature switch tripped", "level": "fault" },
+        { "when": "E301_OnCmd", "text": "heating ({Temp}, target {TempSP})", "level": "ok" },
+        { "when": "TRUE", "text": "off", "level": "idle" }
+      ],
+      "values": [ "Temp", "TempSP" ]
+    },
+    {
+      "id": "CV501", "name": "Conveyor CV501", "kind": "conveyor",
+      "location": "FB_Motor, instance \"Filler_Line\".CV501",
+      "request": "Seq_RunCV501", "command": "CV501_RunCmd",
+      "permits": [
+        { "expr": "EStop_OK", "text": "Emergency stop circuit healthy" },
+        { "expr": "NOT CV501_MotorTrip", "text": "Motor protection not tripped" }
+      ],
+      "states": [
+        { "when": "CV501_MotorTrip", "text": "motor protection tripped", "level": "fault" },
+        { "when": "CV501_RunCmd AND CV501_RunFb", "text": "running", "level": "ok" },
+        { "when": "CV501_RunCmd", "text": "starting: no running feedback yet", "level": "warn" },
+        { "when": "TRUE", "text": "stopped", "level": "idle" }
+      ],
+      "values": [ "CV501_RunFb", "Bottle_Present" ]
+    },
+    {
+      "id": "XV601", "name": "Filling valve XV601", "kind": "valve",
+      "location": "FB_Valve, instance \"Filler_Line\".XV601",
+      "request": "Seq_OpenXV601", "command": "XV601_OpenCmd",
+      "permits": [
+        { "expr": "Bottle_Present", "text": "A bottle is at the filling position" },
+        { "expr": "NOT Air_Low", "text": "Compressed air pressure ok" }
+      ],
+      "states": [
+        { "when": "XV601_OpenCmd AND XV601_ZSO AND NOT XV601_ZSC", "text": "open", "level": "ok" },
+        { "when": "XV601_OpenCmd", "text": "opening: command on, open switch not reached yet", "level": "warn" },
+        { "when": "XV601_ZSC AND NOT XV601_ZSO", "text": "closed", "level": "idle" },
+        { "when": "TRUE", "text": "closing: closed switch not reached yet", "level": "warn" }
+      ],
+      "values": [ "XV601_ZSO", "XV601_ZSC", "Fill_Done" ]
+    },
+    {
+      "id": "CP701", "name": "Capper CP701", "kind": "motor",
+      "location": "FB_Motor, instance \"Filler_Line\".CP701",
+      "request": "Seq_RunCP701", "command": "CP701_RunCmd",
+      "permits": [
+        { "expr": "EStop_OK", "text": "Emergency stop circuit healthy" }
+      ],
+      "states": [
+        { "when": "CP701_RunCmd AND CP701_RunFb", "text": "running", "level": "ok" },
+        { "when": "CP701_RunCmd", "text": "starting: no running feedback yet", "level": "warn" },
+        { "when": "TRUE", "text": "stopped", "level": "idle" }
+      ],
+      "values": [ "CP701_RunFb", "Caps_Low" ]
+    }
+  ],
+
+  "alarms": [
+    { "id": "M01", "tag": "M01", "severity": "FAULT", "text": "Inlet valve XV101 did not open within 10 s",
+      "location": "FB_Valve, instance \"Mixer\".XV101 (output FaultNotOpen)",
+      "condition": "Open command on, but the open limit switch ZSO was not reached in 10 s.",
+      "causes": [ "No compressed air", "Solenoid coil burnt or not powered", "Open limit switch out of position" ],
+      "fix": [ "Check the air supply and the solenoid on XV101", "Check the open switch ZSO", "Press Reset, then Start" ] },
+    { "id": "M02", "tag": "M02", "severity": "FAULT", "text": "Agitator M201 drive fault",
+      "location": "FB_VFD, instance \"Mixer\".M201 (output FaultDrive)",
+      "condition": "The drive reports a fault.",
+      "causes": [ "Overcurrent", "Motor or cable short", "Drive overheated" ],
+      "fix": [ "Read the fault code on the drive panel", "Check the motor and cable", "Reset the drive", "Press Reset, then Start" ] },
+    { "id": "M03", "tag": "M03", "severity": "FAULT", "text": "Heater E301 overtemperature switch tripped",
+      "location": "FB_Heater, instance \"Mixer\".E301 (output FaultOverTemp)",
+      "condition": "The overtemperature safety switch tripped.",
+      "causes": [ "Temperature control failed", "Heater contactor welded" ],
+      "fix": [ "Let the tank cool down", "Check TT301 and the heater contactor", "Press Reset, then Start" ] },
+    { "id": "M04", "tag": "M04", "severity": "WARNING", "text": "Mixer waiting for the Filler Line for more than 60 s",
+      "location": "FB_MixerSequence, instance \"Mixer\" (WaitFillerTooLong)",
+      "condition": "In step 30 the Filler Line did not take the batch within 60 s.",
+      "causes": [ "Filler Line stopped or faulted", "Handover signal not arriving" ],
+      "fix": [ "Look at the Filler Line station", "Check \"DB_LineInterface\".Mixer_BatchReady" ] },
+    { "id": "F01", "tag": "F01", "severity": "FAULT", "text": "Conveyor CV501 motor protection tripped",
+      "location": "FB_Motor, instance \"Filler_Line\".CV501 (output FaultTrip)",
+      "condition": "The motor protection breaker tripped.",
+      "causes": [ "Motor overload", "Bottle jam on the conveyor", "Phase loss" ],
+      "fix": [ "Clear a bottle jam", "Reset the motor protection breaker", "Press Reset, then Start" ] },
+    { "id": "F02", "tag": "F02", "severity": "FAULT", "text": "Filling valve XV601 did not open within 10 s",
+      "location": "FB_Valve, instance \"Filler_Line\".XV601 (output FaultNotOpen)",
+      "condition": "Open command on, but the open limit switch ZSO was not reached in 10 s.",
+      "causes": [ "No compressed air", "Solenoid coil burnt or not powered", "Open limit switch out of position" ],
+      "fix": [ "Check the air supply and the solenoid on XV601", "Check the open switch ZSO", "Press Reset, then Start" ] },
+    { "id": "F03", "tag": "F03", "severity": "WARNING", "text": "Capper CP701 cap magazine nearly empty",
+      "location": "FB_Motor, instance \"Filler_Line\".CP701 (input CapsLow)",
+      "condition": "The cap magazine sensor reports nearly empty.",
+      "causes": [ "Magazine needs refilling" ],
+      "fix": [ "Refill the cap magazine" ] },
+    { "id": "F04", "tag": "F04", "severity": "WARNING", "text": "Filler Line waiting for a batch for more than 60 s",
+      "location": "FB_FillerSequence, instance \"Filler_Line\" (WaitBatchTooLong)",
+      "condition": "In step 0 the Mixer did not offer a batch within 60 s.",
+      "causes": [ "Mixer stopped or faulted", "Handover signal not arriving" ],
+      "fix": [ "Look at the Mixer station", "Check \"DB_LineInterface\".Mixer_BatchReady" ] },
+    { "id": "L01", "tag": "L01", "severity": "WARNING", "text": "Compressed air pressure low",
+      "location": "FB_Line, alarm input Air_Low (\"DB_IO\".Air_Low)",
+      "condition": "The air pressure switch reports low pressure.",
+      "causes": [ "Compressor off", "Air leak" ],
+      "fix": [ "Check the compressor", "Look for air leaks" ] },
+    { "id": "L02", "tag": "L02", "severity": "FAULT", "text": "Emergency stop pressed",
+      "location": "FB_Line, alarm input EStop (\"DB_IO\".EStop_OK is FALSE)",
+      "condition": "The emergency stop circuit is open.",
+      "causes": [ "An E-stop button is pressed", "E-stop circuit wiring or safety relay" ],
+      "fix": [ "Release the E-stop", "Press Reset, then Start" ] }
+  ],
+
+  "exchange": [
+    { "tag": "Batch_Ready", "partner": "Filler Line", "direction": "out", "text": "The Mixer has a finished batch for the Filler Line." },
+    { "tag": "Filler_Ready", "partner": "Mixer", "direction": "in", "text": "The Filler Line can take the next batch." }
+  ]
+}

@@ -324,5 +324,5 @@ const PKStations = (() => {
   /** The station cards, with a note for alarms not tied to one station (also the Plant › Stations tab). */
   const grid = (stations, machineAlarms = []) => (machineAlarms.length ? `<div class="mb-4 notice gold">${icon("warn")}<div>${PK.t("{n} alarm not tied to one station.|{n} alarms not tied to one station.", { n: machineAlarms.length })} <a href="#/alarm">${PK.t("See them")}</a></div></div>` : "") + overviewGrid(stations);
 
-  return { list, keyOf, href, grid, levelOf };
+  return { list, keyOf, href, grid, levelOf, pretty };
 })();

@@ -47,7 +47,7 @@ Full plan and architecture: [PLC Troubleshooter plan](https://claude.ai/artifact
 | `src/PlcKi.Server/` | The web app: live read-only PLC link, status page, "ask about the machine", `probe` connection test. See its README |
 | `src/PlcKi.Plant/` | Plant PC features: login and users, settings page, Windows service |
 | `installer/` | Windows installer (runs PLC-Ki as a service). See [installer/README.md](installer/README.md) |
-| `models/` | Machine models (`demo-mixing-station.json`) and test snapshots taken from watch tables |
+| `models/` | Machine models (`demo-mixing-station.json`, and `demo-two-stations.json` for testing two stations) and test snapshots taken from watch tables |
 | `tests/` | Unit tests (`dotnet test`), including a check that the app calls no PLC write or start/stop function |
 
 ## Requirements
