@@ -325,6 +325,30 @@ public class PlantTests : IDisposable
         Assert.Equal(HttpStatusCode.OK, (await ben.Send(HttpMethod.Put, "/api/me/prefs", new { format = "us" })).StatusCode);   // their own
         Assert.Equal("dot", store.Format);
     }
+
+    [Fact]
+    public async Task The_plant_language_is_set_by_an_administrator_and_a_person_may_choose_their_own()
+    {
+        await using var app = await Start();
+        var admin = new Client(app.GetTestClient());
+        await admin.Send(HttpMethod.Post, "/api/auth/setup", new { name = "anna", password = AdminPw });
+        await admin.Send(HttpMethod.Post, "/api/admin/users", new { name = "ben", password = OperatorPw, role = "operator" });
+        var ben = new Client(app.GetTestClient());
+        await ben.Send(HttpMethod.Post, "/api/auth/login", new { name = "ben", password = OperatorPw });
+        var store = app.Services.GetRequiredService<SettingsStore>();
+
+        Assert.Equal("en", store.Language);                                   // English until changed
+        Assert.False(store.FormatChosen);                                     // so German pages use the German format until one is chosen
+        Assert.Equal(HttpStatusCode.OK, (await admin.Send(HttpMethod.Put, "/api/admin/language", new { language = "de" })).StatusCode);
+        Assert.Equal("de", store.Language);                                   // no restart
+        Assert.Equal(HttpStatusCode.BadRequest, (await admin.Send(HttpMethod.Put, "/api/admin/language", new { language = "fr" })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await ben.Send(HttpMethod.Put, "/api/admin/language", new { language = "en" })).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await ben.Send(HttpMethod.Put, "/api/me/prefs", new { language = "en" })).StatusCode);   // their own
+        Assert.Equal("de", store.Language);
+        Assert.Contains("\"language\":\"de\"", await (await new Client(app.GetTestClient()).Send(HttpMethod.Get, "/api/auth/state")).Content.ReadAsStringAsync());   // the login page reads it
+        await admin.Send(HttpMethod.Put, "/api/admin/format", new { format = "iso" });
+        Assert.True(store.FormatChosen);
+    }
 }
 
 public class PlcAddressTests

@@ -141,9 +141,9 @@
     if (!m) return null;
     const sec = String(m.section || "").toLowerCase();
     const at = { raw: null, symbol: "#" + name, temp: true };
-    if (sec === "temp") return { ...at, text: "temp", label: "temp", why: "Temporary value: it exists only while the block runs, so it can't be read." };
+    if (sec === "temp") return { ...at, text: PK.t("temp"), label: PK.t("temp"), why: PK.t("Temporary value: it exists only while the block runs, so it can't be read.") };
     if (b.kind === "FC" && /^(input|output|inout|return)$/.test(sec))
-      return { ...at, text: "param", label: "parameter", why: "Parameter of this function: the caller sets it each time it runs, so it has no value of its own to read. Open the caller to see it." };
+      return { ...at, text: PK.t("param"), label: PK.t("parameter"), why: PK.t("Parameter of this function: the caller sets it each time it runs, so it has no value of its own to read. Open the caller to see it.") };
     return null;
   }
 
@@ -178,8 +178,8 @@
       } else if (/^[A-Za-z_]\w*\.[A-Za-z_]\w*$/.test(operand) && block && String(block.logic || block.source || "").includes(operand.split(".")[0] + "(")) {
         // Strg_TO_Chars.Cnt: an output pin of an instruction box in the same network, gone once the block has run
         const [box, pin] = operand.split(".");
-        return { raw: null, text: "pin", symbol: operand, label: "box output", temp: true,
-          why: `Output ${pin} of the ${box} box in this network: it exists only while the block runs, so it can't be read.` };
+        return { raw: null, text: PK.t("pin"), symbol: operand, label: PK.t("box output"), temp: true,
+          why: PK.t("Output {pin} of the {box} box in this network: it exists only while the block runs, so it can't be read.", { pin, box }) };
       }
       let t = vals.get(PK.norm(sym));
       if (!t) {
@@ -232,7 +232,7 @@
     const b = bare && ((state.program && state.program.blocks) || []).find((x) => x.name === bare[1]);
     if (b && !/DB$/.test(b.kind)) return `<a class="op" href="${hrefOf(b.name)}">${esc(op)}</a>`;
     if (b && b.instanceOf) return `<a class="op" href="${hrefOf(b.instanceOf, [op])}">${esc(op)}</a>`;
-    return `<button type="button" class="op" data-src="${esc(op)}" title="What sets ${esc(clean(op))}?">${esc(op)}</button>`;
+    return `<button type="button" class="op" data-src="${esc(op)}" title="${esc(PK.t("What sets {name}?", { name: clean(op) }))}">${esc(op)}</button>`;
   }
 
   function codeHtml(text, resolve, highlight, find, lineNo) {
@@ -313,10 +313,10 @@
       // A temp or an FC parameter can never be read: its own look, not the "?" of a value that is missing
       const local = v == null ? (n.t === "leaf" ? (live && live.temp ? live : null) : [n.a, n.b].map((x) => (/^-?\d/.test(x) ? null : resolve(x))).find((x) => x && x.temp)) : null;
       const tip = local ? `${label}: ${local.why}`
-        : v == null ? `${label}${sides ? shown : ""}: no live value (not read, or not found in the PLC)` : `${label}${shown}: ${v ? "passes" : "does not pass"}`;
+        : v == null ? `${label}${sides ? shown : ""}: ${PK.t("no live value (not read, or not found in the PLC)")}` : `${label}${shown}: ${v ? PK.t("passes") : PK.t("does not pass")}`;
       // A click asks what sets it; a comparison asks about its first signal
       const src = plainDraw ? null : n.t === "cmp" ? [n.a, n.b].find(isSignal) : n.op;
-      const attrs = src ? `data-src="${esc(src)}" aria-label="${esc(tip)}. What sets ${esc(clean(src))}?"` : "";
+      const attrs = src ? `data-src="${esc(src)}" aria-label="${esc(tip)}. ${esc(PK.t("What sets {name}?", { name: clean(src) }))}"` : "";
       const state = v === true ? "on" : v === false ? "off" : local ? "tmp" : "unk";
       return { html: `<${src ? 'button type="button"' : "div"} class="contact ${n.t === "cmp" ? "cmp" : ""} ${state} ${blocker && ctx.coilOff ? "blocker" : ""}" title="${esc(tip)}" ${attrs}>
           <span class="sym">${sym}${state === "unk" ? `<span class="q" aria-hidden="true">?</span>` : ""}</span><span class="nm">${nameHtml(label.replace(/^#/, ""))}${local ? `<small class="tmp-tag">${esc(local.label)}</small>` : ""}</span></${src ? "button" : "div"}>`, out: power && v === true };
@@ -400,7 +400,7 @@
       ? `<div class="contact ${result ? "on" : result === false ? "off" : ""}"><span class="sym">${esc(box.kind)}</span><span class="nm">${nameHtml(box.name)}${box.pt ? " · " + nameHtml(box.pt) : ""}</span></div>`
       : plainDraw ? `<div class="contact coil ${coilCls}" title="${esc(coilTip)}"><span class="sym">${opt.coil ? "(" + opt.coil + ")" : "( )"}</span><span class="nm">${nameHtml(lhs.replace(/^#/, ""))}</span></div>`
       : `<button type="button" class="contact coil ${coilCls}" data-src="${esc(lhs)}" data-coil
-          title="${esc(coilTip)}" aria-label="Output ${esc(coilTip)}. Where is it used?"><span class="sym">${opt.coil ? "(" + opt.coil + ")" : "( )"}</span><span class="nm">${nameHtml(lhs.replace(/^#/, ""))}</span></button>`;
+          title="${esc(coilTip)}" aria-label="${esc(PK.t("Output {name}. Where is it used?", { name: coilTip }))}"><span class="sym">${opt.coil ? "(" + opt.coil + ")" : "( )"}</span><span class="nm">${nameHtml(lhs.replace(/^#/, ""))}</span></button>`;
     return `<div class="rung ${opt.hl ? "hl" : ""}"><span class="rail"></span><span class="wire on"></span>${body.html}<span class="wire ${body.out ? "on" : ""}"></span>${end}<span class="wire ${body.out ? "on" : ""}"></span><span class="rail"></span></div>`;
   }
 
@@ -484,8 +484,8 @@
       return blocks.some((b) => b.name === type) ? `<span class="mono">${esc(name)}</span> <a href="${hrefOf(type)}">${esc(type)}</a>` : `<span class="mono">${esc(name)}</span>`;
     }
     const b = blocks.find((x) => x.name === bare);
-    if (b) return b.instanceOf ? `<a class="mono" href="${hrefOf(b.instanceOf, [name])}">${esc(name)}</a> <span class="faint small">values of ${esc(b.instanceOf)}</span>` : `<a class="mono" href="${hrefOf(b.name)}">${esc(name)}</a>`;
-    return `<span class="mono">${esc(name)}</span> <span class="faint small">built-in</span>`;
+    if (b) return b.instanceOf ? `<a class="mono" href="${hrefOf(b.instanceOf, [name])}">${esc(name)}</a> <span class="faint small">${esc(PK.t("values of {block}", { block: b.instanceOf }))}</span>` : `<a class="mono" href="${hrefOf(b.name)}">${esc(name)}</a>`;
+    return `<span class="mono">${esc(name)}</span> <span class="faint small">${PK.t("built-in")}</span>`;
   }
   /**
    * One call statement -> a card with one row per parameter: → inputs (P := expr), ← outputs (Q => target).
@@ -516,9 +516,9 @@
     // In or out is only known when the code says so ("Q => x"); a decoded call writes both as ":=", and a wrong arrow
     // is worse than none
     const dirs = rows.some((r) => r.out);
-    const dir = (r) => dirs ? `<td class="dir" title="${r.out ? "Output: the block writes it" : "Input: the block reads it"}">${r.out ? "←" : "→"}</td>` : "";
-    return `<div class="call"><div class="call-h"><span class="tag">Call</span>${calleeHtml(m[1], block)}${comment ? `<span class="faint small">${esc(comment)}</span>` : ""}</div>
-      <table class="tbl call-tbl"><tr>${dirs ? `<th aria-label="In or out"></th>` : ""}<th>Parameter</th><th>Wired to</th><th>Now</th></tr>
+    const dir = (r) => dirs ? `<td class="dir" title="${r.out ? PK.t("Output: the block writes it") : PK.t("Input: the block reads it")}">${r.out ? "←" : "→"}</td>` : "";
+    return `<div class="call"><div class="call-h"><span class="tag">${PK.t("Call")}</span>${calleeHtml(m[1], block)}${comment ? `<span class="faint small">${esc(comment)}</span>` : ""}</div>
+      <table class="tbl call-tbl"><tr>${dirs ? `<th aria-label="${PK.t("In or out")}"></th>` : ""}<th>${PK.t("Parameter")}</th><th>${PK.t("Wired to")}</th><th>${PK.t("Now")}</th></tr>
       ${rows.map((r) => `<tr>${dir(r)}<td class="mono">${esc(r.name)}</td><td class="mono wired">${wired(r.expr)}</td><td>${value(r.expr)}</td></tr>`).join("")}
       </table></div>`;
   }
@@ -531,7 +531,7 @@
       const st = /^\s*Step\s+(\d+)\b/.exec(l);
       if (st) inCur = curStep != null && Number(st[1]) === curStep;
       else if (/^\s{0,2}\S/.test(l)) inCur = false;
-      return `<span class="gl ${inCur ? "cur" : ""}">${st && inCur ? `<span class="now-tag">now</span>` : ""}${sclLine(l, resolve)}</span>`;
+      return `<span class="gl ${inCur ? "cur" : ""}">${st && inCur ? `<span class="now-tag">${PK.t("now")}</span>` : ""}${sclLine(l, resolve)}</span>`;
     };
     const flush = () => { if (plain.length) { parts.push(net.lang === "GRAPH" ? `<div class="stmt graph">${plain.map(graphLine).join("")}</div>` : `<div class="stmt">${plain.map((l) => sclLine(l, resolve)).join("<br>")}</div>`); plain = []; } };
     for (let k = 0; k < net.lines.length; k++) {
@@ -563,7 +563,7 @@
     // For the "Holding back now" filter: a network where a contact holds back an output that is asked for
     const holding = parts.some((p) => /class="contact[^"]*\bblocker\b/.test(p));
     return `<div class="rung-card ${hl ? "hl" : ""}" ${hl ? 'id="hl"' : ""} data-net="${esc(net.no)}" ${holding ? 'data-holding="1"' : ""}>
-      <div class="rung-title">${net.no ? "Network " + esc(net.no) : ""} ${net.lang ? `<span class="tag lang-${esc(net.lang)}">${esc(net.lang)}</span>` : ""}<span class="faint">${esc(net.title)}</span></div>
+      <div class="rung-title">${net.no ? PK.t("Network {no}", { no: esc(net.no) }) : ""} ${net.lang ? `<span class="tag lang-${esc(net.lang)}">${esc(net.lang)}</span>` : ""}<span class="faint">${esc(net.title)}</span></div>
       ${parts.join("")}</div>`;
   }
 
@@ -578,13 +578,13 @@
     const n = f.n;
     if (n.t === "cmp") {
       const a = /^-?\d/.test(n.a) ? null : resolve(n.a);
-      return `<b>${esc(clean(n.a))} ${esc(n.op)} ${esc(clean(n.b))}</b> is not true${a ? ` (${esc(clean(n.a))} is ${esc(a.text)})` : ""}`;
+      return PK.t("{condition} is not true", { condition: `<b>${esc(clean(n.a))} ${esc(n.op)} ${esc(clean(n.b))}</b>` }) + (a ? ` (${PK.t("{name} is {value}", { name: esc(clean(n.a)), value: esc(a.text) })})` : "");
     }
     const v = f.live;
     const txt = v && typeof v.raw !== "boolean" ? ` (${esc(v.text)})` : "";
     // An input of the block: say which signal is wired to it, so the operator knows what to check
-    const wired = n.op.startsWith("#") && v && v.symbol && instPath && !v.symbol.startsWith(instPath) ? `, wired to <span class="mono">${esc(v.symbol)}</span>` : "";
-    return `${named(n.op, resolve, v)} is ${n.neg ? "on" : "off"}${txt}${wired}`;
+    const wired = n.op.startsWith("#") && v && v.symbol && instPath && !v.symbol.startsWith(instPath) ? `, ${PK.t("wired to {symbol}", { symbol: `<span class="mono">${esc(v.symbol)}</span>` })}` : "";
+    return `${n.neg ? PK.t("{name} is on", { name: named(n.op, resolve, v) }) : PK.t("{name} is off", { name: named(n.op, resolve, v) })}${txt}${wired}`;
   }
 
   /** A signal by its plain name from the machine notes when there is one ("Heater E301 on"), with the program name after it. */
@@ -607,27 +607,27 @@
       const val = g.find((s) => s.value != null);
       const on = g.filter((s) => s.on === true);
       const rest = g.length - on.length;
-      const head = val ? `<b>${esc(clean(sig))} is ${esc(val.value)}</b>: ` : `<b>${esc(clean(sig))}</b> has no live value yet (${g.length} states). `;
+      const head = val ? `<b>${PK.t("{name} is {value}", { name: esc(clean(sig)), value: esc(val.value) })}</b>: ` : PK.t("{name} has no live value yet ({count} states).", { name: `<b>${esc(clean(sig))}</b>`, count: g.length }) + " ";
       const body = !val ? "" : on.length
-        ? `${on.map((s) => `<button type="button" class="linkbtn" data-goto-net="${esc(s.net)}">${esc(clean(s.coil))}</button>`).join(", ")} ${on.length > 1 ? "are" : "is"} on; the other ${rest} state${rest === 1 ? " is" : "s are"} off.`
-        : `none of these ${g.length} states is on.`;
+        ? `${on.map((s) => `<button type="button" class="linkbtn" data-goto-net="${esc(s.net)}">${esc(clean(s.coil))}</button>`).join(", ")} ${PK.t("is on|are on", { n: on.length })}; ${PK.t("the other {n} state is off|the other {n} states are off", { n: rest })}.`
+        : PK.t("none of these {count} states is on.", { count: g.length });
       return `<li>${head}${body}</li>`;
     });
-    return lines.length ? `<div class="state-sum"><div class="why-h">${icon("list")}<b>State${lines.length > 1 ? "s" : ""} right now</b></div><ul>${lines.join("")}</ul></div>` : "";
+    return lines.length ? `<div class="state-sum"><div class="why-h">${icon("list")}<b>${lines.length > 1 ? PK.t("States right now") : PK.t("State right now")}</b></div><ul>${lines.join("")}</ul></div>` : "";
   }
 
   function whyHtml(why, resolve, instPath) {
     if (!why.length) return "";
     const MAX = 6;
-    return `<div class="why-off"><div class="why-h">${icon("info")}<b>Why ${why.length === 1 ? "an output is" : why.length + " outputs are"} off right now</b></div>
+    return `<div class="why-off"><div class="why-h">${icon("info")}<b>${PK.t("Why an output is off right now|Why {n} outputs are off right now", { n: why.length })}</b></div>
       <ul>${why.slice(0, MAX).map((w) => {
         // The next question, as in the design: "Why is that off?" goes to what sets the contact that stops the output
         const n = w.first.n, src = n.t === "cmp" ? [n.a, n.b].find(isSignal) : n.op;
-        const next = src ? `<button type="button" class="linkbtn" data-src="${esc(src)}">${n.t === "cmp" ? "What sets " + esc(clean(src)) + "?" : `Why is it ${n.neg ? "on" : "off"}?`}</button> · ` : "";
-        return `<li>${named(w.coil, resolve)} is off because ${because(w.first, resolve, instPath)}.
-        ${next}${w.net ? `<button type="button" class="linkbtn" data-goto-net="${esc(w.net)}">Network ${esc(w.net)} ›</button>` : ""}</li>`;
+        const next = src ? `<button type="button" class="linkbtn" data-src="${esc(src)}">${n.t === "cmp" ? PK.t("What sets {name}?", { name: esc(clean(src)) }) : n.neg ? PK.t("Why is it on?") : PK.t("Why is it off?")}</button> · ` : "";
+        return `<li>${PK.t("{what} is off because {reason}.", { what: named(w.coil, resolve), reason: because(w.first, resolve, instPath) })}
+        ${next}${w.net ? `<button type="button" class="linkbtn" data-goto-net="${esc(w.net)}">${PK.t("Network {no}", { no: esc(w.net) })} ›</button>` : ""}</li>`;
       }).join("")}</ul>
-      ${why.length > MAX ? `<p class="mt-2 mb-0 faint small">And ${why.length - MAX} more: look for the amber contacts in the rungs.</p>` : ""}</div>`;
+      ${why.length > MAX ? `<p class="mt-2 mb-0 faint small">${PK.t("And {count} more: look for the amber contacts in the rungs.", { count: why.length - MAX })}</p>` : ""}</div>`;
   }
 
   // ---- what the machine model says about each block: its sequence, devices and alarms ----
@@ -728,8 +728,8 @@
     for (const ob of [...byName.values()].filter((b) => b.kind === "OB")) { seen.clear(); const r = dfs(ob, [ob.name]); if (r) return r; }
     return null;
   }
-  const DOT_TEXT = { alarm: "An alarm set here is on", blocked: "A device here is held back", run: "A sequence here is running" };
-  const dot = (s) => s ? `<span class="pdot ${s}" title="${DOT_TEXT[s]}" aria-label="${DOT_TEXT[s]}"></span>` : "";
+  const DOT_TEXT = { alarm: PK.T("An alarm set here is on"), blocked: PK.T("A device here is held back"), run: PK.T("A sequence here is running") };
+  const dot = (s) => s ? `<span class="pdot ${s}" title="${PK.t(DOT_TEXT[s])}" aria-label="${PK.t(DOT_TEXT[s])}"></span>` : "";
   const plainTitle = (b) => (b.title || "").trim();
 
   // ---- "What it does": plain words first ----
@@ -737,46 +737,50 @@
     // CPU not in RUN: the step is where the program was when it stopped, not what it does now
     const stop = PK.cpuStop();
     const time = q.timeInStep && !stop ? ` · ${esc(q.timeInStep)}` : "";
-    const step = q.step != null ? `<span class="pill ${stop ? "" : "info"}">${stop ? "Last step" : "Step"} ${esc(String(q.step))}${q.stepName ? " · " + esc(q.stepName) : ""}${time}</span>` : `<span class="pill">Not in a step</span>`;
+    const step = q.step != null ? `<span class="pill ${stop ? "" : "info"}">${stop ? PK.t("Last step {no}", { no: esc(String(q.step)) }) : PK.t("Step {no}", { no: esc(String(q.step)) })}${q.stepName ? " · " + esc(q.stepName) : ""}${time}</span>` : `<span class="pill">${PK.t("Not in a step")}</span>`;
     const next = (q.next || []);
-    const wait = next.length ? next.map((n, k) => `<p class="pg-wait">${k ? "Or, to" : "To"} go on to step ${esc(String(n.to))}${n.toName ? ` “${esc(n.toName)}”` : ""} it waits for:</p>
-        <ul class="conds">${n.conditions.map(PK.cond).join("")}</ul>`).join("") : "";
-    const halted = stop ? `<div class="mt-3 notice red">${icon("warn")}<div>${esc(q.explanation)}</div></div>`
-      : q.halted ? `<div class="mt-3 notice red">${icon("warn")}<div><b>The sequence is halted.</b>${q.haltReasons && q.haltReasons.length ? " " + q.haltReasons.map(esc).join(" ") : ""}</div></div>` : "";
+    const wait = next.length ? next.map((n, k) => {
+      const to = esc(String(n.to)) + (n.toName ? " " + PK.t("“{name}”", { name: esc(n.toName) }) : "");
+      return `<p class="pg-wait">${k ? PK.t("Or, to go on to step {to} it waits for:", { to }) : PK.t("To go on to step {to} it waits for:", { to })}</p>
+        <ul class="conds">${n.conditions.map(PK.cond).join("")}</ul>`;
+    }).join("") : "";
+    const halted = stop ? `<div class="mt-3 notice red">${icon("warn")}<div>${esc(PK.srv(q.explanation))}</div></div>`
+      : q.halted ? `<div class="mt-3 notice red">${icon("warn")}<div><b>${PK.t("The sequence is halted.")}</b>${q.haltReasons && q.haltReasons.length ? " " + q.haltReasons.map(esc).join(" ") : ""}</div></div>` : "";
     return `<div class="pg-seq">
-      <div class="row" style="gap:8px 10px;flex-wrap:wrap"><b>${esc(q.name)}</b>${step}${stop ? `<span class="pill bad">Not running</span>` : q.halted ? `<span class="pill bad">Halted</span>` : ""}</div>
+      <div class="row" style="gap:8px 10px;flex-wrap:wrap"><b>${esc(q.name)}</b>${step}${stop ? `<span class="pill bad">${PK.t("Not running")}</span>` : q.halted ? `<span class="pill bad">${PK.t("Halted")}</span>` : ""}</div>
       ${q.does && !stop ? `<p class="pg-does">${esc(q.does)}</p>` : ""}${halted}${compact ? "" : wait}
-      ${compact ? "" : `<a class="small" href="#/sequence/${encodeURIComponent(q.id)}">Step chart and timeline ›</a>`}</div>`;
+      ${compact ? "" : `<a class="small" href="#/sequence/${encodeURIComponent(q.id)}">${PK.t("Step chart and timeline ›")}</a>`}</div>`;
   }
+  const capFirst = (x) => { x = PK.srv(x); return x.charAt(0).toUpperCase() + x.slice(1); };
   function eqRow(e) {
     return `<li><span class="ico">${icon(PK.kindIcon(e.kind))}</span><div class="grow min0">
         <a href="#/plant/devices/${encodeURIComponent(e.id)}"><b>${esc(e.name)}</b></a> <span class="faint small mono">${esc(e.id)}</span>
-        ${e.blockedBy ? `<div class="pg-blocked">${esc(e.blockedBy.charAt(0).toUpperCase() + e.blockedBy.slice(1))}</div>` : ""}</div>
-      <span class="lv lv-${esc(e.level)}">${esc(e.state)}</span></li>`;
+        ${e.blockedBy ? `<div class="pg-blocked">${esc(capFirst(e.blockedBy))}</div>` : ""}</div>
+      <span class="lv lv-${esc(e.level)}">${esc(PK.srv(e.state))}</span></li>`;
   }
   const alarmRow = (a, on) => `<li><span class="pg-sev ${on ? "on" : ""}">${esc(a.id)}</span><div class="grow min0">
       <a href="#/alarms/${encodeURIComponent(a.id)}">${esc(a.text)}</a>${on && a.condition ? `<div class="faint small">${esc(a.condition)}</div>` : ""}</div>
-      ${on ? `<span class="pill bad">On now</span>` : ""}</li>`;
+      ${on ? `<span class="pill bad">${PK.t("On now")}</span>` : ""}</li>`;
 
   function whatItDoes(b, n, why, resolve, inst, byName) {
     const parts = [];
-    for (const q of n.seqs) parts.push(`<div class="pg-sec"><h3>Sequence in this block</h3>${seqHtml(q)}</div>`);
-    if (n.eqs.length) parts.push(`<div class="pg-sec"><h3>Devices it controls</h3><ul class="pg-rows">${n.eqs.map(eqRow).join("")}</ul></div>`);
+    for (const q of n.seqs) parts.push(`<div class="pg-sec"><h3>${PK.t("Sequence in this block")}</h3>${seqHtml(q)}</div>`);
+    if (n.eqs.length) parts.push(`<div class="pg-sec"><h3>${PK.t("Devices it controls")}</h3><ul class="pg-rows">${n.eqs.map(eqRow).join("")}</ul></div>`);
     const states = statesHtml(why.states || []);
     if (states) parts.push(`<div class="pg-sec">${states}</div>`);
     if (why.length) parts.push(`<div class="pg-sec">${whyHtml(why, resolve, inst && inst.path)}</div>`);
     if (n.alarms.length || n.active.length) {
       const on = new Set(n.active.map((a) => a.id));
       const off = n.alarms.filter((a) => !on.has(a.id));
-      parts.push(`<div class="pg-sec"><h3>Alarms it sets</h3>
-        ${n.active.length ? `<ul class="pg-rows">${n.active.map((a) => alarmRow(a, true)).join("")}</ul>` : `<p class="mt-0 mb-2 muted small">None of them is on now.</p>`}
-        ${off.length ? `<details class="more pg-more"><summary>${n.active.length ? "The other " : off.length > 1 ? "All " : "The "}${off.length} alarm${off.length > 1 ? "s" : ""} it can set</summary><ul class="pg-rows">${off.map((a) => alarmRow(a, false)).join("")}</ul></details>` : ""}</div>`);
+      parts.push(`<div class="pg-sec"><h3>${PK.t("Alarms it sets")}</h3>
+        ${n.active.length ? `<ul class="pg-rows">${n.active.map((a) => alarmRow(a, true)).join("")}</ul>` : `<p class="mt-0 mb-2 muted small">${PK.t("None of them is on now.")}</p>`}
+        ${off.length ? `<details class="more pg-more"><summary>${n.active.length ? PK.t("The other {n} alarm it can set|The other {n} alarms it can set", { n: off.length }) : off.length > 1 ? PK.t("All {n} alarms it can set", { n: off.length }) : PK.t("The {n} alarm it can set", { n: off.length })}</summary><ul class="pg-rows">${off.map((a) => alarmRow(a, false)).join("")}</ul></details>` : ""}</div>`);
     }
     if (!parts.length) {
       const path = callPath(byName, b.name);
       const parent = path && path.length > 1 ? path[path.length - 2] : null;
-      parts.push(`<div class="pg-sec"><p class="m-0 muted">PLC-Ki's notes on the machine don't mention this block: it runs no sequence, controls no known device and sets no known alarm${parent ? `. It is part of <a href="${hrefOf(parent)}">${esc(parent)}</a>` : ""}. The code below shows what it does.</p>
-        <button type="button" class="mt-3 btn b small" data-ask="Explain in plain words what PLC block ${esc(b.name)} does, and what it is doing right now.">Explain this block in plain words</button></div>`);
+      parts.push(`<div class="pg-sec"><p class="m-0 muted">${PK.t("PLC-Ki's notes on the machine don't mention this block: it runs no sequence, controls no known device and sets no known alarm")}${parent ? `. ${PK.t("It is part of {block}", { block: `<a href="${hrefOf(parent)}">${esc(parent)}</a>` })}` : ""}. ${PK.t("The code below shows what it does.")}</p>
+        <button type="button" class="mt-3 btn b small" data-ask="${esc(PK.t("Explain in plain words what PLC block {name} does, and what it is doing right now.", { name: b.name }))}">${PK.t("Explain this block in plain words")}</button></div>`);
     }
     return parts.join("");
   }
@@ -787,9 +791,9 @@
   /** "network 4" (rungs) or "line 57" (SCL text): where a block writes a signal, or null. */
   function whereWritten(b, sym) {
     if (!b || !sym) return null;
-    if (b.logic) { const n = networks(b.logic).find((x) => x.lines.some((l) => writes(l, sym))); return n && n.no ? "network " + n.no : null; }
+    if (b.logic) { const n = networks(b.logic).find((x) => x.lines.some((l) => writes(l, sym))); return n && n.no ? PK.t("network {no}", { no: n.no }) : null; }
     const i = String(b.source || "").split(/\r?\n/).findIndex((l) => writes(l, sym));
-    return i >= 0 ? "line " + (i + 1) : null;
+    return i >= 0 ? PK.t("line {no}", { no: i + 1 }) : null;
   }
 
   /**
@@ -826,18 +830,19 @@
     const c = t.cause || {};
     const parts = [];
     const same = c.block && t.latch.length === 1 && t.latch[0].block === c.block;
-    if (same) parts.push("Set in " + place(c.block, t.latch[0].at || c.at, c.href));
+    if (same) parts.push(PK.t("Set in {place}", { place: place(c.block, t.latch[0].at || c.at, c.href) }));
     else {
-      if (t.latch.length) parts.push("Latched in " + t.latch.map((l) => place(l.block, l.at, latchHref(l.block))).join(" and "));
-      if (c.block && c.symbol) parts.push((t.latch.length ? "caused in " : "Caused in ") + place(c.block, c.at, c.href) + ` (output ${esc(c.symbol)})`);
+      if (t.latch.length) parts.push(PK.t("Latched in {places}", { places: t.latch.map((l) => place(l.block, l.at, latchHref(l.block))).join(` ${PK.t("and")} `) }));
+      if (c.block && c.symbol) { const v = { place: place(c.block, c.at, c.href), symbol: esc(c.symbol) }; parts.push(t.latch.length ? PK.t("caused in {place} (output {symbol})", v) : PK.t("Caused in {place} (output {symbol})", v)); }
       else if (c.block) {
         // No output in the notes: say what they say ("FB_Station, alarm input EStop (...)")
         const rest = t.location.split(/;|\blatched in\b/i)[0].replace(new RegExp("^\\s*(?:(?:FB|FC|OB)\\s+)?\"?" + reEsc(c.block) + "\"?\\s*,?\\s*"), "").trim();
-        parts.push((t.latch.length ? "comes from " : "Comes from ") + place(c.block, null, c.href) + (rest ? ": " + esc(rest) : ""));
+        const v = { place: place(c.block, null, c.href) };
+        parts.push((t.latch.length ? PK.t("comes from {place}", v) : PK.t("Comes from {place}", v)) + (rest ? ": " + esc(rest) : ""));
       }
     }
     if (!parts.length) return "";
-    const missing = t.symbol && !t.latch.length ? ` <span class="faint">PLC-Ki did not find the block that writes <span class="mono">${esc(t.symbol)}</span>.</span>` : "";
+    const missing = t.symbol && !t.latch.length ? ` <span class="faint">${PK.t("PLC-Ki did not find the block that writes {symbol}.", { symbol: `<span class="mono">${esc(t.symbol)}</span>` })}</span>` : "";
     return `<div class="mb-3 notice alarm-trail">${icon("info")}<div><a href="#/alarms/${encodeURIComponent(t.id)}"><b>${esc(t.id)}</b></a> · ${parts.join(" · ")}.${missing}</div></div>`;
   }
 
@@ -911,15 +916,15 @@
       if (q) {
         const ok = (b) => (b.name + " " + (b.title || "") + " " + (b.comment || "") + " " + (b.number ?? "")).toLowerCase().includes(q);
         const hits = p.blocks.filter(ok);
-        html = hits.length ? hits.map((b) => item(b)).join("") : `<p class="faint small" style="padding:8px 10px">No block matches “${esc(blockQuery)}”.</p>`;
+        html = hits.length ? hits.map((b) => item(b)).join("") : `<p class="faint small" style="padding:8px 10px">${PK.t("No block matches “{query}”.", { query: esc(blockQuery) })}</p>`;
       } else {
         const curDb = cur && tree.dbs.some((b) => b.name === cur), curLoose = cur && tree.loose.some((b) => b.name === cur);
-        html = `<a href="#/program" class="pl-home ${sel && sel.overview ? "on" : ""}">${icon("info")}<span>Overview: what runs now</span></a>`
-          + `<div class="grp">In the order the PLC runs them</div>` + tree.rows.map((r) => item(r.b, r.depth)).join("")
-          + (tree.loose.length ? `<details class="pl-fold" ${curLoose ? "open" : ""}><summary>Not called from an OB (${tree.loose.length})</summary>${tree.loose.map((b) => item(b)).join("")}</details>` : "")
-          + (tree.dbs.length ? `<details class="pl-fold" ${curDb ? "open" : ""}><summary>Data blocks (${tree.dbs.length})</summary>${tree.dbs.map((b) => item(b)).join("")}</details>` : "");
+        html = `<a href="#/program" class="pl-home ${sel && sel.overview ? "on" : ""}">${icon("info")}<span>${PK.t("Overview: what runs now")}</span></a>`
+          + `<div class="grp">${PK.t("In the order the PLC runs them")}</div>` + tree.rows.map((r) => item(r.b, r.depth)).join("")
+          + (tree.loose.length ? `<details class="pl-fold" ${curLoose ? "open" : ""}><summary>${PK.t("Not called from an OB ({n})", { n: tree.loose.length })}</summary>${tree.loose.map((b) => item(b)).join("")}</details>` : "")
+          + (tree.dbs.length ? `<details class="pl-fold" ${curDb ? "open" : ""}><summary>${PK.t("Data blocks ({n})", { n: tree.dbs.length })}</summary>${tree.dbs.map((b) => item(b)).join("")}</details>` : "");
       }
-      return `<input type="search" id="blk-q" class="blk-q" placeholder="Find a block" aria-label="Find a block" value="${esc(blockQuery)}">` + html;
+      return `<input type="search" id="blk-q" class="blk-q" placeholder="${PK.t("Find a block")}" aria-label="${PK.t("Find a block")}" value="${esc(blockQuery)}">` + html;
     }
 
     /** The overview: what runs now and where it lives, then what each part of the program is for. */
@@ -928,18 +933,18 @@
       const seqs = st.sequences || [], alarms = st.activeAlarms || [], blocked = (st.equipment || []).filter((e) => e.blockedBy);
       const where = (loc) => { const b = PK.blockOf(loc); return b && tree.byName.has(b) ? `<a class="pg-where" href="${hrefOf(b)}">${esc(b)} ›</a>` : ""; };
       const now = [];
-      if (alarms.length) now.push(`<div class="pg-sec"><h3>Alarms on now</h3><ul class="pg-rows">${alarms.map((a) => `<li><span class="pg-sev on">${esc(a.id)}</span>
+      if (alarms.length) now.push(`<div class="pg-sec"><h3>${PK.t("Alarms on now")}</h3><ul class="pg-rows">${alarms.map((a) => `<li><span class="pg-sev on">${esc(a.id)}</span>
           <div class="grow min0"><a href="#/alarms/${encodeURIComponent(a.id)}">${esc(a.text)}</a></div>${where(a.location)}</li>`).join("")}</ul></div>`);
-      if (blocked.length) now.push(`<div class="pg-sec"><h3>Held back</h3><ul class="pg-rows">${blocked.map((e) => `<li><span class="ico">${icon(PK.kindIcon(e.kind))}</span>
-          <div class="grow min0"><b>${esc(e.name)}</b><div class="pg-blocked">${esc(e.blockedBy.charAt(0).toUpperCase() + e.blockedBy.slice(1))}</div></div>${where(e.location)}</li>`).join("")}</ul></div>`);
-      if (seqs.length) now.push(`<div class="pg-sec"><h3>Sequences</h3>${seqs.map((q) => `<div class="pg-seqrow">${seqHtml(q, false).replace('<div class="pg-seq">', `<div class="pg-seq">${where(q.block)}`)}</div>`).join("")}</div>`);
+      if (blocked.length) now.push(`<div class="pg-sec"><h3>${PK.t("Held back")}</h3><ul class="pg-rows">${blocked.map((e) => `<li><span class="ico">${icon(PK.kindIcon(e.kind))}</span>
+          <div class="grow min0"><b>${esc(e.name)}</b><div class="pg-blocked">${esc(capFirst(e.blockedBy))}</div></div>${where(e.location)}</li>`).join("")}</ul></div>`);
+      if (seqs.length) now.push(`<div class="pg-sec"><h3>${PK.t("Sequences")}</h3>${seqs.map((q) => `<div class="pg-seqrow">${seqHtml(q, false).replace('<div class="pg-seq">', `<div class="pg-seq">${where(q.block)}`)}</div>`).join("")}</div>`);
       const connected = st.connection && st.connection.state === "connected";
       const stop = PK.cpuStop(st);
-      const right = `<div class="card pg-card"><div class="row" style="align-items:baseline"><h2 class="pg-h">Right now</h2><span class="spacer"></span>
-          ${connected ? `<span class="pill ok"><span class="dot"></span>Live</span>` : st.connection ? `<span class="pill">${esc(st.connection.state === "snapshot" ? "Test values" : "Not live")}</span>` : ""}</div>
-        ${stop ? `<div class="mt-3 mb-1 notice red">${icon("warn")}<div><b>The PLC is in ${esc(stop.word || "STOP")} ${esc(PK.cpuSince(stop))}: the program is not running.</b> What you see is its last state. <a href="#/plc">PLC page</a></div></div>`
-          : !alarms.length && !blocked.length ? `<div class="mt-3 mb-1 notice green">${icon("check")}<div>No alarm is on and nothing the program asks for is held back.</div></div>` : ""}
-        ${now.join("") || (!seqs.length ? `<p class="muted">The machine notes have no sequences to follow.</p>` : "")}</div>`;
+      const right = `<div class="card pg-card"><div class="row" style="align-items:baseline"><h2 class="pg-h">${PK.t("Right now")}</h2><span class="spacer"></span>
+          ${connected ? `<span class="pill ok"><span class="dot"></span>${PK.t("Live")}</span>` : st.connection ? `<span class="pill">${esc(st.connection.state === "snapshot" ? PK.t("Test values") : PK.t("Not live"))}</span>` : ""}</div>
+        ${stop ? `<div class="mt-3 mb-1 notice red">${icon("warn")}<div><b>${PK.t("The PLC is in {mode} {since}: the program is not running.", { mode: esc(stop.word || "STOP"), since: esc(PK.cpuSince(stop)) })}</b> ${PK.t("What you see is its last state.")} <a href="#/plc">${PK.t("PLC page")}</a></div></div>`
+          : !alarms.length && !blocked.length ? `<div class="mt-3 mb-1 notice green">${icon("check")}<div>${PK.t("No alarm is on and nothing the program asks for is held back.")}</div></div>` : ""}
+        ${now.join("") || (!seqs.length ? `<p class="muted">${PK.t("The machine notes have no sequences to follow.")}</p>` : "")}</div>`;
 
       // What each part is for: the units Main calls (one per machine section, as a rule), with everything inside them
       // rolled up, so a library helper deep down does not get a card of its own
@@ -950,19 +955,19 @@
       const shown = allParts ? parts : parts.slice(0, MAX);
       const card = ({ b, n, size }) => {
         const chips = [];
-        for (const q of n.seqs) chips.push(`<span class="pill info">${q.step != null ? `Step ${esc(String(q.step))}${q.stepName ? " · " + esc(q.stepName) : ""}` : "Sequence"}</span>`);
-        if (n.eqs.length) chips.push(`<span class="pill ${n.eqs.some((e) => e.blockedBy) ? "warn" : ""}">${n.eqs.length === 1 ? esc(n.eqs[0].name) : n.eqs.length + " devices"}${n.eqs.some((e) => e.blockedBy) ? " · held back" : ""}</span>`);
-        if (n.alarms.length || n.active.length) chips.push(`<span class="pill ${n.active.length ? "bad" : ""}">${n.active.length ? n.active.length + " alarm" + (n.active.length > 1 ? "s" : "") + " on" : n.alarms.length + " alarm" + (n.alarms.length > 1 ? "s" : "")}</span>`);
+        for (const q of n.seqs) chips.push(`<span class="pill info">${q.step != null ? `${PK.t("Step {no}", { no: esc(String(q.step)) })}${q.stepName ? " · " + esc(q.stepName) : ""}` : PK.t("Sequence")}</span>`);
+        if (n.eqs.length) chips.push(`<span class="pill ${n.eqs.some((e) => e.blockedBy) ? "warn" : ""}">${n.eqs.length === 1 ? esc(n.eqs[0].name) : PK.t("{n} device|{n} devices", { n: n.eqs.length })}${n.eqs.some((e) => e.blockedBy) ? " · " + PK.t("held back") : ""}</span>`);
+        if (n.alarms.length || n.active.length) chips.push(`<span class="pill ${n.active.length ? "bad" : ""}">${n.active.length ? PK.t("{n} alarm on|{n} alarms on", { n: n.active.length }) : PK.t("{n} alarm|{n} alarms", { n: n.alarms.length })}</span>`);
         const lang = (b.languages && b.languages[0]) || b.language || "";
         return `<a class="pg-part" href="${hrefOf(b.name)}"><div class="pg-part-top"><span class="pl-n">${esc(b.name)}</span>${lang ? `<span class="tag lang-${esc(lang)}">${esc(lang)}</span>` : ""}${dot(roll(b.name))}</div>
           <div class="pg-part-t">${esc(plainTitle(b) || b.name)}</div>${b.comment ? `<div class="pg-part-c">${esc(b.comment)}</div>` : ""}
-          ${size ? `<div class="pg-part-c">${size} block${size > 1 ? "s" : ""} inside</div>` : ""}
+          ${size ? `<div class="pg-part-c">${PK.t("{n} block inside|{n} blocks inside", { n: size })}</div>` : ""}
           ${chips.length ? `<div class="row" style="gap:6px;flex-wrap:wrap;margin-top:auto;padding-top:8px">${chips.join("")}</div>` : ""}</a>`;
       };
-      const partsHtml = parts.length ? `<div class="card pg-card"><h2 class="pg-h">The parts of the program</h2>
-          <p class="mt-1 mb-4 muted small">What Main calls, in the order the PLC runs them, with the sequences, devices and alarms inside each. Open one to see it explained, with the code and live values.</p>
+      const partsHtml = parts.length ? `<div class="card pg-card"><h2 class="pg-h">${PK.t("The parts of the program")}</h2>
+          <p class="mt-1 mb-4 muted small">${PK.t("What Main calls, in the order the PLC runs them, with the sequences, devices and alarms inside each. Open one to see it explained, with the code and live values.")}</p>
           <div class="pg-parts">${shown.map(card).join("")}</div>
-          ${parts.length > MAX ? `<button type="button" class="mt-4 btn b small" data-all-parts>${allParts ? "Show fewer" : `Show all ${parts.length}`}</button>` : ""}</div>` : "";
+          ${parts.length > MAX ? `<button type="button" class="mt-4 btn b small" data-all-parts>${allParts ? PK.t("Show fewer") : PK.t("Show all {n}", { n: parts.length })}</button>` : ""}</div>` : "";
       return right + partsHtml;
     }
 
@@ -978,36 +983,36 @@
       },
       render(params) {
         if (!state.program) {
-          if (state.programError) return PK.hero({ title: "No program loaded yet.",
-            sub: "This page explains the PLC program in plain words, with live values, once PLC-Ki has read it from a TIA archive. " + (PK.can("settings")
-              ? "Import it under Setup, Import a program: it takes a few minutes." : "Ask an administrator to import it into PLC-Ki."),
-            extra: `<details class="pk-detail mt-3"><summary>Details</summary><code>${esc(state.programError)}</code></details>`,
-            actions: PK.can("settings") ? `<a class="btn" href="#/setup/program">Import the program</a>` : "" });
-          return PK.hero({ title: "Program" }) + PK.sec("", PK.ui.loading("cards", { rows: 4, label: "Loading the program" }));
+          if (state.programError) return PK.hero({ title: PK.t("No program loaded yet."),
+            sub: PK.t("This page explains the PLC program in plain words, with live values, once PLC-Ki has read it from a TIA archive.") + " " + (PK.can("settings")
+              ? PK.t("Import it under Setup, Import a program: it takes a few minutes.") : PK.t("Ask an administrator to import it into PLC-Ki.")),
+            extra: `<details class="pk-detail mt-3"><summary>${PK.t("Details")}</summary><code>${esc(PK.srv(state.programError))}</code></details>`,
+            actions: PK.can("settings") ? `<a class="btn" href="#/setup/program">${PK.t("Import the program")}</a>` : "" });
+          return PK.hero({ title: PK.t("Program") }) + PK.sec("", PK.ui.loading("cards", { rows: 4, label: PK.t("Loading the program") }));
         }
         if (params.join("/") !== (sel ? sel.params.join("/") : "") && loading == null) select(params);
         const p = state.program;
         const tree = callTree();
         const idx = notesIndex();
         const roll = rollup(tree.byName, idx);
-        const head = PK.hero({ cls: "hero compact", eyebrow: `${esc(p.project)} · ${esc(p.plc)}${p.cpu ? " · " + esc(p.cpu) : ""}`, title: "Program",
-          sub: "What the PLC program does and why, live. Each part is explained in plain words first; the code with live values is underneath." });
+        const head = PK.hero({ cls: "hero compact", eyebrow: `${esc(p.project)} · ${esc(p.plc)}${p.cpu ? " · " + esc(p.cpu) : ""}`, title: PK.t("Program"),
+          sub: PK.t("What the PLC program does and why, live. Each part is explained in plain words first; the code with live values is underneath.") });
         const picked = sel && !sel.overview;
-        const body = (inner) => head + PK.sec("alt", `<div class="split ${picked ? "has-sel" : ""}"><nav class="blocklist" aria-label="Program blocks">${list(tree, roll)}</nav><div class="stack">${inner}</div></div>`);
+        const body = (inner) => head + PK.sec("alt", `<div class="split ${picked ? "has-sel" : ""}"><nav class="blocklist" aria-label="${PK.t("Program blocks")}">${list(tree, roll)}</nav><div class="stack">${inner}</div></div>`);
         if (!sel || sel.overview || sel.error) watchList = [];
         if (!sel) return body(`<div class="card">${PK.ui.loading("table", { rows: 6 })}</div>`);
         if (sel.overview) return body(overview(tree, idx, roll));
         const crumbs = (name) => {
           const path = callPath(tree.byName, name) || [name];
-          return `<nav class="crumbs" aria-label="Where this block sits"><a href="#/program">Program</a>${path.map((n, k) => ` <i>›</i> ${k === path.length - 1 ? `<b>${esc(n)}</b>` : `<a href="${hrefOf(n)}">${esc(n)}</a>`}`).join("")}</nav>`;
+          return `<nav class="crumbs" aria-label="${PK.t("Where this block sits")}"><a href="#/program">${PK.t("Program")}</a>${path.map((n, k) => ` <i>›</i> ${k === path.length - 1 ? `<b>${esc(n)}</b>` : `<a href="${hrefOf(n)}">${esc(n)}</a>`}`).join("")}</nav>`;
         };
         if (sel.error) return body(crumbs(sel.name) + PK.ui.error(sel.error));
         const b = sel.block;
         const asked = new Map();
         const resolve = resolver(sel.inst, b, asked);
         const eqName = (i) => { const e = ((state.status && state.status.equipment) || []).find((x) => x.location && x.location.includes(i.path)); return e ? " · " + e.name : ""; };
-        const instPick = sel.instances.length > 1 ? `<label class="pg-inst"><span class="faint small">Which one</span><select id="inst" aria-label="Instance">${sel.instances.map((i) => `<option value="${esc(i.path)}" ${i === sel.inst ? "selected" : ""}>${esc(i.path + eqName(i))}</option>`).join("")}</select></label>`
-          : sel.inst ? `<span class="pill info" title="Instance: where its values live">${esc(sel.inst.path)}</span>` : "";
+        const instPick = sel.instances.length > 1 ? `<label class="pg-inst"><span class="faint small">${PK.t("Which one")}</span><select id="inst" aria-label="${PK.t("Instance")}">${sel.instances.map((i) => `<option value="${esc(i.path)}" ${i === sel.inst ? "selected" : ""}>${esc(i.path + eqName(i))}</option>`).join("")}</select></label>`
+          : sel.inst ? `<span class="pill info" title="${PK.t("Instance: where its values live")}">${esc(sel.inst.path)}</span>` : "";
         const lang = (b.languages && b.languages[0]) || b.language || "";
         const calledBy = (b.calledBy || []).map((n) => `<a href="${hrefOf(n)}">${esc(n)}</a>`).join(", ");
         const calls = [...new Set((b.calls || []).map((c) => c.block))].filter((n) => tree.byName.has(n)).map((n) => `<a href="${hrefOf(n)}">${esc(n)}</a>`).join(", ");
@@ -1037,29 +1042,29 @@
 
         const canRungs = nets.length > 0, canText = !!text;
         const mode = sel.mode === "rungs" && !canRungs ? (canText ? "text" : "rungs") : sel.mode === "text" && !canText ? "rungs" : sel.mode;
-        const switcher = canRungs && canText ? PK.ui.choice("Show the code as", [["rungs", "Rungs"], ["text", "Text"]].map(([k, l]) => ({ label: l, on: mode === k, data: { "data-mode": k } }))) : "";
+        const switcher = canRungs && canText ? PK.ui.choice(PK.t("Show the code as"), [["rungs", PK.T("Rungs")], ["text", PK.T("Text")]].map(([k, l]) => ({ label: PK.t(l), on: mode === k, data: { "data-mode": k } }))) : "";
 
         let bodyHtml;
         if (mode === "rungs" && canRungs) {
-          const legend = `<div class="legend rung-legend"><span><i class="lg on"></i>Passes power</span><span><i class="lg off"></i>Does not pass</span>
-            <span><i class="lg unk"></i>No live value</span><span><i class="lg tmp"></i>Temp or parameter (never readable)</span><span><i class="lg blocker"></i>Holds back an output that is asked for</span></div>`;
+          const legend = `<div class="legend rung-legend"><span><i class="lg on"></i>${PK.t("Passes power")}</span><span><i class="lg off"></i>${PK.t("Does not pass")}</span>
+            <span><i class="lg unk"></i>${PK.t("No live value")}</span><span><i class="lg tmp"></i>${PK.t("Temp or parameter (never readable)")}</span><span><i class="lg blocker"></i>${PK.t("Holds back an output that is asked for")}</span></div>`;
           // From an alarm, its own line says where it is set instead
           const where = trail || (sel.highlight && sel.highlight.startsWith('"')
-            ? (hl ? `<div class="mb-3 notice">${icon("info")}<div>The highlighted rungs write <b>${esc(sel.highlight)}</b>: (S) sets it, (R) resets it, ( ) follows the rung. The values are live; amber marks the first contact that stops a rung.</div></div>`
-              : `<div class="mb-3 notice gold">${icon("info")}<div>${esc(sel.highlight)} is not written in this block${sel.network ? `; network ${esc(sel.network)} is highlighted` : ""}.</div></div>`) : "");
+            ? (hl ? `<div class="mb-3 notice">${icon("info")}<div>${PK.t("The highlighted rungs write {symbol}: (S) sets it, (R) resets it, ( ) follows the rung. The values are live; amber marks the first contact that stops a rung.", { symbol: `<b>${esc(sel.highlight)}</b>` })}</div></div>`
+              : `<div class="mb-3 notice gold">${icon("info")}<div>${sel.network ? PK.t("{symbol} is not written in this block; network {no} is highlighted.", { symbol: esc(sel.highlight), no: esc(sel.network) }) : PK.t("{symbol} is not written in this block.", { symbol: esc(sel.highlight) })}</div></div>`) : "");
           // Long blocks: show only the networks where something holds back an output that is asked for
           const nHold = (netsHtml.match(/data-holding="1"/g) || []).length;
           const only = netFilter === "holding";
-          const filter = nets.length > 3 ? `<div class="net-filter">${PK.ui.choice("Which networks", [{ label: `All ${nets.length} networks`, on: !only, data: { "data-netf": "all" } }, { label: `Holding back now · ${nHold}`, on: only, data: { "data-netf": "holding" } }])}
-              ${only && !nHold ? `<p class="ok-line">${icon("check")}<span>Nothing in this block is holding back an output right now.</span></p>` : ""}</div>` : "";
+          const filter = nets.length > 3 ? `<div class="net-filter">${PK.ui.choice(PK.t("Which networks"), [{ label: PK.t("All {n} networks", { n: nets.length }), on: !only, data: { "data-netf": "all" } }, { label: PK.t("Holding back now · {n}", { n: nHold }), on: only, data: { "data-netf": "holding" } }])}
+              ${only && !nHold ? `<p class="ok-line">${icon("check")}<span>${PK.t("Nothing in this block is holding back an output right now.")}</span></p>` : ""}</div>` : "";
           bodyHtml = where + filter + legend + `<div class="nets ${only ? "only-holding" : ""}">${netsHtml}</div>`
-            + (b.source && !b.logic ? `<p class="mt-3 mb-0 faint small">Only the on/off statements of this SCL block are drawn as rungs. <button type="button" class="linkbtn" data-mode="text">Show all of it as text</button>.</p>` : "");
+            + (b.source && !b.logic ? `<p class="mt-3 mb-0 faint small">${PK.t("Only the on/off statements of this SCL block are drawn as rungs.")} <button type="button" class="linkbtn" data-mode="text">${PK.t("Show all of it as text")}</button>.</p>` : "");
         } else if (canText) {
           const hits = find ? String(text).split(/\r?\n/).filter((l) => l.toLowerCase().includes(find.toLowerCase())).length : 0;
-          bodyHtml = trail + `<div class="findbar"><input type="search" id="code-find" placeholder="Find in this block" aria-label="Find in this block" value="${esc(find)}">
-              <span class="faint small" aria-live="polite">${find ? (hits ? `${hits} line${hits > 1 ? "s" : ""} · Enter for the next` : "Not in this block") : ""}</span></div>` + codeHtml(text, resolve, want, find, sel.line)
-            + `<p class="mt-3 mb-0 faint small">Click a signal to see what sets it.</p>`;
-        } else bodyHtml = `<p class="muted">No code in this block (data only). Its fields are listed below.</p>`;
+          bodyHtml = trail + `<div class="findbar"><input type="search" id="code-find" placeholder="${PK.t("Find in this block")}" aria-label="${PK.t("Find in this block")}" value="${esc(find)}">
+              <span class="faint small" aria-live="polite">${find ? (hits ? PK.t("{n} line · Enter for the next|{n} lines · Enter for the next", { n: hits }) : PK.t("Not in this block")) : ""}</span></div>` + codeHtml(text, resolve, want, find, sel.line)
+            + `<p class="mt-3 mb-0 faint small">${PK.t("Click a signal to see what sets it.")}</p>`;
+        } else bodyHtml = `<p class="muted">${PK.t("No code in this block (data only). Its fields are listed below.")}</p>`;
 
         const iface = (b.interface || []).filter((m) => m.section !== "Temp" && m.section !== "Constant");
         const isDb = /DB$/.test(b.kind);
@@ -1071,24 +1076,24 @@
         const ins = ofSec(/^(Input|InOut)$/i), outs = ofSec(/^(Output|Return)$/i);
         const ioItem = (m) => { const v = resolve("#" + m.name); return `<span class="io" title="${esc(m.datatype + (m.comment ? " · " + m.comment : ""))}"><span class="mono">${nameHtml(m.name)}</span>${v && !v.temp ? chip(v) : ""}</span>`; };
         const ioRow = (label, list) => list.length ? `<div class="io-row"><span class="io-h">${label}</span><div class="io-list">${list.map(ioItem).join("")}</div></div>` : "";
-        const ioCard = !isDb && (ins.length || outs.length) ? `<div class="card pg-card pg-io"><h2 class="pg-h">Inputs and outputs</h2>${ioRow("In", ins)}${ioRow("Out", outs)}</div>` : "";
+        const ioCard = !isDb && (ins.length || outs.length) ? `<div class="card pg-card pg-io"><h2 class="pg-h">${PK.t("Inputs and outputs")}</h2>${ioRow(PK.t("In"), ins)}${ioRow(PK.t("Out"), outs)}</div>` : "";
         const page = body(crumbs(b.name) + `
             <div class="card pg-card">
               <div class="row" style="gap:10px 12px;flex-wrap:wrap;align-items:center"><h2 class="pg-title">${esc(title || b.name)}${dot(ownState(n))}</h2><span class="spacer"></span>${instPick}</div>
               <div class="pg-meta"><span class="mono">${esc(b.name)}</span><span class="tag">${esc(b.kind)}${b.number != null ? " " + b.number : ""}</span>${lang ? `<span class="tag lang-${esc(lang)}">${esc(lang)}</span>` : ""}
-                ${calledBy ? `<span>Called by ${calledBy}</span>` : ""}${calls ? `<span>Calls ${calls}</span>` : ""}
-                ${b.instanceOf ? `<span>Values of <a href="${hrefOf(b.instanceOf)}">${esc(b.instanceOf)}</a></span>` : ""}</div>
+                ${calledBy ? `<span>${PK.t("Called by {list}", { list: calledBy })}</span>` : ""}${calls ? `<span>${PK.t("Calls {list}", { list: calls })}</span>` : ""}
+                ${b.instanceOf ? `<span>${PK.t("Values of {block}", { block: `<a href="${hrefOf(b.instanceOf)}">${esc(b.instanceOf)}</a>` })}</span>` : ""}</div>
               ${b.comment ? `<p class="pg-lede">${esc(b.comment)}</p>` : ""}
               ${isDb ? "" : whatItDoes(b, n, why, resolve, sel.inst, tree.byName)}
             </div>
             ${ioCard}
             <div class="card pg-card" id="pg-code">
-              <div class="row" style="gap:8px 14px;flex-wrap:wrap;align-items:center"><h2 class="pg-h">${isDb ? "Its values" : "The code"}</h2>${switcher}<span class="faint small">${!switcher ? "" : mode === "rungs" ? "Each network as a rung: green passes power, amber holds back an output that is asked for." : "The code as written in TIA, with the live value after each signal."}</span></div>
+              <div class="row" style="gap:8px 14px;flex-wrap:wrap;align-items:center"><h2 class="pg-h">${isDb ? PK.t("Its values") : PK.t("The code")}</h2>${switcher}<span class="faint small">${!switcher ? "" : mode === "rungs" ? PK.t("Each network as a rung: green passes power, amber holds back an output that is asked for.") : PK.t("The code as written in TIA, with the live value after each signal.")}</span></div>
               <div class="mt-4">${bodyHtml}</div>
             </div>
             ${tagsHtml}
-            ${iface.length ? `<div class="card"><details class="more" style="border:0;margin:0;padding:0" ${!text ? "open" : ""}><summary>Inputs, outputs and stored values (${iface.length})</summary>
-              <table class="mt-2 tbl iface"><tr><th>Name</th><th>Section</th><th>Type</th><th>Now</th><th>Comment</th></tr>
+            ${iface.length ? `<div class="card"><details class="more" style="border:0;margin:0;padding:0" ${!text ? "open" : ""}><summary>${PK.t("Inputs, outputs and stored values ({n})", { n: iface.length })}</summary>
+              <table class="mt-2 tbl iface"><tr><th>${PK.t("Name")}</th><th>${PK.t("Section")}</th><th>${PK.t("Type")}</th><th>${PK.t("Now")}</th><th>${PK.t("Comment")}</th></tr>
               ${iface.map((m) => { const v = resolve("#" + m.name); return `<tr><td>${esc(m.name)}</td><td class="muted">${esc(m.section)}</td><td class="mono">${esc(m.datatype)}</td><td>${v ? chip(v) : ""}</td><td class="muted">${esc(m.comment || "")}</td></tr>`; }).join("")}
               </table></details></div>` : ""}`);
         // Everything drawn above asked for its value: rungs or text first, then the interface table
@@ -1148,9 +1153,9 @@
       delete el.dataset.busy;
       if (r.here) { showHere(page, r.here); return; }
       const v = resolver(sel.inst, sel.block)(op);
-      PK.sheet(`<span class="eyebrow">${coil ? "Where it is used" : "What sets it"}</span>
+      PK.sheet(`<span class="eyebrow">${coil ? PK.t("Where it is used") : PK.t("What sets it")}</span>
         <h2 class="mono" style="font-size:20px;word-break:break-all">${esc(clean(op))}${v ? " " + chip(v) : ""}</h2>
-        <div class="src-answer">${r.html}</div><div class="row end"><button class="btn" data-close>Done</button></div>`);
+        <div class="src-answer">${r.html}</div><div class="row end"><button class="btn" data-close>${PK.t("Done")}</button></div>`);
     }
 
     /** Scroll to a place in this block: its rung, or its line in the text (switching to the text when it has no rung). */
@@ -1216,7 +1221,7 @@
     const n = b.logic ? networks(b.logic).find((x) => x.lines.some(hit)) : null;
     return { net: n && n.no && n.lang !== "GRAPH" ? n.no : null, line: i + 1, hit };
   }
-  const placeText = (p) => (p.net ? "network " + p.net : "line " + p.line);
+  const placeText = (p) => (p.net ? PK.t("network {no}", { no: p.net }) : PK.t("line {no}", { no: p.line }));
   /** A link to a place in a block: rungs at the network when it has one, otherwise the text at the line. */
   function placeHref(name, instPath, p, op) {
     const extra = instPath ? [instPath] : [];
@@ -1286,8 +1291,8 @@
     const link = (w) => placeLink(w.block, w.path, w.place, w.op);
     const always = writers.filter((w) => w.conditional === false), sometimes = writers.filter((w) => w.conditional !== false);
     const parts = [];
-    if (always.length) parts.push(`${always.map(link).join(" and ")} ${always.length > 1 ? "write" : "writes"} this every time ${always.length > 1 ? "they run" : "it runs"}, so a change is overwritten at once.`);
-    if (sometimes.length) parts.push(`${sometimes.map(link).join(" and ")} ${sometimes.length > 1 ? "set" : "sets"} this when ${sometimes.length > 1 ? "their conditions are" : "its condition is"} true, so a change may not stay.`);
+    if (always.length) parts.push(PK.t("{places} writes this every time it runs, so a change is overwritten at once.|{places} write this every time they run, so a change is overwritten at once.", { n: always.length, places: always.map(link).join(` ${PK.t("and")} `) }));
+    if (sometimes.length) parts.push(PK.t("{places} sets this when its condition is true, so a change may not stay.|{places} set this when their conditions are true, so a change may not stay.", { n: sometimes.length, places: sometimes.map(link).join(` ${PK.t("and")} `) }));
     return parts.join(" ");
   }
 
@@ -1306,7 +1311,8 @@
       const target = m[1].trim();
       const others = (await writersOf(target)).writers.filter((w) => w.block !== r.block);
       if (others.length) out.push({ target, from: r.block, writers: others,
-        html: `The program copies it into <b class="mono">${esc(target)}</b> in ${esc(r.block)}, and ${others.map((w) => placeLink(w.block, w.path, w.place, w.op)).join(" and ")} also ${others.length > 1 ? "write" : "writes"} that tag, so the program may not see the held value.` });
+        html: PK.t("The program copies it into {target} in {block}, and {places} also writes that tag, so the program may not see the held value.|The program copies it into {target} in {block}, and {places} also write that tag, so the program may not see the held value.",
+          { n: others.length, target: `<b class="mono">${esc(target)}</b>`, block: esc(r.block), places: others.map((w) => placeLink(w.block, w.path, w.place, w.op)).join(` ${PK.t("and")} `) }) });
     }
     return out;
   }
@@ -1326,7 +1332,7 @@
     for (const st of (hw && hw.available && hw.stations) || []) for (const mo of st.modules || []) for (const c of mo.channels || []) {
       if (ch) break;
       const same = PK.norm(c.symbol) === PK.norm(sym) || (c.tag && PK.norm('"' + c.tag + '"') === PK.norm(sym)) || String(c.address || "").replace(/\s/g, "").toUpperCase() === addr;
-      if (same) ch = { href: `#/plc/racks/${encodeURIComponent(st.name)}${mo.slot != null ? "/" + encodeURIComponent(mo.slot) : ""}`, where: `${st.name} · ${mo.title || mo.name || "slot " + mo.slot}`,
+      if (same) ch = { href: `#/plc/racks/${encodeURIComponent(st.name)}${mo.slot != null ? "/" + encodeURIComponent(mo.slot) : ""}`, where: `${st.name} · ${mo.title || mo.name || PK.t("slot {no}", { no: mo.slot })}`,
         station: st.name, slot: mo.slot, module: mo.title || mo.name || null, channel: c.n };
     }
     return { address: addr, input: addr.startsWith("%I"), ch, comment: tag.comment || null };
@@ -1368,16 +1374,16 @@
     const { writers, readers } = await writersOf(sym);
     if (writers.length === 1 && writers[0].block === onScreen && writers[0].place) return { here: writers[0].place, readers };
     const parts = [];
-    if (writers.length) parts.push(`<p>Set in ${writers.map((w) => placeLink(w.block, w.path, w.place, w.op)).join(" and in ")}.</p>`);
+    if (writers.length) parts.push(`<p>${PK.t("Set in {places}.", { places: writers.map((w) => placeLink(w.block, w.path, w.place, w.op)).join(` ${PK.t("and in")} `) })}</p>`);
     const io = await ioOf(sym);
     if (io) {
       const hwLink = io.ch ? ` <a href="${esc(io.ch.href)}" data-close>${esc(io.ch.where)} ›</a>` : "";
-      parts.push(io.input ? `<p>An input from the field, at <span class="mono">${esc(io.address)}</span>.${hwLink || " PLC-Ki does not know its module."}</p>`
-        : `<p>An output to the field, at <span class="mono">${esc(io.address)}</span>.${hwLink}</p>`);
+      parts.push(io.input ? `<p>${PK.t("An input from the field, at {address}.", { address: `<span class="mono">${esc(io.address)}</span>` })}${hwLink || " " + PK.t("PLC-Ki does not know its module.")}</p>`
+        : `<p>${PK.t("An output to the field, at {address}.", { address: `<span class="mono">${esc(io.address)}</span>` })}${hwLink}</p>`);
     }
-    if (!parts.length) parts.push(`<p class="muted">Nothing in the program sets it. It comes from outside the program: an input, the HMI or another device.</p>`);
+    if (!parts.length) parts.push(`<p class="muted">${PK.t("Nothing in the program sets it. It comes from outside the program: an input, the HMI or another device.")}</p>`);
     const others = onScreen ? readers.filter((x) => x.block !== onScreen) : [];   // not inside an input's answer: it would only repeat the caller
-    if (others.length) parts.push(`<p class="mt-3 small muted">Also read in ${others.slice(0, 8).map((x) => `<a href="${esc(hrefOf(x.block, ["as-text"]))}" data-close>${esc(x.block)}</a>`).join(", ")}${others.length > 8 ? ` and ${others.length - 8} more` : ""}.</p>`);
+    if (others.length) parts.push(`<p class="mt-3 small muted">${PK.t("Also read in {list}.", { list: others.slice(0, 8).map((x) => `<a href="${esc(hrefOf(x.block, ["as-text"]))}" data-close>${esc(x.block)}</a>`).join(", ") + (others.length > 8 ? " " + PK.t("and {count} more", { count: others.length - 8 }) : "") })}</p>`);
     return { parts, readers };
   }
 
@@ -1397,9 +1403,9 @@
     const fb = mem && fbOf(mem.datatype);
     if (fb) {
       const path = inst ? inst.path + "." + first : null;
-      if (!rest) return { html: `<p><b>${esc(first)}</b> runs ${esc(fb)} inside this block. <a href="${esc(hrefOf(fb, path ? [path] : []))}" data-close>Open ${esc(fb)} for ${esc(first)} ›</a></p>` };
+      if (!rest) return { html: `<p>${PK.t("{name} runs {block} inside this block.", { name: `<b>${esc(first)}</b>`, block: esc(fb) })} <a href="${esc(hrefOf(fb, path ? [path] : []))}" data-close>${PK.t("Open {block} for {name} ›", { block: esc(fb), name: esc(first) })}</a></p>` };
       const p = placeIn(await loadBlock(fb), "#" + rest);
-      return { html: `<p>Set in ${placeLink(fb, path, p, "#" + rest)}${path ? `, for <span class="mono">${esc(path)}</span>` : ""}.</p>` };
+      return { html: `<p>${PK.t("Set in {places}.", { places: placeLink(fb, path, p, "#" + rest) + (path ? ", " + PK.t("for {path}", { path: `<span class="mono">${esc(path)}</span>` }) : "") })}</p>` };
     }
     const here = placeIn(b, op);
     if (here) return { here };
@@ -1407,35 +1413,35 @@
       const c = inst && inst.caller;
       if (!c) {
         const callers = (b.calledBy || []).map((n) => `<a href="${esc(hrefOf(n))}" data-close><b>${esc(n)}</b></a>`).join(", ");
-        return { html: `<p>An input: the block that calls ${esc(b.name)} gives it${callers ? `. Called by ${callers}` : ""}.</p>` };
+        return { html: `<p>${PK.t("An input: the block that calls {name} gives it", { name: esc(b.name) })}${callers ? `. ${PK.t("Called by {list}", { list: callers })}` : ""}.</p>` };
       }
       const cl = callLine(await loadBlock(c.block), c.local, first);
       const w = inst.wires[first];
       const wire = w && typeof w === "object" ? w.text : w;
-      const parts = [`<p>An input from ${placeLink(c.block, c.path, cl ? { line: cl.line } : null)}, where it calls <span class="mono">${esc(clean(c.local))}</span>${wire ? ":" : "."}</p>`];
+      const parts = [`<p>${PK.t("An input from {place}, where it calls {local}", { place: placeLink(c.block, c.path, cl ? { line: cl.line } : null), local: `<span class="mono">${esc(clean(c.local))}</span>` })}${wire ? ":" : "."}</p>`];
       if (wire) parts.push(`<pre class="code-line">${esc(first)} := ${esc(wire)}</pre>`);
       const g = typeof w === "string" ? w.replace(/^NOT\s+/, "") : null;
       if (g && g.startsWith('"')) {
         const a = await globalAnswer(g, null);
-        parts.push(`<p class="mt-3 mb-1 small muted">And <span class="mono">${esc(g)}</span>:</p>` + (a.here ? `<p>Set in ${placeLink(b.name, null, a.here, g)}.</p>` : a.parts.join("")));
+        parts.push(`<p class="mt-3 mb-1 small muted">${PK.t("And {name}:", { name: `<span class="mono">${esc(g)}</span>` })}</p>` + (a.here ? `<p>${PK.t("Set in {places}.", { places: placeLink(b.name, null, a.here, g) })}</p>` : a.parts.join("")));
       }
       return { html: parts.join("") };
     }
-    return { html: `<p class="muted">PLC-Ki did not find where the program sets it. ${mem && mem.section === "Static" ? "It keeps its value from the last cycle, or the HMI sets it." : "The HMI or another device may set it."}</p>` };
+    return { html: `<p class="muted">${PK.t("PLC-Ki did not find where the program sets it.")} ${mem && mem.section === "Static" ? PK.t("It keeps its value from the last cycle, or the HMI sets it.") : PK.t("The HMI or another device may set it.")}</p>` };
   }
 
   /** Where an output of the block on screen is used: the caller's lines that read it, or the blocks that read a global signal. */
   async function usesOf(op, ctx) {
     const { b, inst } = ctx;
     const set = placeIn(b, op);
-    const parts = [set ? `<p>Set in this block, ${esc(placeText(set))}.</p>` : ""];
+    const parts = [set ? `<p>${PK.t("Set in this block, {place}.", { place: esc(placeText(set)) })}</p>` : ""];
     if (op.startsWith("#") && inst && inst.caller) {
       const c = inst.caller, ref = c.local + "." + op.slice(1);
       const cb = await loadBlock(c.block);
       const lines = String((cb && (cb.source || cb.logic)) || "").split(/\r?\n/);
       const used = lines.map((l, i) => ({ l: l.trim(), i })).filter((x) => x.l.includes(ref) && !x.l.replace(/\/\/.*$/, "").trim().startsWith("//"));
-      parts.push(used.length ? `<p>Read in ${placeLink(c.block, c.path, { line: used[0].i + 1 })}:</p>` + used.slice(0, 6).map((x) => `<pre class="code-line">${esc(x.l)}</pre>`).join("")
-        : `<p class="muted">${esc(c.block)} does not read it. The HMI or another device may.</p>`);
+      parts.push(used.length ? `<p>${PK.t("Read in {place}:", { place: placeLink(c.block, c.path, { line: used[0].i + 1 }) })}</p>` + used.slice(0, 6).map((x) => `<pre class="code-line">${esc(x.l)}</pre>`).join("")
+        : `<p class="muted">${PK.t("{block} does not read it. The HMI or another device may.", { block: esc(c.block) })}</p>`);
     } else if (!op.startsWith("#")) {
       const { readers } = await writersOf(op);
       const links = [];
@@ -1444,9 +1450,9 @@
         const i = String((xb && (xb.source || xb.logic)) || "").split(/\r?\n/).findIndex((l) => l.includes(op));
         links.push(placeLink(x.block, null, i >= 0 ? { line: i + 1 } : null));
       }
-      parts.push(readers.length ? `<p>Read in ${links.join(", ")}${readers.length > 8 ? ` and ${readers.length - 8} more` : ""}.</p>`
-        : `<p class="muted">No other block reads it. The HMI or another device may.</p>`);
-    } else parts.push(`<p class="muted">An output of ${esc(b.name)}: the block that calls it reads it.</p>`);
+      parts.push(readers.length ? `<p>${PK.t("Read in {list}.", { list: links.join(", ") + (readers.length > 8 ? " " + PK.t("and {count} more", { count: readers.length - 8 }) : "") })}</p>`
+        : `<p class="muted">${PK.t("No other block reads it. The HMI or another device may.")}</p>`);
+    } else parts.push(`<p class="muted">${PK.t("An output of {name}: the block that calls it reads it.", { name: esc(b.name) })}</p>`);
     return parts.join("");
   }
 

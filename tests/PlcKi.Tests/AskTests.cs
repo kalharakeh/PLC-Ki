@@ -68,6 +68,21 @@ public class AskTests
     }
 
     [Fact]
+    public async Task A_German_person_gets_the_answer_in_German()
+    {
+        var (ask, api) = Make(Message("end_turn", new { type = "text", text = "Das Ventil XV101 öffnet nicht." }));
+        await ask.AskAsync(new AskRequest(null, "Why?", "de"), default);
+
+        var system = api.Requests[0].GetProperty("system");
+        Assert.Equal(2, system.GetArrayLength());                                       // the cached prompt stays as it is, the language comes after it
+        Assert.Equal("ephemeral", system[0].GetProperty("cache_control").GetProperty("type").GetString());
+        Assert.Contains("German", system[1].GetProperty("text").GetString());
+        Assert.False(system[1].TryGetProperty("cache_control", out _));
+        Assert.Null(PlcKi.Server.Ask.SystemPrompt.LanguageNote("en"));                 // English or none: the answer follows the question as before
+        Assert.Null(PlcKi.Server.Ask.SystemPrompt.LanguageNote(null));
+    }
+
+    [Fact]
     public async Task Runs_the_tool_and_returns_the_answer()
     {
         var (ask, api) = Make(

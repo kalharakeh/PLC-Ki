@@ -3,6 +3,16 @@ namespace PlcKi.Server.Ask;
 /// <summary>What Claude is told about its job. The text is the same on every request, so it is cached.</summary>
 public static class SystemPrompt
 {
+    /// <summary>
+    /// What the person's language choice adds (review 49): the answer comes in German when German is chosen. Null for
+    /// English or no choice, so the answer follows the language of the question as before.
+    /// </summary>
+    public static string? LanguageNote(string? language) => language?.Trim().ToLowerInvariant() switch
+    {
+        "de" => "The person uses PLC-Ki in German. Answer in German (Sie-form, plain plant-floor German: Störung, Warnung, Quittieren, Schicht, Anlage, Taktzeit, Schrittkette), even when the question is written in English. Keep tag names, alarm numbers, step names and block names exactly as they are in the model; do not translate them.",
+        _ => null,
+    };
+
     public static string Build(string modelIndex) => $"""
 You are PLC-Ki, the assistant at a production machine controlled by a Siemens S7-1500 or S7-1200 PLC. Operators, maintenance technicians and automation engineers ask you what the machine is doing, why it is stopped or waiting, what an alarm means, where it comes from in the PLC program, and how to fix it.
 

@@ -17,6 +17,7 @@ public sealed record NewUserRequest(string? Name, string? Password, string? Role
 public sealed record RoleRequest(string? Role);
 public sealed record TestPlcRequest(string? Address);
 public sealed record FormatRequest(string? Format);
+public sealed record LanguageRequest(string? Language);
 
 public static class PlantEndpoints
 {
@@ -48,6 +49,13 @@ public static class PlantEndpoints
             return Results.Ok(new { format = store.Format });
         });
 
+        // The language of the pages for the whole plant (review 49); each login may choose its own
+        admin.MapPut("/language", (LanguageRequest req, SettingsStore store) =>
+        {
+            store.SaveLanguage(req.Language);
+            return Results.Ok(new { language = store.Language });
+        });
+
         // Start page per role (review 53); each login may override it with its "startPage" preference
         admin.MapPut("/start-pages", (Dictionary<string, string?> pages, SettingsStore store) =>
         {
@@ -65,6 +73,7 @@ public static class PlantEndpoints
                 user = name == null ? null : new { name, role = users.Find(name)?.Role },
                 // Where this role starts when PLC-Ki opens without a page in the address ("" = Active alarm)
                 roleStart = name == null ? null : store.StartPages().GetValueOrDefault(users.Find(name)?.Role ?? ""),
+                language = store.Language,      // the plant's language, for the login page (review 49)
                 publicView = Microsoft.Extensions.Configuration.ConfigurationBinder.GetValue(config, "Plant:PublicView", false),
                 service = ctx.IsService,
             });

@@ -23,6 +23,7 @@ public sealed class PreferenceStore
         "startPage",     // "#/..." or "" for the role's start page
         "alarmSound",    // per severity and station (review 56)
         "format",        // time, date and number format (review 57)
+        "language",      // "en" | "de" (review 49); none = the plant's
     };
 
     public const int MaxValueBytes = 8 * 1024;

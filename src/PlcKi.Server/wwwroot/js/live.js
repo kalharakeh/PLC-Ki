@@ -8,23 +8,56 @@
   let selectedAlarm = null;
   let selectedEq = null;
 
+  /** FAULT / WARNING as people read them; the logic stays on the English words. */
+  const sevWord = (a) => (a.severity === "WARNING" ? PK.t("WARNING") : a.severity === "FAULT" ? PK.t("FAULT") : a.severity);
+  /** The only state word the server writes itself is "unknown"; the others are the model's own texts and stay as they are. */
+  const stT = (text) => (text === "unknown" ? PK.t("unknown") : text);
+  /** A message the server wrote, with the words it puts around the program's texts ("(now Level 15 %)", "[unknown]") in German too. */
+  const srvT = (text) => {
+    const out = PK.srv(text);
+    return out === text ? out : out.replace(/\(now /g, "(jetzt ").replace(/, now /g, ", jetzt ").replace(/ \[unknown\]/g, " [unbekannt]").replace(/ \(no live value to check\)/g, " (kein Livewert zum Prüfen)");
+  };
+  /**
+   * What the server wrote about a device or a sequence in a sentence or two ("Agitator M201: Off. Not requested in the
+   * current step."): sentence by sentence (the rules in the dictionary know the sentences the server writes; the
+   * program's own words inside them stay as they are).
+   */
+  const sentences = (text) => {
+    const t = String(text || "");
+    return PK.lang !== "de" ? t : t.replace(/\.\s+(?=[A-Z])/g, ".\n").split("\n").map(srvT).join(" ");
+  };
+  /** A device's explanation: the first sentence is "<name>: <state>." and the state is translated on its own. */
+  function eqExpl(e) {
+    const text = String(e.explanation || "");
+    const head = `${e.name}: ${e.state}.`;
+    if (PK.lang === "de" && text.startsWith(head)) return `${e.name}: ${stT(e.state)}.` + (text.length > head.length ? " " + sentences(text.slice(head.length).trim()) : "");
+    return sentences(text);
+  }
+
   /** Devices the program asks for whose output stays off, with what they need (from the server). */
   const blockedOf = (s) => (s.equipment || []).filter((e) => e.blockedBy);
+  /** "is blocked: it needs tank level above 20 %, now Level 15 %." (the server writes "needs ..."; the rest of the sentence is here) */
+  const blockedTail = (e) => {
+    const key = /^needs /.test(e.blockedBy) ? PK.T("is blocked: it {why}.") : PK.T("is blocked: {why}.");
+    return PK.t(key, { why: srvT(e.blockedBy) });
+  };
   /** "Agitator M201 is blocked: it needs tank level above 20 %, now Level 15 %." */
-  const blockedLine = (e) => `${e.name} is blocked: ${/^needs /.test(e.blockedBy) ? "it " : ""}${e.blockedBy}.`;
+  const blockedLine = (e) => `${e.name} ${blockedTail(e)}`;
+  /** "Blocked: it needs ..." for a list line. */
+  const blockedShort = (e) => PK.t(/^needs /.test(e.blockedBy) ? PK.T("Blocked: it {why}") : PK.T("Blocked: {why}"), { why: srvT(e.blockedBy) });
   function blockedNotice(list, max = 3) {
     if (!list.length) return "";
     return `<div class="notice gold blocked-list">${icon("warn")}<div>${list.slice(0, max).map((e) =>
-      `<div><b>${esc(e.name)}</b> is blocked: ${esc(/^needs /.test(e.blockedBy) ? "it " + e.blockedBy : e.blockedBy)}.</div>`).join("")}
-      ${list.length > max ? `<div class="small">And ${list.length - max} more on the Plant page.</div>` : ""}</div></div>`;
+      `<div><b>${esc(e.name)}</b> ${esc(blockedTail(e))}</div>`).join("")}
+      ${list.length > max ? `<div class="small">${PK.t("And {n} more on the Plant page.", { n: list.length - max })}</div>` : ""}</div></div>`;
   }
   const opened = Date.now();
   /** No status from PLC-Ki (yet): say so, and what to do if it stays that way. */
   function waitingPage() {
-    if (Date.now() - opened < 6000) return hero({ title: "Connecting to PLC-Ki…", sub: "One moment." });
+    if (Date.now() - opened < 6000) return hero({ title: PK.t("Connecting to PLC-Ki…"), sub: PK.t("One moment.") });
     const i = PK.connInfo();
-    return hero({ eyebrow: `<span class="pill bad"><span class="dot"></span>Not reachable</span>`, title: esc(i.title), sub: esc(i.todo),
-      actions: `<button class="btn" onclick="location.reload()">Try again</button>` });
+    return hero({ eyebrow: `<span class="pill bad"><span class="dot"></span>${PK.t("Not reachable")}</span>`, title: esc(i.title), sub: esc(i.todo),
+      actions: `<button class="btn" onclick="location.reload()">${PK.t("Try again")}</button>` });
   }
   const guide = () => (typeof PKStart !== "undefined" ? PKStart.card() : "");
 
@@ -34,12 +67,12 @@
     const admin = PK.can("settings");
     return hero({
       cls: "hero offline-page",
-      eyebrow: `<span class="pill ${i.level}"><span class="dot"></span>${i.level === "warn" ? "Waiting" : "Not connected"}</span>`,
-      title: "No live values from the PLC.",
+      eyebrow: `<span class="pill ${i.level}"><span class="dot"></span>${i.level === "warn" ? PK.t("Waiting") : PK.t("Not connected")}</span>`,
+      title: PK.t("No live values from the PLC."),
       sub: esc(i.text || i.title),
-      actions: admin ? `<a class="btn" href="#/setup/start/plc">Fix the connection</a><button class="btn b" data-conn-help>What does this mean?</button>`
-        : `<button class="btn" data-conn-help>What does this mean?</button>`,
-      extra: i.todo ? `<div class="notice gold" style="margin-top:26px;max-width:720px">${icon("info")}<div><b>What to do</b><br>${esc(i.todo)}${admin ? "" : "<br>If it stays like this, tell your administrator."}</div></div>` : "",
+      actions: admin ? `<a class="btn" href="#/setup/start/plc">${PK.t("Fix the connection")}</a><button class="btn b" data-conn-help>${PK.t("What does this mean?")}</button>`
+        : `<button class="btn" data-conn-help>${PK.t("What does this mean?")}</button>`,
+      extra: i.todo ? `<div class="notice gold" style="margin-top:26px;max-width:720px">${icon("info")}<div><b>${PK.t("What to do")}</b><br>${esc(i.todo)}${admin ? "" : "<br>" + PK.t("If it stays like this, tell your administrator.")}</div></div>` : "",
     });
   }
   const offline = () => { const c = state.status && state.status.connection; return c && (c.state === "disconnected" || c.state === "waiting"); };
@@ -125,9 +158,13 @@
     }
     return { groups, rootOf };
   }
-  const laterText = (ms) => (ms < 1000 ? "in the same second" : `${Math.round(ms / 1000)} s later`);
+  const laterText = (ms) => (ms < 1000 ? PK.t("in the same second") : PK.t("{n} s later", { n: Math.round(ms / 1000) }));
   /** "Came 1 s after A01. Probably a result of it: fix A01 first." */
-  const followText = (id, ms, text) => `Came ${ms < 1000 ? "in the same second as" : Math.round(ms / 1000) + " s after"} ${id}${text ? ` (${text})` : ""}. Probably a result of it: fix ${id} first.`;
+  const followText = (id, ms, text) => {
+    const what = `${id}${text ? ` (${text})` : ""}`;
+    return ms < 1000 ? PK.t("Came in the same second as {what}. Probably a result of it: fix {id} first.", { what, id })
+      : PK.t("Came {n} s after {what}. Probably a result of it: fix {id} first.", { n: Math.round(ms / 1000), what, id });
+  };
 
   // ---------- Share an alarm (review 48) ----------
   let share = null;               // what the Share button on the page sends: { title, text, url }
@@ -137,15 +174,15 @@
     const local = /^(localhost|127\.0\.0\.1|\[::1\])$|\.localhost$/i.test(location.hostname);
     const lines = [
       `PLC-Ki · ${s.machine}`,
-      `${a.severity === "WARNING" ? "Warning" : "Fault"} ${a.id}: ${a.text}`,
-      a.since ? (a.atStart ? `Already on when PLC-Ki started watching (${PK.when(a.since)})` : `Came at ${PK.when(a.since)}`) : null,
+      a.severity === "WARNING" ? PK.t("Warning {id}: {text}", { id: a.id, text: a.text }) : PK.t("Fault {id}: {text}", { id: a.id, text: a.text }),
+      a.since ? (a.atStart ? PK.t("Already on when PLC-Ki started watching ({when})", { when: PK.when(a.since) }) : PK.t("Came at {when}", { when: PK.when(a.since) })) : null,
       follow ? followText(follow.root.id, follow.ms, follow.root.text) : null,
-      seq ? `Step ${seq.step ?? "?"}${seq.stepName ? " " + seq.stepName : ""} (${seq.name})${seq.halted ? ", halted" : ""}` : null,
-      ...eqs.slice(0, 2).flatMap((e) => [`${e.name}: ${e.state}`, ...e.values.slice(0, 4).map((v) => `  ${v.label}: ${v.text}`)]),
-      ...failed.map((c) => `Failed check: ${c.text}${c.values && c.values.length ? ` (now ${c.values.map((v) => v.label + " " + v.text).join(", ")})` : ""}`),
-      after.length ? `After it: ${after.map((f) => `${f.alarm.id} ${f.alarm.text} (${laterText(f.ms)})`).join("; ")}` : null,
+      seq ? `${PK.t("Step {n}", { n: seq.step ?? "?" })}${seq.stepName ? " " + seq.stepName : ""} (${seq.name})${seq.halted ? PK.t(", halted") : ""}` : null,
+      ...eqs.slice(0, 2).flatMap((e) => [`${e.name}: ${stT(e.state)}`, ...e.values.slice(0, 4).map((v) => `  ${v.label}: ${v.text}`)]),
+      ...failed.map((c) => `${PK.t("Failed check: {text}", { text: c.text })}${c.values && c.values.length ? " " + PK.t("(now {values})", { values: c.values.map((v) => v.label + " " + v.text).join(", ") }) : ""}`),
+      after.length ? PK.t("After it: {list}", { list: after.map((f) => `${f.alarm.id} ${f.alarm.text} (${laterText(f.ms)})`).join("; ") }) : null,
     ].filter((l) => l != null);
-    const link = local ? `${url} (this address only works on the PC it was copied on)` : url;
+    const link = local ? `${url} ${PK.t("(this address only works on the PC it was copied on)")}` : url;
     return { title: `${a.id}: ${a.text}`, text: lines.join("\n"), url, full: lines.join("\n") + "\n\n" + link };
   }
   /** Send on a phone (the phone's own share sheet), else copy; when the browser allows neither, show the text to copy by hand. */
@@ -155,15 +192,15 @@
       try { await navigator.share({ title: share.title, text: share.text, url: share.url }); return; }
       catch (e) { if (e && e.name === "AbortError") return; /* else copy instead */ }
     }
-    if (await PK.copyText(share.full)) { PK.toast("Copied: the alarm, the step, the values and the link. Paste it in a message."); return; }
-    const sh = PK.sheet(`<h2>Copy this for a colleague</h2><p class="muted">This browser does not let PLC-Ki copy. Select the text and copy it.</p>
-      <textarea class="share-text" readonly rows="10">${esc(share.full)}</textarea><div class="row end"><button class="btn" data-close>Done</button></div>`);
+    if (await PK.copyText(share.full)) { PK.toast(PK.t("Copied: the alarm, the step, the values and the link. Paste it in a message.")); return; }
+    const sh = PK.sheet(`<h2>${PK.t("Copy this for a colleague")}</h2><p class="muted">${PK.t("This browser does not let PLC-Ki copy. Select the text and copy it.")}</p>
+      <textarea class="share-text" readonly rows="10">${esc(share.full)}</textarea><div class="row end"><button class="btn" data-close>${PK.t("Done")}</button></div>`);
     const ta = sh.el.querySelector("textarea");
     ta.focus(); ta.select();
   }
   let linkAlarm = null;           // the alarm named in the address (#/alarm/A01), picked once when the page opens on it
   /** A shared link to an alarm that has gone since: say so instead of silently showing another one. */
-  const goneNotice = (id) => `<div class="notice gold aa-gone">${icon("info")}<div>Alarm <b>${esc(id)}</b> from the link is not on any more. <a href="#/alarms/${encodeURIComponent(id)}">What it means and when it was on ›</a></div></div>`;
+  const goneNotice = (id) => `<div class="notice gold aa-gone">${icon("info")}<div>${PK.t("Alarm {id} from the link is not on any more.", { id: `<b>${esc(id)}</b>` })} <a href="#/alarms/${encodeURIComponent(id)}">${PK.t("What it means and when it was on ›")}</a></div></div>`;
 
   function relatedEquipment(alarm) {
     const loc = parseLoc(alarm.location);
@@ -203,7 +240,7 @@
     const prog = state.program && state.program.blocks.find((b) => b.name === loc.block);
     if (!prog) return "";
     const rest = [loc.block, loc.instance, loc.output].filter(Boolean).map(encodeURIComponent).join("/");
-    return `<a class="btn white" href="#/program/${rest}">Show in the program</a>`;
+    return `<a class="btn white" href="#/program/${rest}">${PK.t("Show in the program")}</a>`;
   }
 
   function eqCard(e, full) {
@@ -211,19 +248,19 @@
     const lvl = look.alarms.length ? look.lvl : e.level;      // an alarm on the device colours it; else its own state
     const chain = PK.devStrip(e);
     // An alarm on this device: name it and open it
-    const alarms = look.alarms.map((a) => `<a class="eq-alarm ${a.severity === "WARNING" ? "w" : ""}" href="#/alarms/${encodeURIComponent(a.id)}">${icon("bell")}<span><b>${a.severity === "WARNING" ? "Warning" : "Alarm"} ${esc(a.id)}:</b> ${esc(a.text)}</span><span class="chev">›</span></a>`).join("");
+    const alarms = look.alarms.map((a) => `<a class="eq-alarm ${a.severity === "WARNING" ? "w" : ""}" href="#/alarms/${encodeURIComponent(a.id)}">${icon("bell")}<span><b>${a.severity === "WARNING" ? PK.t("Warning") : PK.t("Alarm")} ${esc(a.id)}:</b> ${esc(a.text)}</span><span class="chev">›</span></a>`).join("");
     const vals = e.values.length ? `<div class="kv">${e.values.map((v) => `<span>${esc(v.label)}</span><span class="val">${esc(v.text)}</span>`).join("")}</div>` : "";
     return `<div class="eq-top"><span class="ico">${icon(PK.kindIcon(e.kind))}</span>
         <div class="grow"><div class="eq-name">${esc(e.name)}</div><div class="eq-id">${esc(e.id)}${e.kind ? " · " + esc(e.kind) : ""}</div></div>
-        <span class="lv lv-${esc(lvl)}">${esc(look.alarms.length ? (lvl === "fault" ? "fault" : "warning") : e.state)}</span></div>
+        <span class="lv lv-${esc(lvl)}">${esc(look.alarms.length ? (lvl === "fault" ? PK.t("fault") : PK.t("warning")) : stT(e.state))}</span></div>
       ${alarms}
       ${chain}
-      ${e.blockedBy ? `<div class="eq-why">${icon("warn")}<span>${esc(e.blockedBy.charAt(0).toUpperCase() + e.blockedBy.slice(1))}</span></div>` : ""}
+      ${e.blockedBy ? `<div class="eq-why">${icon("warn")}<span>${esc((w => w.charAt(0).toUpperCase() + w.slice(1))(srvT(e.blockedBy)))}</span></div>` : ""}
       ${vals}
       ${full ? measureHtml(deviceSignals(e)) : ""}
-      ${full && e.permits.length ? `<div><h3 class="mt-2">Interlocks</h3><ul class="conds">${e.permits.map(cond).join("")}</ul></div>` : ""}
-      ${full && e.explanation && !e.blockedBy ? `<p class="m-0 muted small">${esc(e.explanation)}</p>` : ""}
-      ${full ? `<div class="row">${logicLink(e)}${modelFix("equipment:" + e.id)}</div>` : `<span class="eq-more" aria-hidden="true">Details ›</span>`}`;
+      ${full && e.permits.length ? `<div><h3 class="mt-2">${PK.t("Interlocks")}</h3><ul class="conds">${e.permits.map(cond).join("")}</ul></div>` : ""}
+      ${full && e.explanation && !e.blockedBy ? `<p class="m-0 muted small">${esc(eqExpl(e))}</p>` : ""}
+      ${full ? `<div class="row">${logicLink(e)}${modelFix("equipment:" + e.id)}</div>` : `<span class="eq-more" aria-hidden="true">${PK.t("Details ›")}</span>`}`;
   }
   // ---------- Where to measure (review 41) ----------
   // Each signal's input or output, rack, slot and channel, from the tag table and the hardware read from TIA (the PLC
@@ -256,18 +293,18 @@
       const c = r.ch;
       rows.push(`<li><span class="ms-l">${esc(t.label || t.id)}<span class="faint small">${esc(r.tag)}${r.comment ? " · " + esc(r.comment) : ""}</span></span>
         <span class="mono ms-a">${esc(r.address)}</span>
-        ${c ? `<a class="ms-w" href="${esc(c.href)}">${esc(c.station)}${c.slot != null ? ", slot " + esc(c.slot) : ""}${c.module ? " · " + esc(c.module) : ""}${c.channel != null ? " · channel " + esc(c.channel) : ""} ›</a>` : `<span class="ms-w faint small">Module not known</span>`}</li>`);
+        ${c ? `<a class="ms-w" href="${esc(c.href)}">${esc(c.station)}${c.slot != null ? PK.t(", slot {n}", { n: esc(c.slot) }) : ""}${c.module ? " · " + esc(c.module) : ""}${c.channel != null ? " " + PK.t("· channel {n}", { n: esc(c.channel) }) : ""} ›</a>` : `<span class="ms-w faint small">${PK.t("Module not known")}</span>`}</li>`);
     }
     if (!rows.length) return "";
-    const inner = `<h3 class="${card ? "m-0" : "mt-2"}">Where to measure</h3><ul class="ms-list">${rows.join("")}</ul>
-      ${noModule ? `<p class="m-0 faint small">The module and channel show once the hardware is read from TIA (PLC page, Racks and I/O).</p>` : ""}`;
+    const inner = `<h3 class="${card ? "m-0" : "mt-2"}">${PK.t("Where to measure")}</h3><ul class="ms-list">${rows.join("")}</ul>
+      ${noModule ? `<p class="m-0 faint small">${PK.t("The module and channel show once the hardware is read from TIA (PLC page, Racks and I/O).")}</p>` : ""}`;
     return card ? `<div class="card aa-ms">${inner}</div>` : `<div class="ms">${inner}</div>`;
   }
 
   /** "Show in the program" for a device: its block and instance from the model's location ("FB_VFD, instance "Station".M201"). */
   function logicLink(e) {
     const l = parseLoc(e.location);
-    return l.block ? `<div><a class="btn b small" href="#/program/${[l.block, l.instance].filter(Boolean).map(encodeURIComponent).join("/")}">Show in the program</a></div>` : "";
+    return l.block ? `<div><a class="btn b small" href="#/program/${[l.block, l.instance].filter(Boolean).map(encodeURIComponent).join("/")}">${PK.t("Show in the program")}</a></div>` : "";
   }
 
   /** The steps of a sequence. A short one shows every step as a pill (they wrap). A long one (GRAPH chains
@@ -285,28 +322,28 @@
     const seen = new Set();
     const next = seq.next.filter((n) => n.to !== seq.step && !seen.has(n.to) && seen.add(n.to));
     const now = cur ? `<div class="st ${curCls}"><b>${cur.no}</b>${esc(cur.name)}</div>`
-      : `<div class="st">${seq.step != null ? `<b>${seq.step}</b>` : ""}${esc(seq.stepName || "Step not known")}</div>`;
+      : `<div class="st">${seq.step != null ? `<b>${seq.step}</b>` : ""}${esc(seq.stepName || PK.t("Step not known"))}</div>`;
     return `<div class="stepnow">
-        <span class="sn-l">Now</span>${now}
-        ${next.length ? `<span class="sn-l">Next</span>${next.map((n) => `<div class="st nx ${n.ready === false ? "wait" : n.ready ? "ready" : ""}"><b>${n.to}</b>${esc(n.toName)}</div>`).join("")}` : ""}
+        <span class="sn-l">${PK.t("Now")}</span>${now}
+        ${next.length ? `<span class="sn-l">${PK.t("Next")}</span>${next.map((n) => `<div class="st nx ${n.ready === false ? "wait" : n.ready ? "ready" : ""}"><b>${n.to}</b>${esc(n.toName)}</div>`).join("")}` : ""}
       </div>
-      <details class="allsteps"><summary>All ${def.steps.length} steps${cur ? ` · this is step ${curIdx + 1} of ${def.steps.length}` : ""}</summary>
+      <details class="allsteps"><summary>${PK.t("All {n} steps", { n: def.steps.length })}${cur ? " · " + PK.t("this is step {i} of {n}", { i: curIdx + 1, n: def.steps.length }) : ""}</summary>
         <ol class="steplist">${def.steps.map((st, i) => `<li class="${i === curIdx ? curCls : ""}"${i === curIdx ? ' aria-current="step"' : ""}><b>${st.no}</b><span>${esc(st.name)}</span></li>`).join("")}</ol>
       </details>`;
   }
   /** The way to the full step chart and step timeline of a sequence. */
-  const chartLink = (seq) => `<div><a class="btn b small" href="#/plant/sequence/${encodeURIComponent(seq.id)}">Step chart and timeline ›</a></div>`;
+  const chartLink = (seq) => `<div><a class="btn b small" href="#/plant/sequence/${encodeURIComponent(seq.id)}">${PK.t("Step chart and timeline ›")}</a></div>`;
   /** Settings (HMI values) the model says keep the machine from working, e.g. a 0 % tolerance. */
   function settingsNotice(s) {
     const bad = (s.settings || []).filter((x) => x.valid === false);
     if (!bad.length) return "";
-    return `<div class="mt-4 notice gold">${icon("warn")}<div><b>${bad.length === 1 ? "A machine setting stops it from working" : bad.length + " machine settings stop it from working"}</b>
-      ${bad.map((x) => `<br>${esc(x.label)} is <b>${esc(x.value)}</b>: ${esc(x.problem || "the machine cannot work with this value")}.`).join("")}
-      <br><span class="small">Set it on the HMI (or in the recipe). <a href="#/plant/settings">All settings</a></span></div></div>`;
+    return `<div class="mt-4 notice gold">${icon("warn")}<div><b>${PK.t("A machine setting stops it from working|{n} machine settings stop it from working", { n: bad.length })}</b>
+      ${bad.map((x) => `<br>${PK.t("{label} is {value}: {problem}.", { label: esc(x.label), value: `<b>${esc(x.value)}</b>`, problem: esc(x.problem || PK.t("the machine cannot work with this value")) })}`).join("")}
+      <br><span class="small">${PK.t("Set it on the HMI (or in the recipe).")} <a href="#/plant/settings">${PK.t("All settings")}</a></span></div></div>`;
   }
   /** "This is wrong" for administrators: correct the model entry with Ki (Setup > Program has the live check). */
   const modelFix = (target) => PK.can("settings") && typeof PKModel !== "undefined"
-    ? `<button type="button" class="btn gray small" data-modelfix="${esc(target)}">This is wrong</button>` : "";
+    ? `<button type="button" class="btn gray small" data-modelfix="${esc(target)}">${PK.t("This is wrong")}</button>` : "";
   /** Opening the full step list shows the current step in the middle of it, not step 1. */
   function bindSteps(page) {
     page.querySelectorAll("details.allsteps").forEach((d) => d.ontoggle = () => {
@@ -316,8 +353,8 @@
   }
 
   function seqState(q) {
-    if (PK.cpuStop()) return ["Not running", "bad"];
-    return q.halted ? ["Halted", "bad"] : q.next.some((n) => n.ready === false) ? ["Waiting", "warn"] : ["Running", "ok"];
+    if (PK.cpuStop()) return [PK.t("Not running"), "bad"];
+    return q.halted ? [PK.t("Halted"), "bad"] : q.next.some((n) => n.ready === false) ? [PK.t("Waiting"), "warn"] : [PK.t("Running"), "ok"];
   }
 
   function bindAsk(page) {
@@ -340,29 +377,29 @@
     const alarms = s.activeAlarms;
     const sw = c.switch ? String(c.switch).toUpperCase() : "";
     const todo = [
-      sw ? `The mode switch on the CPU is at ${sw}.` + (/STOP/.test(sw) ? " Someone set it there: find out why before it goes back to RUN." : "")
-        : "Look at the mode switch on the CPU: RUN or STOP.",
-      "Open the CPU's diagnostic buffer in TIA Portal (Online & diagnostics). The newest entry says why it stopped.",
-      "Ask who stopped it: a download or a STOP from TIA or the CPU display, or a fault in the program (cycle time, a missing block, an access error).",
-      "Start it again only when you know why it stopped and the machine is safe to run.",
+      sw ? PK.t("The mode switch on the CPU is at {sw}.", { sw }) + (/STOP/.test(sw) ? " " + PK.t("Someone set it there: find out why before it goes back to RUN.") : "")
+        : PK.t("Look at the mode switch on the CPU: RUN or STOP."),
+      PK.t("Open the CPU's diagnostic buffer in TIA Portal (Online & diagnostics). The newest entry says why it stopped."),
+      PK.t("Ask who stopped it: a download or a STOP from TIA or the CPU display, or a fault in the program (cycle time, a missing block, an access error)."),
+      PK.t("Start it again only when you know why it stopped and the machine is safe to run."),
     ];
     const reported = msgs === null ? ""
-      : msgs.length ? `<div class="card"><h3>What the CPU reports</h3><ul class="list">${msgs.map((m) => `<li style="flex-wrap:wrap"><span style="flex:1;min-width:200px"><b class="semibold">${esc(m.text)}</b>${m.info ? `<div class="faint small">${esc(m.info)}</div>` : ""}</span>${m.since ? `<span class="faint small">${esc(PK.when(m.since))}</span>` : ""}</li>`).join("")}</ul></div>`
-      : `<div class="card"><h3>What the CPU reports</h3><p class="m-0 muted">No message from the CPU right now. Its diagnostic buffer in TIA says why it stopped.</p></div>`;
+      : msgs.length ? `<div class="card"><h3>${PK.t("What the CPU reports")}</h3><ul class="list">${msgs.map((m) => `<li style="flex-wrap:wrap"><span style="flex:1;min-width:200px"><b class="semibold">${esc(m.text)}</b>${m.info ? `<div class="faint small">${esc(m.info)}</div>` : ""}</span>${m.since ? `<span class="faint small">${esc(PK.when(m.since))}</span>` : ""}</li>`).join("")}</ul></div>`
+      : `<div class="card"><h3>${PK.t("What the CPU reports")}</h3><p class="m-0 muted">${PK.t("No message from the CPU right now. Its diagnostic buffer in TIA says why it stopped.")}</p></div>`;
     return hero({
       cls: "hero cpu-stop-page",
-      eyebrow: `<span class="pill bad"><span class="dot"></span>PLC in ${esc(word)}${alarms.length ? ` · ${alarms.length} alarm${alarms.length > 1 ? "s" : ""} on` : ""}</span>`,
-      title: `The PLC is in ${esc(word)}: the program is not running.`,
-      sub: esc(`In ${word} ${PK.cpuSince(c)}. What you see on these pages is its last state, not a running machine.`),
-      actions: `<a class="btn" href="#/plc">Open the PLC page</a><button class="btn b" data-ask="The PLC is in ${esc(word)}. What could have stopped it, and what do I check?">Ask</button>`,
+      eyebrow: `<span class="pill bad"><span class="dot"></span>${PK.t("PLC in {word}", { word: esc(word) })}${alarms.length ? " · " + PK.t("{n} alarm on|{n} alarms on", { n: alarms.length }) : ""}</span>`,
+      title: PK.t("The PLC is in {word}: the program is not running.", { word: esc(word) }),
+      sub: esc(PK.t("In {word} {since}. What you see on these pages is its last state, not a running machine.", { word, since: PK.cpuSince(c) })),
+      actions: `<a class="btn" href="#/plc">${PK.t("Open the PLC page")}</a><button class="btn b" data-ask="${esc(PK.t("The PLC is in {word}. What could have stopped it, and what do I check?", { word }))}">${PK.t("Ask")}</button>`,
       extra: `<div class="grid two" style="margin-top:26px;align-items:start">
-          <div class="card"><h3>What to check</h3><ol class="fix">${todo.map((t) => `<li style="cursor:default">${esc(t)}</li>`).join("")}</ol></div>
+          <div class="card"><h3>${PK.t("What to check")}</h3><ol class="fix">${todo.map((t) => `<li style="cursor:default">${esc(t)}</li>`).join("")}</ol></div>
           ${reported}</div>`,
     })
-    + (alarms.length ? sec("alt", `<h2>Alarms that are on</h2><p class="sub">As they were when the CPU stopped. Fix the STOP first; some may go when the program runs again.</p>
+    + (alarms.length ? sec("alt", `<h2>${PK.t("Alarms that are on")}</h2><p class="sub">${PK.t("As they were when the CPU stopped. Fix the STOP first; some may go when the program runs again.")}</p>
         <ul class="list">${alarms.map((a) => `<li><span class="tag ${a.severity === "WARNING" ? "gold" : "red"}">${esc(a.id)}</span>
           <span class="grow min0"><a href="#/alarms/${encodeURIComponent(a.id)}">${esc(a.text)}</a></span></li>`).join("")}</ul>`) : "")
-    + (seq ? sec(alarms.length ? "" : "alt", `<h2>${esc(seq.name)}</h2><p class="sub">${esc(seq.explanation)}</p>${stepStrip(seq)}`) : "");
+    + (seq ? sec(alarms.length ? "" : "alt", `<h2>${esc(seq.name)}</h2><p class="sub">${esc(sentences(seq.explanation))}</p>${stepStrip(seq)}`) : "");
   }
 
   PK.view("alarm", {
@@ -395,19 +432,19 @@
         const order = chains.flatMap((c) => c.devices).filter((e, i, l) => e.blockedBy && l.indexOf(e) === i);
         return hero({
           before: gone,
-          eyebrow: n ? `<span class="pill warn"><span class="dot"></span>No alarm · ${n} device${n > 1 ? "s" : ""} blocked</span>` : `<span class="pill ok"><span class="dot"></span>No alarm</span>`,
-          title: n ? `No alarm, but ${n === 1 ? "1 device is" : n + " devices are"} blocked.` : "No alarm is active.",
-          sub: esc(n ? blockedLine(root) : (seq ? seq.explanation : s.summary[0] || "")),
-          actions: n ? `<button class="btn" data-ask="Why is ${esc(root.name)} blocked, and what do I check?">Ask why</button><a class="btn b" href="#/plant">See the plant</a>`
-            : `<a class="btn" href="#/plant">See the plant</a><button class="btn b" data-ask="What is the machine doing right now?">Ask</button>`,
+          eyebrow: n ? `<span class="pill warn"><span class="dot"></span>${PK.t("No alarm · {n} device blocked|No alarm · {n} devices blocked", { n })}</span>` : `<span class="pill ok"><span class="dot"></span>${PK.t("No alarm")}</span>`,
+          title: n ? PK.t("No alarm, but {n} device is blocked.|No alarm, but {n} devices are blocked.", { n }) : PK.t("No alarm is active."),
+          sub: esc(n ? blockedLine(root) : (seq ? sentences(seq.explanation) : sentences(s.summary[0] || ""))),
+          actions: n ? `<button class="btn" data-ask="${esc(PK.t("Why is {name} blocked, and what do I check?", { name: root.name }))}">${PK.t("Ask why")}</button><a class="btn b" href="#/plant">${PK.t("See the plant")}</a>`
+            : `<a class="btn" href="#/plant">${PK.t("See the plant")}</a><button class="btn b" data-ask="${esc(PK.t("What is the machine doing right now?"))}">${PK.t("Ask")}</button>`,
           extra: n ? `<div class="chains">${chains.map(PK.chainHtml).join("")}</div>` : "",
         }) + (settingsNotice(s) ? sec("", settingsNotice(s)) : "")
         + (window.PKMemory ? PKMemory.unnotedBlock() : "")
-        + (n ? sec("alt", `<h2>Blocked now</h2><p class="sub">The program asks for ${n === 1 ? "this device" : "these devices"}, but ${n === 1 ? "its" : "their"} output stays off. ${n > 1 ? "The cause comes first." : ""}</p>
-            <div class="stack blocked-now">${order.map((e) => `<div class="aa-dev"><div class="row"><h3 class="m-0">${esc(e.name)}</h3><span class="spacer"></span><a class="small" href="#/plant/devices/${encodeURIComponent(e.id)}">Details ›</a></div>
+        + (n ? sec("alt", `<h2>${PK.t("Blocked now")}</h2><p class="sub">${PK.t("The program asks for this device, but its output stays off.|The program asks for these devices, but their output stays off.", { n })} ${n > 1 ? PK.t("The cause comes first.") : ""}</p>
+            <div class="stack blocked-now">${order.map((e) => `<div class="aa-dev"><div class="row"><h3 class="m-0">${esc(e.name)}</h3><span class="spacer"></span><a class="small" href="#/plant/devices/${encodeURIComponent(e.id)}">${PK.t("Details ›")}</a></div>
               ${PK.devStrip(e)}</div>`).join("")}</div>`) : "")
-        + (seq ? sec(n ? "" : "alt", `<h2>${esc(seq.name)}</h2>${n ? `<p class="sub">${esc(seq.explanation)}</p>` : ""}${stepStrip(seq)}${chartLink(seq)}
-            ${seq.next.length ? `<p class="mt-4 mb-2 muted small">To go on it needs</p><ul class="conds">${seq.next.flatMap((x) => x.conditions).map((c) => PK.condHeld(c, s)).join("")}</ul>` : ""}`) : "")
+        + (seq ? sec(n ? "" : "alt", `<h2>${esc(seq.name)}</h2>${n ? `<p class="sub">${esc(sentences(seq.explanation))}</p>` : ""}${stepStrip(seq)}${chartLink(seq)}
+            ${seq.next.length ? `<p class="mt-4 mb-2 muted small">${PK.t("To go on it needs")}</p><ul class="conds">${seq.next.flatMap((x) => x.conditions).map((c) => PK.condHeld(c, s)).join("")}</ul>` : ""}`) : "")
         + guide();
       }
 
@@ -430,67 +467,67 @@
       const after = (groups.find((g) => g.root.id === a.id) || { after: [] }).after;
 
       const chips = alarms.length > 1 ? `<div class="alarm-chips">${groups.map((g, i) => { const x = g.root; return `
-        <button class="alarm-chip ${[x, ...g.after.map((f) => f.alarm)].every((y) => y.severity === "WARNING") ? "warning" : ""} ${x.id === a.id ? "sel" : ""}" data-alarm="${esc(x.id)}"${g.after.length ? ` title="${esc(g.after.map((f) => f.alarm.id + " came " + laterText(f.ms)).join(", "))}"` : ""}>
-          <span class="d"></span>${i === 0 && firstKnown && groups.length > 1 ? "First · " : ""}${esc(x.id)} ${esc(x.text.length > 40 ? x.text.slice(0, 38) + "…" : x.text)}${g.after.length ? `<span class="chip-n">+${g.after.length} after it</span>` : ""}</button>`; }).join("")}</div>
-          ${atStart > 1 ? `<p class="faint small" style="margin:-12px 0 18px">${atStart} alarms were already on when PLC-Ki started watching, so which of those came first is not known.</p>` : ""}` : "";
+        <button class="alarm-chip ${[x, ...g.after.map((f) => f.alarm)].every((y) => y.severity === "WARNING") ? "warning" : ""} ${x.id === a.id ? "sel" : ""}" data-alarm="${esc(x.id)}"${g.after.length ? ` title="${esc(g.after.map((f) => PK.t("{id} came {when}", { id: f.alarm.id, when: laterText(f.ms) })).join(", "))}"` : ""}>
+          <span class="d"></span>${i === 0 && firstKnown && groups.length > 1 ? PK.t("First") + " · " : ""}${esc(x.id)} ${esc(x.text.length > 40 ? x.text.slice(0, 38) + "…" : x.text)}${g.after.length ? `<span class="chip-n">${PK.t("+{n} after it", { n: g.after.length })}</span>` : ""}</button>`; }).join("")}</div>
+          ${atStart > 1 ? `<p class="faint small" style="margin:-12px 0 18px">${PK.t("{n} alarms were already on when PLC-Ki started watching, so which of those came first is not known.", { n: atStart })}</p>` : ""}` : "";
 
       // Four short facts under the alarm: the device's state, the step, how long in it, when the alarm came
       const facts = [
-        ...eqs.slice(0, 1).map((e) => [e.state, e.name, PK.devLook(e).lvl === "fault" ? "bad" : e.level === "ok" ? "ok" : ""]),
-        seq ? [`Step ${seq.step ?? "?"}${seq.halted ? " halted" : ""}`, `${seq.name}: ${seq.stepName}`, seq.halted ? "bad" : ""] : null,
-        seq && seq.timeInStep ? [seq.timeInStep, "in this step"] : null,
-        a.since ? [PK.when(a.since), a.atStart ? "already on when PLC-Ki started watching" : "came at"] : null,
+        ...eqs.slice(0, 1).map((e) => [stT(e.state), e.name, PK.devLook(e).lvl === "fault" ? "bad" : e.level === "ok" ? "ok" : ""]),
+        seq ? [seq.halted ? PK.t("Step {n} halted", { n: seq.step ?? "?" }) : PK.t("Step {n}", { n: seq.step ?? "?" }), `${seq.name}: ${seq.stepName}`, seq.halted ? "bad" : ""] : null,
+        seq && seq.timeInStep ? [seq.timeInStep, PK.t("in this step")] : null,
+        a.since ? [PK.when(a.since), a.atStart ? PK.t("already on when PLC-Ki started watching") : PK.t("came at")] : null,
       ].filter(Boolean).slice(0, 4);
       const V = window.PKVis;
       const rung = rungHtml(a, where, loc);
       const rec = !!(window.PKCapture && PKCapture.atAlarm(a, loc.instance));
       const fixList = a.fix.length ? `<ol class="fix">${a.fix.map((f, i) => `<li class="${done.has(i) ? "done" : ""}"><button type="button" class="fix-b" data-fix="${i}" aria-pressed="${done.has(i)}">${esc(f)}</button></li>`).join("")}</ol>`
-        : `<p class="muted">No fix written for this alarm yet. Ask about it.</p>`;
+        : `<p class="muted">${PK.t("No fix written for this alarm yet. Ask about it.")}</p>`;
 
       // Left: the alarm, then straight to the fix. Right: where it is, in the machine and in the program.
       // On a phone the right column follows the left, so the fix is on the first screen.
-      const main = `<div class="eyebrow"><span class="pill ${warn ? "warn" : "bad"}"><span class="dot"></span>${esc(a.severity)} · ${esc(a.id)}</span></div>
+      const main = `<div class="eyebrow"><span class="pill ${warn ? "warn" : "bad"}"><span class="dot"></span>${esc(sevWord(a))} · ${esc(a.id)}</span></div>
           <h1>${esc(a.text)}</h1>
-          ${follow ? `<div class="notice aa-follow">${icon("info")}<div>${esc(followText(follow.root.id, follow.ms))} <button type="button" class="btn plain small" data-alarm="${esc(follow.root.id)}">Open ${esc(follow.root.id)} ›</button></div></div>` : ""}
+          ${follow ? `<div class="notice aa-follow">${icon("info")}<div>${esc(followText(follow.root.id, follow.ms))} <button type="button" class="btn plain small" data-alarm="${esc(follow.root.id)}">${PK.t("Open {id} ›", { id: esc(follow.root.id) })}</button></div></div>` : ""}
           ${a.condition ? `<p class="sub">${esc(a.condition)}</p>` : ""}
-          ${failed.length ? `<p class="sub"><b>Failed check:</b> ${failed.map((c) => esc(c.text) + (c.values && c.values.length ? ` (now ${c.values.map((v) => esc(v.label) + " " + esc(v.text)).join(", ")})` : "")).join("; ")}</p>` : ""}
+          ${failed.length ? `<p class="sub"><b>${PK.t("Failed check:")}</b> ${failed.map((c) => esc(c.text) + (c.values && c.values.length ? " " + PK.t("(now {values})", { values: c.values.map((v) => esc(v.label) + " " + esc(v.text)).join(", ") }) : "")).join("; ")}</p>` : ""}
           ${settingsNotice(s)}
           ${PK.ui.tiles(facts.map(([value, label, state]) => ({ value, label, state })), { small: true })}
-          <div class="actions"><button class="btn" data-ask="Why is alarm ${esc(a.id)} on, and how do I fix it?">Ask about this alarm</button>
-            ${where.block ? `<a class="btn b" href="${esc(where.href)}">Show where it is set</a>` : ""}
-            <button type="button" class="btn b" data-share title="The alarm, the step, the values and a link, as plain text for a colleague">${navigator.share && matchMedia("(pointer: coarse)").matches ? "Send" : "Copy link"}</button></div>
+          <div class="actions"><button class="btn" data-ask="${esc(PK.t("Why is alarm {id} on, and how do I fix it?", { id: a.id }))}">${PK.t("Ask about this alarm")}</button>
+            ${where.block ? `<a class="btn b" href="${esc(where.href)}">${PK.t("Show where it is set")}</a>` : ""}
+            <button type="button" class="btn b" data-share title="${esc(PK.t("The alarm, the step, the values and a link, as plain text for a colleague"))}">${navigator.share && matchMedia("(pointer: coarse)").matches ? PK.t("Send") : PK.t("Copy link")}</button></div>
           <div class="aa-fix">
-            <div class="card"><h3>Fix it</h3>${fixList}<p class="mt-3 mb-0 faint small">Tap a step when it is done. The ticks are only on this screen.</p></div>
-            <div class="card"><h3>Likely causes</h3>${a.causes.length ? `<ol class="causes">${a.causes.map((c, i) => `<li><b>${i + 1}</b><span>${esc(c)}</span></li>`).join("")}</ol>` : `<p class="muted">None written yet.</p>`}</div>
+            <div class="card"><h3>${PK.t("Fix it")}</h3>${fixList}<p class="mt-3 mb-0 faint small">${PK.t("Tap a step when it is done. The ticks are only on this screen.")}</p></div>
+            <div class="card"><h3>${PK.t("Likely causes")}</h3>${a.causes.length ? `<ol class="causes">${a.causes.map((c, i) => `<li><b>${i + 1}</b><span>${esc(c)}</span></li>`).join("")}</ol>` : `<p class="muted">${PK.t("None written yet.")}</p>`}</div>
           </div>
-          ${after.length ? `<div class="card aa-after"><h3>Came after it</h3><ul class="list">${after.map((f) => `<li>
-              <span class="tag ${f.alarm.severity === "WARNING" ? "gold" : "red"}">${esc(f.alarm.id)}</span><span class="grow min0">${esc(f.alarm.text)}<span class="faint small">Came ${esc(laterText(f.ms))}</span></span>
-              <button type="button" class="btn gray small" data-alarm="${esc(f.alarm.id)}">Open</button></li>`).join("")}</ul>
-            <p class="m-0 faint small">Probably a result of this alarm: fix it first, then see whether ${after.length === 1 ? "that one clears" : "they clear"} too.</p></div>` : ""}
+          ${after.length ? `<div class="card aa-after"><h3>${PK.t("Came after it")}</h3><ul class="list">${after.map((f) => `<li>
+              <span class="tag ${f.alarm.severity === "WARNING" ? "gold" : "red"}">${esc(f.alarm.id)}</span><span class="grow min0">${esc(f.alarm.text)}<span class="faint small">${esc(PK.t("Came {when}", { when: laterText(f.ms) }))}</span></span>
+              <button type="button" class="btn gray small" data-alarm="${esc(f.alarm.id)}">${PK.t("Open")}</button></li>`).join("")}</ul>
+            <p class="m-0 faint small">${PK.t("Probably a result of this alarm: fix it first, then see whether that one clears too.|Probably a result of this alarm: fix it first, then see whether they clear too.", { n: after.length })}</p></div>` : ""}
           ${window.PKMemory ? PKMemory.lastLine(a.id) : ""}
-          ${eqs.map((e) => `<div class="aa-dev"><div class="row"><h3 class="m-0">${esc(e.name)}</h3><span class="spacer"></span><a class="small" href="#/plant/devices/${encodeURIComponent(e.id)}">Details ›</a></div>${PK.devStrip(e)}</div>`).join("")}`;
+          ${eqs.map((e) => `<div class="aa-dev"><div class="row"><h3 class="m-0">${esc(e.name)}</h3><span class="spacer"></span><a class="small" href="#/plant/devices/${encodeURIComponent(e.id)}">${PK.t("Details ›")}</a></div>${PK.devStrip(e)}</div>`).join("")}`;
 
       const vals = eqs.flatMap((e) => e.values);
-      const side = `${eqs.length && V ? `<div class="card aa-pic"><div class="row"><h3 class="m-0">Where in the machine</h3><span class="spacer"></span><a class="small" href="#/plant">Plant ›</a></div>
+      const side = `${eqs.length && V ? `<div class="card aa-pic"><div class="row"><h3 class="m-0">${PK.t("Where in the machine")}</h3><span class="spacer"></span><a class="small" href="#/plant">${PK.t("Plant ›")}</a></div>
             ${V.plantMap(V.around(eqs.map((e) => e.id)), null, eqs.map((e) => e.id))}
             ${vals.length ? `<div class="kv">${vals.map((v) => `<span>${esc(v.label)}</span><span class="val">${esc(v.text)}</span>`).join("")}</div>` : ""}</div>` : ""}
           ${measureHtml([...failed.flatMap((c) => (c.values || []).map((v) => v.id)), ...eqs.flatMap(deviceSignals)], { card: true })}
-          <div class="card aa-sw"><h3>Where it is set</h3>
-            ${where.block ? `<div class="path">${(path || [{ block: where.block }]).map((p) => `<span>${esc(p.block)}${p.instance ? " " + esc(p.instance) : ""}</span>`).join("<i>›</i>")}${where.network ? `<i>›</i><span>Network ${esc(where.network)}</span>` : ""}${where.symbol ? `<i>›</i><span>${esc(where.symbol)}</span>` : ""}</div>` : `<p class="m-0 muted small">${esc(a.location || "No place in the program is known for this alarm.")}</p>`}
-            ${rung ? `<div class="aa-rung">${rung}</div><p class="m-0 faint small">${rec ? "Values just before the alarm came, from the recording. ? means not recorded." : "Values now. They can look normal again after a halt."}</p>` : ""}
-            <div class="gap-2 row">${where.block ? `<a class="btn b small" href="${esc(where.href)}">Open in the program</a>` : links(loc)}${modelFix("alarm:" + a.id)}</div></div>`;
+          <div class="card aa-sw"><h3>${PK.t("Where it is set")}</h3>
+            ${where.block ? `<div class="path">${(path || [{ block: where.block }]).map((p) => `<span>${esc(p.block)}${p.instance ? " " + esc(p.instance) : ""}</span>`).join("<i>›</i>")}${where.network ? `<i>›</i><span>${PK.t("Network {n}", { n: esc(where.network) })}</span>` : ""}${where.symbol ? `<i>›</i><span>${esc(where.symbol)}</span>` : ""}</div>` : `<p class="m-0 muted small">${esc(a.location || PK.t("No place in the program is known for this alarm."))}</p>`}
+            ${rung ? `<div class="aa-rung">${rung}</div><p class="m-0 faint small">${rec ? PK.t("Values just before the alarm came, from the recording. ? means not recorded.") : PK.t("Values now. They can look normal again after a halt.")}</p>` : ""}
+            <div class="gap-2 row">${where.block ? `<a class="btn b small" href="${esc(where.href)}">${PK.t("Open in the program")}</a>` : links(loc)}${modelFix("alarm:" + a.id)}</div></div>`;
 
       share = shareText(a, s, seq, eqs, failed, after, follow);
       return sec(`hero aa ${warn ? "aa-warn" : ""}`, `${gone}${chips}<div class="aa-grid"><div class="aa-main">${main}</div><aside class="aa-side">${side}</aside></div>`)
         + (window.PKCapture ? PKCapture.alarmSection(a) : "")
-        + (checks.length ? sec("", `<h2>What the program checks</h2><p class="sub">The comparisons behind this alarm, ${a.checksAtAlarm ? "with the values from the last read before it came" : "with the values now"}. ✗ is the one that failed.</p>
+        + (checks.length ? sec("", `<h2>${PK.t("What the program checks")}</h2><p class="sub">${a.checksAtAlarm ? PK.t("The comparisons behind this alarm, with the values from the last read before it came. ✗ is the one that failed.") : PK.t("The comparisons behind this alarm, with the values now. ✗ is the one that failed.")}</p>
             <div class="card"><ul class="conds">${checks.map(cond).join("")}</ul></div>`) : "")
         + (typeof PKDocs !== "undefined" ? PKDocs.alarmSection(a, eqs) : "")
-        + sec("alt", `<h2>What is going on</h2>
-          <div class="grid two"><div>${s.summary.map((l) => `<p class="mb-3 sub">${esc(l)}</p>`).join("")}</div>
+        + sec("alt", `<h2>${PK.t("What is going on")}</h2>
+          <div class="grid two"><div>${s.summary.map((l) => `<p class="mb-3 sub">${esc(sentences(l))}</p>`).join("")}</div>
           ${seq ? `<div class="card"><h3>${esc(seq.name)}</h3>${stepStrip(seq)}${chartLink(seq)}
-            ${seq.next.length ? `<p class="mt-3 mb-2 muted small">To go on it needs</p><ul class="conds">${seq.next.flatMap((n) => n.conditions).map((c) => PK.condHeld(c, s)).join("")}</ul>` : ""}</div>` : ""}</div>`)
-        + (window.PKMemory ? sec("", `<details class="more" data-hist ${histOpen ? "open" : ""}><summary><b>History of this alarm</b> <span class="muted small">every time PLC-Ki saw it, and what was found</span></summary>
+            ${seq.next.length ? `<p class="mt-3 mb-2 muted small">${PK.t("To go on it needs")}</p><ul class="conds">${seq.next.flatMap((n) => n.conditions).map((c) => PK.condHeld(c, s)).join("")}</ul>` : ""}</div>` : ""}</div>`)
+        + (window.PKMemory ? sec("", `<details class="more" data-hist ${histOpen ? "open" : ""}><summary><b>${PK.t("History of this alarm")}</b> <span class="muted small">${PK.t("every time PLC-Ki saw it, and what was found")}</span></summary>
             <div class="mt-3 card">${PKMemory.alarmBlock(a.id)}</div></details>`) : "")
         + guide();
     },
@@ -538,23 +575,23 @@
   function timelineCard() {
     if (!TL.busy && Date.now() - TL.at > 30000) setTimeout(loadTimeline, 0);     // every 30 s while the page is open
     const d = TL.data;
-    const pick = PK.ui.choice("Time", [["shift", "This shift"], ["24h", "24 h"], ["7d", "7 days"]]
+    const pick = PK.ui.choice(PK.t("Time"), [["shift", PK.t("This shift")], ["24h", PK.t("24 h")], ["7d", PK.t("7 days")]]
       .map(([k, l]) => ({ label: l, on: TL.win === k, data: { "data-tlwin": k } })));
-    const head = `<div class="tl-head"><h3>Timeline</h3>${d ? `<span class="faint small">${esc(d.label)}</span>` : ""}<span class="spacer"></span>${pick}</div>`;
-    if (!d) return `<div class="card stack">${head}${TL.err ? PK.ui.error(TL.err) : PK.ui.loading("chart", { label: "Loading the timeline" })}</div>`;
+    const head = `<div class="tl-head"><h3>${PK.t("Timeline")}</h3>${d ? `<span class="faint small">${esc(PK.srv(d.label))}</span>` : ""}<span class="spacer"></span>${pick}</div>`;
+    if (!d) return `<div class="card stack">${head}${TL.err ? PK.ui.error(TL.err) : PK.ui.loading("chart", { label: PK.t("Loading the timeline") })}</div>`;
     const m = d.marks[TL.sel];
-    const sel = m ? `<p class="tl-sel"><time>${esc(PK.when(m.time))}</time> ${esc(m.text)}${m.shift ? ` <a class="nowrap" href="#/reports/shift/${m.shift.day}/${m.shift.index}/@${new Date(m.time).getTime()}">In the shift log ›</a>` : ""}</p>` : "";
+    const sel = m ? `<p class="tl-sel"><time>${esc(PK.when(m.time))}</time> ${esc(PK.srv(m.text))}${m.shift ? ` <a class="nowrap" href="#/reports/shift/${m.shift.day}/${m.shift.index}/@${new Date(m.time).getTime()}">${PK.t("In the shift log ›")}</a>` : ""}</p>` : "";
     const logHref = d.shift ? `#/reports/shift/${d.shift.day}/${d.shift.index}` : "#/reports/shift";
     const recent = d.recent.length ? PK.ui.events(d.recent, { cls: "tl-recent" })
-      : `<p class="m-0 muted small">Nothing has happened yet in the last 24 hours.</p>`;
-    const legend = d.marks.length ? `<div class="legend small">${[...new Set(d.marks.map((x) => x.mark))].map((k) => `<span class="lg-${esc(k)}"><span class="tl-dot tl-${esc(k)}"></span> ${esc(PK.ui.marks[k] || k)}</span>`).join("")}</div>` : "";
+      : `<p class="m-0 muted small">${PK.t("Nothing has happened yet in the last 24 hours.")}</p>`;
+    const legend = d.marks.length ? `<div class="legend small">${[...new Set(d.marks.map((x) => x.mark))].map((k) => `<span class="lg-${esc(k)}"><span class="tl-dot tl-${esc(k)}"></span> ${esc(PK.t(PK.ui.marks[k] || k))}</span>`).join("")}</div>` : "";
     return `<div class="card stack" data-timeline>${head}
-      ${PK.ui.timeline({ spans: d.spans, from: d.from, to: d.to, marks: d.marks, sel: TL.sel, label: "Machine state, " + d.label })}${sel}${legend}
-      <div><h4 class="mt-3 mb-0 small muted">Latest</h4>${recent}</div>
-      <div class="row"><span class="spacer"></span><a class="small" href="${logHref}">Shift log ›</a></div></div>`;
+      ${PK.ui.timeline({ spans: d.spans, from: d.from, to: d.to, marks: d.marks, sel: TL.sel, label: PK.t("Machine state, {label}", { label: PK.srv(d.label) }) })}${sel}${legend}
+      <div><h4 class="mt-3 mb-0 small muted">${PK.t("Latest")}</h4>${recent}</div>
+      <div class="row"><span class="spacer"></span><a class="small" href="${logHref}">${PK.t("Shift log ›")}</a></div></div>`;
   }
 
-  const PLANT_TABS = [["overview", "Overview"], ["devices", "Devices"], ["sequence", "Sequence"], ["stations", "Stations"], ["values", "Values over time"], ["settings", "Machine settings"], ["exchange", "Data exchange"]];
+  const PLANT_TABS = [["overview", PK.T("Overview")], ["devices", PK.T("Devices")], ["sequence", PK.T("Sequence")], ["stations", PK.T("Stations")], ["values", PK.T("Values over time")], ["settings", PK.T("Machine settings")], ["exchange", PK.T("Data exchange")]];
   // The HMI panel's operator settings and buttons (from the program export), loaded once for the Settings tab
   const H = { data: null, error: null, loading: false, q: "", shown: [] };
   async function loadHmi() {
@@ -562,7 +599,7 @@
     H.loading = true;
     try {
       const r = await PK.api("GET", "/api/program/hmi");
-      if (r.available) H.data = r; else H.error = r.error || "No HMI in the program export.";
+      if (r.available) H.data = r; else H.error = r.error || PK.T("No HMI in the program export.");
     } catch (e) { H.error = e.message; }
     H.loading = false;
     PK.draw();
@@ -572,8 +609,8 @@
 
   /** Every value an operator sets on the HMI panel, by screen, with its live value; then the buttons. */
   function hmiSettingsHtml(s) {
-    if (H.loading || (!H.data && !H.error)) return `<p class="faint small">Reading the HMI panel…</p>`;
-    if (!H.data) return `<p class="faint small">${esc(H.error)}</p>`;
+    if (H.loading || (!H.data && !H.error)) return `<p class="faint small">${PK.t("Reading the HMI panel…")}</p>`;
+    if (!H.data) return `<p class="faint small">${esc(PK.srv(H.error))}</p>`;
     const d = H.data;
     const q = H.q.trim().toLowerCase();
     const hit = (f) => !q || [f.label, f.screen, f.symbol, f.comment].some((x) => String(x || "").toLowerCase().includes(q));
@@ -582,24 +619,24 @@
     H.shown = take.filter((f) => f.type && !f.modelTag).concat(d.commands.filter(hit).slice(0, 100).filter((f) => f.type && !f.modelTag));
     const modelVal = (f) => { const m = f.modelTag && (s.settings || []).find((x) => x.id === f.modelTag); return m ? `<span class="m-0 chip">${esc(m.value)}</span>` : null; };
     const byScreen = new Map();
-    for (const f of take) { const k = (f.screenKind === "Popup" ? "Pop-up " : "Screen ") + f.screen + (f.screenNumber != null ? ` (no. ${f.screenNumber})` : ""); if (!byScreen.has(k)) byScreen.set(k, []); byScreen.get(k).push(f); }
+    for (const f of take) { const k = (f.screenKind === "Popup" ? PK.t("Pop-up {name}", { name: f.screen }) : PK.t("Screen {name}", { name: f.screen })) + (f.screenNumber != null ? " " + PK.t("(no. {n})", { n: f.screenNumber }) : ""); if (!byScreen.has(k)) byScreen.set(k, []); byScreen.get(k).push(f); }
     const panels = d.panels.map((p) => `${esc(p.name)}${p.type ? ` · ${esc(p.type)}` : ""}`).join(", ");
     const cmds = d.commands.filter(hit);
     return `<div class="card stack">
-        <div><b>On the HMI panel</b> <span class="faint small">${panels} · ${d.settings.length} values the operator can change${d.commands.length ? `, ${d.commands.length} buttons` : ""}</span></div>
-        <input class="input" type="search" placeholder="Find a setting, screen or tag" value="${esc(H.q)}" id="hmi-q" aria-label="Find a setting on the HMI">
-        ${take.length ? `<table class="tbl hmi-tbl"><tr><th>On the panel</th><th>Now</th><th>PLC value</th></tr>
+        <div><b>${PK.t("On the HMI panel")}</b> <span class="faint small">${panels} · ${PK.t("{n} values the operator can change", { n: d.settings.length })}${d.commands.length ? ", " + PK.t("{n} buttons", { n: d.commands.length }) : ""}</span></div>
+        <input class="input" type="search" placeholder="${esc(PK.t("Find a setting, screen or tag"))}" value="${esc(H.q)}" id="hmi-q" aria-label="${esc(PK.t("Find a setting on the HMI"))}">
+        ${take.length ? `<table class="tbl hmi-tbl"><tr><th>${PK.t("On the panel")}</th><th>${PK.t("Now")}</th><th>${PK.t("PLC value")}</th></tr>
           ${[...byScreen].map(([screen, fs]) => `<tr class="grp"><td colspan="3"><b>${esc(screen)}</b></td></tr>`
-            + fs.map((f) => `<tr><td>${esc(f.label || "(no text)")}${f.unit ? ` <span class="faint">[${esc(f.unit)}]</span>` : ""}${f.authorization ? ` <span class="faint small" title="User group needed on the panel">· ${esc(f.authorization)}</span>` : ""}</td>
-              <td>${modelVal(f) || (f.type ? hmiLive(f) : `<span class="faint small">not read</span>`)}</td>
+            + fs.map((f) => `<tr><td>${esc(f.label || PK.t("(no text)"))}${f.unit ? ` <span class="faint">[${esc(f.unit)}]</span>` : ""}${f.authorization ? ` <span class="faint small" title="${esc(PK.t("User group needed on the panel"))}">· ${esc(f.authorization)}</span>` : ""}</td>
+              <td>${modelVal(f) || (f.type ? hmiLive(f) : `<span class="faint small">${PK.t("not read")}</span>`)}</td>
               <td class="mono small">${esc(f.symbol)}${f.comment ? `<br><span class="muted" style="font-family:inherit">${esc(f.comment)}</span>` : ""}</td></tr>`).join("")).join("")}
-          </table>` : `<p class="muted">${q ? "No setting matches." : "The panel has no input fields linked to the PLC."}</p>`}
-        ${rows.length > take.length ? `<p class="faint small">Showing ${take.length} of ${rows.length}. Search to narrow it down.</p>` : ""}
-        ${cmds.length ? `<details class="more"><summary>Buttons and switches that change PLC values (${cmds.length})</summary>
-          <table class="tbl hmi-tbl"><tr><th>On the panel</th><th>Does</th><th>PLC value</th><th>Now</th></tr>
+          </table>` : `<p class="muted">${q ? PK.t("No setting matches.") : PK.t("The panel has no input fields linked to the PLC.")}</p>`}
+        ${rows.length > take.length ? `<p class="faint small">${PK.t("Showing {a} of {b}. Search to narrow it down.", { a: take.length, b: rows.length })}</p>` : ""}
+        ${cmds.length ? `<details class="more"><summary>${PK.t("Buttons and switches that change PLC values ({n})", { n: cmds.length })}</summary>
+          <table class="tbl hmi-tbl"><tr><th>${PK.t("On the panel")}</th><th>${PK.t("Does")}</th><th>${PK.t("PLC value")}</th><th>${PK.t("Now")}</th></tr>
           ${cmds.slice(0, 100).map((f) => `<tr><td>${esc(f.where)}</td><td class="small">${esc(f.action || "")}</td><td class="mono small">${esc(f.symbol)}</td><td>${f.type ? hmiLive(f) : ""}</td></tr>`).join("")}
           </table></details>` : ""}
-        <p class="faint small">Read from the HMI project in the TIA archive. PLC-Ki only reads these values; change them on the panel.</p>
+        <p class="faint small">${PK.t("Read from the HMI project in the TIA archive. PLC-Ki only reads these values; change them on the panel.")}</p>
       </div>`;
   }
 
@@ -629,7 +666,7 @@
       const stationList = stationsNow(s);
       const ask0 = attention[0] && PK.devLook(attention[0]).alarms[0];
       // "Temperature reached 60 °C (can't come while Heater E301 is blocked)": a wait that cannot come by itself says so
-      const heldText = (c) => { const d = c.heldBy && s.equipment.find((e) => e.id === c.heldBy); return d ? `${c.text} (can't come while ${d.name} is ${d.blockedBy ? "blocked" : "in fault"})` : c.text; };
+      const heldText = (c) => { const d = c.heldBy && s.equipment.find((e) => e.id === c.heldBy); return d ? (d.blockedBy ? PK.t("{text} (can't come while {name} is blocked)", { text: c.text, name: d.name }) : PK.t("{text} (can't come while {name} is in fault)", { text: c.text, name: d.name })) : c.text; };
       const waitsFor = main ? main.next.flatMap((n) => n.conditions).filter((c) => c.met === false).map(heldText) : [];
       const badSettings = (s.settings || []).filter((x) => x.valid === false);
       const counts = { devices: attention.length, exchange: s.exchange.length, settings: badSettings.length };
@@ -638,15 +675,15 @@
       const stopWord = stop ? stop.word || "STOP" : "";
 
       const head = hero({
-        eyebrow: main ? `<span class="pill ${stCls}"><span class="dot"></span>${stText}</span>${main.timeInStep && !stop ? `<span class="faint">for ${esc(main.timeInStep)}</span>` : ""}<span class="faint">· ${esc(main.name)}</span>` : "",
-        title: main ? `${stop ? "Last step" : "Step"} ${main.step ?? "?"}: ${esc(main.stepName)}` : esc(s.machine),
-        sub: stop ? esc(`The CPU is in ${stopWord} ${PK.cpuSince(stop)}: the program is not running. The values are its last state.`)
-          : main ? (main.halted ? esc("Halted: " + (main.haltReasons.join("; ") || "the outputs are off.")) : waitsFor.length ? esc("Waiting for: " + waitsFor.join("; ")) : esc(main.does || "")) : esc(s.summary[0] || ""),
-        actions: stop ? `<a class="btn" href="#/alarm">What to check</a><a class="btn b" href="#/plc">PLC page</a>` : `<button class="btn" data-ask="${ask0 ? `Why is alarm ${esc(ask0.id)} on for ${esc(attention[0].name)}, and what do I check?` : attention.length ? `Why is ${esc(attention[0].name)} ${esc(attention[0].blockedBy ? "blocked" : attention[0].state)}, and what do I check?` : "What is the machine doing right now?"}">Ask about it</button>${s.activeAlarms.length ? `<a class="btn b" href="#/alarm">${s.activeAlarms.length} active alarm${s.activeAlarms.length > 1 ? "s" : ""}</a>` : ""}`,
+        eyebrow: main ? `<span class="pill ${stCls}"><span class="dot"></span>${stText}</span>${main.timeInStep && !stop ? `<span class="faint">${PK.t("for {time}", { time: esc(main.timeInStep) })}</span>` : ""}<span class="faint">· ${esc(main.name)}</span>` : "",
+        title: main ? (stop ? PK.t("Last step {n}: {name}", { n: main.step ?? "?", name: esc(main.stepName) }) : PK.t("Step {n}: {name}", { n: main.step ?? "?", name: esc(main.stepName) })) : esc(s.machine),
+        sub: stop ? esc(PK.t("The CPU is in {word} {since}: the program is not running. The values are its last state.", { word: stopWord, since: PK.cpuSince(stop) }))
+          : main ? (main.halted ? esc(PK.t("Halted: {why}", { why: main.haltReasons.map(srvT).join("; ") || PK.t("the outputs are off.") })) : waitsFor.length ? esc(PK.t("Waiting for: {list}", { list: waitsFor.join("; ") })) : esc(main.does || "")) : esc(sentences(s.summary[0] || "")),
+        actions: stop ? `<a class="btn" href="#/alarm">${PK.t("What to check")}</a><a class="btn b" href="#/plc">${PK.t("PLC page")}</a>` : `<button class="btn" data-ask="${esc(ask0 ? PK.t("Why is alarm {id} on for {name}, and what do I check?", { id: ask0.id, name: attention[0].name }) : attention.length ? PK.t("Why is {name} {state}, and what do I check?", { name: attention[0].name, state: attention[0].blockedBy ? PK.t("blocked") : stT(attention[0].state) }) : PK.t("What is the machine doing right now?"))}">${PK.t("Ask about it")}</button>${s.activeAlarms.length ? `<a class="btn b" href="#/alarm">${PK.t("{n} active alarm|{n} active alarms", { n: s.activeAlarms.length })}</a>` : ""}`,
         // Measured values as bars with the interlock limit marked; switches and counters stay as numbers
         extra: (s.overview.length ? (V ? V.valueBars(s.overview.slice(0, 8)) : PK.ui.tiles(s.overview.slice(0, 8).map((v) => ({ value: v.text, label: v.label })), { cls: "plant-kpis" })) : "")
-          + PK.ui.tabs("Plant", PLANT_TABS.filter(([k]) => (k !== "exchange" || s.exchange.length) && (k !== "settings" || (s.settings || []).length || (H.data && H.data.settings.length)) && (k !== "stations" || stationList.stations.length > 1) && (k !== "sequence" || (state.model && state.model.sequences.length))).map(([k, l]) =>
-            ({ label: l, on: k === tab, href: "#/plant" + (k === "overview" ? "" : "/" + k), count: k === "devices" || k === "settings" ? counts[k] : 0 }))),
+          + PK.ui.tabs(PK.t("Plant"), PLANT_TABS.filter(([k]) => (k !== "exchange" || s.exchange.length) && (k !== "settings" || (s.settings || []).length || (H.data && H.data.settings.length)) && (k !== "stations" || stationList.stations.length > 1) && (k !== "sequence" || (state.model && state.model.sequences.length))).map(([k, l]) =>
+            ({ label: PK.t(l), on: k === tab, href: "#/plant" + (k === "overview" ? "" : "/" + k), count: k === "devices" || k === "settings" ? counts[k] : 0 }))),
       });
 
       loadHmi();
@@ -657,44 +694,44 @@
         const alarmRows = s.activeAlarms.map((x) => `<li><a class="al ${x.severity === "WARNING" ? "w" : ""}" href="#/alarm">
               <span class="ico">${icon("bell")}</span>
               <span class="nd-t"><b>${esc(x.id)} · ${esc(x.text)}</b><span>${esc(x.condition || x.location || "")}</span></span>
-              <span class="lv lv-${x.severity === "WARNING" ? "warn" : "fault"}">${esc(x.severity === "WARNING" ? "warning" : "fault")}</span><span class="chev">›</span></a></li>`).join("");
+              <span class="lv lv-${x.severity === "WARNING" ? "warn" : "fault"}">${esc(x.severity === "WARNING" ? PK.t("warning") : PK.t("fault"))}</span><span class="chev">›</span></a></li>`).join("");
         // A device whose problem is an alarm already listed above is not listed again; a blocked one still is
         const devRows = attention.filter((e) => e.blockedBy || !PK.devLook(e).alarms.length);
         const stopRow = stop ? `<li><a class="al" href="#/alarm"><span class="ico">${icon("warn")}</span>
-              <span class="nd-t"><b>PLC in ${esc(stopWord)}</b><span>The program is not running. What to check is on Active alarm.</span></span>
+              <span class="nd-t"><b>${PK.t("PLC in {word}", { word: esc(stopWord) })}</b><span>${PK.t("The program is not running. What to check is on Active alarm.")}</span></span>
               <span class="lv lv-fault">${esc(stopWord.toLowerCase())}</span><span class="chev">›</span></a></li>` : "";
         const nNeeds = devRows.length + s.activeAlarms.length + badSettings.length + (stop ? 1 : 0);
         const settingRows = badSettings.map((x) => `<li><a href="#/plant/settings">
               <span class="ico">${icon("gear")}</span>
-              <span class="nd-t"><b>Setting ${esc(x.label)} is ${esc(x.value)}</b><span>${esc(x.problem || "the machine cannot work with this value")}</span></span>
-              <span class="lv lv-warn">setting</span><span class="chev">›</span></a></li>`).join("");
+              <span class="nd-t"><b>${PK.t("Setting {label} is {value}", { label: esc(x.label), value: esc(x.value) })}</b><span>${esc(x.problem || PK.t("the machine cannot work with this value"))}</span></span>
+              <span class="lv lv-warn">${PK.t("setting")}</span><span class="chev">›</span></a></li>`).join("");
         const needs = nNeeds
           ? `<ul class="needs">${stopRow}${alarmRows}${settingRows}${devRows.map((e) => `<li><a href="#/plant/devices/${encodeURIComponent(e.id)}">
               <span class="ico">${icon(PK.kindIcon(e.kind))}</span>
-              <span class="nd-t"><b>${esc(e.name)}</b><span>${esc(e.blockedBy ? (/^needs /.test(e.blockedBy) ? "Blocked: it " + e.blockedBy : "Blocked: " + e.blockedBy) : e.explanation || e.state)}</span></span>
-              <span class="lv lv-${esc(e.blockedBy ? "warn" : e.level)}">${esc(e.blockedBy ? "blocked" : e.state)}</span><span class="chev">›</span></a></li>`).join("")}</ul>`
-          : `<p class="ok-line">${icon("check")}<span>No alarm, and every device is doing what the program asks.</span></p>`;
+              <span class="nd-t"><b>${esc(e.name)}</b><span>${esc(e.blockedBy ? blockedShort(e) : e.explanation ? eqExpl(e) : stT(e.state))}</span></span>
+              <span class="lv lv-${esc(e.blockedBy ? "warn" : e.level)}">${esc(e.blockedBy ? PK.t("blocked") : stT(e.state))}</span><span class="chev">›</span></a></li>`).join("")}</ul>`
+          : `<p class="ok-line">${icon("check")}<span>${PK.t("No alarm, and every device is doing what the program asks.")}</span></p>`;
         const seqCards = s.sequences.map((q) => `<div class="card stack">
             <div class="row"><h3 class="m-0">${esc(q.name)}</h3><span class="pill ${seqState(q)[1]}">${seqState(q)[0]}</span><span class="spacer"></span>
-              <a class="small" href="#/plant/sequence/${encodeURIComponent(q.id)}">Step chart and timeline ›</a></div>
+              <a class="small" href="#/plant/sequence/${encodeURIComponent(q.id)}">${PK.t("Step chart and timeline ›")}</a></div>
             ${stepStrip(q)}
-            ${stop ? `<div class="notice red">${icon("warn")}<div>${esc(q.explanation)}</div></div>`
-              : q.does ? `<p class="m-0"><span class="muted">This step should:</span> ${esc(q.does)}</p>` : ""}
-            ${q.halted && q.haltReasons.length && !stop ? `<div class="notice red">${icon("warn")}<div><b>Halted, outputs are off:</b> ${q.haltReasons.map(esc).join("; ")}</div></div>` : ""}
-            ${q.next.map((n) => `<div><p class="mt-0 mb-2 muted small">To go to step ${n.to} "${esc(n.toName)}" it needs</p><ul class="conds">${n.conditions.map((c) => PK.condHeld(c, s)).join("")}</ul></div>`).join("")}
+            ${stop ? `<div class="notice red">${icon("warn")}<div>${esc(sentences(q.explanation))}</div></div>`
+              : q.does ? `<p class="m-0"><span class="muted">${PK.t("This step should:")}</span> ${esc(q.does)}</p>` : ""}
+            ${q.halted && q.haltReasons.length && !stop ? `<div class="notice red">${icon("warn")}<div><b>${PK.t("Halted, outputs are off:")}</b> ${q.haltReasons.map((x) => esc(srvT(x))).join("; ")}</div></div>` : ""}
+            ${q.next.map((n) => `<div><p class="mt-0 mb-2 muted small">${PK.t(`To go to step {n} "{name}" it needs`, { n: n.to, name: esc(n.toName) })}</p><ul class="conds">${n.conditions.map((c) => PK.condHeld(c, s)).join("")}</ul></div>`).join("")}
             ${q.limit ? `<p class="m-0 faint">${esc(q.limit)}</p>` : ""}
           </div>`).join("");
         body = sec("", `<div class="plant-cols">
             <div class="stack">
-              <div class="card stack"><div class="row"><h3 class="m-0">Needs attention</h3>${nNeeds ? `<span class="count ${stop || s.activeAlarms.some((x) => x.severity !== "WARNING") ? "" : "warn"}">${nNeeds}</span>` : ""}<span class="spacer"></span>
-                <a class="small" href="#/plant/devices">All devices ›</a></div>${needs}</div>
+              <div class="card stack"><div class="row"><h3 class="m-0">${PK.t("Needs attention")}</h3>${nNeeds ? `<span class="count ${stop || s.activeAlarms.some((x) => x.severity !== "WARNING") ? "" : "warn"}">${nNeeds}</span>` : ""}<span class="spacer"></span>
+                <a class="small" href="#/plant/devices">${PK.t("All devices ›")}</a></div>${needs}</div>
               ${timelineCard()}
               ${seqCards}
             </div>
             <div class="stack">
-              ${V && s.equipment.length ? `<div class="card stack"><h3 class="m-0">The machine at a glance</h3>${V.plantMap(s.equipment, null)}</div>` : ""}
-              ${V ? `<a class="card plink" href="#/plant/values"><span class="ico">${icon("clock")}</span><span><b>Values over time</b><span class="muted small">The last minutes of every measured value, with steps and alarms.</span></span><span class="chev">›</span></a>` : ""}
-              ${s.exchange.length ? `<a class="card plink" href="#/plant/exchange"><span class="ico">${icon("link")}</span><span><b>Data exchange</b><span class="muted small">${s.exchange.length} signals to and from ${esc([...new Set(s.exchange.map((x) => x.partner))].join(", "))}.</span></span><span class="chev">›</span></a>` : ""}
+              ${V && s.equipment.length ? `<div class="card stack"><h3 class="m-0">${PK.t("The machine at a glance")}</h3>${V.plantMap(s.equipment, null)}</div>` : ""}
+              ${V ? `<a class="card plink" href="#/plant/values"><span class="ico">${icon("clock")}</span><span><b>${PK.t("Values over time")}</b><span class="muted small">${PK.t("The last minutes of every measured value, with steps and alarms.")}</span></span><span class="chev">›</span></a>` : ""}
+              ${s.exchange.length ? `<a class="card plink" href="#/plant/exchange"><span class="ico">${icon("link")}</span><span><b>${PK.t("Data exchange")}</b><span class="muted small">${PK.t("{n} signals to and from {partners}.", { n: s.exchange.length, partners: esc([...new Set(s.exchange.map((x) => x.partner))].join(", ")) })}</span></span><span class="chev">›</span></a>` : ""}
             </div>
           </div>`);
       } else if (tab === "devices") {
@@ -702,38 +739,38 @@
         const sorted = [...s.equipment].sort((x, y) => rank(x) - rank(y));
         const shown = sorted.filter((e) => (!eqOnlyProblems || problemOf(e)) && (!q || (e.id + " " + e.name + " " + (e.kind || "") + " " + e.state).toLowerCase().includes(q)));
         const sel = s.equipment.find((e) => e.id === selectedEq) || shown[0] || sorted[0];
-        const tools = `<div class="dev-tools">${s.equipment.length > 6 ? `<input type="search" id="eq-search" placeholder="Find a device" value="${esc(eqQuery)}" aria-label="Find a device">` : ""}
-            ${PK.ui.choice("Show", [{ label: `All ${s.equipment.length}`, on: !eqOnlyProblems, data: { "data-eqf": "all" } }, { label: `Needs attention ${attention.length}`, on: eqOnlyProblems, data: { "data-eqf": "problems" } }])}</div>`;
+        const tools = `<div class="dev-tools">${s.equipment.length > 6 ? `<input type="search" id="eq-search" placeholder="${esc(PK.t("Find a device"))}" value="${esc(eqQuery)}" aria-label="${esc(PK.t("Find a device"))}">` : ""}
+            ${PK.ui.choice(PK.t("Show"), [{ label: PK.t("All {n}", { n: s.equipment.length }), on: !eqOnlyProblems, data: { "data-eqf": "all" } }, { label: PK.t("Needs attention {n}", { n: attention.length }), on: eqOnlyProblems, data: { "data-eqf": "problems" } }])}</div>`;
         const list = shown.length ? `<ul class="devlist">${shown.map((e) => `<li><button type="button" class="${sel && e.id === sel.id ? "on" : ""}" data-pick="${esc(e.id)}" aria-pressed="${!!sel && e.id === sel.id}">
             <span class="ico">${icon(PK.kindIcon(e.kind))}</span><span class="dv-t"><b>${esc(e.name)}</b><span>${esc(e.id)}</span></span>
             ${devPill(e)}</button></li>`).join("")}</ul>`
-          : PK.ui.empty({ icon: eqOnlyProblems && !q ? "check" : "search", title: eqOnlyProblems && !q ? "Every device is fine." : "No device matches.", action: `<button class="btn b small" data-eq-reset>Show all devices</button>` });
+          : PK.ui.empty({ icon: eqOnlyProblems && !q ? "check" : "search", title: eqOnlyProblems && !q ? PK.t("Every device is fine.") : PK.t("No device matches."), action: `<button class="btn b small" data-eq-reset>${PK.t("Show all devices")}</button>` });
         body = sec("", `<div class="dev-cols"><div class="stack">${tools}${list}</div>
-            <div data-dev>${sel ? `<div class="card stack eq-open">${eqCard(sel, true)}<div class="actions"><button class="btn small" data-ask="${PK.devLook(sel).alarms[0] ? `Why is alarm ${esc(PK.devLook(sel).alarms[0].id)} on for ${esc(sel.id)}?` : `Why is ${esc(sel.id)} ${esc(sel.state)}?`}">Ask why</button></div></div>` : ""}</div></div>`);
+            <div data-dev>${sel ? `<div class="card stack eq-open">${eqCard(sel, true)}<div class="actions"><button class="btn small" data-ask="${esc(PK.devLook(sel).alarms[0] ? PK.t("Why is alarm {id} on for {name}?", { id: PK.devLook(sel).alarms[0].id, name: sel.id }) : PK.t("Why is {name} {state}?", { name: sel.id, state: stT(sel.state) }))}">${PK.t("Ask why")}</button></div></div>` : ""}</div></div>`);
       } else if (tab === "stations") {
         // The stations inside Plant; each card opens that station's phone page (the one its QR label opens)
         body = sec("", PKStations.grid(stationList.stations, stationList.machineAlarms));
       } else if (tab === "sequence") {
-        body = sec("", V ? V.sequenceBody(params[1], params[2]) : `<p class="muted">The step chart is not available.</p>`);
+        body = sec("", V ? V.sequenceBody(params[1], params[2]) : `<p class="muted">${PK.t("The step chart is not available.")}</p>`);
       } else if (tab === "values") {
-        body = sec("", V ? V.trends() : `<p class="muted">Charts are not available.</p>`);
+        body = sec("", V ? V.trends() : `<p class="muted">${PK.t("Charts are not available.")}</p>`);
       } else if (tab === "settings") {
         const where = (x) => x.hmi || (H.data && H.data.bySetting[x.id]) || "";
-        body = sec("", ((s.settings || []).length ? `<p class="sub">Values an operator or engineer sets on the HMI or in the recipe that the machine needs. ✗ means the machine cannot work with the value it has now.</p>
-          <div class="card"><table class="tbl"><tr><th></th><th>Setting</th><th>Value</th><th>What it does</th></tr>
-            ${(s.settings || []).map((x) => `<tr><td>${x.valid === false ? `<span class="mark no" aria-label="not OK">✗</span>` : x.valid === true ? `<span class="mark yes" aria-label="OK">✓</span>` : ""}</td>
-              <td><b>${esc(x.label)}</b>${where(x) ? `<br><span class="faint small">On the panel: ${esc(where(x))}</span>` : ""}</td><td class="val ${x.valid === false ? "setting-bad" : ""}">${esc(x.value)}</td>
-              <td class="muted">${esc(x.text || "")}${x.valid === false && x.problem ? `<br><span class="setting-bad">${esc(x.problem)}${where(x) ? `. Change it on the panel: ${esc(where(x))}` : ""}</span>` : ""}</td></tr>`).join("")}
-          </table></div>` : `<p class="sub">Values an operator sets on the HMI panel, with what they are now.</p>`)
+        body = sec("", ((s.settings || []).length ? `<p class="sub">${PK.t("Values an operator or engineer sets on the HMI or in the recipe that the machine needs. ✗ means the machine cannot work with the value it has now.")}</p>
+          <div class="card"><table class="tbl"><tr><th></th><th>${PK.t("Setting")}</th><th>${PK.t("Value")}</th><th>${PK.t("What it does")}</th></tr>
+            ${(s.settings || []).map((x) => `<tr><td>${x.valid === false ? `<span class="mark no" aria-label="${esc(PK.t("not OK"))}">✗</span>` : x.valid === true ? `<span class="mark yes" aria-label="${esc(PK.t("OK"))}">✓</span>` : ""}</td>
+              <td><b>${esc(x.label)}</b>${where(x) ? `<br><span class="faint small">${PK.t("On the panel: {where}", { where: esc(where(x)) })}</span>` : ""}</td><td class="val ${x.valid === false ? "setting-bad" : ""}">${esc(x.value)}</td>
+              <td class="muted">${esc(x.text || "")}${x.valid === false && x.problem ? `<br><span class="setting-bad">${esc(x.problem)}${where(x) ? ". " + PK.t("Change it on the panel: {where}", { where: esc(where(x)) }) : ""}</span>` : ""}</td></tr>`).join("")}
+          </table></div>` : `<p class="sub">${PK.t("Values an operator sets on the HMI panel, with what they are now.")}</p>`)
           + `<div class="mt-4">${hmiSettingsHtml(s)}</div>`);
       } else {
-        body = sec("", `<div class="card"><table class="tbl xchg"><tr><th>With</th><th>Signal</th><th>Value</th><th>Meaning</th></tr>
-            ${s.exchange.map((x) => `<tr><td class="with"><b title="${x.direction === "in" ? "from" : "to"} ${esc(x.partner)}">${x.direction === "in" ? "← from" : "→ to"} ${esc(x.partner)}</b></td>
+        body = sec("", `<div class="card"><table class="tbl xchg"><tr><th>${PK.t("With")}</th><th>${PK.t("Signal")}</th><th>${PK.t("Value")}</th><th>${PK.t("Meaning")}</th></tr>
+            ${s.exchange.map((x) => `<tr><td class="with"><b title="${x.direction === "in" ? PK.t("from {partner}", { partner: esc(x.partner) }) : PK.t("to {partner}", { partner: esc(x.partner) })}">${x.direction === "in" ? PK.t("← from {partner}", { partner: esc(x.partner) }) : PK.t("→ to {partner}", { partner: esc(x.partner) })}</b></td>
               <td class="sig">${esc(x.label)}</td><td class="val">${esc(x.value)}</td><td class="muted mean">${esc(x.text || "")}</td></tr>`).join("")}
             </table></div>`);
       }
       return head + body
-        + (Object.keys(s.tagErrors || {}).length ? sec("tight", `<details class="more"><summary>${Object.keys(s.tagErrors).length} signals could not be read</summary><ul class="small">${Object.entries(s.tagErrors).map(([k, v]) => `<li><code>${esc(k)}</code>: ${esc(v)}</li>`).join("")}</ul></details>`) : "")
+        + (Object.keys(s.tagErrors || {}).length ? sec("tight", `<details class="more"><summary>${PK.t("{n} signals could not be read", { n: Object.keys(s.tagErrors).length })}</summary><ul class="small">${Object.entries(s.tagErrors).map(([k, v]) => `<li><code>${esc(k)}</code>: ${esc(PK.srv(v))}</li>`).join("")}</ul></details>`) : "")
         + guide();
     },
     after(page) {
@@ -794,31 +831,31 @@
         return `<li class="click" data-open="${esc(a.id)}" id="alarm-${esc(a.id)}" style="flex-wrap:wrap" tabindex="0" aria-expanded="${open}">
           <span class="tag ${a.severity === "WARNING" ? "gold" : "red"}">${esc(a.id)}</span>
           <span style="flex:1;min-width:200px"><b class="semibold">${esc(a.text)}</b>${a.location ? `<div class="faint">${esc(a.location)}</div>` : ""}</span>
-          ${on ? `<span class="pill ${a.severity === "WARNING" ? "warn" : "bad"}"><span class="dot"></span>Active</span>` : ""}<span class="chev">${open ? "⌄" : "›"}</span>
+          ${on ? `<span class="pill ${a.severity === "WARNING" ? "warn" : "bad"}"><span class="dot"></span>${PK.t("Active")}</span>` : ""}<span class="chev">${open ? "⌄" : "›"}</span>
           ${open ? `<div style="flex-basis:100%;padding:10px 0 4px" class="grid two">
-              <div>${a.condition ? `<h3>Meaning</h3><p class="mt-0 mb-3 muted">${esc(a.condition)}</p>` : ""}
-                ${a.causes.length ? `<h3>Likely causes</h3><ol class="causes small">${a.causes.map((c, i) => `<li><b>${i + 1}</b><span>${esc(c)}</span></li>`).join("")}</ol>` : ""}</div>
-              <div>${a.fix.length ? `<h3>How to fix</h3><ol class="fix small">${a.fix.map((c) => `<li style="font-size:15px;cursor:default">${esc(c)}</li>`).join("")}</ol>` : ""}
-                <div class="mt-4 actions">${on ? `<a class="btn small" href="#/alarm">Open on Active alarm</a>` : ""}
-                ${(() => { const w = alarmWhere(a); return w.block ? `<a class="btn b small" href="${esc(w.href)}">Show where it is set</a>` : ""; })()}
-                <button class="btn b small" data-ask="Explain alarm ${esc(a.id)}: when does it come, why, and how is it fixed?">Ask</button></div></div>
-            </div>${window.PKMemory ? `<div class="mem-in-row"><h3>History of this alarm</h3>${PKMemory.alarmBlock(a.id, { compact: true })}</div>` : ""}` : ""}
+              <div>${a.condition ? `<h3>${PK.t("Meaning")}</h3><p class="mt-0 mb-3 muted">${esc(a.condition)}</p>` : ""}
+                ${a.causes.length ? `<h3>${PK.t("Likely causes")}</h3><ol class="causes small">${a.causes.map((c, i) => `<li><b>${i + 1}</b><span>${esc(c)}</span></li>`).join("")}</ol>` : ""}</div>
+              <div>${a.fix.length ? `<h3>${PK.t("How to fix")}</h3><ol class="fix small">${a.fix.map((c) => `<li style="font-size:15px;cursor:default">${esc(c)}</li>`).join("")}</ol>` : ""}
+                <div class="mt-4 actions">${on ? `<a class="btn small" href="#/alarm">${PK.t("Open on Active alarm")}</a>` : ""}
+                ${(() => { const w = alarmWhere(a); return w.block ? `<a class="btn b small" href="${esc(w.href)}">${PK.t("Show where it is set")}</a>` : ""; })()}
+                <button class="btn b small" data-ask="${esc(PK.t("Explain alarm {id}: when does it come, why, and how is it fixed?", { id: a.id }))}">${PK.t("Ask")}</button></div></div>
+            </div>${window.PKMemory ? `<div class="mem-in-row"><h3>${PK.t("History of this alarm")}</h3>${PKMemory.alarmBlock(a.id, { compact: true })}</div>` : ""}` : ""}
         </li>`;
       }).join("");
       // The counts live in the filter buttons: one row to read and to click, no second row of the same numbers
       return hero({
-        title: "Alarms",
-        sub: "Every alarm the program can raise: what it means, where it is set, the likely causes and the fix.",
-      }) + sec("alt", `${PK.ui.toolbar({ search: { id: "alarm-search", placeholder: "Search by number, text or device", label: "Search alarms", value: alarmFilter },
-          left: PK.ui.choice("Show", [["all", "All", m.alarms.length, "Every alarm in the program"], ["active", "Active", s.activeAlarms.length, "On right now"], ["faults", "Faults", faults, "Faults stop the machine"], ["warnings", "Warnings", m.alarms.length - faults, "Warnings do not stop the machine"]]
+        title: PK.t("Alarms"),
+        sub: PK.t("Every alarm the program can raise: what it means, where it is set, the likely causes and the fix."),
+      }) + sec("alt", `${PK.ui.toolbar({ search: { id: "alarm-search", placeholder: PK.t("Search by number, text or device"), label: PK.t("Search alarms"), value: alarmFilter },
+          left: PK.ui.choice(PK.t("Show"), [["all", PK.t("All"), m.alarms.length, PK.t("Every alarm in the program")], ["active", PK.t("Active"), s.activeAlarms.length, PK.t("On right now")], ["faults", PK.t("Faults"), faults, PK.t("Faults stop the machine")], ["warnings", PK.t("Warnings"), m.alarms.length - faults, PK.t("Warnings do not stop the machine")]]
             .map(([k, l, n, t]) => ({ label: `${l} <b>${n}</b>`, on: alarmKind === k, hot: k === "active" && n, title: t, data: { "data-akind": k } }))) })}
-          ${PK.cpuStop(s) ? `<div class="mb-4 notice red">${icon("warn")}<div><b>The PLC is in ${esc(PK.cpuStop(s).word || "STOP")}: the program is not running.</b> The alarms below are as they were when it stopped. <a href="#/alarm">What to check</a></div></div>` : ""}
+          ${PK.cpuStop(s) ? `<div class="mb-4 notice red">${icon("warn")}<div><b>${PK.t("The PLC is in {word}: the program is not running.", { word: esc(PK.cpuStop(s).word || "STOP") })}</b> ${PK.t("The alarms below are as they were when it stopped.")} <a href="#/alarm">${PK.t("What to check")}</a></div></div>` : ""}
           ${PK.deviceDiagnostics ? `<div class="diag-zone">${PK.deviceDiagnostics()}</div>` : ""}
-          <a class="card plink alarms-past" href="#/history"><span class="ico">${icon("clock")}</span><span><b>Past alarms</b><span class="muted small">What came and went, what fixed it, and the seconds before each alarm: in History.</span></span><span class="chev">›</span></a>
+          <a class="card plink alarms-past" href="#/history"><span class="ico">${icon("clock")}</span><span><b>${PK.t("Past alarms")}</b><span class="muted small">${PK.t("What came and went, what fixed it, and the seconds before each alarm: in History.")}</span></span><span class="chev">›</span></a>
           ${rows ? `<ul class="list">${rows}</ul>` : PK.ui.empty({ ...(alarmKind === "active" && !q
-            ? { title: "No alarm is active.", text: "The machine reports no fault or warning right now." }
-            : { icon: "search", title: "No alarm matches.", text: `Search by the alarm number (like ${esc((m.alarms[0] || {}).id || "A101")}), a word from the text, or a device tag.` }),
-            action: q || alarmKind !== "all" ? `<button class="btn b small" data-areset>Show all alarms</button>` : "" })}`);
+            ? { title: PK.t("No alarm is active."), text: PK.t("The machine reports no fault or warning right now.") }
+            : { icon: "search", title: PK.t("No alarm matches."), text: PK.t("Search by the alarm number (like {id}), a word from the text, or a device tag.", { id: esc((m.alarms[0] || {}).id || "A101") }) }),
+            action: q || alarmKind !== "all" ? `<button class="btn b small" data-areset>${PK.t("Show all alarms")}</button>` : "" })}`);
     },
     after(page) {
       if (PK.wireDeviceDiagnostics) PK.wireDeviceDiagnostics(page);

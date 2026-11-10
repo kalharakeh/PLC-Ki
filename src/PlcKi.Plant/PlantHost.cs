@@ -137,6 +137,7 @@ public static class PlantHost
     private static readonly HashSet<string> Open = new(StringComparer.OrdinalIgnoreCase)
     {
         "/login.html", "/login.js", "/ui.css", "/favicon.ico",
+        "/js/i18n.js", "/js/i18n-de.js",        // the login page is translated too (review 49): only texts of the page, no data
         "/api/auth/state", "/api/auth/login", "/api/auth/setup", "/api/auth/logout",
     };
 

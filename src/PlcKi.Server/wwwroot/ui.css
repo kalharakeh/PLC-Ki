@@ -455,6 +455,7 @@ a.op { color: inherit; }
 .rung.more-right { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 56px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 56px), transparent); }
 .contact.blocker .nm { color: var(--warn-ink); font-weight: 700; }
 .contact.blocker .nm::after { content: "↑ stops the output"; display: block; font-weight: 600; }
+html[lang="de"] .contact.blocker .nm::after { content: "↑ stoppt den Ausgang"; }
 .rung-legend { margin: 0 0 12px; }
 .rung-legend span { display: inline-flex; gap: 6px; align-items: center; }
 .lg { width: 18px; height: 12px; border-radius: 4px; border: 1.5px solid var(--line-strong); background: var(--bg-alt); display: inline-block; }

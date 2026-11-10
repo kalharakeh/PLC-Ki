@@ -170,6 +170,27 @@ public sealed class SettingsStore
     /// <summary>The plant's format; each login may choose its own. Read live.</summary>
     public string Format => _config["Plant:Format"] is { } f && Formats.Contains(f) ? f : "text";
 
+    /// <summary>The page languages (review 49): English and German.</summary>
+    public static readonly IReadOnlyList<string> Languages = new[] { "en", "de" };
+
+    /// <summary>The language of the pages for everyone who has not chosen their own; English until changed. Read live.</summary>
+    public string Language => _config["Plant:Language"] is { } l && Languages.Contains(l) ? l : "en";
+
+    /// <summary>True once an administrator chose a format: until then German pages use the German format (03.11.2026, 14:02, 12,5).</summary>
+    public bool FormatChosen => _config["Plant:Format"] is { } f && Formats.Contains(f);
+
+    public void SaveLanguage(string? language)
+    {
+        if (language == null || !Languages.Contains(language)) throw new PlantException("The language is en or de.");
+        lock (_lock)
+        {
+            var root = Load();
+            Obj(root, "Plant")["Language"] = language;
+            AtomicFile.Save(_ctx.SettingsFile, root.ToJsonString(Json));
+            (_config as IConfigurationRoot)?.Reload();
+        }
+    }
+
     public void SaveFormat(string? format)
     {
         if (format == null || !Formats.Contains(format)) throw new PlantException("The format is text, dot, iso or us.");

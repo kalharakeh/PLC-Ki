@@ -143,11 +143,11 @@ const PKDev = (() => {
     const gap = dw / 6.2;
     keys.forEach(([t, a], i) => {
       const cx = dx + gap * (i + 0.7);
-      s += `<g class="pkd-key" data-key="${a}" role="button" aria-label="Display key ${a}" tabindex="${o.keys ? 0 : -1}"><circle cx="${cx}" cy="${ky}" r="${kr}" fill="var(--dev-key)" stroke="var(--dev-recess)" stroke-width="${k * 0.3}"/><text x="${cx}" y="${ky + kr * 0.42}" font-size="${kr * 1.15}" fill="var(--dev-plate)" text-anchor="middle">${t}</text></g>`;
+      s += `<g class="pkd-key" data-key="${a}" role="button" aria-label="${esc(PK.t("Display key {key}", { key: a }))}" tabindex="${o.keys ? 0 : -1}"><circle cx="${cx}" cy="${ky}" r="${kr}" fill="var(--dev-key)" stroke="var(--dev-recess)" stroke-width="${k * 0.3}"/><text x="${cx}" y="${ky + kr * 0.42}" font-size="${kr * 1.15}" fill="var(--dev-plate)" text-anchor="middle">${t}</text></g>`;
     });
     [["ESC", "esc"], ["OK", "ok"]].forEach(([t, a], i) => {
       const cx = dx + gap * (4.55 + i * 1.05);
-      s += `<g class="pkd-key" data-key="${a}" role="button" aria-label="Display key ${t}" tabindex="${o.keys ? 0 : -1}"><rect x="${cx - kr * 1.25}" y="${ky - kr * 0.8}" width="${kr * 2.5}" height="${kr * 1.6}" rx="${kr * 0.4}" fill="var(--dev-key)" stroke="var(--dev-recess)" stroke-width="${k * 0.3}"/><text x="${cx}" y="${ky + kr * 0.35}" font-size="${kr * 0.78}" font-weight="700" fill="var(--dev-plate)" text-anchor="middle">${t}</text></g>`;
+      s += `<g class="pkd-key" data-key="${a}" role="button" aria-label="${esc(PK.t("Display key {key}", { key: t }))}" tabindex="${o.keys ? 0 : -1}"><rect x="${cx - kr * 1.25}" y="${ky - kr * 0.8}" width="${kr * 2.5}" height="${kr * 1.6}" rx="${kr * 0.4}" fill="var(--dev-key)" stroke="var(--dev-recess)" stroke-width="${k * 0.3}"/><text x="${cx}" y="${ky + kr * 0.35}" font-size="${kr * 0.78}" font-weight="700" fill="var(--dev-plate)" text-anchor="middle">${t}</text></g>`;
     });
     // the lower flap: memory card slot and PROFINET ports behind it
     const fy = ky + kr + k * 5, fh = H - fy - k * 8;
@@ -297,7 +297,7 @@ const PKDev = (() => {
     const H = Math.max(...drawn.map((d) => d.h), k * 40);
     drawn.forEach((d, i) => {
       const m = mods[i], sel = o.selected === i;
-      inner += `<g class="pkd-mod${sel ? " on" : ""}" data-mod="${i}" transform="translate(${x} ${top + (H - d.h)})" tabindex="0" role="button" aria-label="${esc(`Slot ${m.slot ?? "?"}: ${m.title || m.name}`)}">
+      inner += `<g class="pkd-mod${sel ? " on" : ""}" data-mod="${i}" transform="translate(${x} ${top + (H - d.h)})" tabindex="0" role="button" aria-label="${esc(PK.t("Slot {slot}: {title}", { slot: m.slot ?? "?", title: m.title || m.name }))}">
         <rect class="pkd-hit" x="${-k * 1.2}" y="${-k * 1.2}" width="${d.w + k * 2.4}" height="${d.h + k * 2.4}" rx="${k * 2}" fill="none"/>${d.svg}</g>`;
       inner += `<text x="${x + d.w / 2}" y="${top - k * 3}" font-size="${k * 3}" text-anchor="middle" class="pkd-slot">${m.slot ?? ""}</text>`;
       x += d.w + gap;
@@ -311,7 +311,7 @@ const PKDev = (() => {
     else if (fam === "s7-1200" || fam === "et200sp")
       rail = `<rect x="${k * 2}" y="${top + H * 0.6 - k * 17.5}" width="${W - k * 4}" height="${k * 35}" fill="${C.rail}" stroke="${C.railD}" stroke-width="${k * 0.4}"/><rect x="${k * 2}" y="${top + H * 0.6 - k * 13}" width="${W - k * 4}" height="${k * 26}" fill="${C.railD}" opacity="0.45"/>`;
     // Scales up to fill the card (at most 1.6x), never below its drawn size (then the card scrolls sideways)
-    return `<svg class="pkd-rack" viewBox="0 0 ${W} ${top + H + k * 4}" style="width:100%;height:auto;min-width:${Math.round(W)}px;max-width:${Math.round(W * 1.6)}px" role="group" aria-label="${esc(station.name)} rack">${defs()}${rail}${inner}</svg>`;
+    return `<svg class="pkd-rack" viewBox="0 0 ${W} ${top + H + k * 4}" style="width:100%;height:auto;min-width:${Math.round(W)}px;max-width:${Math.round(W * 1.6)}px" role="group" aria-label="${esc(PK.t("{name} rack", { name: station.name }))}">${defs()}${rail}${inner}</svg>`;
   }
 
   /** One device on its own (the PLC page's big CPU). */
