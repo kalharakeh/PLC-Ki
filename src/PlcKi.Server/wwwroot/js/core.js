@@ -23,6 +23,7 @@ const PK = (() => {
     chat: '<path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12Z"/>',
     check: '<path d="m5 12 5 5 9-10"/>',
     x: '<path d="M6 6l12 12M18 6 6 18"/>',
+    expand: '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>',
     warn: '<path d="M12 3 2 20h20L12 3Z"/><path d="M12 10v4M12 17v.5"/>',
     info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/>',
     valve: '<path d="M3 8v8l9-4-9-4ZM21 8v8l-9-4 9-4Z"/><path d="M12 12V5M9 5h6"/>',
@@ -170,6 +171,9 @@ const PK = (() => {
       .map((a) => [a.getAttribute("href"), (a.title || a.textContent).split(":")[0].trim()]);
     const st = typeof PKStations !== "undefined" && state.status ? PKStations.list(state.status).stations : [];
     st.filter((x) => x.key).forEach((x) => out.push([PKStations.href(x.key), "Station: " + x.name]));
+    // The line screen (TV, review 44), for a wall PC that opens straight into it: the whole machine, then each station
+    out.push(["#/tv", "Line screen (TV)"]);
+    st.filter((x) => x.key).forEach((x) => out.push(["#/tv/" + encodeURIComponent(x.key), "Line screen (TV): " + x.name]));
     for (const h of also || []) if (h && !out.some(([v]) => v === h)) out.push([h, h.replace(/^#\//, "")]);    // a saved page not listed now
     return out;
   }
@@ -328,6 +332,8 @@ const PK = (() => {
     [/^#\/hardware(?=\/|$)/, "#/plc/racks"],
     [/^#\/capture(?=\/|$)/, "#/history/recordings"],
     [/^#\/reports\/faults(?:\/.*)?$/, "#/history/ranking/downtime"],
+    // A bookmark for one station's line screen may be written #/tv?station=<name>; the page itself is #/tv/<name>
+    [/^#\/tv\/?\?(?:.*&)?station=([^&]*).*$/, "#/tv/$1"],
   ];
   const movedTo = (hash) => { for (const [re, to] of MOVED) if (re.test(hash)) return hash.replace(re, to); return null; };
 
@@ -814,7 +820,7 @@ const PK = (() => {
     if (screenOpt.sound && beeps.length) beep(beeps.some((a) => !isWarning(a)));
     if (screenOpt.notify && "Notification" in window && Notification.permission === "granted") {
       const a = fresh[0];
-      try { const n = new Notification(`${a.severity} ${a.id}: ${a.text}`, { body: state.status.machine || "PLC-Ki", tag: "plcki-" + a.id }); n.onclick = () => { window.focus(); go("#/alarm"); }; } catch { /* not allowed here */ }
+      try { const n = new Notification(`${a.severity} ${a.id}: ${a.text}`, { body: state.status.machine || "PLC-Ki", tag: "plcki-" + a.id }); n.onclick = () => { window.focus(); if (!tvOn) go("#/alarm"); }; } catch { /* not allowed here */ }
     }
   }
   // The CPU going to STOP alerts like a new fault alarm. The first status only sets where things are, as for alarms.
@@ -831,7 +837,7 @@ const PK = (() => {
     if (screenOpt.notify && "Notification" in window && Notification.permission === "granted") {
       try {
         const n = new Notification(`The PLC is in ${c.word || "STOP"}`, { body: `${state.status.machine || "PLC-Ki"}: the program is not running.`, tag: "plcki-cpu" });
-        n.onclick = () => { window.focus(); go("#/alarm"); };
+        n.onclick = () => { window.focus(); if (!tvOn) go("#/alarm"); };
       } catch { /* not allowed here */ }
     }
   }
@@ -857,7 +863,25 @@ const PK = (() => {
     } catch { wakeLock = null; }
   }
   // The browser drops the lock when the tab is hidden; take it again when it comes back.
-  document.addEventListener("visibilitychange", () => { if (screenOpt.awake && document.visibilityState === "visible") keepAwake(true); });
+  document.addEventListener("visibilitychange", () => { if ((screenOpt.awake || tvOn) && document.visibilityState === "visible") keepAwake(true); });
+
+  // ---- Line screen (TV, review 44): no menu or top bar, dark unless Light was chosen, the screen kept on ----
+  // Nothing is saved: the theme is only painted (not written to the login's choices or "plcki.paint"), and leaving
+  // puts back what was there. The page itself is tv.js.
+  let tvOn = false;
+  function tvMode(on) {
+    on = !!on;
+    if (tvOn === on) return;
+    tvOn = on;
+    document.documentElement.classList.toggle("tv", on);
+    const chosen = prefs.get("theme", "auto");
+    if (on) { if (chosen !== "light") document.documentElement.dataset.theme = "dark"; keepAwake(true); }
+    else {
+      if (chosen === "auto") delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = chosen;
+      showTheme();
+      if (!screenOpt.awake) keepAwake(false);
+    }
+  }
 
   /**
    * Set a password: one's own (asks for the current one) or, for an administrator, someone else's.
@@ -933,12 +957,16 @@ const PK = (() => {
     const row = (key, title, text, ok, why) => `<label class="opt-row ${ok ? "" : "off"}"><input type="checkbox" data-opt="${key}" ${screenOpt[key] && ok ? "checked" : ""} ${ok ? "" : "disabled"}>
       <span><b>${esc(title)}</b><br><span class="muted small">${esc(ok ? text : why)}</span></span></label>`;
     const notHere = "Not possible on this connection: the browser allows it only on the PLC-Ki PC itself (localhost) or over https.";
+    const tvStations = typeof PKStations !== "undefined" && state.status ? PKStations.list(state.status).stations.filter((x) => x.key) : [];
     const s = sheet(`<span class="eyebrow">This screen</span><h2>Alarm sound and screen</h2>
       <p class="m-0 muted">${prefs.perLogin ? `Saved for ${esc(state.user.name)}, on every device you log in on. "Keep this screen on" is for this device only.` : "Only for this browser on this device."} Nothing here changes the machine.</p>
       <div class="gap-3 stack">
         ${row("sound", "Beep when a new alarm comes", "A short tone: three beeps for a fault, one for a warning. Leave this page open in a tab.", true, "")}
         ${row("notify", "Show a notice when a new alarm comes", "A message from the browser, also when PLC-Ki is in a background tab.", canNotify, notHere)}
         ${row("awake", "Keep this screen on", "For a screen on the line: the display does not go dark while this page is open.", canWake, notHere)}
+        <div class="opt-row" style="cursor:default;flex-wrap:wrap"><span class="grow"><b>Line screen (TV)</b><br><span class="muted small">For a TV on the line: no menu, the state in big letters and the machine picture. It turns to the alarm when one comes and keeps the screen on. Esc leaves it.</span></span>
+          <span class="row end" style="flex-basis:100%">${tvStations.length ? `<select id="tv-pick" class="start-sel" style="flex:1 1 12em;width:auto" aria-label="Line screen for"><option value="#/tv">Whole machine</option>${tvStations.map((x) => `<option value="#/tv/${esc(encodeURIComponent(x.key))}">${esc(x.name)}</option>`).join("")}</select>` : ""}
+          <button type="button" class="btn" data-tv-open>Line screen (TV)</button></span></div>
         <div class="opt-row" style="cursor:default"><span class="grow"><b>Screen colours</b><br><span class="muted small">Dark suits a wall screen in a bright hall.</span></span>
           ${ui.choice("Screen colours", [["auto", "Like this PC"], ["light", "Light"], ["dark", "Dark"]].map(([k, l]) => ({ label: l, on: themeChoice() === k, data: { "data-theme-set": k } })))}</div>
         ${soundRulesHtml()}
@@ -964,6 +992,7 @@ const PK = (() => {
       if (key === "sound" && box.checked) beep(false);
     });
     s.el.querySelector("[data-test-beep]").onclick = () => beep(true);
+    s.el.querySelector("[data-tv-open]").onclick = () => { const p = s.el.querySelector("#tv-pick"); s.close(); go(p ? p.value : "#/tv"); };
     const fp = s.el.querySelector("#fmt-pick");
     fp.onchange = () => { prefs.set("format", fp.value || null); draw(); toast("Saved: " + date(Date.now()) + "."); };
     s.el.querySelectorAll("[data-sound]").forEach((sel) => sel.onchange = () => { const r = soundRule(); r[sel.dataset.sound] = sel.value; prefs.set("alarmSound", r); });
@@ -1519,6 +1548,11 @@ const PK = (() => {
       "The stations come from the program: each device and sequence belongs to the station (instance) named in its location. An alarm belongs to the station of its device.",
       "Tap a device for its values and interlocks. Open the alarm for the full fix list and where it is set in the program.",
       "Values update every second."]],
+    tv: ["Line screen (TV)", "A page for a TV on the line, readable from a few metres: the state, the step and the machine picture. It turns to the alarm when one comes.", [
+      "Open it from Alarm sound and screen, or bookmark #/tv (the whole machine) or #/tv/<station> (one station). It can also be a start page.",
+      "When an alarm comes, the screen shows that alarm large: its text, the station and since when. It goes back to the picture when no alarm is on.",
+      "The screen stays on and is dark unless Light was chosen. Everything moves a few pixels every few minutes so nothing burns into the TV.",
+      "It only reads. No login is needed when viewing without login is on. Press Esc or the × in the corner to leave."]],
     "setup/qr": ["QR labels", "Print a QR label per station or device. A phone that scans it opens that station's live page.", [
       "Pick the address phones use: the PC's address on the plant network, not localhost. Open it on a phone once to check it works.",
       "Phones only reach PLC-Ki when Settings › Other computers may open PLC-Ki is on.",
@@ -1817,5 +1851,5 @@ const PK = (() => {
   }
 
   return { AI, ui, BP, can, roleTitle, prefs, startPage, startChoices, startLabel, hm, num, numText, dayMonth, weekdayDay, FORMATS, fmtKey, alarmWants, screenSize, dirty: setDirty, get isDirty() { return !!dirty; }, plain, connInfo, connSheet, helpSheet, screenSheet, passwordSheet, setHash, cmd, sec, hero, on, $, esc, icon, fillIcons, kindIcon, api, state, view, go, draw, route, toast, copyText, sheet, confirmSheet, cond, md, ago, clock, date, when,
-    loadProgram, blockOf, valueBySymbol, norm, start, cpuStop, cpuSince, loadHeld, releaseAll, loadHandover, get current() { return current; } };
+    loadProgram, blockOf, valueBySymbol, norm, start, cpuStop, cpuSince, loadHeld, releaseAll, loadHandover, tvMode, get current() { return current; } };
 })();
