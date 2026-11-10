@@ -1872,5 +1872,5 @@ section.hero.aa .card { background: var(--panel); }
 @media (max-width: 600px) {
   .notice-bar { padding-top: 10px; }
   .notice-strip { font-size: 14px; padding: 10px 12px; gap: 8px 10px; }
-  .notice-strip div.small { display: none; }   /* the names are one tap away (Show) */
+  .notice-strip div.small { font-size: 13px; }
 }

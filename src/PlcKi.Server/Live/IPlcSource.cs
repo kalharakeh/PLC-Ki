@@ -43,7 +43,8 @@ public interface IPlcSource : IDisposable
 
     /// <summary>
     /// The blocks in the PLC (name, kind, language), read-only, to see whether they still match the imported program.
-    /// Sources that cannot list blocks return null. Called after a connect and then every 10 minutes.
+    /// Sources that cannot list blocks return null (no check); a list that cannot be read right now throws.
+    /// Called after a connect and then every 10 minutes.
     /// </summary>
     IReadOnlyList<PlcKi.Core.Status.PlcBlock>? BrowseBlocks() => null;
 

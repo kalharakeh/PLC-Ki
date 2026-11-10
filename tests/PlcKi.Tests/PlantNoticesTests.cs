@@ -160,4 +160,19 @@ public class PlantNoticesTests
         Assert.Empty(added);
         Assert.Empty(missing);
     }
+
+    [Fact]
+    public void Know_how_protected_blocks_the_importer_left_out_do_not_count_as_added()
+    {
+        var export = ProgramExport.Load(Path.Combine(AppContext.BaseDirectory, "models", "demo-export.zip"));
+        export.Problems.Add("{\"kind\":\"know-how-protected\",\"name\":\"FB_Vendor\",\"detail\":\"Only the interface can be explained.\"}");
+        export.Problems.Add("plain text problem");
+        var plc = export.Plcs[0];
+        var onPlc = AsOnPlc(plc);
+        onPlc.Add(new PlcBlock("FB_Vendor", "FB", "SCL"));
+        var notExported = ProgramDrift.NotExported(export);
+        Assert.Equal(new[] { "FB_Vendor" }, notExported);
+        Assert.Empty(ProgramDrift.Compare(onPlc, plc, notExported).Added);
+        Assert.Equal(new[] { "FB_Vendor" }, ProgramDrift.Compare(onPlc, plc).Added);
+    }
 }

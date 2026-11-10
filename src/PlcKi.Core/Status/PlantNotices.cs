@@ -116,8 +116,32 @@ public static class ProgramDrift
         _ => null,
     };
 
-    /// <summary>Blocks in the PLC that the import does not have, and blocks of the import the PLC does not have.</summary>
-    public static (List<string> Added, List<string> Missing) Compare(IReadOnlyList<PlcBlock> onPlc, ExportPlc plc)
+    /// <summary>
+    /// Blocks the importer left out on purpose or could not export, from the manifest's problems: know-how-protected
+    /// blocks have no export, so they would always look "added". Such a block is in the PLC, just not readable.
+    /// </summary>
+    public static HashSet<string> NotExported(ProgramExport? export)
+    {
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var p in export?.Problems ?? new List<string>())
+        {
+            try
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(p);
+                var r = doc.RootElement;
+                if (r.ValueKind != System.Text.Json.JsonValueKind.Object) continue;
+                var kind = r.TryGetProperty("kind", out var k) ? k.GetString() : null;
+                if (kind is "know-how-protected" or "block" && r.TryGetProperty("name", out var n) && n.GetString() is { Length: > 0 } name)
+                    names.Add(name);
+            }
+            catch (System.Text.Json.JsonException) { /* a plain-text problem: not about one block */ }
+        }
+        return names;
+    }
+
+    /// <summary>Blocks in the PLC that the import does not have, and blocks of the import the PLC does not have.
+    /// <paramref name="notExported"/>: blocks the importer could not export (see <see cref="NotExported"/>).</summary>
+    public static (List<string> Added, List<string> Missing) Compare(IReadOnlyList<PlcBlock> onPlc, ExportPlc plc, ISet<string>? notExported = null)
     {
         var imported = plc.Blocks.Where(b => KindOf(b.Kind) != null)
             .Select(b => (b.Name, Kind: KindOf(b.Kind)!)).ToList();
@@ -127,7 +151,8 @@ public static class ProgramDrift
 
         // Safety (F) and system blocks of the import are on the PLC too, so they still count as missing when absent
         var added = onPlc
-            .Where(b => plcKinds.Contains(b.Kind) && !SystemLanguages.Contains(b.Language ?? "") && !importedKeys.Contains(b.Kind + ":" + b.Name))
+            .Where(b => plcKinds.Contains(b.Kind) && !SystemLanguages.Contains(b.Language ?? "") && !importedKeys.Contains(b.Kind + ":" + b.Name)
+                        && !(notExported?.Contains(b.Name) ?? false))
             .Select(b => b.Name).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList();
         var missing = imported.Where(b => !plcKeys.Contains(b.Kind + ":" + b.Name))
             .Select(b => b.Name).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList();

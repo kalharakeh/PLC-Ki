@@ -55,9 +55,11 @@ public sealed class PlantNoticeService
     /// <summary>The PLC's block list as just read; null when the source cannot list blocks (then no notice).</summary>
     public void PublishBlocks(IReadOnlyList<PlcBlock>? onPlc)
     {
+        ProgramExport? export = null;
+        try { export = _program.Loaded.Export; } catch (Exception) { /* no program yet */ }
         var plc = Plc();
         if (onPlc == null || plc == null || plc.Blocks.Count == 0) { _drift = null; return; }
-        var (added, missing) = ProgramDrift.Compare(onPlc, plc);
+        var (added, missing) = ProgramDrift.Compare(onPlc, plc, ProgramDrift.NotExported(export));
         var was = _drift;
         _drift = ProgramDrift.Notice(added, missing);
         if (_drift != null && was?.Text != _drift.Text)

@@ -323,7 +323,12 @@ public sealed class PollingService : BackgroundService
         {
             _lastBlocks = DateTime.UtcNow;
             try { _notices.PublishBlocks(_source.BrowseBlocks()); }
-            catch (Exception ex) { _log.LogDebug(ex, "Listing the PLC's blocks failed."); _lastBlocks = DateTime.UtcNow.AddMinutes(-9); }
+            catch (Exception ex)
+            {
+                // Not now (the extra connection is paused, or the answer was slow): keep the last answer, ask again in 30 s
+                _log.LogDebug(ex, "Listing the PLC's blocks failed.");
+                _lastBlocks = DateTime.UtcNow - TimeSpan.FromMinutes(10) + TimeSpan.FromSeconds(30);
+            }
         }
     }
 
