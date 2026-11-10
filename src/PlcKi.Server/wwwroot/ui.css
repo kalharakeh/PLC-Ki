@@ -1931,7 +1931,7 @@ section.hero.aa .card { background: var(--panel); }
 }
 /* Shift handover note (review 3, item 47) */
 .ho-text { white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 2px; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; }
-@media (max-width: 600px) { .ho-text { -webkit-line-clamp: 2; line-clamp: 2; } .notice-strip.ho-strip > svg { display: none; } }
+@media (max-width: 600px) { .ho-text { -webkit-line-clamp: 2; line-clamp: 2; } .ho-strip > .btn + .btn { margin-left: 0; } }
 .rp-ho textarea { width: 100%; }
 .rp-ho .ho-note { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; }
 .print-only { display: none !important; }
