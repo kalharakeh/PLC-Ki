@@ -41,6 +41,13 @@ public interface IPlcSource : IDisposable
     /// </summary>
     IReadOnlyList<PlcKi.Core.Diagnostics.CpuAlarm>? ReadCpuAlarms() => null;
 
+    /// <summary>
+    /// The blocks in the PLC (name, kind, language), read-only, to see whether they still match the imported program.
+    /// Sources that cannot list blocks return null (no check); a list that cannot be read right now throws.
+    /// Called after a connect and then every 10 minutes.
+    /// </summary>
+    IReadOnlyList<PlcKi.Core.Status.PlcBlock>? BrowseBlocks() => null;
+
     /// <summary>Model tags the PLC sends every change for (fast capture); the normal reads feed the recording for the rest.</summary>
     IReadOnlySet<string> FastTagIds => NoTags;
     static readonly IReadOnlySet<string> NoTags = new HashSet<string>();

@@ -495,7 +495,32 @@ const PK = (() => {
     if (state.status && $("machine").textContent !== state.status.machine) $("machine").textContent = state.status.machine;
     machineLine();
     renderBanner(stale);
+    renderNotices(stale);
     setTitle();
+  }
+
+  /**
+   * Notices the server sends with the status (review 43): test switches that are on in the PLC ("a fault may be caused
+   * on purpose") and blocks in the PLC that differ from the imported program. Read-only: PLC-Ki only says it.
+   * Forces set in TIA cannot be shown: the S7 driver cannot read the CPU's force list.
+   */
+  function renderNotices(stale) {
+    const bar = $("notice-bar");
+    if (!bar) return;
+    const list = (!stale && state.status && state.status.notices) || [];
+    const admin = state.user && state.user.role === "admin";
+    const html = list.map((n) => {
+      const items = n.items || [];
+      const shown = items.slice(0, 4).map((i) => `<span class="mono">${esc(i)}</span>`).join(", ") + (items.length > 4 ? `, and ${items.length - 4} more` : "");
+      const link = n.link && (n.kind !== "program" || admin)
+        ? `<a class="btn gray small" href="${esc(n.link)}">${n.kind === "program" ? "Import again" : "Show"}</a>` : "";
+      const who = n.kind === "program" && !admin ? " Tell an administrator." : "";
+      return `<div class="notice gold notice-strip" role="status" data-kind="${esc(n.kind)}">${icon(n.kind === "program" ? "file" : "warn")}
+        <div><b>${esc(n.text)}</b>${who}${shown ? `<div class="small">${shown}</div>` : ""}</div>${link}</div>`;
+    }).join("");
+    const full = html ? `<div class="wrap">${html}</div>` : "";
+    if (bar.dataset.html !== full) { bar.innerHTML = full; bar.dataset.html = full; }
+    bar.classList.toggle("hidden", !list.length);
   }
 
   /** Under the machine name in the top bar: the CPU and the program it was read from, as far as known. */
@@ -1406,6 +1431,12 @@ const PK = (() => {
     heldBar.id = "held-bar";
     heldBar.className = "held-bar hidden";
     back.before(heldBar);
+    // Test switches on, or the PLC's blocks differ from the import: a strip of its own, so a STOP or the test-values
+    // banner never hides it
+    const noticeBar = document.createElement("div");
+    noticeBar.id = "notice-bar";
+    noticeBar.className = "notice-bar hidden";
+    heldBar.before(noticeBar);
     back.querySelector("a").onclick = (e) => { if (e.button || e.ctrlKey || e.metaKey || e.shiftKey) return; e.preventDefault(); history.back(); };
     document.addEventListener("click", (e) => { if (e.target.closest && e.target.closest("#nav a, .rail-brand, a.mrow[href]")) fromMenu = true; }, true);
     const bar = document.createElement("div");

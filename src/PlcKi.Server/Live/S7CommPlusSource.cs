@@ -396,6 +396,19 @@ public sealed class S7CommPlusSource : IPlcSource
         }
     }
 
+    /// <summary>
+    /// The PLC's blocks (name, kind, language), read-only, over the extra-values connection like the alarms, so a slow
+    /// answer never costs the polling connection. Throws when they cannot be listed right now (the extra connection is
+    /// paused or broke), so the polling loop keeps the last answer and asks again soon.
+    /// </summary>
+    public IReadOnlyList<PlcKi.Core.Status.PlcBlock>? BrowseBlocks()
+    {
+        if (_client == null) throw new IOException("Not connected.");
+        var blocks = _extras.Run("listing the PLC's blocks", l => ((S7ExtraLink)l).Client.BrowseBlocksAsync().GetAwaiter().GetResult(), out var why);
+        if (blocks == null) throw new IOException("No block list from the PLC: " + (why ?? "no answer"));
+        return blocks.Select(b => new PlcKi.Core.Status.PlcBlock(b.Name, b.Type.ToString(), b.Language.ToString())).ToList();
+    }
+
     // Text lists turn "@2%t#519K@" in system diagnostic texts into words. They belong to the program, so they are kept
     // across reconnects; loaded once (again after a failure 10 minutes later, or when the program changed)
     private S7CommPlusTextListCatalog? _textLists;
