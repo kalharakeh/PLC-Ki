@@ -52,9 +52,41 @@ public class DocumentTests : IDisposable
     {
         var lib = new DocumentLibrary(_root, "Helium leak test");
         foreach (var f in files) await lib.AddAsync(new MemoryStream(f.Data), f.Name, f.Scope, f.Kind, f.Device);
-        await Task.Delay(50);
         await lib.ReadPendingAsync();
         return lib;
+    }
+
+    [Fact]
+    public async Task Waiting_for_the_read_works_even_when_the_thread_pool_is_busy()
+    {
+        // The read of an uploaded file is queued on the thread pool. When every worker is busy it has not started yet,
+        // and waiting for "pending" reads must still wait for it (on a slow CI machine this used to return too early).
+        ThreadPool.GetMinThreads(out var minWorkers, out var minIo);
+        using var release = new ManualResetEventSlim();
+        var blockers = new List<Task>();
+        try
+        {
+            ThreadPool.SetMinThreads(Environment.ProcessorCount, minIo);
+            for (int i = 0; i < Environment.ProcessorCount; i++) blockers.Add(Task.Run(() => release.Wait()));
+            await Task.Delay(100);      // the blockers hold every worker the pool has right now
+
+            var lib = new DocumentLibrary(_root, "Helium leak test");
+            await lib.AddAsync(new MemoryStream(Pdf(ListManual())), "G120.pdf", "shared", null, null);
+            Assert.True(lib.Busy);
+            var wait = lib.ReadPendingAsync();
+            Assert.False(wait.IsCompleted);     // the read is queued behind the blockers: waiting must not return yet
+
+            release.Set();
+            await wait;
+            Assert.False(lib.Busy);
+            Assert.Equal("ready", Assert.Single(lib.List()).State);
+        }
+        finally
+        {
+            release.Set();
+            await Task.WhenAll(blockers);
+            ThreadPool.SetMinThreads(minWorkers, minIo);
+        }
     }
 
     [Fact]
