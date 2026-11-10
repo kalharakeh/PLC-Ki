@@ -162,7 +162,8 @@ const PK = (() => {
     document.dispatchEvent(new Event("pk:prefs"));     // pages that read a choice at load read it again
   }
   /** Where this login starts: its own choice, else its role's (Setup, Settings), else Active alarm. */
-  const startPage = () => prefs.get("startPage", "") || state.roleStart || "#/alarm";
+  const PAGE = /^#\/[A-Za-z0-9/_.%~-]{0,120}$/;
+  const startPage = () => [prefs.get("startPage", ""), state.roleStart].find((p) => typeof p === "string" && PAGE.test(p)) || "#/alarm";
   /** What a start page can be: the main pages (not Setup) and each station. [[address, label]] */
   function startChoices(also) {
     const out = [...document.querySelectorAll("#nav a[data-route]")].filter((a) => !a.classList.contains("admin-only"))
@@ -758,16 +759,22 @@ const PK = (() => {
 
   // ---- This screen: alert on new alarms, keep the screen on. Saved per browser. ----
   // Sound, notices and spacing follow the login; "keep this screen on" belongs to the device, so it stays in this browser.
+  // A screen set to stay on before the update keeps it: until "plcki.awake" is written, it is read from the old "plcki.screen".
+  const awakeHere = () => {
+    const a = ls.get("plcki.awake");
+    if (a != null) return a === "1";
+    try { return !!(JSON.parse(ls.get("plcki.screen") || "{}") || {}).awake; } catch { return false; }
+  };
   const screenOpt = {};
   const readScreenOpt = () => {
     for (const k of Object.keys(screenOpt)) delete screenOpt[k];
     Object.assign(screenOpt, prefs.get("screen", {}));
-    screenOpt.awake = ls.get("plcki.awake") === "1" || (!prefs.perLogin && !!screenOpt.awake);
+    screenOpt.awake = awakeHere();
   };
   readScreenOpt();
   const saveScreenOpt = () => {
     const { awake, ...rest } = screenOpt;
-    ls.set("plcki.awake", awake ? "1" : null);
+    ls.set("plcki.awake", awake ? "1" : "0");
     prefs.set("screen", rest);
   };
 
