@@ -51,6 +51,9 @@ public sealed class MachineHistory
     /// <summary>Called with each batch of new events, after they are added (the disk log listens here).</summary>
     public Action<IReadOnlyList<MachineEvent>>? Recorded { get; set; }
 
+    /// <summary>Called with each read that has values, after it is added (the ValueLog keeps them on disk, thinned out).</summary>
+    public Action<Snapshot>? ValuesRecorded { get; set; }
+
     public TimeSpan KeepValues => _keepValues;
     /// <summary>At most this many events are kept (the oldest go first).</summary>
     public int MaxEvents => _maxEvents;
@@ -81,6 +84,7 @@ public sealed class MachineHistory
             _prev = status;
             _prevHadValues |= hasValues;
         }
+        if (hasValues) ValuesRecorded?.Invoke(snap);
         if (events.Count > 0) Recorded?.Invoke(events);
     }
 

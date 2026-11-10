@@ -16,6 +16,10 @@
     return Math.floor(m / 60) + " h" + (m % 60 ? " " + (m % 60) + " min" : "");
   }
   const hhmmss = (ms) => new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  /** A time on a chart: the clock for a few hours, with the weekday and date once the chart reaches over a day. */
+  const stampAt = (ms, span) => span > 20 * 3600000
+    ? new Date(ms).toLocaleString([], { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })
+    : hhmmss(ms);
   function num(v, tag) {
     if (v == null || !isFinite(v)) return "–";
     const d = tag && tag.decimals != null ? tag.decimals : Math.abs(v) >= 100 ? 0 : Math.abs(v) >= 10 ? 1 : 2;
@@ -82,15 +86,18 @@
   }
   /** The SVG path of a series over the time window; the last value holds until now. */
   function pathOf(points, tr, y) {
-    let d = "", started = false, firstX = 0, lastX = 0, last = null;
+    let d = "", area = "", started = false, firstX = 0, lastX = 0, segX = 0, last = null;
+    // Each stretch between gaps is closed on its own, so a gap (PLC-Ki was off) is not filled in
+    const close = () => { if (started) area += `L${lastX} 100L${segX} 100Z`; };
     for (const [t, v] of points) {
-      if (v == null) { started = false; continue; }
+      if (v == null) { close(); started = false; continue; }
       const px = (x(t, tr) * 10).toFixed(1), py = y(v).toFixed(1);
-      if (!started) { if (!d) firstX = px; d += `M${px} ${py}`; started = true; } else d += `L${px} ${py}`;
+      if (!started) { if (!d) firstX = px; segX = px; d += `M${px} ${py}`; area += `M${px} ${py}`; started = true; } else { d += `L${px} ${py}`; area += `L${px} ${py}`; }
       lastX = px; last = v;
     }
-    if (last != null && started) { d += `L1000 ${y(last).toFixed(1)}`; lastX = 1000; }
-    return { d, firstX, lastX, last };
+    if (last != null && started) { d += `L1000 ${y(last).toFixed(1)}`; area += `L1000 ${y(last).toFixed(1)}`; lastX = 1000; }
+    close();
+    return { d, area, firstX, lastX, last };
   }
   /** A setpoint series is drawn dashed on the chart of its value: TempSP on Temp, M201_SpeedSP on M201_SpeedPV. */
   function baseOf(sp, list) {
@@ -106,10 +113,9 @@
     const unit = sr.unit ? " " + esc(sr.unit) : "";
     const { lo, hi } = scaleOf(sr.unit, [...vals, ...spVals]);
     const y = (v) => 92 - ((v - lo) / (hi - lo)) * 84;      // a little room at top and bottom
-    const { d, firstX, lastX, last } = pathOf(sr.points, tr, y);
-    const area = d ? `${d}L${lastX} 100L${firstX} 100Z` : "";
+    const { d, area, last } = pathOf(sr.points, tr, y);
     const spPath = sp ? pathOf(sp.points, tr, y) : null;
-    const marks = tr.alarms.map((a) => `<i class="tr-al ${a.came ? "came" : "went"}" style="left:${x(a.time, tr).toFixed(2)}%" title="${esc(hhmmss(a.time) + " " + a.text)}"></i>`).join("");
+    const marks = tr.alarms.map((a) => `<i class="tr-al ${a.came ? "came" : "went"}" style="left:${x(a.time, tr).toFixed(2)}%" title="${esc(stampAt(a.time, tr.to - tr.from) + " " + a.text)}"></i>`).join("");
     const t = hover != null ? tr.from + hover * (tr.to - tr.from) : null;
     const hv = t != null ? valueAt(sr.points, t) : null;
     const spNow = sp ? (t != null ? valueAt(sp.points, t) : spPath.last) : null;
@@ -137,7 +143,7 @@
       const to = i === seq.spans.length - 1 ? tr.to : s.to;       // the step it is in now runs to "now"
       const l = Math.max(0, x(s.from, tr)), w = Math.max(0.3, x(to, tr) - l);
       const name = stepName(def, s.step);
-      return `<span class="tr-span ${stepColour(def, s.step)}" style="left:${l.toFixed(2)}%;width:${w.toFixed(2)}%" title="${esc(`Step ${s.step} ${name}: ${dur(to - s.from)}, from ${hhmmss(s.from)}`)}">${w > 4 ? s.step : ""}</span>`;
+      return `<span class="tr-span ${stepColour(def, s.step)}" style="left:${l.toFixed(2)}%;width:${w.toFixed(2)}%" title="${esc(`Step ${s.step} ${name}: ${dur(to - s.from)}, from ${stampAt(s.from, tr.to - tr.from)}`)}">${w > 4 ? s.step : ""}</span>`;
     }).join("");
     const t = hover != null ? tr.from + hover * (tr.to - tr.from) : null;
     const at = t != null ? [...seq.spans].reverse().find((s) => s.from <= t) : null;
@@ -151,19 +157,27 @@
   function axisRow(tr, label = true) {
     const span = tr.to - tr.from;
     // Clock times ("18:12"), with seconds when the window is short; the right end is "now"
-    const clock = (ms) => new Date(ms).toLocaleTimeString([], span <= 600000 ? { hour: "2-digit", minute: "2-digit", second: "2-digit" } : { hour: "2-digit", minute: "2-digit" });
+    const clock = (ms) => span > 36 * 3600000 ? new Date(ms).toLocaleDateString([], { weekday: "short", day: "2-digit", month: "2-digit" })
+      : span > 20 * 3600000 ? new Date(ms).toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" })
+      : new Date(ms).toLocaleTimeString([], span <= 600000 ? { hour: "2-digit", minute: "2-digit", second: "2-digit" } : { hour: "2-digit", minute: "2-digit" });
     const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) =>
       `<span class="tr-tick" style="left:${f * 100}%">${f === 1 ? "now" : clock(tr.from + f * span)}</span>`).join("");
     const t = hover != null ? tr.from + hover * span : null;
     return `<div class="tr-row axis ${label ? "" : "nolab"}">${label ? `<div class="tr-lab"></div>` : ""}<div class="tr-plot axis">${ticks}
-      ${t != null ? `<span class="tr-tick at" style="left:${(hover * 100).toFixed(2)}%">${hhmmss(t)}</span>` : ""}</div></div>`;
+      ${t != null ? `<span class="tr-tick at" style="left:${(hover * 100).toFixed(2)}%">${stampAt(t, span)}</span>` : ""}</div></div>`;
   }
 
   function windowChoice(tr) {
     const keep = tr.keepMinutes;
-    const opts = [...new Set([5, 15, 60, keep].filter((m) => m <= keep))];
+    // What the live buffer holds, and what is saved on disk (an hour, 6 h, a day, a week, 30 days) as far back as it goes
+    const saved = tr.savedFrom ? (Date.now() - tr.savedFrom) / 60000 : 0;
+    const more = [60, 360, 1440, 10080, 43200];
+    const reach = more.filter((m) => m <= saved);
+    const nextMore = saved ? more.find((m) => m > saved) : null;
+    const opts = [...new Set([5, 15, ...more.filter((m) => m <= keep), keep, ...reach, ...(nextMore ? [nextMore] : [])].filter((m) => m <= keep || m <= (nextMore || 0)))].sort((a, b) => a - b);
     const cur = trendMin || keep;
-    return opts.length > 1 ? PK.ui.choice("Time shown", opts.map((m) => ({ label: m < 60 ? m + " min" : m / 60 + " h", on: m === cur, data: { "data-tr-min": m } }))) : "";
+    const label = (m) => m < 60 ? m + " min" : m < 2880 ? Math.round(m / 60) + " h" : Math.round(m / 1440) + " d";
+    return opts.length > 1 ? PK.ui.choice("Time shown", opts.map((m) => ({ label: label(m), on: m === cur, data: { "data-tr-min": m } }))) : "";
   }
 
   /** "Last 15 minutes": the measured values stacked over one time axis, the step band and alarm marks. */
@@ -171,14 +185,16 @@
     const tr = needTrend();
     if (!tr) return PK.ui.loading("chart", { label: "Loading the values" });
     const short = (trendMin || tr.keepMinutes) * 60000 - (tr.to - tr.from) > 30000;
-    const note = short ? `PLC-Ki started watching ${dur(tr.to - tr.from)} ago, so the charts start there.` : "";
+    const note = short ? (tr.source === "disk" ? `PLC-Ki has values from ${dur(tr.to - tr.from)} back, so the charts start there.`
+      : `PLC-Ki started watching ${dur(tr.to - tr.from)} ago, so the charts start there.`) : "";
     const ids = tr.series.map((s) => s.id);
     // A setpoint goes on its value's chart as a dashed line, not on a chart of its own
     const spFor = new Map(), onBase = new Set();
     tr.series.forEach((s) => { const b = baseOf(s, tr.series); if (b && !spFor.has(b.id)) { spFor.set(b.id, s); onBase.add(s.id); } });
     const admin = state.user && state.user.role === "admin";
-    const keep = admin ? `<a href="#/setup/settings">PLC-Ki keeps ${tr.keepMinutes} minutes</a>, in memory only (up to 240 in Setup › Settings).`
-      : `PLC-Ki keeps ${tr.keepMinutes} minutes, in memory only. An administrator can set up to 240.`;
+    const res = tr.source === "disk" && tr.resolutionSec ? ` One point on a chart is ${dur(tr.resolutionSec * 1000)}; a step shorter than that does not show.` : "";
+    const keep = `${res} Values are saved on this PC (every read for the newest days, a minute at a time for older ones), so charts survive a restart.`
+      + (admin ? ` <a href="#/setup/settings">How long they are kept is set in Setup › Settings › Storage.</a>` : " An administrator sets how long they are kept.");
     return `<div class="trends">
       <div class="toolbar tr-tools">${windowChoice(tr)}
         <input type="search" list="tr-choices" id="tr-add" placeholder="Add a value to the chart" aria-label="Add a value to the chart" autocomplete="off">
