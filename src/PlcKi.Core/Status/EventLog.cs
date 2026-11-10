@@ -106,6 +106,25 @@ public sealed class EventLog
             .OrderBy(d => d.Day).ToList();
     }
 
+    /// <summary>
+    /// How an event shows as a mark on the timeline strip: "alarm" (a fault came), "warn" (a warning came), "halt",
+    /// "stop" (the PLC left RUN), "link" (the connection was lost), "write" (a value changed from PLC-Ki).
+    /// Null: no mark (an alarm went, a step, an output...): those are in the shift log only.
+    /// </summary>
+    public static string? Mark(MachineEvent e) => e.Kind switch
+    {
+        "alarm" when e.Text.Contains(" went:", StringComparison.Ordinal) => null,
+        "alarm" => e.Text.Contains("(WARNING)", StringComparison.OrdinalIgnoreCase) ? "warn" : "alarm",
+        "halt" when e.Text.Contains(" halted in step", StringComparison.Ordinal) => "halt",
+        "cpu" when !e.Text.Contains("back in RUN", StringComparison.Ordinal) => "stop",
+        "link" when e.Text.StartsWith("Lost", StringComparison.Ordinal) || e.Text.StartsWith("The PLC connection dropped", StringComparison.Ordinal) => "link",
+        "write" => "write",
+        _ => null,
+    };
+
+    /// <summary>The kinds that can carry a mark (read without the busy step files).</summary>
+    public static readonly IReadOnlySet<string> Marked = new HashSet<string> { "alarm", "halt", "cpu", "link", "write" };
+
     /// <summary>One line in a day file: short names, empty fields left out.</summary>
     private sealed record Line(
         [property: JsonPropertyName("t")] DateTimeOffset T,

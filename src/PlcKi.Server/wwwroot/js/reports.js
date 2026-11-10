@@ -5,7 +5,8 @@
 
 (() => {
   const { esc, icon, api, toast } = PK;
-  const r = { cfg: null, shift: null, faults: null, err: null, days: 7, loading: false, draft: null, saving: false };
+  const r = { cfg: null, shift: null, faults: null, err: null, days: 7, loading: false, draft: null, saving: false,
+    log: null };   // the shift log: { key, list (newest first), err, f (filter), all (show every line) }
 
   // ---- formatting ----
   const pct = (x) => (x == null ? "—" : `${(x * 100).toFixed(x >= 0.995 || x === 0 ? 0 : 1)} %`);
@@ -24,10 +25,9 @@
     return diff === 0 ? "Today" : diff === 1 ? "Yesterday" : d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
   };
   const oeeCls = (x) => (x == null ? "" : x >= 0.85 ? "ok" : x >= 0.6 ? "warn" : "bad");
-  const STATE = {
-    running: ["Running", "var(--ok)"], idle: ["Waiting or stopped", "var(--steel)"], down: ["Down (fault)", "var(--fault)"],
-    nolink: ["No PLC connection", "var(--warn)"], off: ["Not watched", "var(--line-strong)"],
-  };
+  const STATE = PK.ui.states;
+  /** "2026-11-10 06:00": a local time as Ki's tools take it */
+  const local = (t) => { const d = new Date(t); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${hm(d)}`; };
   const addDays = (day, n) => { const d = new Date(day + "T12:00:00"); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
 
   // ---- loading ----
@@ -41,6 +41,21 @@
       r.shift = await api("GET", "/api/reports/shift" + q); r.err = null;
     } catch (e) { r.err = e.message; }
     r.loading = false; PK.draw();
+    if (r.shift) loadLog(r.shift);
+  }
+  // What happened in the shift, from the event day files (/api/events): every step, alarm, halt, value changed
+  const LOG_MAX = 5000;
+  async function loadLog(x) {
+    const key = x.from + "|" + x.to;
+    const same = r.log && r.log.key === key;
+    const keep = same ? r.log : { key, list: null, err: null, f: (r.log && r.log.f) || "all", all: false };
+    if (!same) r.markSel = -1;
+    try {
+      keep.list = await api("GET", `/api/events?from=${encodeURIComponent(x.from)}&to=${encodeURIComponent(x.to)}&max=${LOG_MAX}`);
+      keep.err = null;
+    } catch (e) { keep.err = e.message; }
+    r.log = keep;
+    PK.draw();
   }
   async function loadFaults() {
     r.loading = true; PK.draw();
@@ -78,26 +93,6 @@
   // One report tile: the number, what it is, how it was worked out
   const kpi = (value, label, note, state) => ({ html: value, label, note, state });
   const kpiRow = (tiles) => PK.ui.tiles(tiles, { boxed: true, cls: "rp-kpis" });
-
-  /** The shift as a coloured bar: running, waiting, down, no link, not watched, with hour marks. */
-  function timelineBar(spans, from, to) {
-    const a = new Date(from).getTime(), b = new Date(to).getTime(), len = Math.max(1, b - a);
-    const segs = spans.map((s) => {
-      const x = (new Date(s.from).getTime() - a) / len * 100, w = (new Date(s.to).getTime() - new Date(s.from).getTime()) / len * 100;
-      const [name, col] = STATE[s.state] || [s.state, "var(--muted)"];
-      const tip = `${hm(s.from)}–${hm(s.to)} ${name}${s.why ? ": " + s.why : ""}`;
-      return `<span class="rp-seg rp-${s.state}" style="left:${x.toFixed(3)}%;width:${Math.max(w, 0.15).toFixed(3)}%;background:${col}" title="${esc(tip)}"></span>`;
-    }).join("");
-    const ticks = [];
-    const first = new Date(a); first.setMinutes(0, 0, 0);
-    const hours = len / 3600000;
-    const step = hours > 12 ? 4 : hours > 6 ? 2 : 1;
-    for (let t = first.getTime() + 3600000; t < b; t += 3600000) {
-      if (new Date(t).getHours() % step) continue;
-      ticks.push(`<span class="rp-tick" style="left:${((t - a) / len * 100).toFixed(2)}%">${hm(t)}</span>`);
-    }
-    return `<div class="rp-bar" role="img" aria-label="Machine state over the shift">${segs}</div><div class="rp-ticks"><span>${hm(a)}</span>${ticks.join("")}<span class="rp-end">${hm(b)}</span></div>`;
-  }
 
   function legend(t) {
     const m = { running: t.running, idle: t.idle, down: t.down, nolink: t.noLink, off: t.off };
@@ -149,6 +144,31 @@
     </div>`;
   }
 
+  // The shift log's filters: which kinds each one shows (null: all)
+  const LOG_F = [["all", "Everything", null], ["alarms", "Alarms and stops", ["alarm", "halt", "blocked", "state", "cpu", "link", "monitor"]],
+    ["steps", "Steps and outputs", ["step", "output"]], ["changes", "Values changed", ["write"]]];
+  const LOG_SHOWN = 40;
+  function shiftLog(x) {
+    const L = r.log && r.log.key === x.from + "|" + x.to ? r.log : null;
+    const h = `<h3 id="shift-log">What happened</h3>`;
+    if (!L || (!L.list && !L.err)) return `<div class="card">${h}${PK.ui.loading("list", { rows: 5, label: "Loading the shift log" })}</div>`;
+    if (!L.list) return `<div class="card">${h}${PK.ui.error(L.err)}</div>`;
+    const [, , kinds] = LOG_F.find(([k]) => k === L.f) || LOG_F[0];
+    const count = (ks) => ks ? L.list.filter((e) => ks.includes(e.kind)).length : L.list.length;
+    const pick = PK.ui.choice("Show", LOG_F.map(([k, label, ks]) => ({ label: `${label}&nbsp;<span class="faint">${count(ks)}</span>`, on: L.f === k, data: { "data-logf": k } })));
+    const csv = `/api/events.csv?from=${encodeURIComponent(x.from)}&to=${encodeURIComponent(x.to)}${kinds ? "&kind=" + kinds.join(",") : ""}`;
+    const bar = PK.ui.toolbar({ left: pick, right: `<a class="btn gray small no-print" href="${csv}" download>${icon("download")}<span>Download for Excel</span></a>` });
+    const list = kinds ? L.list.filter((e) => kinds.includes(e.kind)) : L.list;
+    const shown = L.all ? list : list.slice(0, LOG_SHOWN);
+    const body = !list.length
+      ? PK.ui.empty({ icon: "clock", title: L.list.length ? "Nothing of this kind in this shift." : "Nothing recorded in this shift.",
+        text: L.list.length ? "" : "PLC-Ki records what happens while it runs and is connected to the PLC." })
+      : PK.ui.events(shown, { cls: "rp-log" })
+        + (list.length > shown.length ? `<div class="mt-2 row no-print"><button class="btn gray small" type="button" data-logall>Show all ${list.length}</button></div>` : "")
+        + (L.list.length >= LOG_MAX ? `<p class="mt-2 mb-0 faint small">The latest ${LOG_MAX.toLocaleString()} lines. Download for Excel has every line.</p>` : "");
+    return `<div class="card">${h}<p class="mt-0 muted small">Newest first. Steps, alarms, halts, values changed from PLC-Ki: everything PLC-Ki saw in this shift.</p>${bar}${body}</div>`;
+  }
+
   function shiftPage() {
     const x = r.shift;
     if (!x) return PK.sec("tight rp", r.err ? PK.ui.error(r.err) : PK.ui.loading("tiles", { label: "Making the report" }));
@@ -167,7 +187,9 @@
         kpi(pct(o.quality), "Quality", p.badKnown ? `${p.bad} reject${p.bad === 1 ? "" : "s"}` : "No reject counter set"),
       ]);
 
-    const time = `<div class="card"><h3>Where the time went</h3>${timelineBar(x.timeline, x.from, x.to)}${legend(t)}</div>`;
+    const L = r.log && r.log.key === x.from + "|" + x.to && r.log.list ? r.log.list : [];
+    const marks = L.filter((e) => e.mark).reverse();
+    const time = `<div class="card"><h3>Where the time went</h3>${PK.ui.timeline({ spans: x.timeline, from: x.from, to: x.to, marks, sel: r.markSel ?? -1, label: "Machine state over the shift" })}${marks[r.markSel] ? `<p class="tl-sel"><time>${esc(PK.clock(marks[r.markSel].time))}</time> ${esc(marks[r.markSel].text)}</p>` : ""}${legend(t)}</div>`;
     const parts = `<div class="card"><h3>Parts</h3><div class="kv">
         <span>Made</span><span>${p.total}</span>
         <span>Good</span><span>${p.good}</span>
@@ -184,7 +206,7 @@
     const losses = `<div class="card"><h3>Biggest losses</h3>${lossTable(x.losses, t.idle + t.down + t.noLink)}</div>`;
     const faults = `<div class="card"><h3>Alarms in this shift</h3>${faultTable(x.faults, true)}<p class="mt-3 mb-0 faint small no-print">Every past alarm, with what fixed it: <a href="#/history">History</a>.</p></div>`;
     const ask = PK.state.user ? `<div class="mt-2 row no-print"><button class="btn b small" type="button" data-rpask>${icon("chat")}<span>Ask ${PK.AI} for a handover note</span></button></div>` : "";
-    return PK.sec("tight rp", shiftPicker(x) + head + kpis + `<div class="rp-grid">${time}<div class="grid two rp-two">${parts}${maint}</div><div class="grid two rp-two">${losses}${faults}</div></div>` + notes(x.notes) + ask);
+    return PK.sec("tight rp", shiftPicker(x) + head + kpis + `<div class="rp-grid">${time}<div class="grid two rp-two">${parts}${maint}</div><div class="grid two rp-two">${losses}${faults}</div>${shiftLog(x)}</div>` + notes(x.notes) + ask);
   }
 
   // ---- summary over a time window: down time, MTTR and MTBF, where the time went, every shift's OEE ----
@@ -289,12 +311,18 @@
       if (day) PK.on(day, "change", pick);
       if (sh) PK.on(sh, "change", pick);
       el.querySelectorAll("[data-days]").forEach((b) => PK.on(b, "click", () => { r.days = +b.dataset.days; loadFaults(); }));
+      el.querySelectorAll("[data-logf]").forEach((b) => PK.on(b, "click", () => { r.log.f = b.dataset.logf; r.log.all = false; PK.draw(); }));
+      const all = el.querySelector("[data-logall]");
+      if (all) PK.on(all, "click", () => { r.log.all = true; PK.draw(); });
+      el.querySelectorAll("[data-tlmk]").forEach((b) => PK.on(b, "click", () => { const i = +b.dataset.tlmk; r.markSel = r.markSel === i ? -1 : i; PK.draw(); }));
       const ask = el.querySelector("[data-rpask]");
       if (ask) PK.on(ask, "click", () => {
         const x = r.shift;
         const q = `Write a short shift handover for the ${x.shift} shift (${hm(x.from)}–${hm(x.to)}): OEE ${pct(x.oee.value)}, ${x.parts.total} parts, down ${mins(x.totals.down)} in ${x.maint.stops} stops. ` +
           `Biggest losses: ${x.losses.slice(0, 3).map((l) => `${l.why} (${mins(l.minutes)}, ${l.times}x)`).join("; ") || "none"}. ` +
-          `Alarms: ${x.faults.slice(0, 5).map((f) => `${f.id} ${f.text} ${f.count}x`).join("; ") || "none"}. Say what the next shift should watch and what maintenance should check.`;
+          `Alarms: ${x.faults.slice(0, 5).map((f) => `${f.id} ${f.text} ${f.count}x`).join("; ") || "none"}. ` +
+          `Read what happened in this shift with get_recent_events from "${local(x.from)}" to "${local(x.inProgress ? new Date() : x.to)}" (the shift log: steps, alarms, halts, values changed). ` +
+          `Say what the next shift should watch and what maintenance should check.`;
         if (window.PKAsk) window.PKAsk.open(q);
       });
       // Settings: edit a copy; the unsaved-changes bar offers Save

@@ -478,6 +478,39 @@
   // One short header (the step, what it waits for, the key values), then four tabs so the page stays one screen:
   // Overview (what needs attention, the sequence, the machine at a glance), Devices (list and the picked one),
   // Values over time, and Data exchange. The tab is in the address: #/plant/devices/M201, #/plant/values.
+  // ---- Timeline strip on Plant › Overview (review 3, item 40): this shift, 24 h or 7 days, from /api/timeline ----
+  // The machine's states as one bar, marks for alarms, halts, STOP, connection lost and values changed, and the latest lines.
+  const TL = { win: "shift", data: null, at: 0, busy: false, err: null, sel: -1 };
+  try { TL.win = localStorage.getItem("pk.timeline") || "shift"; } catch { /* private window: this shift */ }
+  async function loadTimeline() {
+    if (TL.busy) return;
+    TL.busy = true;
+    const win = TL.win;
+    try { const d = await PK.api("GET", "/api/timeline?window=" + win); if (win === TL.win) { TL.data = d; TL.err = null; } }
+    catch (e) { TL.err = e.message; }
+    TL.busy = false; TL.at = Date.now();
+    if (win !== TL.win) return loadTimeline();     // the window changed while this one loaded
+    PK.draw();
+  }
+  function timelineCard() {
+    if (!TL.busy && Date.now() - TL.at > 30000) setTimeout(loadTimeline, 0);     // every 30 s while the page is open
+    const d = TL.data;
+    const pick = PK.ui.choice("Time", [["shift", "This shift"], ["24h", "24 h"], ["7d", "7 days"]]
+      .map(([k, l]) => ({ label: l, on: TL.win === k, data: { "data-tlwin": k } })));
+    const head = `<div class="tl-head"><h3>Timeline</h3>${d ? `<span class="faint small">${esc(d.label)}</span>` : ""}<span class="spacer"></span>${pick}</div>`;
+    if (!d) return `<div class="card stack">${head}${TL.err ? PK.ui.error(TL.err) : PK.ui.loading("chart", { label: "Loading the timeline" })}</div>`;
+    const m = d.marks[TL.sel];
+    const sel = m ? `<p class="tl-sel"><time>${esc(PK.when(m.time))}</time> ${esc(m.text)}</p>` : "";
+    const logHref = d.shift ? `#/reports/shift/${d.shift.day}/${d.shift.index}` : "#/reports/shift";
+    const recent = d.recent.length ? PK.ui.events(d.recent, { cls: "tl-recent" })
+      : `<p class="m-0 muted small">Nothing has happened yet in the last 24 hours.</p>`;
+    const legend = d.marks.length ? `<div class="legend small">${[...new Set(d.marks.map((x) => x.mark))].map((k) => `<span class="lg-${esc(k)}"><span class="tl-dot tl-${esc(k)}"></span> ${esc(PK.ui.marks[k] || k)}</span>`).join("")}</div>` : "";
+    return `<div class="card stack" data-timeline>${head}
+      ${PK.ui.timeline({ spans: d.spans, from: d.from, to: d.to, marks: d.marks, sel: TL.sel, label: "Machine state, " + d.label })}${sel}${legend}
+      <div><h4 class="mt-3 mb-0 small muted">Latest</h4>${recent}</div>
+      <div class="row"><span class="spacer"></span><a class="small" href="${logHref}">Shift log ›</a></div></div>`;
+  }
+
   const PLANT_TABS = [["overview", "Overview"], ["devices", "Devices"], ["sequence", "Sequence"], ["stations", "Stations"], ["values", "Values over time"], ["settings", "Machine settings"], ["exchange", "Data exchange"]];
   // The HMI panel's operator settings and buttons (from the program export), loaded once for the Settings tab
   const H = { data: null, error: null, loading: false, q: "", shown: [] };
@@ -612,6 +645,7 @@
             <div class="stack">
               <div class="card stack"><div class="row"><h3 class="m-0">Needs attention</h3>${nNeeds ? `<span class="count ${stop || s.activeAlarms.some((x) => x.severity !== "WARNING") ? "" : "warn"}">${nNeeds}</span>` : ""}<span class="spacer"></span>
                 <a class="small" href="#/plant/devices">All devices ›</a></div>${needs}</div>
+              ${timelineCard()}
               ${seqCards}
             </div>
             <div class="stack">
@@ -676,6 +710,13 @@
       const es = page.querySelector("#eq-search");
       if (es) es.oninput = () => { eqQuery = es.value; PK.draw(); };
       page.querySelectorAll("[data-eqf]").forEach((b) => b.onclick = () => { eqOnlyProblems = b.dataset.eqf === "problems"; PK.draw(); });
+      // Timeline: the time window (remembered in this browser) and a mark picked to read its line
+      page.querySelectorAll("[data-tlwin]").forEach((b) => b.onclick = () => {
+        TL.win = b.dataset.tlwin; TL.data = null; TL.sel = -1; TL.at = 0;
+        try { localStorage.setItem("pk.timeline", TL.win); } catch { /* not kept */ }
+        loadTimeline();
+      });
+      page.querySelectorAll("[data-tlmk]").forEach((b) => b.onclick = () => { const i = +b.dataset.tlmk; TL.sel = TL.sel === i ? -1 : i; PK.draw(); });
       const r = page.querySelector("[data-eq-reset]");
       if (r) r.onclick = () => { eqQuery = ""; eqOnlyProblems = false; PK.draw(); };
       if (window.PKVis) window.PKVis.bindTrends(page);
