@@ -24,6 +24,14 @@ public sealed class PlantSettings
     public double HistoryMinutes { get; set; } = 15;
     public bool AskEnabled { get; set; } = true;
     public string AskEffort { get; set; } = "medium";
+    /// <summary>The Claude model Ask uses (an id like claude-opus-5-5).</summary>
+    public string AskModel { get; set; } = "claude-opus-5-5";
+    /// <summary>Longest answer, in tokens: 4000 short, 8000 normal, 16000 long.</summary>
+    public int AskMaxTokens { get; set; } = 8000;
+    /// <summary>How many lookups (tool rounds) one question may take.</summary>
+    public int AskMaxToolRounds { get; set; } = 12;
+    /// <summary>Monthly limit for Ask in US dollars (estimated from the token counts). 0 = no limit. Takes effect without a restart.</summary>
+    public double AskMonthlyLimitUsd { get; set; }
     public int Port { get; set; } = 5080;
     public bool AllowRemote { get; set; }
     public bool PublicView { get; set; }
@@ -55,9 +63,9 @@ public sealed class PlantSettings
     public string? ApiKey { get; set; }
     public bool ClearApiKey { get; set; }
 
-    /// <summary>The settings that only take effect after a restart (everything but PublicView).</summary>
+    /// <summary>The settings that only take effect after a restart (everything but PublicView, the Ask limit, allowed writes and storage).</summary>
     internal string RestartKey() => string.Join('|', Source, Address, Security, Username, PollMs, FastMs, TimeoutMs, Model,
-        SnapshotFile, HistoryMinutes, AskEnabled, AskEffort, Port, AllowRemote, Export, PlcVia,
+        SnapshotFile, HistoryMinutes, AskEnabled, AskEffort, AskModel, AskMaxTokens, AskMaxToolRounds, Port, AllowRemote, Export, PlcVia,
         TiaMode, TiaUrl, TiaImporterPath, TiaPlcsimIp, TiaAllowReal);
 }
 
@@ -106,6 +114,10 @@ public sealed class SettingsStore
             HistoryMinutes = c.GetValue("PlcKi:HistoryMinutes", 15.0),
             AskEnabled = c.GetValue("PlcKi:Ask:Enabled", true),
             AskEffort = c["PlcKi:Ask:Effort"] ?? "medium",
+            AskModel = c["PlcKi:Ask:Model"] ?? "claude-opus-5-5",
+            AskMaxTokens = c.GetValue("PlcKi:Ask:MaxTokens", 8000),
+            AskMaxToolRounds = c.GetValue("PlcKi:Ask:MaxToolRounds", 12),
+            AskMonthlyLimitUsd = c.GetValue("PlcKi:Ask:MonthlyLimitUsd", 0.0),
             Port = c.GetValue("Plant:Port", PortFromUrls(urls) ?? 5080),
             AllowRemote = c.GetValue("Plant:AllowRemote", urls.Contains("*") || urls.Contains("0.0.0.0") || urls.Contains("[::]")),
             PublicView = c.GetValue("Plant:PublicView", false),
@@ -140,6 +152,9 @@ public sealed class SettingsStore
             AlarmOccurrences = c.GetValue("Plant:Retention:AlarmOccurrences", d.AlarmOccurrences),
         };
     }
+
+    /// <summary>The port the TIA helper listens on when PLC-Ki starts it on this PC (appsettings.json, not on the settings page).</summary>
+    public int TiaPort => _config.GetValue("PlcKi:Tia:Port", 5090);
 
     /// <summary>The storage limits in force. Saved ones that are out of range fall back to the defaults.</summary>
     public RetentionLimits Retention() => RetentionFrom(_config);
@@ -271,6 +286,10 @@ public sealed class SettingsStore
             plc.Remove("Password");                 // never in plain text: see PlantSecrets
             ask["Enabled"] = s.AskEnabled;
             ask["Effort"] = s.AskEffort;
+            ask["Model"] = s.AskModel.Trim();
+            ask["MaxTokens"] = s.AskMaxTokens;
+            ask["MaxToolRounds"] = s.AskMaxToolRounds;
+            ask["MonthlyLimitUsd"] = Math.Round(s.AskMonthlyLimitUsd, 2);
             plant["Port"] = s.Port;
             plant["AllowRemote"] = s.AllowRemote;
             plant["PublicView"] = s.PublicView;
@@ -321,6 +340,13 @@ public sealed class SettingsStore
         if (s.TimeoutMs is < 500 or > 60_000) throw new PlantException("Wait for an answer: 0.5 to 60 seconds (500 to 60000 ms).");
         if (s.HistoryMinutes is < 1 or > 240) throw new PlantException("History: 1 to 240 minutes.");
         if (s.AskEffort is not ("low" or "medium" or "high" or "max")) throw new PlantException("Effort is low, medium, high or max.");
+        // Checked only when changed here: a value set by hand in appsettings.json or on the command line never blocks saving
+        var now = Current();
+        if (s.AskModel != now.AskModel && !System.Text.RegularExpressions.Regex.IsMatch(s.AskModel?.Trim() ?? "", @"^claude-[a-z0-9.-]{2,60}$"))
+            throw new PlantException("The model is a Claude model name like claude-opus-5-5.");
+        if (s.AskMaxTokens != now.AskMaxTokens && s.AskMaxTokens is < 1000 or > 16000) throw new PlantException("Answer length: 1000 to 16000 tokens.");
+        if (s.AskMaxToolRounds != now.AskMaxToolRounds && s.AskMaxToolRounds is < 2 or > 30) throw new PlantException("Lookups per question: 2 to 30.");
+        if (double.IsNaN(s.AskMonthlyLimitUsd) || s.AskMonthlyLimitUsd is < 0 or > 100_000) throw new PlantException("Monthly limit: 0 (none) to 100000 dollars.");
         if (s.Port is < 1 or > 65535) throw new PlantException("Port: 1 to 65535.");
         if (s.Retention?.Problem() is { } keep) throw new PlantException(keep);
         if (string.IsNullOrWhiteSpace(s.Model)) throw new PlantException("Choose a machine model.");

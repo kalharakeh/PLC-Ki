@@ -192,6 +192,50 @@ public class PlantTests : IDisposable
         Assert.Equal("10.20.30.40", config["PlcKi:Plc:Address"]);
         Assert.Equal(PlcPw, config["PlcKi:Plc:Password"]);
     }
+
+    [Fact]
+    public async Task Ask_limit_works_at_once_and_the_model_after_a_restart()
+    {
+        await using var app = await Start();
+        var c = new Client(app.GetTestClient());
+        await c.Send(HttpMethod.Post, "/api/auth/setup", new { name = "anna", password = AdminPw });
+        var store = app.Services.GetRequiredService<SettingsStore>();
+        var config = app.Services.GetRequiredService<IConfiguration>();
+
+        var s = store.Current();
+        Assert.Equal("claude-opus-5-5", s.AskModel);
+        s.AskMonthlyLimitUsd = 25;
+        s.Username = "plcki-reader";
+        var r = await c.Send(HttpMethod.Put, "/api/admin/settings", s);
+        Assert.True(r.IsSuccessStatusCode, await r.Content.ReadAsStringAsync());
+        Assert.Equal(25.0, config.GetValue("PlcKi:Ask:MonthlyLimitUsd", 0.0));
+        Assert.Equal("plcki-reader", config["PlcKi:Plc:Username"]);
+
+        s = store.Current();
+        s.AskModel = "claude-sonnet-5-5";
+        s.AskMaxTokens = 16000;
+        s.AskMaxToolRounds = 20;
+        var saved = System.Text.Json.JsonDocument.Parse(await (await c.Send(HttpMethod.Put, "/api/admin/settings", s)).Content.ReadAsStringAsync()).RootElement;
+        Assert.True(saved.GetProperty("info").GetProperty("restartNeeded").GetBoolean());
+        Assert.Equal("claude-sonnet-5-5", saved.GetProperty("settings").GetProperty("askModel").GetString());
+        Assert.Equal(5090, saved.GetProperty("info").GetProperty("tiaPort").GetInt32());
+
+        foreach (var bad in new Action<PlantSettings>[] { x => x.AskMaxTokens = 99_999, x => x.AskMaxToolRounds = 1, x => x.AskModel = "gpt-5", x => x.AskMonthlyLimitUsd = -1 })
+        {
+            var b = store.Current();
+            bad(b);
+            Assert.Equal(HttpStatusCode.BadRequest, (await c.Send(HttpMethod.Put, "/api/admin/settings", b)).StatusCode);
+        }
+
+        // A value set by hand in the config file, outside the page's ranges, does not block saving other settings
+        File.WriteAllText(Path.Combine(_dir, "settings.json"), File.ReadAllText(Path.Combine(_dir, "settings.json")).Replace("\"MaxTokens\": 16000", "\"MaxTokens\": 32000"));
+        (config as IConfigurationRoot)!.Reload();
+        Assert.Equal(32000, store.Current().AskMaxTokens);
+        var other = store.Current();
+        other.HistoryMinutes = 30;
+        var ok = await c.Send(HttpMethod.Put, "/api/admin/settings", other);
+        Assert.True(ok.IsSuccessStatusCode, await ok.Content.ReadAsStringAsync());
+    }
 }
 
 public class PlcAddressTests

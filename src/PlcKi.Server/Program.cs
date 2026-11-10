@@ -179,7 +179,13 @@ static async Task<int> RunAppAsync(string[] appArgs, bool probe, JobService jobs
         var diag = sp.GetRequiredService<PlcKi.Server.Hardware.DiagnosticsService>();
         return new MachineTools(model, () => new LiveView(live.Status, live.Snapshot, live.History, DateTimeOffset.Now, captures, fast, eventLog), live.Memory, diag.View, docs);
     });
-    builder.Services.AddSingleton<AskService>();
+    // What Ask used per month, and the monthly limit (read for every question: a new limit works without a restart)
+    var askUsage = new AskUsage(Path.Combine(plant.DataDir, "ask-usage.json"));
+    builder.Services.AddSingleton(askUsage);
+    var askLimit = () => builder.Configuration.GetValue("PlcKi:Ask:MonthlyLimitUsd", 0.0);
+    builder.Services.AddSingleton(sp => new AskService(sp.GetRequiredService<AskOptions>(), sp.GetRequiredService<MachineTools>(),
+        sp.GetRequiredService<LiveState>(), sp.GetRequiredService<ILogger<AskService>>(), sp.GetRequiredService<PlcKi.Core.Knowledge.DocumentLibrary>(),
+        askUsage, askLimit));
     builder.Services.AddSingleton<IPlcSource>(sp => CreateSource(sp.GetRequiredService<ILoggerFactory>().CreateLogger("plc")));
     builder.Services.AddHostedService<PollingService>();
     builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.WriteIndented = false);
@@ -258,8 +264,19 @@ static async Task<int> RunAppAsync(string[] appArgs, bool probe, JobService jobs
     app.MapGet("/api/ask", (AskService ask) =>
     {
         var (enabled, reason) = ask.Availability();
-        return Results.Ok(new { enabled, reason, code = enabled ? null : opt.Ask.Enabled ? "nokey" : "off", model = opt.Ask.Model });
+        var code = enabled ? null : !opt.Ask.Enabled ? "off" : askUsage.LimitReached(askLimit()) != null ? "limit" : "nokey";
+        return Results.Ok(new { enabled, reason, code, model = opt.Ask.Model });
     });
+
+    // For the settings page: what Ask used this month and before, the limit, and the models it can choose from
+    app.MapGet("/api/admin/ask/usage", () => Results.Ok(new
+    {
+        month = askUsage.ThisMonth(),
+        months = askUsage.Months(),
+        limit = askLimit(),
+        models = AskUsage.Models,
+        running = opt.Ask.Model,
+    }));
 
     app.MapPost("/api/ask", async (AskRequest req, AskService ask, CancellationToken ct) =>
     {
