@@ -1952,3 +1952,108 @@ section.hero.aa .card { background: var(--panel); }
 .ask-bar span { display: block; height: 100%; background: var(--accent); }
 .ask-bar.near span { background: var(--warn, #c27c0e); }
 .ask-bar.full span { background: var(--fault, #d93025); }
+
+/* ---------- Line screen (TV) mode (review 3, item 44): tv.js. Read from about 5 m on a 1920x1080 TV; still fits
+   1366x768 and portrait. No menu, top bar, banner or footer: the page says itself when values are not live. ---------- */
+html.tv :is(.sidebar, .topbar, #banner, footer.foot, #back-bar, #notice-bar, #held-bar, #dirty-bar, .ask-panel, .scrim, .skip) { display: none !important; }
+html.tv .app { display: block; min-height: 0; }
+html.tv body { background: var(--bg); }
+html.tv.frozen main#page:not(:has(.offline-page)) { filter: none; opacity: 1; }     /* the TV says "No data" itself */
+html.tv:not(.tv-moved) .tv { cursor: none; }
+/* Fixed and clipped, so the burn-in shift never makes the page scroll; the padding is more than the shift */
+.tv { position: fixed; inset: 0; overflow: hidden; background: var(--bg); color: var(--ink);
+  --tv-pad: clamp(14px, 1.8vmax, 36px); }
+.tv-in { position: absolute; inset: var(--tv-pad); display: grid; grid-template-rows: auto minmax(0, 1fr); gap: clamp(10px, 1.6vh, 26px); transition: transform 2s var(--ease); }
+
+/* The band: state word, step, cycle, clock */
+.tv-band { --lv: var(--steel); --lv-soft: var(--steel-soft); --lv-ink: var(--ink);
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: clamp(14px, 2.4vw, 48px);
+  padding: clamp(12px, 2vh, 28px) clamp(16px, 2vw, 36px); border-radius: clamp(14px, 1.4vw, 28px);
+  background: var(--lv-soft); box-shadow: inset clamp(8px, 0.8vw, 16px) 0 0 var(--lv); }
+.tv-band.lv-ok { --lv: var(--ok); --lv-soft: var(--ok-soft); --lv-ink: var(--ok-ink); }
+.tv-band.lv-warn { --lv: var(--warn); --lv-soft: var(--warn-soft); --lv-ink: var(--warn-ink); }
+.tv-band.lv-fault { --lv: var(--fault); --lv-soft: var(--fault-soft); --lv-ink: var(--fault-ink); }
+.tv-state { display: grid; gap: 2px; min-width: 0; padding-left: clamp(8px, 1vw, 20px); }
+.tv-name { font-size: clamp(14px, min(2.2vh, 1.6vw), 30px); color: var(--muted); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40vw; }
+.tv .tv-word { font-size: clamp(40px, min(10vh, 7vw), 150px); line-height: 1; font-weight: 800; letter-spacing: -0.02em; color: var(--lv-ink); white-space: nowrap; }
+.tv-step { display: grid; gap: 4px; min-width: 0; }
+.tv-step-n { font-size: clamp(14px, min(2.4vh, 1.7vw), 32px); color: var(--muted); font-weight: 600; }
+.tv-for { margin-left: 0.6em; font-weight: 500; }
+.tv-step-t { font-size: clamp(22px, min(4.6vh, 3.2vw), 68px); line-height: 1.1; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tv-step-w { font-size: clamp(14px, min(2.3vh, 1.6vw), 32px); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tv-cycle { display: flex; gap: clamp(12px, 2vw, 40px); }
+.tv-cycle > div, .tv-clock { display: grid; justify-items: end; line-height: 1.05; }
+.tv-cycle b { font-size: clamp(20px, min(4.4vh, 3vw), 64px); font-weight: 700; }
+.tv-cycle span, .tv-clock span { font-size: clamp(12px, min(1.9vh, 1.3vw), 26px); color: var(--muted); }
+.tv-clock b { font-size: clamp(24px, min(5.6vh, 4vw), 84px); font-weight: 700; letter-spacing: -0.01em; }
+
+/* The body: the picture alone, or the alarm beside a smaller picture */
+.tv-body { min-height: 0; display: grid; }
+.tv-split { min-height: 0; display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: clamp(12px, 2vw, 36px); }
+.tv-msg { align-self: center; justify-self: center; text-align: center; font-size: clamp(18px, min(3.4vh, 2.4vw), 46px); color: var(--muted); max-width: 30em; }
+.tv-pic { min-height: 0; overflow: hidden; display: grid; align-content: center; }
+.tv-pic.dim { opacity: 0.45; filter: grayscale(1); }
+.tv-pic.tv-none { color: var(--muted); justify-content: center; font-size: clamp(16px, 2.4vh, 32px); }
+.tv .pmap { gap: clamp(10px, 2vh, 28px); }
+.tv .pm-h { font-size: clamp(13px, min(2vh, 1.4vw), 26px); margin-bottom: clamp(6px, 1vh, 14px); }
+.tv .pm-devs { grid-template-columns: repeat(auto-fit, minmax(clamp(120px, min(15vw, 24vh), 300px), 1fr)); gap: clamp(8px, 1.6vh, 26px); }
+.tv .pm-dev { padding: clamp(10px, 3vh, 48px) 10px; border-width: 2px; border-radius: clamp(12px, 1.4vw, 24px); gap: clamp(2px, 0.8vh, 12px); }
+.tv .pm-dev:hover { transform: none; }
+.tv .pm-sym svg { width: clamp(40px, min(13vh, 7vw), 170px); height: clamp(40px, min(13vh, 7vw), 170px); }
+.tv .pm-dev b { font-size: clamp(15px, min(4vh, 2.6vw), 52px); }
+.tv .pm-st, .tv .pm-v { font-size: clamp(13px, min(2.8vh, 1.8vw), 36px); }
+.tv .pm-key { font-size: clamp(12px, min(1.7vh, 1.2vw), 22px); }
+.tv-split .pm-devs { grid-template-columns: repeat(auto-fit, minmax(clamp(100px, min(9vw, 18vh), 220px), 1fr)); }
+.tv-split .pm-sym svg { width: clamp(34px, min(6vh, 4.4vw), 90px); height: clamp(34px, min(6vh, 4.4vw), 90px); }
+.tv-split .pm-dev b { font-size: clamp(14px, min(2.3vh, 1.6vw), 32px); }
+.tv-split .pm-st, .tv-split .pm-v { font-size: clamp(12px, min(1.9vh, 1.3vw), 26px); }
+
+/* The alarm, large */
+.tv-al { --al: var(--fault); --al-soft: var(--fault-soft); --al-ink: var(--fault-ink);
+  min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: clamp(8px, 1.6vh, 24px);
+  padding: clamp(16px, 3vh, 44px) clamp(18px, 2.4vw, 48px); border-radius: clamp(14px, 1.4vw, 28px);
+  background: var(--al-soft); border: clamp(3px, 0.4vw, 8px) solid var(--al); }
+.tv-al.warn { --al: var(--warn); --al-soft: var(--warn-soft); --al-ink: var(--warn-ink); }
+.tv-al-top { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.tv-al-sev { font-size: clamp(16px, min(3vh, 2.2vw), 42px); font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; color: var(--al-ink); }
+.tv-al-first { font-size: clamp(13px, min(2.2vh, 1.6vw), 30px); font-weight: 700; padding: 0.15em 0.7em; border-radius: 999px; background: var(--al); color: #fff; }
+.tv .tv-al-text { font-size: clamp(28px, min(6.4vh, 4.4vw), 96px); line-height: 1.08; font-weight: 800; letter-spacing: -0.015em; margin: 0; }
+.tv-al-facts { display: flex; flex-wrap: wrap; gap: 0.4em 1.6em; font-size: clamp(16px, min(3vh, 2.1vw), 42px); font-weight: 600; }
+.tv-al-facts > span { display: inline-flex; align-items: center; gap: 0.4em; }
+.tv-al-facts svg { width: 1em; height: 1em; fill: none; stroke: currentColor; stroke-width: 2; }
+.tv-al-cond { margin: 0; font-size: clamp(15px, min(2.5vh, 1.8vw), 34px); color: var(--muted); }
+.tv-al-more { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; font-size: clamp(14px, min(2.2vh, 1.6vw), 30px); }
+.tv-al-chip { padding: 0.15em 0.7em; border-radius: 999px; border: 2px solid var(--fault); color: var(--fault-ink); }
+.tv-al-chip.warn { border-color: var(--warn); color: var(--warn-ink); }
+.tv-al-fix { font-size: clamp(14px, min(2.3vh, 1.6vw), 32px); }
+.tv-al-fix ol { margin: 0.3em 0 0; padding-left: 1.4em; display: grid; gap: 0.2em; }
+.tv-alarm .tv-band .tv-word { animation: tv-pulse 2s var(--ease) infinite; }
+@keyframes tv-pulse { 50% { opacity: 0.6; } }
+@media (prefers-reduced-motion: reduce) { .tv-alarm .tv-band .tv-word { animation: none; } .tv-in { transition: none; } }
+
+/* The quiet corner: exit and full screen, faint until the mouse moves */
+.tv-corner { position: absolute; right: 0; bottom: 0; display: flex; align-items: center; gap: 10px; opacity: 0.28; transition: opacity 0.4s var(--ease); }
+html.tv-moved .tv-corner, .tv-corner:focus-within { opacity: 1; }
+.tv-btn { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel); color: var(--muted); cursor: pointer; }
+.tv-btn:hover { color: var(--ink); }
+.tv-btn svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.tv-test { font-size: 13px; font-weight: 700; padding: 4px 10px; border-radius: 999px; background: var(--warn-soft); color: var(--warn-ink); }
+.tv-hint { font-size: 13px; color: var(--muted); }
+
+/* Portrait and smaller screens: the band in rows, the alarm above the picture */
+@media (orientation: portrait), (max-width: 1100px) {
+  .tv-band { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "state clock" "step step" "cycle cycle"; row-gap: clamp(8px, 1.4vh, 20px); }
+  .tv-state { grid-area: state; } .tv-clock { grid-area: clock; } .tv-step { grid-area: step; padding-left: clamp(8px, 1vw, 20px); }
+  .tv-cycle { grid-area: cycle; justify-content: flex-start; padding-left: clamp(8px, 1vw, 20px); }
+  .tv-cycle > div { justify-items: start; }
+  .tv-split { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+  .tv .tv-word { font-size: clamp(36px, min(7vh, 11vw), 140px); }
+  .tv-step-t { white-space: normal; }
+}
+/* A phone is not a line screen, but must not break: the page scrolls instead of clipping */
+@media (max-width: 600px) {
+  .tv { position: static; overflow: visible; }
+  .tv-in { position: static; transform: none !important; padding: 16px; }
+  .tv-corner { position: static; justify-content: flex-end; opacity: 1; }
+  .tv-name { max-width: 60vw; }
+}
