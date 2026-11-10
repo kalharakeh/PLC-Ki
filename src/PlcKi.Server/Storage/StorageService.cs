@@ -21,7 +21,7 @@ public sealed record DiskSpace(string Drive, long Free, long Total, bool Low, st
 /// What PLC-Ki keeps and how much (Setup › Settings › Storage), and the limits that stop it growing forever:
 /// pruning at start and once a day (StoragePruning), export, and clear on an administrator's confirmed request.
 /// Pruning only ever touches: production log day files (reports\*\yyyy-MM-dd.jsonl), event day files
-/// (events\*\yyyy-MM-dd.jsonl and events\*\steps\yyyy-MM-dd.jsonl), value day files (values\*\yyyy-MM-dd.jsonl and values\*ull\yyyy-MM-dd.jsonl), the older change log files,
+/// (events\*\yyyy-MM-dd.jsonl and events\*\steps\yyyy-MM-dd.jsonl), value day files (values\*\yyyy-MM-dd.jsonl and values\*\full\yyyy-MM-dd.jsonl), the older change log files,
 /// alarm recordings (captures\*\*.json) and alarm memory occurrences without a note. Never: notes (handover\ too), documents,
 /// logins, settings, keys, models, the hold list or the report settings.
 /// </summary>
