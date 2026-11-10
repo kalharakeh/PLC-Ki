@@ -21,7 +21,7 @@ public sealed record DiskSpace(string Drive, long Free, long Total, bool Low, st
 /// What PLC-Ki keeps and how much (Setup › Settings › Storage), and the limits that stop it growing forever:
 /// pruning at start and once a day (StoragePruning), export, and clear on an administrator's confirmed request.
 /// Pruning only ever touches: production log day files (reports\*\yyyy-MM-dd.jsonl), event day files
-/// (events\*\yyyy-MM-dd.jsonl and events\*\steps\yyyy-MM-dd.jsonl), the older change log files,
+/// (events\*\yyyy-MM-dd.jsonl and events\*\steps\yyyy-MM-dd.jsonl), value day files (values\*\yyyy-MM-dd.jsonl and values\*\full\yyyy-MM-dd.jsonl), the older change log files,
 /// alarm recordings (captures\*\*.json) and alarm memory occurrences without a note. Never: notes (handover\ too), documents,
 /// logins, settings, keys, models, the hold list or the report settings.
 /// </summary>
@@ -37,12 +37,14 @@ public sealed class StorageService
     private readonly AlarmMemory? _memory;
     private readonly AlarmCaptureBook? _book;
     private readonly ProductionLog? _production;
+    private readonly ValueLog? _values;
     private readonly ILogger? _log;
     private readonly object _lock = new();
 
     public StorageService(string dataDir, Func<RetentionLimits> limits, AlarmMemory? memory = null, AlarmCaptureBook? book = null,
-        ProductionLog? production = null, ILogger? log = null)
+        ProductionLog? production = null, ILogger? log = null, ValueLog? values = null)
     {
+        _values = values;
         _dataDir = Path.GetFullPath(dataDir);
         _limits = limits;
         _memory = memory;
@@ -56,6 +58,7 @@ public sealed class StorageService
     private string ReportsDir => Path.Combine(_dataDir, "reports");
     private string CapturesDir => Path.Combine(_dataDir, "captures");
     private string EventsDir => Path.Combine(_dataDir, "events");
+    private string ValuesDir => Path.Combine(_dataDir, "values");
     public JsonLinesLog ChangeLog => WriteEndpoints.ChangeLog(_dataDir);
 
     /// <summary>The last automatic pruning: when, and what it removed.</summary>
@@ -90,6 +93,17 @@ public sealed class StorageService
                 if (!dryRun) foreach (var d in old) TryDelete(d.Path);
                 if (old.Count > 0)
                     list.Add(new Removed(busy ? "steps" : "events", old.Count, evBytes, $"{Plural(old.Count, busy ? "day file of steps" : "day file of events", busy ? "day files of steps" : "day files of events")} up to {old.Max(d => d.Day):yyyy-MM-dd}"));
+            }
+
+            // Values: the full-rate files go first, the minute files stay much longer
+            foreach (var (full, keep) in new[] { (true, r.ValueFullDays), (false, r.ValueDays) })
+            {
+                var vCut = DateOnly.FromDateTime(now.LocalDateTime.Date.AddDays(-keep));
+                var oldV = ValueLog.DayFiles(ValuesDir, full).Where(d => d.Day < vCut).ToList();
+                long vBytes = oldV.Sum(d => Size(d.Path));
+                if (!dryRun) foreach (var d in oldV) TryDelete(d.Path);
+                if (oldV.Count > 0)
+                    list.Add(new Removed(full ? "values-full" : "values", oldV.Count, vBytes, $"{Plural(oldV.Count, full ? "day file of values at the full rate" : "day file of values", full ? "day files of values at the full rate" : "day files of values")} up to {oldV.Max(d => d.Day):yyyy-MM-dd}"));
             }
 
             var ch = ChangeLog.Prune(r.ChangeLogDays, r.ChangeLogMb * 1024L * 1024, now, dryRun);
@@ -130,7 +144,7 @@ public sealed class StorageService
 
     // ---------- clear ----------
 
-    public static readonly string[] Clearable = { "production", "events", "steps", "changes", "recordings", "memory" };
+    public static readonly string[] Clearable = { "production", "events", "steps", "values", "changes", "recordings", "memory" };
 
     /// <summary>
     /// Removes one kind completely, on an administrator's confirmed request, and writes it into the change log with
@@ -156,6 +170,13 @@ public sealed class StorageService
                     long eb = evFiles.Sum(d => Size(d.Path));
                     int en = evFiles.Count(d => TryDelete(d.Path));
                     done = new Removed(kind, en, eb, Plural(en, "day file"));
+                    break;
+                case "values":
+                    var vFiles = ValueLog.DayFiles(ValuesDir, true).Concat(ValueLog.DayFiles(ValuesDir, false)).ToList();
+                    long vb = vFiles.Sum(d => Size(d.Path));
+                    int vn = vFiles.Count(d => TryDelete(d.Path));
+                    _values?.Restart();
+                    done = new Removed(kind, vn, vb, Plural(vn, "day file"));
                     break;
                 case "changes":
                     done = ChangeLog.Clear() with { Kind = kind };
@@ -187,6 +208,7 @@ public sealed class StorageService
         "production" => "Production log",
         "events" => "Machine events",
         "steps" => "Steps and outputs",
+        "values" => "Value history",
         "changes" => "Change log",
         "recordings" => "Alarm recordings",
         "memory" => "Alarm memory",
@@ -273,6 +295,17 @@ public sealed class StorageService
                 $"{N(keep)} days", ev.Count == 0 ? null
                     : $"all {Plural(ev.Count, "day file")} ({ev[0].Day:yyyy-MM-dd} to {ev[^1].Day:yyyy-MM-dd}, {Bytes(evBytes)}) of {(busy ? "steps and outputs" : "machine events")}. The timeline and the shift log start again from now."));
         }
+
+        // Value history: the full-rate files and the minute files
+        var vFull = ValueLog.DayFiles(ValuesDir, true);
+        var vThin = ValueLog.DayFiles(ValuesDir, false);
+        long vBytesAll = vFull.Concat(vThin).Sum(d => Size(d.Path));
+        rows.Add(new StorageRow("values", "Value history",
+            "Numeric values for the trends: every read for the newest days, a minute at a time (lowest, highest, last) for older ones.",
+            "disk", Rel(ValuesDir), vThin.Count, Plural(vThin.Count, "day"), vBytesAll,
+            vThin.Count > 0 ? new DateTimeOffset(vThin[0].Day.ToDateTime(TimeOnly.MinValue)) : null,
+            $"{N(r.ValueDays)} days; every read for {N(r.ValueFullDays)}", vThin.Count == 0 ? null
+                : $"all value history ({Plural(vThin.Count, "day")}, {Bytes(vBytesAll)}). The trends start again from now."));
 
         // Change log
         var chFiles = ChangeLog.Files();

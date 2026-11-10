@@ -719,6 +719,8 @@ const PKSetup = (() => {
     ["productionDays", "Production log", "days", "400 days lets a report compare with the same weeks last year."],
     ["eventDays", "Machine events", "days", "Alarms, halts, connection drops, values changed. As long as the production log, so every shift report has its shift log."],
     ["stepEventDays", "Steps and outputs", "days", "About 20 per cycle, 1 to 5 MB a day, so kept for a shorter time."],
+    ["valueFullDays", "Values, every read", "days", "Big: about 16 MB a day on the demo, several times that on a real machine. Charts of up to 2 hours use it."],
+    ["valueDays", "Values, a minute at a time", "days", "Lowest, highest and last value of each minute: 1 to 5 MB a day, so a week of trends stays small."],
     ["changeLogDays", "Change log", "days", "Who changed which value. Older files go first."],
     ["changeLogMb", "Change log, at most", "MB", "Whichever comes first: the days or the size."],
     ["recordings", "Alarm recordings", "per machine", "The newest ones are kept."],
@@ -737,7 +739,7 @@ const PKSetup = (() => {
       return `<tr><td><b class="semibold">${esc(r.title)}</b><div class="muted small">${esc(r.what)}</div></td>
         <td class="small">${r.where === "memory" ? "Memory" : `Disk<div class="faint mono" style="overflow-wrap:anywhere">${esc(r.folder || "")}</div>`}</td>
         <td class="nowrap small">${esc(r.countText)}${r.bytes != null && r.where === "disk" ? `<div class="faint">${size(r.bytes)}</div>` : ""}</td>
-        <td class="nowrap small">${r.oldest ? esc(PK.date(r.oldest, !["production", "events", "steps"].includes(r.kind))) : "–"}</td>
+        <td class="nowrap small">${r.oldest ? esc(PK.date(r.oldest, !["production", "events", "steps", "values"].includes(r.kind))) : "–"}</td>
         <td class="small">${esc(r.limit)}</td>
         <td class="nowrap">${exp}${clr}</td></tr>`;
     }).join("");

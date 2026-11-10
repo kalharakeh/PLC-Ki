@@ -129,6 +129,10 @@ static async Task<int> RunAppAsync(string[] appArgs, bool probe, JobService jobs
     machineHistory.Recorded = eventLog.Write;
     builder.Services.AddSingleton(machineHistory);
     builder.Services.AddSingleton(eventLog);
+    // Values: the numeric ones on disk too, at the full rate for a few days and a minute at a time for longer (data folder\values\<machine>)
+    var valueLog = new ValueLog(ValueLog.FolderFor(plant.DataDir, PlcKi.Server.Reports.ReportService.Slug(model.Name)), Trend.NumericIds(model));
+    machineHistory.ValuesRecorded = valueLog.Add;
+    builder.Services.AddSingleton(valueLog);
     builder.Services.AddSingleton(new LiveModelCheck(model));
     // Machine memory: every alarm occurrence and the technicians' notes, one file per machine in the data folder
     // Storage limits (Setup › Settings › Storage): read live from settings.json, applied at start and once a day
@@ -155,7 +159,7 @@ static async Task<int> RunAppAsync(string[] appArgs, bool probe, JobService jobs
         folder: Path.Combine(plant.DataDir, "captures", CaptureFolder(opt.Model))));
     builder.Services.AddSingleton(sp => new PlcKi.Server.Storage.StorageService(plant.DataDir, () => sp.GetRequiredService<SettingsStore>().Retention(),
         memory, sp.GetRequiredService<AlarmCaptureBook>(), sp.GetRequiredService<PlcKi.Server.Reports.ReportService>().Log,
-        sp.GetRequiredService<ILoggerFactory>().CreateLogger("storage")));
+        sp.GetRequiredService<ILoggerFactory>().CreateLogger("storage"), valueLog));
     builder.Services.AddHostedService<PlcKi.Server.Storage.StoragePruning>();
     builder.Services.AddSingleton<WatchList>();
     builder.Services.AddSingleton<DeviceWatch>();
@@ -184,6 +188,7 @@ static async Task<int> RunAppAsync(string[] appArgs, bool probe, JobService jobs
         builder.WebHost.UseUrls("http://localhost:5080");
 
     var app = builder.Build();
+    app.Lifetime.ApplicationStopping.Register(valueLog.Flush);     // the minute being collected goes to disk
     // Work out the drives once at startup, so the polling loop reads their values before anyone opens a page
     _ = Task.Run(() => { try { app.Services.GetRequiredService<PlcKi.Server.Hardware.DiagnosticsService>().Drives(); } catch (Exception) { /* shown on the page */ } });
     if (!plant.IsService)
@@ -246,13 +251,8 @@ static async Task<int> RunAppAsync(string[] appArgs, bool probe, JobService jobs
     // How well the model fits the live machine: what the machine did that the model does not explain (read-only)
     app.MapGet("/api/model-check", (LiveModelCheck check) => Results.Ok(check.Report()));
 
-    // Values over time for the charts, from the same in-memory history (read-only). tags= is a comma list of tag ids.
-    app.MapGet("/api/trend", (MachineHistory history, MachineModel m, double? minutes, string? tags) =>
-    {
-        var window = TimeSpan.FromMinutes(Math.Clamp(minutes ?? history.KeepValues.TotalMinutes, 1, history.KeepValues.TotalMinutes));
-        var ids = string.IsNullOrWhiteSpace(tags) ? null : tags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        return Results.Ok(Trend.Build(m, history, window, DateTimeOffset.Now, ids));
-    });
+    // Values over time for the charts: the live buffer, or the values saved on disk for a longer window (read-only)
+    TrendEndpoints.Map(app);
 
     // "Ask a question": Claude answers from the live values and the machine model (read-only lookups)
     app.MapGet("/api/ask", (AskService ask) =>
