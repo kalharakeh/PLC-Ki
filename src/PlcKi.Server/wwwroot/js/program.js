@@ -1311,7 +1311,8 @@
 
   // The tag tables and the hardware, read once, for "an input from the field at %I0.3, on this module"
   let ioData = null;
-  window.addEventListener("pk:program-changed", () => { ioData = null; });
+  // A new program or a new hardware read: the addresses and channels may be different
+  for (const ev of ["pk:program-changed", "pk:hardware-changed"]) window.addEventListener(ev, () => { ioData = null; });
   async function ioOf(sym) {
     ioData ||= Promise.all([PK.api("GET", "/api/program/tags").catch(() => null), PK.api("GET", "/api/hardware").catch(() => null)]);
     const [tags, hw] = await ioData;
@@ -1336,7 +1337,7 @@
    * Resolves to { address, input, ch, comment, tag (the PLC tag), via (the block with the copy) } or null.
    */
   const measured = new Map();
-  window.addEventListener("pk:program-changed", () => measured.clear());
+  for (const ev of ["pk:program-changed", "pk:hardware-changed"]) window.addEventListener(ev, () => measured.clear());
   function whereToMeasure(sym) {
     const key = PK.norm(sym);
     if (!measured.has(key)) measured.set(key, findMeasure(sym).catch(() => null));

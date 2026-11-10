@@ -461,7 +461,7 @@
       if (!j) return;
       if (j.state === "running") { jobMsg = j.stage || jobMsg; return; }
       job = null;
-      if (j.state === "done") { jobMsg = ""; PK.toast("Hardware read from TIA."); loadHw(true); }
+      if (j.state === "done") { jobMsg = ""; PK.toast("Hardware read from TIA."); loadHw(true); window.dispatchEvent(new Event("pk:hardware-changed")); }
       else { jobMsg = "Reading the hardware did not work. Open Setup › Program for the log."; PK.draw(); }
     },
     render(params) {

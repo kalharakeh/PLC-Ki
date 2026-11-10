@@ -229,7 +229,7 @@
   // Each signal's input or output, rack, slot and channel, from the tag table and the hardware read from TIA (the PLC
   // page's Racks and I/O). Looked up once per signal in the background (PKProgram.whereToMeasure); the page redraws.
   const MS = { res: new Map(), busy: new Set() };
-  window.addEventListener("pk:program-changed", () => MS.res.clear());
+  for (const ev of ["pk:program-changed", "pk:hardware-changed"]) window.addEventListener(ev, () => MS.res.clear());
   function measureOf(symbol) {
     if (MS.res.has(symbol)) return MS.res.get(symbol);
     if (window.PKProgram && PKProgram.whereToMeasure && !MS.busy.has(symbol)) {
