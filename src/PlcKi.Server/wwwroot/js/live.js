@@ -106,6 +106,65 @@
   }
   let histOpen = false;           // "History of this alarm" stays open across the redraws
 
+  // ---------- Follow-up alarms (review 42) ----------
+  /** How soon after a first alarm another one has to come to be folded under it. */
+  const FOLD_MS = 5000;
+  /**
+   * The active alarms in groups: each first alarm with the ones that came up to 5 s after it, in the server's order
+   * (first-out first). Only when PLC-Ki saw the first one come: alarms already on when it started watching have no
+   * known order, so they stand alone. Timing only, nothing in the model links two alarms, so the page says "probably".
+   * Returns { groups: [{ root, after: [{ alarm, ms }] }], rootOf: Map(id -> { root, ms }) }.
+   */
+  function foldAlarms(alarms) {
+    const groups = [], rootOf = new Map();
+    for (const a of alarms) {
+      const t = a.since && !a.atStart ? Date.parse(a.since) : NaN;
+      const g = !isNaN(t) && groups.find((x) => !isNaN(x.t) && x.t <= t && t - x.t <= FOLD_MS);
+      if (g) { g.after.push({ alarm: a, ms: t - g.t }); rootOf.set(a.id, { root: g.root, ms: t - g.t }); }
+      else groups.push({ root: a, t, after: [] });
+    }
+    return { groups, rootOf };
+  }
+  const laterText = (ms) => (ms < 1000 ? "in the same second" : `${Math.round(ms / 1000)} s later`);
+  /** "Came 1 s after A01. Probably a result of it: fix A01 first." */
+  const followText = (id, ms, text) => `Came ${ms < 1000 ? "in the same second as" : Math.round(ms / 1000) + " s after"} ${id}${text ? ` (${text})` : ""}. Probably a result of it: fix ${id} first.`;
+
+  // ---------- Share an alarm (review 48) ----------
+  let share = null;               // what the Share button on the page sends: { title, text, url }
+  /** Plain text for a colleague: the alarm, when it came, the step, the device's values, what came after it, and the link. */
+  function shareText(a, s, seq, eqs, failed, after, follow) {
+    const url = `${location.origin}${location.pathname}#/alarm/${encodeURIComponent(a.id)}`;
+    const local = /^(localhost|127\.0\.0\.1|\[::1\])$|\.localhost$/i.test(location.hostname);
+    const lines = [
+      `PLC-Ki · ${s.machine}`,
+      `${a.severity === "WARNING" ? "Warning" : "Fault"} ${a.id}: ${a.text}`,
+      a.since ? (a.atStart ? `Already on when PLC-Ki started watching (${PK.when(a.since)})` : `Came at ${PK.when(a.since)}`) : null,
+      follow ? followText(follow.root.id, follow.ms, follow.root.text) : null,
+      seq ? `Step ${seq.step ?? "?"}${seq.stepName ? " " + seq.stepName : ""} (${seq.name})${seq.halted ? ", halted" : ""}` : null,
+      ...eqs.slice(0, 2).flatMap((e) => [`${e.name}: ${e.state}`, ...e.values.slice(0, 4).map((v) => `  ${v.label}: ${v.text}`)]),
+      ...failed.map((c) => `Failed check: ${c.text}${c.values && c.values.length ? ` (now ${c.values.map((v) => v.label + " " + v.text).join(", ")})` : ""}`),
+      after.length ? `After it: ${after.map((f) => `${f.alarm.id} ${f.alarm.text} (${laterText(f.ms)})`).join("; ")}` : null,
+    ].filter((l) => l != null);
+    const link = local ? `${url} (this address only works on the PC it was copied on)` : url;
+    return { title: `${a.id}: ${a.text}`, text: lines.join("\n"), url, full: lines.join("\n") + "\n\n" + link };
+  }
+  /** Send on a phone (the phone's own share sheet), else copy; when the browser allows neither, show the text to copy by hand. */
+  async function shareAlarm() {
+    if (!share) return;
+    if (navigator.share && matchMedia("(pointer: coarse)").matches) {
+      try { await navigator.share({ title: share.title, text: share.text, url: share.url }); return; }
+      catch (e) { if (e && e.name === "AbortError") return; /* else copy instead */ }
+    }
+    if (await PK.copyText(share.full)) { PK.toast("Copied: the alarm, the step, the values and the link. Paste it in a message."); return; }
+    const sh = PK.sheet(`<h2>Copy this for a colleague</h2><p class="muted">This browser does not let PLC-Ki copy. Select the text and copy it.</p>
+      <textarea class="share-text" readonly rows="10">${esc(share.full)}</textarea><div class="row end"><button class="btn" data-close>Done</button></div>`);
+    const ta = sh.el.querySelector("textarea");
+    ta.focus(); ta.select();
+  }
+  let linkAlarm = null;           // the alarm named in the address (#/alarm/A01), picked once when the page opens on it
+  /** A shared link to an alarm that has gone since: say so instead of silently showing another one. */
+  const goneNotice = (id) => `<div class="notice gold aa-gone">${icon("info")}<div>Alarm <b>${esc(id)}</b> from the link is not on any more. <a href="#/alarms/${encodeURIComponent(id)}">What it means and when it was on ›</a></div></div>`;
+
   function relatedEquipment(alarm) {
     const loc = parseLoc(alarm.location);
     return ((state.status && state.status.equipment) || []).filter((e) => {
@@ -281,6 +340,11 @@
       if (offline()) return offlinePage() + guide();
       const stop = PK.cpuStop(s);
       if (stop) return stopPage(s, stop, seq) + guide();
+      // #/alarm/A01 (a shared link) opens on that alarm; when it has gone, the page says so
+      const want = PK.current && PK.current.params[0];
+      if (want && want !== linkAlarm) { linkAlarm = want; selectedAlarm = want; }
+      const gone = want && !alarms.some((x) => x.id === want) ? goneNotice(want) : "";
+      share = null;
 
       if (!alarms.length) {
         const blocked = blockedOf(s);
@@ -290,6 +354,7 @@
         const root = (chains.length && chains[0].devices.find((e) => e.blockedBy)) || blocked[0];
         const order = chains.flatMap((c) => c.devices).filter((e, i, l) => e.blockedBy && l.indexOf(e) === i);
         return hero({
+          before: gone,
           eyebrow: n ? `<span class="pill warn"><span class="dot"></span>No alarm · ${n} device${n > 1 ? "s" : ""} blocked</span>` : `<span class="pill ok"><span class="dot"></span>No alarm</span>`,
           title: n ? `No alarm, but ${n === 1 ? "1 device is" : n + " devices are"} blocked.` : "No alarm is active.",
           sub: esc(n ? blockedLine(root) : (seq ? seq.explanation : s.summary[0] || "")),
@@ -318,10 +383,15 @@
       const path = callPath(where.block || loc.block);
       const checks = a.checks || [];
       const failed = checks.filter((c) => c.met === false);
+      // Follow-ups fold under the alarm they came right after: one chip per first alarm, with "+1 after it".
+      // The chip is red when any alarm in it is a fault, so a fault after a warning is not hidden behind amber.
+      const { groups, rootOf } = foldAlarms(alarms);
+      const follow = rootOf.get(a.id) || null;
+      const after = (groups.find((g) => g.root.id === a.id) || { after: [] }).after;
 
-      const chips = alarms.length > 1 ? `<div class="alarm-chips">${alarms.map((x, i) =>
-        `<button class="alarm-chip ${x.severity === "WARNING" ? "warning" : ""} ${x.id === a.id ? "sel" : ""}" data-alarm="${esc(x.id)}">
-          <span class="d"></span>${i === 0 && firstKnown ? "First · " : ""}${esc(x.id)} ${esc(x.text.length > 40 ? x.text.slice(0, 38) + "…" : x.text)}</button>`).join("")}</div>
+      const chips = alarms.length > 1 ? `<div class="alarm-chips">${groups.map((g, i) => { const x = g.root; return `
+        <button class="alarm-chip ${[x, ...g.after.map((f) => f.alarm)].every((y) => y.severity === "WARNING") ? "warning" : ""} ${x.id === a.id ? "sel" : ""}" data-alarm="${esc(x.id)}"${g.after.length ? ` title="${esc(g.after.map((f) => f.alarm.id + " came " + laterText(f.ms)).join(", "))}"` : ""}>
+          <span class="d"></span>${i === 0 && firstKnown && groups.length > 1 ? "First · " : ""}${esc(x.id)} ${esc(x.text.length > 40 ? x.text.slice(0, 38) + "…" : x.text)}${g.after.length ? `<span class="chip-n">+${g.after.length} after it</span>` : ""}</button>`; }).join("")}</div>
           ${atStart > 1 ? `<p class="faint small" style="margin:-12px 0 18px">${atStart} alarms were already on when PLC-Ki started watching, so which of those came first is not known.</p>` : ""}` : "";
 
       // Four short facts under the alarm: the device's state, the step, how long in it, when the alarm came
@@ -341,16 +411,22 @@
       // On a phone the right column follows the left, so the fix is on the first screen.
       const main = `<div class="eyebrow"><span class="pill ${warn ? "warn" : "bad"}"><span class="dot"></span>${esc(a.severity)} · ${esc(a.id)}</span></div>
           <h1>${esc(a.text)}</h1>
+          ${follow ? `<div class="notice aa-follow">${icon("info")}<div>${esc(followText(follow.root.id, follow.ms))} <button type="button" class="btn plain small" data-alarm="${esc(follow.root.id)}">Open ${esc(follow.root.id)} ›</button></div></div>` : ""}
           ${a.condition ? `<p class="sub">${esc(a.condition)}</p>` : ""}
           ${failed.length ? `<p class="sub"><b>Failed check:</b> ${failed.map((c) => esc(c.text) + (c.values && c.values.length ? ` (now ${c.values.map((v) => esc(v.label) + " " + esc(v.text)).join(", ")})` : "")).join("; ")}</p>` : ""}
           ${settingsNotice(s)}
           ${PK.ui.tiles(facts.map(([value, label, state]) => ({ value, label, state })), { small: true })}
           <div class="actions"><button class="btn" data-ask="Why is alarm ${esc(a.id)} on, and how do I fix it?">Ask about this alarm</button>
-            ${where.block ? `<a class="btn b" href="${esc(where.href)}">Show where it is set</a>` : ""}</div>
+            ${where.block ? `<a class="btn b" href="${esc(where.href)}">Show where it is set</a>` : ""}
+            <button type="button" class="btn b" data-share title="The alarm, the step, the values and a link, as plain text for a colleague">${navigator.share && matchMedia("(pointer: coarse)").matches ? "Send" : "Copy link"}</button></div>
           <div class="aa-fix">
             <div class="card"><h3>Fix it</h3>${fixList}<p class="mt-3 mb-0 faint small">Tap a step when it is done. The ticks are only on this screen.</p></div>
             <div class="card"><h3>Likely causes</h3>${a.causes.length ? `<ol class="causes">${a.causes.map((c, i) => `<li><b>${i + 1}</b><span>${esc(c)}</span></li>`).join("")}</ol>` : `<p class="muted">None written yet.</p>`}</div>
           </div>
+          ${after.length ? `<div class="card aa-after"><h3>Came after it</h3><ul class="list">${after.map((f) => `<li>
+              <span class="tag ${f.alarm.severity === "WARNING" ? "gold" : "red"}">${esc(f.alarm.id)}</span><span class="grow min0">${esc(f.alarm.text)}<span class="faint small">Came ${esc(laterText(f.ms))}</span></span>
+              <button type="button" class="btn gray small" data-alarm="${esc(f.alarm.id)}">Open</button></li>`).join("")}</ul>
+            <p class="m-0 faint small">Probably a result of this alarm: fix it first, then see whether ${after.length === 1 ? "that one clears" : "they clear"} too.</p></div>` : ""}
           ${window.PKMemory ? PKMemory.lastLine(a.id) : ""}
           ${eqs.map((e) => `<div class="aa-dev"><div class="row"><h3 class="m-0">${esc(e.name)}</h3><span class="spacer"></span><a class="small" href="#/plant/devices/${encodeURIComponent(e.id)}">Details ›</a></div>${PK.devStrip(e)}</div>`).join("")}`;
 
@@ -363,7 +439,8 @@
             ${rung ? `<div class="aa-rung">${rung}</div><p class="m-0 faint small">${rec ? "Values just before the alarm came, from the recording. ? means not recorded." : "Values now. They can look normal again after a halt."}</p>` : ""}
             <div class="gap-2 row">${where.block ? `<a class="btn b small" href="${esc(where.href)}">Open in the program</a>` : links(loc)}${modelFix("alarm:" + a.id)}</div></div>`;
 
-      return sec(`hero aa ${warn ? "aa-warn" : ""}`, `${chips}<div class="aa-grid"><div class="aa-main">${main}</div><aside class="aa-side">${side}</aside></div>`)
+      share = shareText(a, s, seq, eqs, failed, after, follow);
+      return sec(`hero aa ${warn ? "aa-warn" : ""}`, `${gone}${chips}<div class="aa-grid"><div class="aa-main">${main}</div><aside class="aa-side">${side}</aside></div>`)
         + (window.PKCapture ? PKCapture.alarmSection(a) : "")
         + (checks.length ? sec("", `<h2>What the program checks</h2><p class="sub">The comparisons behind this alarm, ${a.checksAtAlarm ? "with the values from the last read before it came" : "with the values now"}. ✗ is the one that failed.</p>
             <div class="card"><ul class="conds">${checks.map(cond).join("")}</ul></div>`) : "")
@@ -376,8 +453,10 @@
             <div class="mt-3 card">${PKMemory.alarmBlock(a.id)}</div></details>`) : "")
         + guide();
     },
+    leave() { linkAlarm = null; },
     after(page) {
       page.querySelectorAll("[data-alarm]").forEach((b) => b.onclick = () => { selectedAlarm = b.dataset.alarm; PK.draw(); });
+      page.querySelectorAll("[data-share]").forEach((b) => b.onclick = shareAlarm);
       page.querySelectorAll("[data-fix]").forEach((b) => b.onclick = () => {
         const set = (fixDone[selectedAlarm] ||= new Set());
         const i = Number(b.dataset.fix);

@@ -1660,6 +1660,17 @@ section.hero.aa { padding-block: 26px 30px; }
 .aa-fix .card { padding: 16px 18px; }
 .aa-fix .fix { gap: 10px; }
 .aa-fix .fix li { font-size: 16px; }
+/* Follow-up alarms folded under the first one, and Share (review 42, 48) */
+.alarm-chip .chip-n { font-size: 12px; font-weight: 600; padding: 1px 7px; border-radius: 999px; background: var(--line); color: var(--ink); }
+.alarm-chip.sel .chip-n { background: color-mix(in srgb, var(--bg) 22%, transparent); color: var(--bg); }
+.aa-follow { align-items: center; }
+.aa-follow > div { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.aa-follow .btn.plain { padding: 2px 4px; }
+.aa-after { padding: 16px 18px; }
+.aa-after .list li { gap: 10px; }
+.aa-after .list li .faint { display: block; margin-top: 2px; }
+.aa-gone { margin-bottom: 14px; }
+.share-text { width: 100%; font: 14px/1.45 var(--mono, ui-monospace, monospace); padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line-strong); background: var(--bg); color: var(--ink); resize: vertical; margin: 10px 0 14px; }
 .aa-dev { display: grid; gap: 8px; }
 .aa-pic, .aa-sw { display: grid; gap: 12px; padding: 16px 18px; }
 .aa-pic .pm-key { display: none; }
