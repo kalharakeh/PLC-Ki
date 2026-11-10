@@ -26,6 +26,8 @@ public sealed class PlantContext
     public string AppDir { get; } = AppContext.BaseDirectory;
     public string SettingsFile => Path.Combine(DataDir, "settings.json");
     public string UsersFile => Path.Combine(DataDir, "users.json");
+    /// <summary>Each login's own choices (theme, alarm sound, start page, ...): PreferenceStore.</summary>
+    public string PrefsFile => Path.Combine(DataDir, "prefs.json");
     public string KeysDir => Path.Combine(DataDir, "keys");
     /// <summary>Machine models uploaded on the settings page.</summary>
     public string ModelsDir => Path.Combine(DataDir, "models");

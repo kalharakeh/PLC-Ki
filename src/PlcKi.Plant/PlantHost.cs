@@ -83,6 +83,7 @@ public static class PlantHost
         services.AddWindowsService(o => o.ServiceName = PlantContext.ServiceName);
         services.AddSingleton(ctx);
         services.AddSingleton(new UserStore(ctx.UsersFile));
+        services.AddSingleton(new PreferenceStore(ctx.PrefsFile));
         services.AddSingleton(new LoginThrottle());
         services.AddSingleton<SettingsStore>();
         ConfigureKeys(services.AddDataProtection().PersistKeysToFileSystem(new DirectoryInfo(ctx.KeysDir)));

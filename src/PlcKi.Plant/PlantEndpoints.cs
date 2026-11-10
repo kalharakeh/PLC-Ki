@@ -27,11 +27,27 @@ public static class PlantEndpoints
 
         var auth = app.MapGroup("/api/auth");
         var admin = app.MapGroup("/api/admin");
+        var me = app.MapGroup("/api/me");
         // Every handler turns a PlantException into a readable error for the page
         auth.AddEndpointFilter(Errors);
         admin.AddEndpointFilter(Errors);
+        me.AddEndpointFilter(Errors);
 
-        auth.MapGet("/state", (HttpContext http, UserStore users, PlantContext ctx, Microsoft.Extensions.Configuration.IConfiguration config) =>
+        // This login's own choices (review 52). Logged out there are none: the page keeps them in the browser.
+        static string Me(HttpContext http) => http.User.Identity?.IsAuthenticated == true ? http.User.Identity.Name!
+            : throw new PlantException("Please log in.", 401);
+        me.MapGet("/prefs", (HttpContext http, PreferenceStore prefs) => Results.Ok(prefs.Get(Me(http))));
+        me.MapPut("/prefs", (System.Text.Json.Nodes.JsonObject changes, HttpContext http, PreferenceStore prefs) =>
+            Results.Ok(prefs.Set(Me(http), changes)));
+
+        // Start page per role (review 53); each login may override it with its "startPage" preference
+        admin.MapPut("/start-pages", (Dictionary<string, string?> pages, SettingsStore store) =>
+        {
+            store.SaveStartPages(pages);
+            return Results.Ok(store.StartPages());
+        });
+
+        auth.MapGet("/state", (HttpContext http, UserStore users, PlantContext ctx, SettingsStore store, Microsoft.Extensions.Configuration.IConfiguration config) =>
         {
             var name = http.User.Identity?.IsAuthenticated == true ? http.User.Identity.Name : null;
             return Results.Ok(new
@@ -39,6 +55,8 @@ public static class PlantEndpoints
                 setupNeeded = !users.Any,
                 setupAllowed = !users.Any && PlantHost.IsLocal(http),
                 user = name == null ? null : new { name, role = users.Find(name)?.Role },
+                // Where this role starts when PLC-Ki opens without a page in the address ("" = Active alarm)
+                roleStart = name == null ? null : store.StartPages().GetValueOrDefault(users.Find(name)?.Role ?? ""),
                 publicView = Microsoft.Extensions.Configuration.ConfigurationBinder.GetValue(config, "Plant:PublicView", false),
                 service = ctx.IsService,
             });
@@ -94,6 +112,7 @@ public static class PlantEndpoints
             settings = store.Current(),
             info = Info(ctx, store, http),
             models = Files(ctx, "models", "*.json", ctx.ModelsDir),
+            startPages = store.StartPages(),
             snapshots = Files(ctx, Path.Combine("models", "snapshots"), "*.json", null),
         }));
 
@@ -191,9 +210,10 @@ public static class PlantEndpoints
             return Results.Ok(new { u.Name, u.Role, u.Created });
         });
 
-        admin.MapDelete("/users/{name}", (string name, UserStore users, HttpContext http) =>
+        admin.MapDelete("/users/{name}", (string name, UserStore users, PreferenceStore prefs, HttpContext http) =>
         {
             users.Delete(name, http.User.Identity!.Name!);
+            prefs.Remove(name);
             return Results.NoContent();
         });
 

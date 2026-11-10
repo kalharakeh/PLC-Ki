@@ -47,9 +47,10 @@
 
   // ---------- trend data, fetched while a page that shows it is open ----------
   let trend = null, trendAt = 0, trendBusy = false, trendMin = null;
-  const TKEY = "plcki.trendTags";
-  let picked = (() => { try { return JSON.parse(localStorage.getItem(TKEY) || "null"); } catch { return null; } })();
-  function savePicked() { try { picked ? localStorage.setItem(TKEY, JSON.stringify(picked)) : localStorage.removeItem(TKEY); } catch { /* private window */ } }
+  // The values picked for the chart: kept per login (review 52), or in this browser when logged out
+  let picked = PK.prefs.get("trendTags", null);
+  document.addEventListener("pk:prefs", () => { picked = PK.prefs.get("trendTags", null); });
+  function savePicked() { PK.prefs.set("trendTags", picked || null); }
   async function loadTrend(force) {
     if (trendBusy || (!force && Date.now() - trendAt < 4000)) return;
     trendBusy = true; trendAt = Date.now();

@@ -97,6 +97,82 @@ const PK = (() => {
   const can = (what) => !!(state.user && (ROLE_CAN[state.user.role] || []).includes(what));
   const ROLE_TITLE = { admin: "Administrator", technician: "Technician", operator: "Operator" };
   const roleTitle = (role) => ROLE_TITLE[role] || "Operator";
+
+  // ---- Choices per login (review 52): saved on the server, so they follow the person to another PC or a phone.
+  // Logged out (public view) they stay in this browser under the old keys, as before. A login's choices are also
+  // cached in this browser ("plcki.prefs.<name>"), apart from the logged-out copy, so one person never gets another's.
+  const LEGACY = { theme: "plcki.theme", screen: "plcki.screen", trendTags: "plcki.trendTags", timeline: "pk.timeline",
+    netFilter: "plcki.netFilter", getStarted: "plcki.getStarted", handoverSeen: "pk.handover.seen" };
+  const JSON_PREFS = new Set(["screen", "trendTags", "alarmSound", "format"]);
+  const ls = {
+    get: (k) => { try { return localStorage.getItem(k); } catch { return null; } },
+    set: (k, v) => { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch { /* private window */ } },
+  };
+  let mine = null;            // this login's choices; null while logged out
+  let prefsOut = {}, prefsTimer = null;
+  const prefsCache = () => "plcki.prefs." + state.user.name.toLowerCase();
+  function readLocal(key) {
+    const raw = ls.get(LEGACY[key] || "plcki." + key);
+    if (raw == null) return undefined;
+    if (!JSON_PREFS.has(key)) return raw;
+    try { return JSON.parse(raw); } catch { return undefined; }
+  }
+  const writeLocal = (key, v) => ls.set(LEGACY[key] || "plcki." + key, v == null ? null : JSON_PREFS.has(key) ? JSON.stringify(v) : String(v));
+  function sendPrefs(keepalive) {
+    clearTimeout(prefsTimer); prefsTimer = null;
+    const body = prefsOut; prefsOut = {};
+    if (!Object.keys(body).length) return;
+    if (keepalive) { fetch("/api/me/prefs", { method: "PUT", keepalive: true, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).catch(() => {}); return; }
+    api("PUT", "/api/me/prefs", body).catch(() => { prefsOut = { ...body, ...prefsOut }; });   // tried again with the next change
+  }
+  const prefs = {
+    /** This login's choice, or this browser's when logged out; dflt when there is none. */
+    get(key, dflt) { const v = mine ? mine[key] : readLocal(key); return v === undefined || v === null ? dflt : v; },
+    /** null removes the choice (back to the default). */
+    set(key, v) {
+      if (v === undefined) v = null;
+      if (!mine) { writeLocal(key, v); return; }
+      if (v === null) delete mine[key]; else mine[key] = v;
+      ls.set(prefsCache(), JSON.stringify(mine));
+      prefsOut[key] = v;
+      clearTimeout(prefsTimer); prefsTimer = setTimeout(() => sendPrefs(false), 500);
+    },
+    /** True when the choices are kept for the login (and follow the person). */
+    get perLogin() { return !!mine; },
+  };
+  window.addEventListener("pagehide", () => { if (prefsTimer) sendPrefs(true); });
+  async function loadPrefs() {
+    if (!state.user) return;
+    let cached = null;
+    try { cached = JSON.parse(ls.get(prefsCache()) || "null"); } catch { /* none */ }
+    let server = null;
+    try { server = await api("GET", "/api/me/prefs"); } catch { /* PLC-Ki not answering: this browser's copy */ }
+    mine = server || cached || {};
+    // The first login on this browser after the update takes the browser's old choices along, once. Later logins
+    // (another person on a shared PC) start from their own, never from what is in this browser.
+    if (server && !ls.get("plcki.prefsMoved")) {
+      if (!Object.keys(server).length) {
+        const up = {};
+        for (const k of Object.keys(LEGACY)) { const v = readLocal(k); if (v !== undefined) up[k] = v; }
+        if (Object.keys(up).length) { try { mine = await api("PUT", "/api/me/prefs", up); } catch { mine = up; } }
+      }
+      ls.set("plcki.prefsMoved", "1");
+    }
+    ls.set(prefsCache(), JSON.stringify(mine));
+    document.dispatchEvent(new Event("pk:prefs"));     // pages that read a choice at load read it again
+  }
+  /** Where this login starts: its own choice, else its role's (Setup, Settings), else Active alarm. */
+  const startPage = () => prefs.get("startPage", "") || state.roleStart || "#/alarm";
+  /** What a start page can be: the main pages (not Setup) and each station. [[address, label]] */
+  function startChoices(also) {
+    const out = [...document.querySelectorAll("#nav a[data-route]")].filter((a) => !a.classList.contains("admin-only"))
+      .map((a) => [a.getAttribute("href"), (a.title || a.textContent).split(":")[0].trim()]);
+    const st = typeof PKStations !== "undefined" && state.status ? PKStations.list(state.status).stations : [];
+    st.filter((x) => x.key).forEach((x) => out.push([PKStations.href(x.key), "Station: " + x.name]));
+    for (const h of also || []) if (h && !out.some(([v]) => v === h)) out.push([h, h.replace(/^#\//, "")]);    // a saved page not listed now
+    return out;
+  }
+  const startLabel = (h) => (startChoices([h]).find(([v]) => v === h) || [h, h])[1];
   const views = {};
   let current = null;       // { name, view, params }
   let lastHtml = "";
@@ -681,8 +757,19 @@ const PK = (() => {
   }
 
   // ---- This screen: alert on new alarms, keep the screen on. Saved per browser. ----
-  const screenOpt = (() => { try { return JSON.parse(localStorage.getItem("plcki.screen") || "{}"); } catch { return {}; } })();
-  const saveScreenOpt = () => { try { localStorage.setItem("plcki.screen", JSON.stringify(screenOpt)); } catch { /* private window */ } };
+  // Sound, notices and spacing follow the login; "keep this screen on" belongs to the device, so it stays in this browser.
+  const screenOpt = {};
+  const readScreenOpt = () => {
+    for (const k of Object.keys(screenOpt)) delete screenOpt[k];
+    Object.assign(screenOpt, prefs.get("screen", {}));
+    screenOpt.awake = ls.get("plcki.awake") === "1" || (!prefs.perLogin && !!screenOpt.awake);
+  };
+  readScreenOpt();
+  const saveScreenOpt = () => {
+    const { awake, ...rest } = screenOpt;
+    ls.set("plcki.awake", awake ? "1" : null);
+    prefs.set("screen", rest);
+  };
 
   // ---- Spacing (item 36): Compact for control-room PCs, Touch for tablets and gloves. "auto" is Touch on a touch screen. ----
   const coarse = window.matchMedia ? matchMedia("(pointer: coarse)") : { matches: false, addEventListener() {} };
@@ -781,10 +868,14 @@ const PK = (() => {
   const sysDark = window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : { matches: false, addEventListener() {} };
   const themeChoice = () => document.documentElement.dataset.theme || "auto";
   const darkNow = () => themeChoice() === "dark" || (themeChoice() === "auto" && sysDark.matches);
-  function setTheme(t) {
+  function applyTheme(t) {
     if (t === "auto") delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = t;
-    try { t === "auto" ? localStorage.removeItem("plcki.theme") : localStorage.setItem("plcki.theme", t); } catch { /* private window */ }
+    ls.set("plcki.paint", t === "auto" ? null : t);     // the first paint of the next page load (index.html), before the login is known
     showTheme();
+  }
+  function setTheme(t) {
+    prefs.set("theme", t === "auto" ? null : t);
+    applyTheme(t);
   }
   function showTheme() {
     const b = $("theme-btn");
@@ -804,13 +895,16 @@ const PK = (() => {
       <span><b>${esc(title)}</b><br><span class="muted small">${esc(ok ? text : why)}</span></span></label>`;
     const notHere = "Not possible on this connection: the browser allows it only on the PLC-Ki PC itself (localhost) or over https.";
     const s = sheet(`<span class="eyebrow">This screen</span><h2>Alarm sound and screen</h2>
-      <p class="m-0 muted">Only for this browser on this device. Nothing here changes the machine.</p>
+      <p class="m-0 muted">${prefs.perLogin ? `Saved for ${esc(state.user.name)}, on every device you log in on. "Keep this screen on" is for this device only.` : "Only for this browser on this device."} Nothing here changes the machine.</p>
       <div class="gap-3 stack">
         ${row("sound", "Beep when a new alarm comes", "A short tone: three beeps for a fault, one for a warning. Leave this page open in a tab.", true, "")}
         ${row("notify", "Show a notice when a new alarm comes", "A message from the browser, also when PLC-Ki is in a background tab.", canNotify, notHere)}
         ${row("awake", "Keep this screen on", "For a screen on the line: the display does not go dark while this page is open.", canWake, notHere)}
         <div class="opt-row" style="cursor:default"><span class="grow"><b>Screen colours</b><br><span class="muted small">Dark suits a wall screen in a bright hall.</span></span>
           ${ui.choice("Screen colours", [["auto", "Like this PC"], ["light", "Light"], ["dark", "Dark"]].map(([k, l]) => ({ label: l, on: themeChoice() === k, data: { "data-theme-set": k } })))}</div>
+        ${state.user ? `<label class="opt-row" style="cursor:default;flex-wrap:wrap"><span class="grow"><b>Start page</b><br><span class="muted small">Where PLC-Ki opens for you when no page is in the address. A link or a bookmark still opens its own page.</span></span>
+          <select id="start-page" class="start-sel" aria-label="Start page"><option value="">As for ${esc(roleTitle(state.user.role).toLowerCase())}s: ${esc(startLabel(state.roleStart || "#/alarm"))}</option>
+            ${startChoices([prefs.get("startPage", "")]).map(([h, l]) => `<option value="${esc(h)}" ${prefs.get("startPage", "") === h ? "selected" : ""}>${esc(l)}</option>`).join("")}</select></label>` : ""}
         <div class="opt-row" style="cursor:default"><span class="grow"><b>Spacing</b><br><span class="muted small">Compact fits more on a control-room PC. Touch makes buttons bigger for a tablet or gloves.</span></span>
           ${ui.choice("Spacing", [["auto", "Like this device"], ["compact", "Compact"], ["touch", "Touch"]].map(([k, l]) => ({ label: l, on: densityChoice() === k, data: { "data-density-set": k } })))}</div>
       </div>
@@ -827,6 +921,8 @@ const PK = (() => {
       if (key === "sound" && box.checked) beep(false);
     });
     s.el.querySelector("[data-test-beep]").onclick = () => beep(true);
+    const sp = s.el.querySelector("#start-page");
+    if (sp) sp.onchange = () => { prefs.set("startPage", sp.value || null); toast("Start page saved."); };
     s.el.querySelectorAll("[data-theme-set]").forEach((b) => b.onclick = () => {
       setTheme(b.dataset.themeSet);
       s.el.querySelectorAll("[data-theme-set]").forEach((x) => { x.classList.toggle("on", x === b); x.setAttribute("aria-pressed", x === b); });
@@ -1436,7 +1532,7 @@ const PK = (() => {
   // whose page stays open across the shift change shows it too.
   let handover = null;
   const hoKey = (n) => `${n.day}|${n.shiftIndex}|${n.editedAt || n.at}`;
-  const hoSeen = () => { try { return localStorage.getItem("pk.handover.seen") || ""; } catch { return ""; } };
+  const hoSeen = () => prefs.get("handoverSeen", "");
   async function loadHandover() {
     if (document.hidden && handover) return;
     try { handover = (await api("GET", "/api/handover/now")).note; } catch { return; }
@@ -1456,7 +1552,7 @@ const PK = (() => {
       <a class="btn gray small" href="#/reports/shift/${esc(n.day)}/${n.shiftIndex}">Read</a><button type="button" class="btn small" data-ho-ok>Got it</button></div>`;
   }
   function handoverSeen() {
-    if (handover) try { localStorage.setItem("pk.handover.seen", hoKey(handover)); } catch { /* shown again on the next page load */ }
+    if (handover) prefs.set("handoverSeen", hoKey(handover));
     handover = null;
     renderNotices();
   }
@@ -1482,7 +1578,12 @@ const PK = (() => {
     try {
       const st = await api("GET", "/api/auth/state");
       state.user = st.user;
+      state.roleStart = st.roleStart || "";
     } catch { /* public view */ }
+    await loadPrefs();
+    readScreenOpt();
+    applyDensity();
+    applyTheme(prefs.get("theme", "auto"));
     const admin = can("settings");
     document.querySelectorAll(".admin-only").forEach((el) => el.classList.toggle("hidden", !admin));
     // Public view without a login: Ask needs a login (it spends Claude credit), so its buttons are hidden
@@ -1594,6 +1695,11 @@ const PK = (() => {
       catch { return false; }
     };
     if (admin && !location.hash && typeof PKStart !== "undefined" && (await PKStart.firstRun()) && !(await alarmOn())) history.replaceState(null, "", "#/setup/start");
+    // Start page (review 53): only when PLC-Ki opens without a page in the address; a link or bookmark wins
+    if (!location.hash || location.hash === "#" || location.hash === "#/") {
+      const startAt = startPage();
+      if (startAt !== "#/alarm") history.replaceState(null, "", startAt);
+    }
     route();
     pollStatus();
     pollValues();
@@ -1602,6 +1708,6 @@ const PK = (() => {
     loadHandover(); setInterval(loadHandover, 60000);
   }
 
-  return { AI, ui, BP, can, roleTitle, screenSize, dirty: setDirty, get isDirty() { return !!dirty; }, plain, connInfo, connSheet, helpSheet, screenSheet, passwordSheet, setHash, cmd, sec, hero, on, $, esc, icon, fillIcons, kindIcon, api, state, view, go, draw, route, toast, copyText, sheet, confirmSheet, cond, md, ago, clock, date, when,
+  return { AI, ui, BP, can, roleTitle, prefs, startPage, startChoices, startLabel, screenSize, dirty: setDirty, get isDirty() { return !!dirty; }, plain, connInfo, connSheet, helpSheet, screenSheet, passwordSheet, setHash, cmd, sec, hero, on, $, esc, icon, fillIcons, kindIcon, api, state, view, go, draw, route, toast, copyText, sheet, confirmSheet, cond, md, ago, clock, date, when,
     loadProgram, blockOf, valueBySymbol, norm, start, cpuStop, cpuSince, loadHeld, releaseAll, loadHandover, get current() { return current; } };
 })();
