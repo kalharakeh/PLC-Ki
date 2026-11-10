@@ -26,7 +26,11 @@ public sealed class ReportService
         // Alarm occurrences come from the machine memory (kept on disk, survives restarts)
         Alarms = new MemoryAlarmSpans(memory);
         Builder = new ReportBuilder(model, Log, Alarms, () => Settings);
+        Handover = new HandoverNotes(HandoverNotes.FileFor(dataDir, Slug(model.Name)));
     }
+
+    /// <summary>The shift handover notes (data folder\handover\&lt;machine&gt;.json; never pruned).</summary>
+    public HandoverNotes Handover { get; }
 
     public string Folder { get; }
     public string SettingsFile { get; }
@@ -50,6 +54,9 @@ public sealed class ReportService
         return s.Length == 0 ? "machine" : s.Length > 60 ? s[..60] : s;
     }
 }
+
+/// <summary>PUT /api/reports/handover: the shift's note; empty text removes it.</summary>
+public sealed record HandoverRequest(string? Day, int? Shift, string? Text);
 
 public static class ReportEndpoints
 {
@@ -109,6 +116,41 @@ public static class ReportEndpoints
                 shift = w.Day is { } d ? new { day = d.ToString("yyyy-MM-dd"), index = w.Index } : null,
                 spans = r.Builder.States(w.From, w.To, now), marks, recent = latest,
             });
+        });
+
+        // Shift handover note (review 3, item 47): one per shift; anyone logged in writes it during that shift or the next one
+        app.MapGet("/api/reports/handover", (ReportService r, string? day, int? shift) =>
+        {
+            var now = DateTimeOffset.Now;
+            var pick = Pick(r.Settings, day, shift, now);
+            if (pick == null) return Results.Json(new { error = "No shift is set up. An administrator can add shifts on this page." }, statusCode: 400);
+            return Results.Ok(HandoverView(r, pick.Value.Day, pick.Value.Index, now));
+        });
+
+        app.MapPut("/api/reports/handover", (HandoverRequest req, ReportService r, HttpContext http) =>
+        {
+            var who = http.User.Identity?.IsAuthenticated == true ? http.User.Identity!.Name : null;
+            if (string.IsNullOrEmpty(who))
+                return Results.Json(new { error = "Log in to write the handover note, so the next shift knows who wrote it.", login = true }, statusCode: 401);
+            var now = DateTimeOffset.Now;
+            var cfg = r.Settings;
+            var pick = Pick(cfg, req.Day, req.Shift, now);
+            if (pick == null) return Results.Json(new { error = "No shift is set up. An administrator can add shifts on this page." }, statusCode: 400);
+            var (d, i) = pick.Value;
+            if (!HandoverNotes.CanWrite(cfg, d, i, now))
+                return Results.Json(new { error = "This shift's handover note can no longer be changed: a note can be written during its shift and the next one." }, statusCode: 409);
+            if ((req.Text ?? "").Trim().Length > HandoverNotes.MaxLength)
+                return Results.Json(new { error = $"The note is too long: at most {HandoverNotes.MaxLength} characters." }, statusCode: 400);
+            var (from, to) = ReportBuilder.Window(d, cfg.Shifts[i]);
+            r.Handover.Set(d, i, cfg.Shifts[i].Name, from, to, req.Text, who, now);
+            return Results.Ok(HandoverView(r, d, i, now));
+        });
+
+        // For every page: the note the last shift left, during the first hours of the next shift (null otherwise)
+        app.MapGet("/api/handover/now", (ReportService r) =>
+        {
+            var n = r.Handover.ToShow(r.Settings, DateTimeOffset.Now);
+            return Results.Ok(new { note = n });
         });
 
         app.MapGet("/api/reports/faults", (ReportService r, int? days) => Results.Ok(r.Builder.Faults(days ?? 7, DateTimeOffset.Now)));
@@ -204,6 +246,18 @@ public static class ReportEndpoints
             return ("shift", cfg.Shifts[at.Index].Name + " shift", from, to, at.Day, at.Index);
         }
         return ("shift", "Last 8 hours", now.AddHours(-8), now, null, 0);
+    }
+
+    static object HandoverView(ReportService r, DateOnly day, int index, DateTimeOffset now)
+    {
+        var cfg = r.Settings;
+        return new
+        {
+            day = day.ToString("yyyy-MM-dd"), shiftIndex = index,
+            note = r.Handover.Get(day, index),
+            canWrite = cfg.Shifts.Count > index && HandoverNotes.CanWrite(cfg, day, index, now),
+            maxLength = HandoverNotes.MaxLength,
+        };
     }
 
     static string? Blank(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();

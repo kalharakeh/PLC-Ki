@@ -22,7 +22,7 @@ public sealed record DiskSpace(string Drive, long Free, long Total, bool Low, st
 /// pruning at start and once a day (StoragePruning), export, and clear on an administrator's confirmed request.
 /// Pruning only ever touches: production log day files (reports\*\yyyy-MM-dd.jsonl), event day files
 /// (events\*\yyyy-MM-dd.jsonl and events\*\steps\yyyy-MM-dd.jsonl), the older change log files,
-/// alarm recordings (captures\*\*.json) and alarm memory occurrences without a note. Never: notes, documents,
+/// alarm recordings (captures\*\*.json) and alarm memory occurrences without a note. Never: notes (handover\ too), documents,
 /// logins, settings, keys, models, the hold list or the report settings.
 /// </summary>
 public sealed class StorageService
@@ -296,6 +296,11 @@ public sealed class StorageService
                 : $"all {Plural(chCount, "entry", "entries")} ({Bytes(chBytes)}): who changed which value, when and why. One new entry then says that you cleared it."));
 
         // Kept, never removed automatically
+        var hoDir = Path.Combine(_dataDir, "handover");
+        var hoFiles = Directory.Exists(hoDir) ? Directory.GetFiles(hoDir, "*.json") : Array.Empty<string>();
+        int hoCount = hoFiles.Sum(f => { try { using var d = JsonDocument.Parse(File.ReadAllText(f)); return d.RootElement.GetArrayLength(); } catch (Exception e) when (e is IOException or JsonException or InvalidOperationException) { return 0; } });
+        rows.Add(new StorageRow("handover", "Handover notes", "The note each shift leaves for the next one (Reports › Shift report).", "disk", Rel(hoDir),
+            hoCount, Plural(hoCount, "note"), hoFiles.Sum(Size), null, "never removed automatically", null, Never: true));
         var held = Path.Combine(_dataDir, "held-inputs.json");
         rows.Add(new StorageRow("holds", "Hold list", "Inputs held on PLCSIM.", "disk", Rel(held), heldCount, heldCount is { } h ? Plural(h, "input") : "",
             File.Exists(held) ? Size(held) : 0, null, "until released (Tags page)", null, Never: true));

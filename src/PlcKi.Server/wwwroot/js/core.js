@@ -295,6 +295,7 @@ const PK = (() => {
     page.scrollTop = 0;
     window.scrollTo(0, 0);
     showAccess();
+    showHandover();
     if (state.user && state.user.role === "admin" && (!state.changes || Date.now() - state.changes.at > 30000)) loadChanges();
     setTitle();
   }
@@ -564,10 +565,13 @@ const PK = (() => {
    * on purpose") and blocks in the PLC that differ from the imported program. Read-only: PLC-Ki only says it.
    * Forces set in TIA cannot be shown: the S7 driver cannot read the CPU's force list.
    */
-  function renderNotices(stale) {
+  let noticesStale = false;
+  function renderNotices(stale = noticesStale) {
+    noticesStale = stale;
     const bar = $("notice-bar");
     if (!bar) return;
     const list = (!stale && state.status && state.status.notices) || [];
+    const ho = handoverShown();     // the last shift's handover note: one entry in the same strip (review 47)
     const admin = state.user && state.user.role === "admin";
     const html = list.map((n) => {
       const items = n.items || [];
@@ -578,9 +582,10 @@ const PK = (() => {
       return `<div class="notice gold notice-strip" role="status" data-kind="${esc(n.kind)}">${icon(n.kind === "program" ? "file" : "warn")}
         <div><b>${esc(n.text)}</b>${who}${shown ? `<div class="small">${shown}</div>` : ""}</div>${link}</div>`;
     }).join("");
-    const full = html ? `<div class="wrap">${html}</div>` : "";
+    const all = (ho ? handoverHtml(ho) : "") + html;
+    const full = all ? `<div class="wrap">${all}</div>` : "";
     if (bar.dataset.html !== full) { bar.innerHTML = full; bar.dataset.html = full; }
-    bar.classList.toggle("hidden", !list.length);
+    bar.classList.toggle("hidden", !list.length && !ho);
   }
 
   /** Under the machine name in the top bar: the CPU and the program it was read from, as far as known. */
@@ -1414,6 +1419,37 @@ const PK = (() => {
     const b = bar.querySelector("[data-release-all]");
     if (b) b.onclick = releaseAll;
   }
+  // ---- Shift handover (review 3, item 47): the note the last shift left, as one entry in the notice strip on every page
+  // during the first hours of the next shift (GET /api/handover/now), until "Got it" in this browser. Checked again every minute, so a panel PC
+  // whose page stays open across the shift change shows it too.
+  let handover = null;
+  const hoKey = (n) => `${n.day}|${n.shiftIndex}|${n.editedAt || n.at}`;
+  const hoSeen = () => { try { return localStorage.getItem("pk.handover.seen") || ""; } catch { return ""; } };
+  async function loadHandover() {
+    if (document.hidden && handover) return;
+    try { handover = (await api("GET", "/api/handover/now")).note; } catch { return; }
+    showHandover();
+  }
+  /** The note to show now, or null: not seen in this browser, and not on the report of the shift that wrote it. */
+  function handoverShown() {
+    const n = handover;
+    return n && hoKey(n) !== hoSeen() && location.hash !== `#/reports/shift/${n.day}/${n.shiftIndex}` ? n : null;
+  }
+  function handoverHtml(n) {
+    const at = new Date(n.editedAt || n.at);
+    const text = n.text.length > 220 ? n.text.slice(0, 219).trimEnd() + "…" : n.text;
+    return `<div class="notice notice-strip ho-strip" role="status" data-kind="handover">${icon("chat")}
+      <div><b>Handover from the ${esc(n.shift)} shift</b> <span class="small">(${esc(n.editedBy || n.by)}, ${pad(at.getHours())}:${pad(at.getMinutes())})</span>
+        <div class="ho-text">${esc(text)}</div></div>
+      <a class="btn gray small" href="#/reports/shift/${esc(n.day)}/${n.shiftIndex}">Read</a><button type="button" class="btn small" data-ho-ok>Got it</button></div>`;
+  }
+  function handoverSeen() {
+    if (handover) try { localStorage.setItem("pk.handover.seen", hoKey(handover)); } catch { /* shown again on the next page load */ }
+    handover = null;
+    renderNotices();
+  }
+  const showHandover = () => renderNotices();
+
   /** Puts every held input back to the value it had before its hold (administrators). */
   async function releaseAll() {
     const n = ((held && held.items) || []).length;
@@ -1497,6 +1533,8 @@ const PK = (() => {
     noticeBar.id = "notice-bar";
     noticeBar.className = "notice-bar hidden";
     heldBar.before(noticeBar);
+    // Got it on the handover entry (the strip is redrawn with each status, so the click is caught here)
+    noticeBar.addEventListener("click", (e) => { if (e.target.closest("[data-ho-ok]")) handoverSeen(); });
     back.querySelector("a").onclick = (e) => { if (e.button || e.ctrlKey || e.metaKey || e.shiftKey) return; e.preventDefault(); history.back(); };
     document.addEventListener("click", (e) => { if (e.target.closest && e.target.closest("#nav a, .rail-brand, a.mrow[href]")) fromMenu = true; }, true);
     const bar = document.createElement("div");
@@ -1549,8 +1587,9 @@ const PK = (() => {
     pollValues();
     pollJobs();
     if (state.user) { loadHeld(); setInterval(loadHeld, 15000); }
+    loadHandover(); setInterval(loadHandover, 60000);
   }
 
   return { AI, ui, BP, screenSize, dirty: setDirty, get isDirty() { return !!dirty; }, plain, connInfo, connSheet, helpSheet, screenSheet, passwordSheet, setHash, cmd, sec, hero, on, $, esc, icon, fillIcons, kindIcon, api, state, view, go, draw, route, toast, copyText, sheet, confirmSheet, cond, md, ago, clock, date, when,
-    loadProgram, blockOf, valueBySymbol, norm, start, cpuStop, cpuSince, loadHeld, releaseAll, get current() { return current; } };
+    loadProgram, blockOf, valueBySymbol, norm, start, cpuStop, cpuSince, loadHeld, releaseAll, loadHandover, get current() { return current; } };
 })();
