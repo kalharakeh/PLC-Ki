@@ -226,6 +226,15 @@ public class PlantTests : IDisposable
             bad(b);
             Assert.Equal(HttpStatusCode.BadRequest, (await c.Send(HttpMethod.Put, "/api/admin/settings", b)).StatusCode);
         }
+
+        // A value set by hand in the config file, outside the page's ranges, does not block saving other settings
+        File.WriteAllText(Path.Combine(_dir, "settings.json"), File.ReadAllText(Path.Combine(_dir, "settings.json")).Replace("\"MaxTokens\": 16000", "\"MaxTokens\": 32000"));
+        (config as IConfigurationRoot)!.Reload();
+        Assert.Equal(32000, store.Current().AskMaxTokens);
+        var other = store.Current();
+        other.HistoryMinutes = 30;
+        var ok = await c.Send(HttpMethod.Put, "/api/admin/settings", other);
+        Assert.True(ok.IsSuccessStatusCode, await ok.Content.ReadAsStringAsync());
     }
 }
 

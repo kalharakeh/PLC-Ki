@@ -340,10 +340,12 @@ public sealed class SettingsStore
         if (s.TimeoutMs is < 500 or > 60_000) throw new PlantException("Wait for an answer: 0.5 to 60 seconds (500 to 60000 ms).");
         if (s.HistoryMinutes is < 1 or > 240) throw new PlantException("History: 1 to 240 minutes.");
         if (s.AskEffort is not ("low" or "medium" or "high" or "max")) throw new PlantException("Effort is low, medium, high or max.");
-        if (!System.Text.RegularExpressions.Regex.IsMatch(s.AskModel?.Trim() ?? "", @"^claude-[a-z0-9.-]{2,60}$"))
+        // Checked only when changed here: a value set by hand in appsettings.json or on the command line never blocks saving
+        var now = Current();
+        if (s.AskModel != now.AskModel && !System.Text.RegularExpressions.Regex.IsMatch(s.AskModel?.Trim() ?? "", @"^claude-[a-z0-9.-]{2,60}$"))
             throw new PlantException("The model is a Claude model name like claude-opus-5-5.");
-        if (s.AskMaxTokens is < 1000 or > 16000) throw new PlantException("Answer length: 1000 to 16000 tokens.");
-        if (s.AskMaxToolRounds is < 2 or > 30) throw new PlantException("Lookups per question: 2 to 30.");
+        if (s.AskMaxTokens != now.AskMaxTokens && s.AskMaxTokens is < 1000 or > 16000) throw new PlantException("Answer length: 1000 to 16000 tokens.");
+        if (s.AskMaxToolRounds != now.AskMaxToolRounds && s.AskMaxToolRounds is < 2 or > 30) throw new PlantException("Lookups per question: 2 to 30.");
         if (double.IsNaN(s.AskMonthlyLimitUsd) || s.AskMonthlyLimitUsd is < 0 or > 100_000) throw new PlantException("Monthly limit: 0 (none) to 100000 dollars.");
         if (s.Port is < 1 or > 65535) throw new PlantException("Port: 1 to 65535.");
         if (s.Retention?.Problem() is { } keep) throw new PlantException(keep);
