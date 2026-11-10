@@ -6,7 +6,8 @@
 (() => {
   const { esc, icon, api, toast } = PK;
   const r = { cfg: null, shift: null, faults: null, err: null, days: 7, loading: false, draft: null, saving: false,
-    log: null };   // the shift log: { key, list (newest first), err, f (filter), all (show every line) }
+    log: null,     // the shift log: { key, list (newest first), err, f (filter), all (show every line) }
+    ho: null };    // the shift's handover note: { key, data: { note, canWrite, maxLength }, err, draft, saving }
 
   // ---- formatting ----
   const pct = (x) => (x == null ? "—" : `${(x * 100).toFixed(x >= 0.995 || x === 0 ? 0 : 1)} %`);
@@ -41,7 +42,31 @@
       r.shift = await api("GET", "/api/reports/shift" + q); r.err = null;
     } catch (e) { r.err = e.message; }
     r.loading = false; PK.draw();
-    if (r.shift) loadLog(r.shift);
+    if (r.shift) { loadLog(r.shift); loadHandover(r.shift); }
+  }
+  // The shift's handover note (/api/reports/handover). A draft being typed is kept through the 30 s refresh.
+  async function loadHandover(x) {
+    const key = x.day + "/" + x.shiftIndex;
+    const same = r.ho && r.ho.key === key;
+    const ho = same ? r.ho : { key, data: null, err: null, draft: null, saving: false };
+    try { ho.data = await api("GET", `/api/reports/handover?day=${x.day}&shift=${x.shiftIndex}`); ho.err = null; }
+    catch (e) { ho.err = e.message; }
+    r.ho = ho;
+    PK.draw();
+  }
+  async function saveHandover() {
+    const ho = r.ho;
+    if (!ho || ho.draft == null) return;
+    const [day, shift] = ho.key.split("/");
+    ho.saving = true; PK.draw();
+    try {
+      ho.data = await api("PUT", "/api/reports/handover", { day, shift: +shift, text: ho.draft });
+      ho.draft = null;
+      PK.dirty(null);
+      toast(ho.data.note ? "Saved. The next shift sees it when they open PLC-Ki." : "Removed the handover note.");
+      if (PK.loadHandover) PK.loadHandover();
+    } catch (e) { toast(e.message, "error"); }
+    ho.saving = false; PK.draw();
   }
   // What happened in the shift, from the event day files (/api/events): every step, alarm, halt, value changed
   const LOG_MAX = 5000;
@@ -177,6 +202,31 @@
     return `<div class="card">${h}<p class="mt-0 muted small">Newest first. Steps, alarms, halts, values changed from PLC-Ki: everything PLC-Ki saw in this shift.</p>${bar}${body}</div>`;
   }
 
+  /** The shift's handover note: written during this shift or the next one by anyone logged in, then read-only. */
+  function handoverCard(x) {
+    const ho = r.ho && r.ho.key === x.day + "/" + x.shiftIndex ? r.ho : null;
+    const h = `<h3 class="m-0">Handover note</h3>`;
+    if (!ho || (!ho.data && !ho.err)) return `<div class="card stack rp-ho">${h}${PK.ui.loading("lines")}</div>`;
+    if (!ho.data) return `<div class="card stack rp-ho">${h}${PK.ui.error(ho.err)}</div>`;
+    const { note, canWrite, maxLength } = ho.data;
+    const hmOf = (t) => hm(t) + (new Date(t).toDateString() !== new Date(x.from).toDateString() ? ` (${esc(dayName(String(t).slice(0, 10)))})` : "");
+    const who = note ? `<span class="faint small">${esc(note.by)}, ${hmOf(note.at)}${note.editedBy ? ` · changed by ${esc(note.editedBy)}, ${hmOf(note.editedAt)}` : ""}</span>` : "";
+    const head = `<div class="row">${h}<span class="spacer"></span>${who}</div>`;
+    if (canWrite && PK.state.user) {
+      const text = ho.draft != null ? ho.draft : note ? note.text : "";
+      return `<div class="card stack rp-ho no-print">${head}
+        <label class="field m-0"><span class="sr">Handover note for the next shift</span><textarea id="ho-text" rows="4" maxlength="${maxLength}"
+          placeholder="What the next shift should know: what was done, what is still open, what to watch.">${esc(text)}</textarea></label>
+        <div class="row"><span class="faint small">The next shift sees it on every page when they open PLC-Ki. It can be changed until the next shift ends.</span><span class="spacer"></span>
+          <button class="btn small" type="button" data-ho-save ${ho.saving || ho.draft == null ? "disabled" : ""}>${ho.saving ? "Saving…" : "Save note"}</button></div></div>`
+        + (note ? `<div class="card stack rp-ho print-only">${head}<p class="ho-note">${esc(note.text)}</p></div>` : "");
+    }
+    const body = note ? `<p class="ho-note">${esc(note.text)}</p>`
+      : `<p class="m-0 muted">${canWrite ? "No handover note yet." : "No handover note was left for this shift."}</p>`;
+    const login = canWrite && !PK.state.user ? `<p class="m-0 small no-print"><a href="/login.html">Log in</a> to write the handover note.</p>` : "";
+    return `<div class="card stack rp-ho">${head}${body}${login}</div>`;
+  }
+
   function shiftPage() {
     const x = r.shift;
     if (!x) return PK.sec("tight rp", r.err ? PK.ui.error(r.err) : PK.ui.loading("tiles", { label: "Making the report" }));
@@ -214,7 +264,7 @@
     const losses = `<div class="card"><h3>Biggest losses</h3>${lossTable(x.losses, t.idle + t.down + t.noLink)}</div>`;
     const faults = `<div class="card"><h3>Alarms in this shift</h3>${faultTable(x.faults, true)}<p class="mt-3 mb-0 faint small no-print">Every past alarm, with what fixed it: <a href="#/history">History</a>.</p></div>`;
     const ask = PK.state.user ? `<div class="mt-2 row no-print"><button class="btn b small" type="button" data-rpask>${icon("chat")}<span>Ask ${PK.AI} for a handover note</span></button></div>` : "";
-    return PK.sec("tight rp", shiftPicker(x) + head + kpis + `<div class="rp-grid">${time}<div class="grid two rp-two">${parts}${maint}</div><div class="grid two rp-two">${losses}${faults}</div>${shiftLog(x)}</div>` + notes(x.notes) + ask);
+    return PK.sec("tight rp", shiftPicker(x) + head + handoverCard(x) + `<div class="mt-4"></div>` + kpis + `<div class="rp-grid">${time}<div class="grid two rp-two">${parts}${maint}</div><div class="grid two rp-two">${losses}${faults}</div>${shiftLog(x)}</div>` + notes(x.notes) + ask);
   }
 
   // ---- summary over a time window: down time, MTTR and MTBF, where the time went, every shift's OEE ----
@@ -325,17 +375,30 @@
         // At once, not smooth: a redraw during a smooth scroll would leave the page somewhere else
         setTimeout(() => { const li = document.querySelector(".tl-list li.hit"); if (li) window.scrollTo({ top: li.getBoundingClientRect().top + scrollY - innerHeight / 2, behavior: "instant" }); }, 0);
       }
+      const hoText = el.querySelector("#ho-text"), hoSave = el.querySelector("[data-ho-save]");
+      if (hoText) PK.on(hoText, "input", () => {
+        r.ho.draft = hoText.value;
+        PK.dirty(saveHandover);
+        if (hoSave) hoSave.disabled = false;
+      });
+      if (hoSave) PK.on(hoSave, "click", saveHandover);
       el.querySelectorAll("[data-logf]").forEach((b) => PK.on(b, "click", () => { r.log.f = b.dataset.logf; r.log.all = false; PK.draw(); }));
       const all = el.querySelector("[data-logall]");
       if (all) PK.on(all, "click", () => { r.log.all = true; PK.draw(); });
       el.querySelectorAll("[data-tlmk]").forEach((b) => PK.on(b, "click", () => { const i = +b.dataset.tlmk; r.markSel = r.markSel === i ? -1 : i; PK.draw(); }));
       const ask = el.querySelector("[data-rpask]");
-      if (ask) PK.on(ask, "click", () => {
+      if (ask) PK.on(ask, "click", async () => {
         const x = r.shift;
+        // The note the shift before left: what it asked to watch belongs in this handover too
+        const shifts = r.cfg ? r.cfg.settings.shifts : [];
+        const [pd, pi] = x.shiftIndex > 0 ? [x.day, x.shiftIndex - 1] : [addDays(x.day, -1), Math.max(0, shifts.length - 1)];
+        let prev = null;
+        try { prev = (await api("GET", `/api/reports/handover?day=${pd}&shift=${pi}`)).note; } catch { /* asked without it */ }
         const q = `Write a short shift handover for the ${x.shift} shift (${hm(x.from)}–${hm(x.to)}): OEE ${pct(x.oee.value)}, ${x.parts.total} parts, down ${mins(x.totals.down)} in ${x.maint.stops} stops. ` +
           `Biggest losses: ${x.losses.slice(0, 3).map((l) => `${l.why} (${mins(l.minutes)}, ${l.times}x)`).join("; ") || "none"}. ` +
           `Alarms: ${x.faults.slice(0, 5).map((f) => `${f.id} ${f.text} ${f.count}x`).join("; ") || "none"}. ` +
           `Read what happened in this shift with get_recent_events from "${local(x.from)}" to "${local(x.inProgress ? new Date() : x.to)}" (the shift log: steps, alarms, halts, values changed). ` +
+          (prev ? `The ${prev.shift} shift before left this handover note: "${prev.text}". Say what of it is still open. ` : "") +
           `Say what the next shift should watch and what maintenance should check.`;
         if (window.PKAsk) window.PKAsk.open(q);
       });

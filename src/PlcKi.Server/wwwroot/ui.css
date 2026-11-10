@@ -1929,3 +1929,10 @@ section.hero.aa .card { background: var(--panel); }
   .notice-strip { font-size: 14px; padding: 10px 12px; gap: 8px 10px; }
   .notice-strip div.small { font-size: 13px; }
 }
+/* Shift handover note (review 3, item 47) */
+.ho-text { white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 2px; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; }
+@media (max-width: 600px) { .ho-text { -webkit-line-clamp: 2; line-clamp: 2; } .ho-strip > .btn + .btn { margin-left: 0; } }
+.rp-ho textarea { width: 100%; }
+.rp-ho .ho-note { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; }
+.print-only { display: none !important; }
+@media print { .print-only { display: grid !important; } .ho-strip { display: none !important; } }
