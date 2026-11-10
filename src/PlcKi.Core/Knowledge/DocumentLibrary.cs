@@ -74,6 +74,8 @@ public sealed class DocumentLibrary
     private readonly object _lock = new();
     private readonly Dictionary<string, Entry> _docs = new(StringComparer.Ordinal);
     private readonly SemaphoreSlim _reading = new(1, 1);
+    /// <summary>Background reads that were started and have not finished. Counted from the moment they are queued, not from the moment a worker picks them up.</summary>
+    private readonly List<Task> _running = new();
 
     private sealed class Entry
     {
@@ -132,7 +134,13 @@ public sealed class DocumentLibrary
                 .OrderBy(i => i.Scope == "machine" ? 0 : 1).ThenBy(i => i.File, StringComparer.OrdinalIgnoreCase).ToList();
     }
 
-    public bool Busy => _reading.CurrentCount == 0 || List().Any(d => d.State == "reading");
+    public bool Busy
+    {
+        get
+        {
+            lock (_lock) return _running.Count > 0 || _docs.Values.Any(e => e.Index.Info.State == "reading");
+        }
+    }
 
     public (DocumentInfo Info, string Path)? Get(string id)
     {
@@ -186,14 +194,30 @@ public sealed class DocumentLibrary
         }
         lock (_lock)
             foreach (var gone in _docs.Keys.Where(k => !seen.Contains(k)).ToList()) _docs.Remove(gone);
-        return todo.Count == 0 ? Task.CompletedTask : Task.Run(() => ReadAll(todo, ct), ct);
+        if (todo.Count == 0) return Task.CompletedTask;
+        // Registered before Scan returns: whoever waits afterwards sees this read even if no worker thread has started it yet
+        Task read;
+        lock (_lock)
+        {
+            read = Task.Run(() => ReadAll(todo, ct), ct);
+            _running.Add(read);
+        }
+        _ = read.ContinueWith(t => { lock (_lock) _running.Remove(t); }, TaskScheduler.Default);
+        return read;
     }
 
-    /// <summary>Waits until every document is read.</summary>
+    /// <summary>Waits until every document that was found so far is read.</summary>
     public async Task ReadPendingAsync()
     {
-        await _reading.WaitAsync();
-        _reading.Release();
+        while (true)
+        {
+            Task[] running;
+            lock (_lock) running = _running.ToArray();
+            if (running.Length == 0) return;
+            // A read that failed or was cancelled is still finished; its documents are marked "failed" or stay as they were
+            foreach (var t in running) { try { await t.ConfigureAwait(false); } catch (Exception) { } }
+            await Task.Yield();
+        }
     }
 
     private async Task ReadAll(List<Entry> todo, CancellationToken ct)
@@ -204,9 +228,20 @@ public sealed class DocumentLibrary
             foreach (var e in todo)
             {
                 ct.ThrowIfCancellationRequested();
-                var idx = DocumentReader.Read(e.Path, e.Index.Info);
-                idx.Info.SourceTicks = System.IO.File.Exists(e.Path) ? Ticks(new FileInfo(e.Path)) : 0;
-                Save(e.Path, idx);
+                DocumentIndex idx;
+                try
+                {
+                    idx = DocumentReader.Read(e.Path, e.Index.Info);
+                    idx.Info.SourceTicks = System.IO.File.Exists(e.Path) ? Ticks(new FileInfo(e.Path)) : 0;
+                    Save(e.Path, idx);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    // File removed, locked or folder gone: say so instead of staying "reading" for ever
+                    e.Index.Info.State = "failed";
+                    e.Index.Info.Note = "The file could not be read: " + ex.Message;
+                    continue;
+                }
                 lock (_lock)
                     if (_docs.ContainsKey(idx.Info.Id)) Put(new Entry { Path = e.Path, Index = idx });
             }
@@ -218,7 +253,8 @@ public sealed class DocumentLibrary
     {
         var file = IndexFile(path);
         Directory.CreateDirectory(System.IO.Path.GetDirectoryName(file)!);
-        var tmp = file + ".tmp";
+        // Own temporary name per write: two writers of the same index (a rescan, a second PLC-Ki process) must not share one
+        var tmp = file + "." + Guid.NewGuid().ToString("N")[..8] + ".tmp";
         System.IO.File.WriteAllText(tmp, JsonSerializer.Serialize(idx, JsonOpt));
         System.IO.File.Move(tmp, file, overwrite: true);
     }
