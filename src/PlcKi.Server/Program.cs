@@ -123,7 +123,12 @@ static async Task<int> RunAppAsync(string[] appArgs, bool probe, JobService jobs
     });
     builder.Services.AddSingleton(sp => new PlcKi.Server.Hardware.HardwareService(opt, sp.GetRequiredService<ProgramService>(), Resolve));
     builder.Services.AddSingleton(new StatusEngine(model));
-    builder.Services.AddSingleton(new MachineHistory(TimeSpan.FromMinutes(Math.Clamp(opt.HistoryMinutes, 1, 240))));
+    // Events: the last 1,000 in memory for the live pages, and every one on disk, a file per day (data folder\events\<machine>)
+    var machineHistory = new MachineHistory(TimeSpan.FromMinutes(Math.Clamp(opt.HistoryMinutes, 1, 240)));
+    var eventLog = new EventLog(EventLog.FolderFor(plant.DataDir, PlcKi.Server.Reports.ReportService.Slug(model.Name)));
+    machineHistory.Recorded = eventLog.Write;
+    builder.Services.AddSingleton(machineHistory);
+    builder.Services.AddSingleton(eventLog);
     builder.Services.AddSingleton(new LiveModelCheck(model));
     // Machine memory: every alarm occurrence and the technicians' notes, one file per machine in the data folder
     // Storage limits (Setup › Settings › Storage): read live from settings.json, applied at start and once a day
@@ -167,7 +172,7 @@ static async Task<int> RunAppAsync(string[] appArgs, bool probe, JobService jobs
         var live = sp.GetRequiredService<LiveState>();
         var captures = sp.GetRequiredService<AlarmCaptureBook>();
         var diag = sp.GetRequiredService<PlcKi.Server.Hardware.DiagnosticsService>();
-        return new MachineTools(model, () => new LiveView(live.Status, live.Snapshot, live.History, DateTimeOffset.Now, captures, fast), live.Memory, diag.View, docs);
+        return new MachineTools(model, () => new LiveView(live.Status, live.Snapshot, live.History, DateTimeOffset.Now, captures, fast, eventLog), live.Memory, diag.View, docs);
     });
     builder.Services.AddSingleton<AskService>();
     builder.Services.AddSingleton<IPlcSource>(sp => CreateSource(sp.GetRequiredService<ILoggerFactory>().CreateLogger("plc")));
@@ -221,17 +226,7 @@ static async Task<int> RunAppAsync(string[] appArgs, bool probe, JobService jobs
         });
     });
 
-    // What happened lately (alarms came and went, steps, blocked devices), newest first. Kept in memory since PLC-Ki started.
-    app.MapGet("/api/events", (MachineHistory history, string? kind, int? max) =>
-    {
-        // kind: one kind or several, comma-separated ("alarm,cpu")
-        var kinds = string.IsNullOrEmpty(kind) ? null : kind.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToHashSet();
-        var list = history.Events(TimeSpan.FromDays(30), DateTimeOffset.Now)
-            .Where(e => kinds == null || kinds.Contains(e.Kind))
-            .Reverse().Take(Math.Clamp(max ?? 50, 1, 500))
-            .Select(e => new { time = e.Time, kind = e.Kind, text = e.Text });
-        return Results.Ok(list);
-    });
+    app.MapEvents();    // /api/events and /api/events.csv: what happened, from the event day files
 
     // Fast capture: how values are recorded right now, and the seconds around each alarm (read-only)
     app.MapGet("/api/fast", (FastRecorder f, AlarmCaptureBook book) => Results.Ok(new

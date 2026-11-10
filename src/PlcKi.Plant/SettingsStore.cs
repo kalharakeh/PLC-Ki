@@ -130,6 +130,8 @@ public sealed class SettingsStore
         return new RetentionLimits
         {
             ProductionDays = c.GetValue("Plant:Retention:ProductionDays", d.ProductionDays),
+            EventDays = c.GetValue("Plant:Retention:EventDays", d.EventDays),
+            StepEventDays = c.GetValue("Plant:Retention:StepEventDays", d.StepEventDays),
             ChangeLogDays = c.GetValue("Plant:Retention:ChangeLogDays", d.ChangeLogDays),
             ChangeLogMb = c.GetValue("Plant:Retention:ChangeLogMb", d.ChangeLogMb),
             Recordings = c.GetValue("Plant:Retention:Recordings", d.Recordings),
@@ -162,6 +164,8 @@ public sealed class SettingsStore
     private static void WriteRetention(JsonObject plant, RetentionLimits r) => plant["Retention"] = new JsonObject
     {
         ["ProductionDays"] = r.ProductionDays,
+        ["EventDays"] = r.EventDays,
+        ["StepEventDays"] = r.StepEventDays,
         ["ChangeLogDays"] = r.ChangeLogDays,
         ["ChangeLogMb"] = r.ChangeLogMb,
         ["Recordings"] = r.Recordings,

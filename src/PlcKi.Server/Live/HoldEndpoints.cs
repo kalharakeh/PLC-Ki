@@ -112,7 +112,7 @@ public static class HoldEndpoints
                 WriteEndpoints.Append(ctx, new WriteLogEntry(DateTimeOffset.Now, user, p.Plc, "plcsim", symbol, shown, before, now, now == shown, reason, true, null, "hold", p.Address.Text,
                     p.Rule));
                 history.Note(new MachineEvent(DateTimeOffset.Now, "write",
-                    $"{user} holds the input {symbol} ({p.Address.Text}) at {shown} on PLCSIM (was {before})." + (reason != null ? $" Reason: {reason}" : "")));
+                    $"{user} holds the input {symbol} ({p.Address.Text}) at {shown} on PLCSIM (was {before})." + (reason != null ? $" Reason: {reason}" : "")) { Tag = symbol });
                 return Results.Ok(new { symbol, address = p.Address.Text, before, value = shown, now, instance = p.Instance });
             }
             catch (Exception ex) when (ex is InvalidOperationException or HttpRequestException or TaskCanceledException or JobException)
@@ -138,7 +138,7 @@ public static class HoldEndpoints
                     WriteEndpoints.Append(ctx, new WriteLogEntry(DateTimeOffset.Now, user, h.Plc, "plcsim", h.Symbol, h.Before, h.Value, now, null, note, true, null,
                         all ? "release-all" : "release", h.Address));
                     history.Note(new MachineEvent(DateTimeOffset.Now, "write", $"{user} released the input {h.Symbol} ({h.Address}) on PLCSIM" +
-                        (note == null ? $": back to {h.Before}." : $". {note}")));
+                        (note == null ? $": back to {h.Before}." : $". {note}")) { Tag = h.Symbol });
                     results.Add(new { h.Symbol, h.Address, ok = true, before = h.Value, now, note });
                 }
                 catch (Exception ex) when (ex is InvalidOperationException or HttpRequestException or TaskCanceledException or JobException or FormatException)

@@ -20,7 +20,8 @@ public sealed record DiskSpace(string Drive, long Free, long Total, bool Low, st
 /// <summary>
 /// What PLC-Ki keeps and how much (Setup › Settings › Storage), and the limits that stop it growing forever:
 /// pruning at start and once a day (StoragePruning), export, and clear on an administrator's confirmed request.
-/// Pruning only ever touches: production log day files (reports\*\yyyy-MM-dd.jsonl), the older change log files,
+/// Pruning only ever touches: production log day files (reports\*\yyyy-MM-dd.jsonl), event day files
+/// (events\*\yyyy-MM-dd.jsonl and events\*\steps\yyyy-MM-dd.jsonl), the older change log files,
 /// alarm recordings (captures\*\*.json) and alarm memory occurrences without a note. Never: notes, documents,
 /// logins, settings, keys, models, the hold list or the report settings.
 /// </summary>
@@ -54,6 +55,7 @@ public sealed class StorageService
     public RetentionLimits Limits => _limits();
     private string ReportsDir => Path.Combine(_dataDir, "reports");
     private string CapturesDir => Path.Combine(_dataDir, "captures");
+    private string EventsDir => Path.Combine(_dataDir, "events");
     public JsonLinesLog ChangeLog => WriteEndpoints.ChangeLog(_dataDir);
 
     /// <summary>The last automatic pruning: when, and what it removed.</summary>
@@ -78,6 +80,17 @@ public sealed class StorageService
             if (!dryRun) foreach (var d in days) TryDelete(d.Path);
             if (days.Count > 0)
                 list.Add(new Removed("production", days.Count, dayBytes, $"{Plural(days.Count, "day file")} up to {days.Max(d => d.Day):yyyy-MM-dd}"));
+
+            // Machine events and, kept shorter, steps and outputs: whole day files
+            foreach (var (busy, keep) in new[] { (false, r.EventDays), (true, r.StepEventDays) })
+            {
+                var evCut = DateOnly.FromDateTime(now.LocalDateTime.Date.AddDays(-keep));
+                var old = EventLog.DayFiles(EventsDir, busy).Where(d => d.Day < evCut).ToList();
+                long evBytes = old.Sum(d => Size(d.Path));
+                if (!dryRun) foreach (var d in old) TryDelete(d.Path);
+                if (old.Count > 0)
+                    list.Add(new Removed(busy ? "steps" : "events", old.Count, evBytes, $"{Plural(old.Count, busy ? "day file of steps" : "day file of events", busy ? "day files of steps" : "day files of events")} up to {old.Max(d => d.Day):yyyy-MM-dd}"));
+            }
 
             var ch = ChangeLog.Prune(r.ChangeLogDays, r.ChangeLogMb * 1024L * 1024, now, dryRun);
             if (ch.Count > 0) list.Add(ch);
@@ -117,7 +130,7 @@ public sealed class StorageService
 
     // ---------- clear ----------
 
-    public static readonly string[] Clearable = { "production", "changes", "recordings", "memory" };
+    public static readonly string[] Clearable = { "production", "events", "steps", "changes", "recordings", "memory" };
 
     /// <summary>
     /// Removes one kind completely, on an administrator's confirmed request, and writes it into the change log with
@@ -136,6 +149,13 @@ public sealed class StorageService
                     int n = days.Count(d => TryDelete(d.Path));
                     _production?.Restart();
                     done = new Removed(kind, n, bytes, Plural(n, "day file"));
+                    break;
+                case "events":
+                case "steps":
+                    var evFiles = EventLog.DayFiles(EventsDir, kind == "steps");
+                    long eb = evFiles.Sum(d => Size(d.Path));
+                    int en = evFiles.Count(d => TryDelete(d.Path));
+                    done = new Removed(kind, en, eb, Plural(en, "day file"));
                     break;
                 case "changes":
                     done = ChangeLog.Clear() with { Kind = kind };
@@ -165,6 +185,8 @@ public sealed class StorageService
     private static string Title(string kind) => kind switch
     {
         "production" => "Production log",
+        "events" => "Machine events",
+        "steps" => "Steps and outputs",
         "changes" => "Change log",
         "recordings" => "Alarm recordings",
         "memory" => "Alarm memory",
@@ -201,10 +223,6 @@ public sealed class StorageService
 
         if (history != null)
         {
-            var ev = history.Events(TimeSpan.FromDays(36500), now);
-            rows.Add(new StorageRow("events", "Events", "Alarms that came and went, steps, connection drops, CPU mode, changed values.", "memory", null,
-                ev.Count, Plural(ev.Count, "event"), null, ev.Count > 0 ? ev[0].Time : null,
-                $"the last {N(history.MaxEvents)}; gone after a restart", null));
             var snaps = history.Snapshots(history.KeepValues, now);
             rows.Add(new StorageRow("values", "Values", "Every value, for the charts and \"what happened before the alarm\".", "memory", null,
                 snaps.Count, Plural(snaps.Count, "read"), null, history.OldestValueTime,
@@ -240,6 +258,21 @@ public sealed class StorageService
             days.Count > 0 ? new DateTimeOffset(days[0].Day.ToDateTime(TimeOnly.MinValue)) : null,
             $"{N(r.ProductionDays)} days", days.Count == 0 ? null
                 : $"all {Plural(days.Count, "day file")} ({days[0].Day:yyyy-MM-dd} to {days[^1].Day:yyyy-MM-dd}, {Bytes(days.Sum(d => Size(d.Path)))}) in {Rel(ReportsDir)}. The shift, OEE and fault reports start again from now. The report settings stay."));
+
+        // Machine events, and the steps and outputs kept apart for a shorter time
+        foreach (var (busy, keep) in new[] { (false, r.EventDays), (true, r.StepEventDays) })
+        {
+            var ev = EventLog.DayFiles(EventsDir, busy);
+            var evBytes = ev.Sum(d => Size(d.Path));
+            string kind = busy ? "steps" : "events";
+            rows.Add(new StorageRow(kind, busy ? "Steps and outputs" : "Machine events",
+                busy ? "Every step change and every output switched on or off, for the timeline and the shift log."
+                     : "Alarms that came and went, halts, blocked devices, CPU mode, connection drops, values changed from PLC-Ki.",
+                "disk", Rel(EventsDir) + (busy ? @"\…\" + EventLog.StepsFolder : ""), ev.Count, Plural(ev.Count, "day"), evBytes,
+                ev.Count > 0 ? new DateTimeOffset(ev[0].Day.ToDateTime(TimeOnly.MinValue)) : null,
+                $"{N(keep)} days", ev.Count == 0 ? null
+                    : $"all {Plural(ev.Count, "day file")} ({ev[0].Day:yyyy-MM-dd} to {ev[^1].Day:yyyy-MM-dd}, {Bytes(evBytes)}) of {(busy ? "steps and outputs" : "machine events")}. The timeline and the shift log start again from now."));
+        }
 
         // Change log
         var chFiles = ChangeLog.Files();

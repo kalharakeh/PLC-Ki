@@ -2,8 +2,23 @@ using PlcKi.Core.Model;
 
 namespace PlcKi.Core.Status;
 
-/// <summary>Something that changed on the machine: a step change, an alarm, a halt, a blocked device, the PLC link.</summary>
-public sealed record MachineEvent(DateTimeOffset Time, string Kind, string Text);
+/// <summary>
+/// Something that changed on the machine: a step change, an alarm, a halt, a blocked device, the PLC link.
+/// The optional fields say what it is about, so a page can link to it and the shift log can filter by it.
+/// </summary>
+public sealed record MachineEvent(DateTimeOffset Time, string Kind, string Text)
+{
+    /// <summary>The alarm id (alarm events).</summary>
+    public string? Alarm { get; init; }
+    /// <summary>The sequence id (step and halt events).</summary>
+    public string? Seq { get; init; }
+    /// <summary>The step it is in now (step and halt events).</summary>
+    public int? Step { get; init; }
+    /// <summary>The device id (blocked, output, state events).</summary>
+    public string? Device { get; init; }
+    /// <summary>The tag symbol (values written or held).</summary>
+    public string? Tag { get; init; }
+}
 
 /// <summary>One point of a tag's history: the value from this time on.</summary>
 public sealed record HistoryPoint(DateTimeOffset Time, object? Value, string Text);
@@ -11,7 +26,8 @@ public sealed record HistoryPoint(DateTimeOffset Time, object? Value, string Tex
 /// <summary>
 /// Remembers what happened recently, in memory only: the last few minutes of tag values and a list of events
 /// found by comparing each status with the one before. Lets the assistant answer "what happened?" and
-/// "how did the temperature change?", not only "what is it now?". Thread-safe.
+/// "how did the temperature change?", not only "what is it now?". Every new event also goes to <see cref="Recorded"/>,
+/// where the EventLog keeps it on disk. Thread-safe.
 /// </summary>
 public sealed class MachineHistory
 {
@@ -32,6 +48,9 @@ public sealed class MachineHistory
         _maxEvents = maxEvents;
     }
 
+    /// <summary>Called with each batch of new events, after they are added (the disk log listens here).</summary>
+    public Action<IReadOnlyList<MachineEvent>>? Recorded { get; set; }
+
     public TimeSpan KeepValues => _keepValues;
     /// <summary>At most this many events are kept (the oldest go first).</summary>
     public int MaxEvents => _maxEvents;
@@ -39,6 +58,7 @@ public sealed class MachineHistory
     public void Add(Snapshot snap, MachineStatus status)
     {
         bool hasValues = snap.Values.Values.Any(v => v != null);
+        List<MachineEvent> events;
         lock (_lock)
         {
             if (hasValues && (_snapshots.Count == 0 || _snapshots.Last().Time != snap.Time))
@@ -48,7 +68,7 @@ public sealed class MachineHistory
                 while (_snapshots.Count > 0 && _snapshots.Peek().Time < cutoff) _snapshots.Dequeue();
             }
 
-            var events = new List<MachineEvent>();
+            events = new List<MachineEvent>();
             if (_prev == null) events.Add(new MachineEvent(status.Time, "monitor", "PLC-Ki started watching the machine."));
             else events.AddRange(Diff(_prev, status, compareValues: hasValues && _prevHadValues));
             if (hasValues && !_prevHadValues) events.AddRange(Baseline(status));
@@ -61,6 +81,7 @@ public sealed class MachineHistory
             _prev = status;
             _prevHadValues |= hasValues;
         }
+        if (events.Count > 0) Recorded?.Invoke(events);
     }
 
     /// <summary>"The PLC went to STOP" when the CPU leaves RUN, "The PLC is back in RUN" when it comes back.</summary>
@@ -89,6 +110,7 @@ public sealed class MachineHistory
             if (n == null) _events.AddFirst(e); else _events.AddAfter(n, e);
             if (_events.Count > _maxEvents) _events.RemoveFirst();
         }
+        Recorded?.Invoke(new[] { e });
     }
 
     public List<MachineEvent> Events(TimeSpan window, DateTimeOffset now)
@@ -152,11 +174,11 @@ public sealed class MachineHistory
         foreach (var s in b.Sequences.Where(s => s.Step != null))
             list.Add(new MachineEvent(t, "step", $"{s.Name} was in step {s.Step} \"{s.StepName}\"" +
                 (s.TimeInStep != null ? $" for {s.TimeInStep} already" : "") + " when watching started." +
-                (s.Halted ? " It was halted" + Because(s.HaltReasons) + "." : "")));
+                (s.Halted ? " It was halted" + Because(s.HaltReasons) + "." : "")) { Seq = s.Id, Step = s.Step });
         foreach (var a in b.ActiveAlarms)
-            list.Add(new MachineEvent(t, "alarm", $"{a.Id} was already active when watching started: {a.Text}."));
+            list.Add(new MachineEvent(t, "alarm", $"{a.Id} was already active when watching started: {a.Text}.") { Alarm = a.Id });
         foreach (var e in b.Equipment.Where(IsBlocked))
-            list.Add(new MachineEvent(t, "blocked", e.Explanation));
+            list.Add(new MachineEvent(t, "blocked", e.Explanation) { Device = e.Id });
         return list;
     }
 
@@ -186,21 +208,21 @@ public sealed class MachineHistory
                     (p.Step != null
                         ? $"{s.Name}: step {p.Step} \"{p.StepName}\" -> step {s.Step} \"{s.StepName}\"" +
                           (p.TimeInStep != null ? $" (after about {p.TimeInStep} in step {p.Step})" : "")
-                        : $"{s.Name}: now in step {s.Step} \"{s.StepName}\"") + "."));
+                        : $"{s.Name}: now in step {s.Step} \"{s.StepName}\"") + ".") { Seq = s.Id, Step = s.Step });
             if (!p.Halted && s.Halted)
-                list.Add(new MachineEvent(t, "halt", $"{s.Name} halted in step {s.Step}" + Because(s.HaltReasons) + "."));
+                list.Add(new MachineEvent(t, "halt", $"{s.Name} halted in step {s.Step}" + Because(s.HaltReasons) + ".") { Seq = s.Id, Step = s.Step });
             else if (p.Halted && !s.Halted)
-                list.Add(new MachineEvent(t, "halt", $"{s.Name} is no longer halted."));
+                list.Add(new MachineEvent(t, "halt", $"{s.Name} is no longer halted.") { Seq = s.Id, Step = s.Step });
             else if (p.Halted && s.Halted && !p.HaltReasons.SequenceEqual(s.HaltReasons) && s.HaltReasons.Count > 0)
-                list.Add(new MachineEvent(t, "halt", $"{s.Name} still halted, now" + Because(s.HaltReasons) + "."));
+                list.Add(new MachineEvent(t, "halt", $"{s.Name} still halted, now" + Because(s.HaltReasons) + ".") { Seq = s.Id, Step = s.Step });
         }
 
         var before = a.ActiveAlarms.Select(x => x.Id).ToHashSet();
         var now = b.ActiveAlarms.Select(x => x.Id).ToHashSet();
         foreach (var x in b.ActiveAlarms.Where(x => !before.Contains(x.Id)))
-            list.Add(new MachineEvent(t, "alarm", $"{x.Id} came: {x.Text} ({x.Severity})."));
+            list.Add(new MachineEvent(t, "alarm", $"{x.Id} came: {x.Text} ({x.Severity}).") { Alarm = x.Id });
         foreach (var x in a.ActiveAlarms.Where(x => !now.Contains(x.Id)))
-            list.Add(new MachineEvent(t, "alarm", $"{x.Id} went: {x.Text}."));
+            list.Add(new MachineEvent(t, "alarm", $"{x.Id} went: {x.Text}.") { Alarm = x.Id });
 
         // Going into or out of STOP clears or brings back every "blocked" at once: that is the CPU mode, logged on its own
         bool cpuChanged = (a.Cpu?.Stopped ?? false) != (b.Cpu?.Stopped ?? false);
@@ -209,15 +231,15 @@ public sealed class MachineHistory
             var p = a.Equipment.FirstOrDefault(x => x.Id == e.Id);
             if (p == null) continue;
             if (!cpuChanged && !IsBlocked(p) && IsBlocked(e))
-                list.Add(new MachineEvent(t, "blocked", e.Explanation));
+                list.Add(new MachineEvent(t, "blocked", e.Explanation) { Device = e.Id });
             else if (!cpuChanged && IsBlocked(p) && !IsBlocked(e))
-                list.Add(new MachineEvent(t, "blocked", $"{e.Name} is no longer blocked: {e.State}."));
+                list.Add(new MachineEvent(t, "blocked", $"{e.Name} is no longer blocked: {e.State}.") { Device = e.Id });
             if (p.Commanded != true && e.Commanded == true)
-                list.Add(new MachineEvent(t, "output", $"{e.Name} switched on."));
+                list.Add(new MachineEvent(t, "output", $"{e.Name} switched on.") { Device = e.Id });
             else if (p.Commanded == true && e.Commanded == false)
-                list.Add(new MachineEvent(t, "output", $"{e.Name} switched off."));
+                list.Add(new MachineEvent(t, "output", $"{e.Name} switched off.") { Device = e.Id });
             if (p.Level != e.Level && e.Level is "fault" or "warn")
-                list.Add(new MachineEvent(t, "state", $"{e.Name}: {e.State}."));
+                list.Add(new MachineEvent(t, "state", $"{e.Name}: {e.State}.") { Device = e.Id });
         }
         return list;
     }

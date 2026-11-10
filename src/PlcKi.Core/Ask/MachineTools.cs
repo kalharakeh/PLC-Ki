@@ -15,8 +15,9 @@ public sealed record ToolSpec(string Name, string Description, Dictionary<string
 /// <summary>What the tools see: the latest status, the latest values and the recent history.</summary>
 /// <param name="Captures">The seconds around each alarm (fast capture); null when not running.</param>
 /// <param name="Fast">The fast recording itself; null when not running.</param>
+/// <param name="Events">Every event on disk, a file per day; null: only the ones in memory (History).</param>
 public sealed record LiveView(MachineStatus? Status, Snapshot? Snapshot, MachineHistory History, DateTimeOffset Now,
-    AlarmCaptureBook? Captures = null, FastRecorder? Fast = null);
+    AlarmCaptureBook? Captures = null, FastRecorder? Fast = null, EventLog? Events = null);
 
 /// <summary>
 /// The tools the assistant uses to look at the machine. All of them only read: the machine model and the
@@ -82,9 +83,12 @@ public sealed class MachineTools
 
         new("get_recent_events",
             "What happened recently, oldest first: step changes (with time spent in the step before), alarms coming and " +
-            "going, halts, devices blocked by an interlock, outputs switched on/off, PLC connection changes. " +
-            "Only covers the time since PLC-Ki started.",
-            Props(("minutes", new { type = "number", description = "How far back, default 30" })),
+            "going, halts, devices blocked by an interlock, outputs switched on/off, PLC connection changes, values changed " +
+            "from PLC-Ki. Kept on disk, so it reaches back across restarts (steps for about 30 days, the rest about a year). " +
+            "Give from and to for a shift or another time span; when there are many step changes, the oldest of them are left out first.",
+            Props(("minutes", new { type = "number", description = "How far back from now, default 30 (ignored when from is given)" }),
+                ("from", new { type = "string", description = "Start, local time, e.g. \"2026-11-10 06:00\"" }),
+                ("to", new { type = "string", description = "End, local time; default now" })),
             Array.Empty<string>()),
 
         new("get_sequence",
@@ -187,7 +191,7 @@ public sealed class MachineTools
                 "get_live_status" => LiveStatus(),
                 "read_tags" => ReadTags(Strings(input, "ids"), Str(input, "search")),
                 "get_tag_history" => TagHistory(Strings(input, "ids"), Num(input, "minutes") ?? 10),
-                "get_recent_events" => RecentEvents(Num(input, "minutes") ?? 30),
+                "get_recent_events" => RecentEvents(Num(input, "minutes") ?? 30, Str(input, "from"), Str(input, "to")),
                 "get_sequence" => Sequence(Str(input, "id")),
                 "get_equipment" => Equipment(Str(input, "id") ?? ""),
                 "get_alarm" => Alarm(Str(input, "id") ?? ""),
@@ -357,18 +361,43 @@ public sealed class MachineTools
         };
     }
 
-    private object RecentEvents(double minutes)
+    private object RecentEvents(double minutes, string? fromText = null, string? toText = null)
     {
         var v = _live();
-        var events = v.History.Events(TimeSpan.FromMinutes(Math.Max(minutes, 0.1)), v.Now);
-        const int max = 150;
+        var to = Time(toText) ?? v.Now;
+        var from = Time(fromText) ?? to - TimeSpan.FromMinutes(Math.Max(minutes, 0.1));
+        if (from > to) (from, to) = (to, from);
+        var events = v.Events?.Read(from, to) ?? v.History.Events(v.Now - from, v.Now).Where(e => e.Time <= to).ToList();
+
+        // Too many for one answer: keep the rare events (alarms, halts, link...) and the newest step changes and outputs
+        const int max = 150, rareMax = 120;
+        int rareLeft = 0, busyLeft = 0;
+        if (events.Count > max)
+        {
+            var rare = events.Where(e => !EventLog.Busy.Contains(e.Kind)).ToList();
+            var busy = events.Where(e => EventLog.Busy.Contains(e.Kind)).ToList();
+            var keepRare = rare.TakeLast(rareMax).ToList();
+            var keepBusy = busy.TakeLast(max - keepRare.Count).ToList();
+            rareLeft = rare.Count - keepRare.Count;
+            busyLeft = busy.Count - keepBusy.Count;
+            events = keepRare.Concat(keepBusy).OrderBy(e => e.Time).ToList();
+        }
+        bool oneDay = from.ToLocalTime().Date == to.ToLocalTime().Date && to.ToLocalTime().Date == v.Now.ToLocalTime().Date;
+        string Stamp(DateTimeOffset t) => oneDay ? Clock(t) : t.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
         return new
         {
-            now = Clock(v.Now),
-            events = events.TakeLast(max).Select(e => new { time = Clock(e.Time), kind = e.Kind, text = e.Text }),
-            olderLeftOut = events.Count > max ? events.Count - max : (int?)null,
+            now = Stamp(v.Now),
+            from = Stamp(from),
+            to = Stamp(to),
+            events = events.Select(e => new { time = Stamp(e.Time), kind = e.Kind, text = e.Text }),
+            olderLeftOut = rareLeft > 0 ? rareLeft : (int?)null,
+            stepsAndOutputsLeftOut = busyLeft > 0 ? busyLeft : (int?)null,
+            keptSince = v.Events == null ? "PLC-Ki started (memory only)" : null,
         };
     }
+
+    private static DateTimeOffset? Time(string? s) =>
+        DateTimeOffset.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out var t) ? t : null;
 
     private object AlarmCapture(string? alarm, string? capture, double? seconds)
     {
