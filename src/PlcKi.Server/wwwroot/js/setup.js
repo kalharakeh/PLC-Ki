@@ -862,6 +862,15 @@ const PKSetup = (() => {
             <span class="grow"><b class="semibold">${esc(u.name)}</b>${state.user && u.name === state.user.name ? " (you)" : ""}<div class="faint">${esc(PK.roleTitle(u.role))}</div></span>
             <span class="li-acts">${state.user && u.name !== state.user.name ? `<button class="btn plain small" data-role="${esc(u.name)}" data-now="${esc(u.role)}">Change role</button>
               <button class="btn plain small" data-pw="${esc(u.name)}">New password</button><button class="fg-fault btn plain small" data-del="${esc(u.name)}">Delete</button>` : `<button class="btn plain small" data-pw-own>Change my password</button>`}</span></li>`).join("")}</ul>
+          <h3 class="mt-5">Start page for each role</h3>
+          <p class="sub">Where PLC-Ki opens after logging in, when no page is in the address. Each person can choose their own under Alarm sound and screen.</p>
+          <div class="grid three">${ROLES.map(([r]) => { const now = (lists.startPages || {})[r] || "";
+            return `<label class="field">${esc(PK.roleTitle(r))}s<select data-start-role="${r}">${PK.startChoices([now]).map(([h, l]) => `<option value="${esc(h)}" ${(now || "#/alarm") === h ? "selected" : ""}>${esc(l)}</option>`).join("")}</select></label>`; }).join("")}</div>
+          <div class="mt-3 row end"><button class="btn gray" data-save-start>Save start pages</button></div>
+          <h3 class="mt-5">Dates and numbers</h3>
+          <p class="sub">How times, dates and decimals are written for everyone. Each person can choose their own under Alarm sound and screen.</p>
+          <div class="row"><select id="plant-format" aria-label="Dates and numbers for this plant" style="max-width:100%">${Object.entries(PK.FORMATS).map(([k, f]) =>
+            `<option value="${k}" ${((state.info && state.info.format) || "text") === k ? "selected" : ""}>${esc(f.label)}</option>`).join("")}</select></div>
           <h3 class="mt-5">Add a login</h3>
           <div class="grid three"><label class="field">Name<input id="nu-name" autocomplete="off"></label>
             <label class="field">Password <span class="hint">at least 8 characters</span><input id="nu-pw" type="password" autocomplete="new-password"></label>
@@ -902,6 +911,17 @@ const PKSetup = (() => {
           if (o.dataset.to !== now) act(() => api("PUT", `/api/admin/users/${encodeURIComponent(name)}/role`, { role: o.dataset.to }), `${name} is now ${PK.roleTitle(o.dataset.to).toLowerCase()}.`);
         });
       });
+      const pf = page.querySelector("#plant-format");
+      pf.onchange = async () => {
+        try { const r = await api("PUT", "/api/admin/format", { format: pf.value }); if (state.info) state.info.format = r.format; PK.draw(); toast("Saved for this plant."); }
+        catch (e) { toast(e.message, "error"); }
+      };
+      page.querySelector("[data-save-start]").onclick = async () => {
+        const pages = {};
+        page.querySelectorAll("[data-start-role]").forEach((sel) => { pages[sel.dataset.startRole] = sel.value === "#/alarm" ? "" : sel.value; });
+        try { lists.startPages = await api("PUT", "/api/admin/start-pages", pages); toast("Start pages saved. They are used from the next login."); }
+        catch (e) { toast(e.message, "error"); }
+      };
       const own = page.querySelector("[data-pw-own]");
       if (own) own.onclick = () => PK.passwordSheet();
       page.querySelectorAll("[data-del]").forEach((b) => b.onclick = async () => {

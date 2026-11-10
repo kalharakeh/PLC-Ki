@@ -15,16 +15,16 @@
     if (m < 60) return m + " min" + (s % 60 ? " " + (s % 60) + " s" : "");
     return Math.floor(m / 60) + " h" + (m % 60 ? " " + (m % 60) + " min" : "");
   }
-  const hhmmss = (ms) => new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  const hhmmss = (ms) => PK.clock(ms);
   /** A time on a chart: the clock for a few hours, with the weekday and date once the chart reaches over a day. */
   const elapsed = (ms) => { const s = Math.max(0, Math.round(ms / 1000)); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); };
   const stampAt = (ms, span, tr) => tr && tr.cycle ? "+" + elapsed(ms - tr.from) : span > 20 * 3600000
-    ? new Date(ms).toLocaleString([], { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })
+    ? `${PK.weekdayDay(ms)}, ${PK.hm(ms)}`
     : hhmmss(ms);
   function num(v, tag) {
     if (v == null || !isFinite(v)) return "–";
     const d = tag && tag.decimals != null ? tag.decimals : Math.abs(v) >= 100 ? 0 : Math.abs(v) >= 10 ? 1 : 2;
-    return Number(v).toFixed(d);
+    return PK.num(v, d);
   }
   const tagOf = (id) => state.model && state.model.tags.find((t) => t.id === id);
   const seqDef = (id) => state.model && state.model.sequences.find((d) => d.id === id);
@@ -47,9 +47,10 @@
 
   // ---------- trend data, fetched while a page that shows it is open ----------
   let trend = null, trendAt = 0, trendBusy = false, trendMin = null;
-  const TKEY = "plcki.trendTags";
-  let picked = (() => { try { return JSON.parse(localStorage.getItem(TKEY) || "null"); } catch { return null; } })();
-  function savePicked() { try { picked ? localStorage.setItem(TKEY, JSON.stringify(picked)) : localStorage.removeItem(TKEY); } catch { /* private window */ } }
+  // The values picked for the chart: kept per login (review 52), or in this browser when logged out
+  let picked = PK.prefs.get("trendTags", null);
+  document.addEventListener("pk:prefs", () => { picked = PK.prefs.get("trendTags", null); });
+  function savePicked() { PK.prefs.set("trendTags", picked || null); }
   async function loadTrend(force) {
     if (trendBusy || (!force && Date.now() - trendAt < 4000)) return;
     trendBusy = true; trendAt = Date.now();
@@ -203,9 +204,9 @@
     const span = tr.to - tr.from;
     // Clock times ("18:12"), with seconds when the window is short; the right end is "now"
     const cycle = !!tr.cycle;
-    const clock = (ms) => cycle ? elapsed(ms - tr.from) : span > 36 * 3600000 ? new Date(ms).toLocaleDateString([], { weekday: "short", day: "2-digit", month: "2-digit" })
-      : span > 20 * 3600000 ? new Date(ms).toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" })
-      : new Date(ms).toLocaleTimeString([], span <= 600000 ? { hour: "2-digit", minute: "2-digit", second: "2-digit" } : { hour: "2-digit", minute: "2-digit" });
+    const clock = (ms) => cycle ? elapsed(ms - tr.from) : span > 36 * 3600000 ? PK.weekdayDay(ms)
+      : span > 20 * 3600000 ? `${["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][new Date(ms).getDay()]} ${PK.hm(ms)}`
+      : span <= 600000 ? PK.clock(ms) : PK.hm(ms);
     const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) =>
       `<span class="tr-tick" style="left:${f * 100}%">${f === 1 && !cycle ? "now" : clock(tr.from + f * span)}</span>`).join("");
     const t = hover != null ? tr.from + hover * span : null;
@@ -247,7 +248,7 @@
     if (!tr) return PK.ui.loading("chart", { label: "Loading the values" });
     const short = !tr.cycle && (trendMin || tr.keepMinutes) * 60000 - (tr.to - tr.from) > 30000;
     const cy = tr.cycle;
-    const clockAt = (ms) => new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    const clockAt = (ms) => PK.clock(ms);
     const cycNote = cy ? `${cy.a.running ? "The cycle running now" : "The last finished cycle"}: ${clockAt(cy.a.start)} to ${cy.a.running ? "now" : clockAt(cy.a.end)}, ${dur(cy.a.end - cy.a.start)}.`
       + (cy.b ? ` Grey dashed: the previous cycle, ${clockAt(cy.b.start)} to ${clockAt(cy.b.end)}, ${dur(cy.b.end - cy.b.start)}.` : "")
       + " The time axis starts at 0:00 with the cycle." : "";
