@@ -2008,12 +2008,13 @@ html.tv:not(.tv-moved) .tv { cursor: none; }
 .tv .pm-dev:hover { transform: none; }
 .tv .pm-sym svg { width: clamp(40px, min(13vh, 7vw), 170px); height: clamp(40px, min(13vh, 7vw), 170px); }
 .tv .pm-dev b { font-size: clamp(15px, min(4vh, 2.6vw), 52px); }
-.tv .pm-st, .tv .pm-v { font-size: clamp(13px, min(2.8vh, 1.8vw), 36px); }
+.tv .pm-st, .tv .pm-v, .tv .pm-d { font-size: clamp(13px, min(2.8vh, 1.8vw), 36px); white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; text-wrap: balance; line-height: 1.15; }
+.pm-d { color: var(--muted); }
 .tv .pm-key { font-size: clamp(12px, min(1.7vh, 1.2vw), 22px); }
 .tv-split .pm-devs { grid-template-columns: repeat(auto-fit, minmax(clamp(100px, min(9vw, 18vh), 220px), 1fr)); }
 .tv-split .pm-sym svg { width: clamp(34px, min(6vh, 4.4vw), 90px); height: clamp(34px, min(6vh, 4.4vw), 90px); }
 .tv-split .pm-dev b { font-size: clamp(14px, min(2.3vh, 1.6vw), 32px); }
-.tv-split .pm-st, .tv-split .pm-v { font-size: clamp(12px, min(1.9vh, 1.3vw), 26px); }
+.tv-split .pm-st, .tv-split .pm-v, .tv-split .pm-d { font-size: clamp(12px, min(1.9vh, 1.3vw), 26px); }
 
 /* The alarm, large */
 .tv-al { --al: var(--fault); --al-soft: var(--fault-soft); --al-ink: var(--fault-ink);
