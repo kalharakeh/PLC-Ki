@@ -1,3 +1,4 @@
+using PlcKi.Core.Reports;
 using PlcKi.Core.Model;
 using PlcKi.Core.Status;
 
@@ -25,6 +26,23 @@ public static class TrendEndpoints
         });
     }
 
+    /// <summary>The cycle list behind the chips "This cycle" and "Compare with the previous cycle".</summary>
+    public static void MapCycles(WebApplication app)
+    {
+        // GET /api/trend/cycles: the running cycle (if any) and the finished ones, newest first, with start and end in ms.
+        app.MapGet("/api/trend/cycles", (PlcKi.Server.Reports.ReportService reports, MachineModel m, ValueLog values) =>
+        {
+            var now = DateTimeOffset.Now;
+            var cfg = reports.Settings;
+            var list = Cycles.List(m, cfg, reports.Log.Records(now.AddDays(-7), now), values, now);
+            return Results.Ok(new
+            {
+                sequence = Cycles.Sequence(m, cfg)?.Name,
+                cycles = list.Select(c => new { start = c.Start, end = c.End, sec = c.Sec, running = c.Running }),
+            });
+        });
+    }
+
     public static TrendData Get(MachineModel m, MachineHistory h, ValueLog? values, EventLog? events, DateTimeOffset now,
         double? minutes, double? hours, double? days, long? from, long? to, IReadOnlyCollection<string>? ids)
     {
@@ -33,7 +51,8 @@ public static class TrendEndpoints
             : days is { } d ? TimeSpan.FromDays(d)
             : hours is { } hr ? TimeSpan.FromHours(hr)
             : TimeSpan.FromMinutes(minutes ?? h.KeepValues.TotalMinutes);
-        if (window < TimeSpan.FromMinutes(1)) window = TimeSpan.FromMinutes(1);
+        var shortest = from != null ? TimeSpan.FromSeconds(5) : TimeSpan.FromMinutes(1);       // a cycle can be short
+        if (window < shortest) window = shortest;
         if (window > Longest) window = Longest;
         var start = end - window;
 

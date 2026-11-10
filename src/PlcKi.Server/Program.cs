@@ -177,7 +177,7 @@ static async Task<int> RunAppAsync(string[] appArgs, bool probe, JobService jobs
         var live = sp.GetRequiredService<LiveState>();
         var captures = sp.GetRequiredService<AlarmCaptureBook>();
         var diag = sp.GetRequiredService<PlcKi.Server.Hardware.DiagnosticsService>();
-        return new MachineTools(model, () => new LiveView(live.Status, live.Snapshot, live.History, DateTimeOffset.Now, captures, fast, eventLog), live.Memory, diag.View, docs);
+        return new MachineTools(model, () => new LiveView(live.Status, live.Snapshot, live.History, DateTimeOffset.Now, captures, fast, eventLog, valueLog), live.Memory, diag.View, docs);
     });
     builder.Services.AddSingleton<AskService>();
     builder.Services.AddSingleton<IPlcSource>(sp => CreateSource(sp.GetRequiredService<ILoggerFactory>().CreateLogger("plc")));
@@ -253,6 +253,7 @@ static async Task<int> RunAppAsync(string[] appArgs, bool probe, JobService jobs
 
     // Values over time for the charts: the live buffer, or the values saved on disk for a longer window (read-only)
     TrendEndpoints.Map(app);
+    TrendEndpoints.MapCycles(app);
 
     // "Ask a question": Claude answers from the live values and the machine model (read-only lookups)
     app.MapGet("/api/ask", (AskService ask) =>

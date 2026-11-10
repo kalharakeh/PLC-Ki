@@ -16,8 +16,9 @@ public sealed record ToolSpec(string Name, string Description, Dictionary<string
 /// <param name="Captures">The seconds around each alarm (fast capture); null when not running.</param>
 /// <param name="Fast">The fast recording itself; null when not running.</param>
 /// <param name="Events">Every event on disk, a file per day; null: only the ones in memory (History).</param>
+/// <param name="Saved">The numeric values saved on disk, hours or days back; null: only the ones in memory (History).</param>
 public sealed record LiveView(MachineStatus? Status, Snapshot? Snapshot, MachineHistory History, DateTimeOffset Now,
-    AlarmCaptureBook? Captures = null, FastRecorder? Fast = null, EventLog? Events = null);
+    AlarmCaptureBook? Captures = null, FastRecorder? Fast = null, EventLog? Events = null, ValueLog? Saved = null);
 
 /// <summary>
 /// The tools the assistant uses to look at the machine. All of them only read: the machine model and the
@@ -74,11 +75,12 @@ public sealed class MachineTools
 
         new("get_tag_history",
             "How tag values changed over the last minutes (PLC-Ki keeps a short history in memory since it started). " +
+            "Numbers are also saved on disk, so minutes can be hours or days (up to 90 days, thinned to about 40 slices with the lowest and highest value in each). " +
             "For each tag: the change points (time and value from then on) and, for numbers, min/max/average. " +
             "Use it for questions like \"did the temperature drop before the alarm?\" or \"how long did filling take?\".",
             Props(
                 ("ids", new { type = "array", items = new { type = "string" }, description = "Tag ids, up to 10" }),
-                ("minutes", new { type = "number", description = "How far back, default 10" })),
+                ("minutes", new { type = "number", description = "How far back, default 10 (1440 = a day, 10080 = a week)" })),
             new[] { "ids" }),
 
         new("get_recent_events",
@@ -333,6 +335,10 @@ public sealed class MachineTools
     private object TagHistory(List<string> ids, double minutes)
     {
         var v = _live();
+        // Further back than the live buffer reaches (or since a restart): the values saved on disk
+        if (v.Saved != null && (minutes > v.History.KeepValues.TotalMinutes
+                || (v.History.OldestValueTime is not { } oldest ? minutes > 1 : v.Now - TimeSpan.FromMinutes(minutes) < oldest - TimeSpan.FromSeconds(10))))
+            if (SavedHistory(v, ids, Math.Min(minutes, 90 * 1440.0)) is { } saved) return saved;
         var window = TimeSpan.FromMinutes(Math.Clamp(minutes, 0.1, v.History.KeepValues.TotalMinutes));
         var result = new List<object>();
         var unknown = new List<string>();
@@ -356,6 +362,49 @@ public sealed class MachineTools
             now = Clock(v.Now),
             historyStarts = v.History.OldestValueTime is { } o ? Clock(o) : "no values yet",
             note = "Each change point is the value from that time on.",
+            tags = result,
+            unknown = unknown.Count > 0 ? unknown : null,
+        };
+    }
+
+    /// <summary>Tag history from the saved values: about 40 slices, each with the lowest and highest value; null when nothing is saved.</summary>
+    private object? SavedHistory(LiveView v, List<string> ids, double minutes)
+    {
+        var tags = new List<TagDef>();
+        var unknown = new List<string>();
+        foreach (var id in ids.Take(10))
+        {
+            var t = FindTag(id);
+            if (t == null) unknown.Add(id);
+            else if (t.Type is "Real" or "LReal" or "Int" or "DInt") tags.Add(t);
+            else unknown.Add(id + " (not a number: only numbers are saved on disk)");
+        }
+        if (tags.Count == 0 || v.Saved!.OldestDay() == null) return null;
+        var from = v.Now - TimeSpan.FromMinutes(minutes);
+        var range = v.Saved.Read(from, v.Now, tags.Select(t => t.Id).ToList(), 40);
+        string Stamp(long ms) => DateTimeOffset.FromUnixTimeMilliseconds(ms).ToLocalTime().ToString(minutes > 1440 ? "ddd dd MMM HH:mm" : "HH:mm", CultureInfo.InvariantCulture);
+        var result = new List<object>();
+        foreach (var t in tags)
+        {
+            var slices = range.Series[t.Id];
+            var have = slices.Select((b, i) => (b, i)).Where(x => x.b != null).ToList();
+            result.Add(new
+            {
+                id = t.Id,
+                label = t.Label,
+                slices = have.Select(x => new { time = Stamp(range.BucketStart(x.i)), low = ValueFormat.Format(t, x.b!.Value.Min), high = ValueFormat.Format(t, x.b!.Value.Max), last = ValueFormat.Format(t, x.b!.Value.Last) }),
+                min = have.Count > 0 ? ValueFormat.Format(t, have.Min(x => x.b!.Value.Min)) : null,
+                max = have.Count > 0 ? ValueFormat.Format(t, have.Max(x => x.b!.Value.Max)) : null,
+                average = have.Count > 0 && t.Type is not "Time" ? ValueFormat.Format(t, have.Average(x => x.b!.Value.Last)) : null,
+            });
+        }
+        return new
+        {
+            now = Clock(v.Now),
+            source = "saved values on disk",
+            from = Stamp(range.From),
+            sliceMinutes = Math.Round(range.BucketMs / 60000, 1),
+            note = "Each slice is a stretch of time with the lowest, highest and last value in it; a missing slice means PLC-Ki was not running. The average is of the last values of the slices.",
             tags = result,
             unknown = unknown.Count > 0 ? unknown : null,
         };

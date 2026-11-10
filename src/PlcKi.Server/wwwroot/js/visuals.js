@@ -17,7 +17,8 @@
   }
   const hhmmss = (ms) => new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
   /** A time on a chart: the clock for a few hours, with the weekday and date once the chart reaches over a day. */
-  const stampAt = (ms, span) => span > 20 * 3600000
+  const elapsed = (ms) => { const s = Math.max(0, Math.round(ms / 1000)); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); };
+  const stampAt = (ms, span, tr) => tr && tr.cycle ? "+" + elapsed(ms - tr.from) : span > 20 * 3600000
     ? new Date(ms).toLocaleString([], { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })
     : hhmmss(ms);
   function num(v, tag) {
@@ -59,6 +60,43 @@
     trendBusy = false;
     PK.draw();
   }
+  // The cycle views: "This cycle" (the running one, else the last finished) and "Compare with the previous cycle", on a time axis
+  // that starts at 0:00 with the cycle. The previous cycle's values are drawn grey and dashed over this one's.
+  let mode = null, cyc = null, cycAt = 0, cycBusy = false, cycInfo = { count: 0, sequence: null }, cycInfoAt = 0, cycAsked = false;
+  async function loadCycle() {
+    if (cycBusy) return;
+    cycBusy = true; cycAt = Date.now(); cycInfoAt = cycAt;
+    try {
+      const list = await PK.api("GET", "/api/trend/cycles");
+      cycInfo = { count: list.cycles.length, sequence: list.sequence };
+      const a = list.cycles[0], b = mode === "compare" ? list.cycles[1] : null;
+      if (!a || (mode === "compare" && !b)) cyc = null;
+      else {
+        const get = (c) => {
+          const q = new URLSearchParams({ from: Math.floor(c.start), to: Math.ceil(c.end) });
+          if (picked) q.set("tags", picked.length ? picked.join(",") : "-");
+          return PK.api("GET", "/api/trend?" + q);
+        };
+        const [ta, tb] = await Promise.all([get(a), b ? get(b) : null]);
+        const durA = a.end - a.start, durB = b ? b.end - b.start : 0;
+        ta.from = a.start; ta.to = a.start + Math.max(durA, durB, 10000);
+        ta.endAt = a.end; ta.cycle = { a, b, sequence: list.sequence };
+        if (tb) {
+          ta.cmp = {};
+          tb.series.forEach((s) => { ta.cmp[s.id] = s.points.map((p) => [p[0] - b.start + a.start, p[1]]); });
+          ta.cmpEnd = a.start + durB;
+        }
+        cyc = ta;
+      }
+    } catch { /* keep what we had */ }
+    cycBusy = false; cycAsked = true;
+    PK.draw();
+  }
+  /** Just the number of cycles, so the chips can say whether there is a cycle to show or compare. */
+  async function loadCycleCount() {
+    cycInfoAt = Date.now();
+    try { const list = await PK.api("GET", "/api/trend/cycles"); const n = list.cycles.length; if (n !== cycInfo.count) { cycInfo = { count: n, sequence: list.sequence }; PK.draw(); } } catch { /* no chips */ }
+  }
   /** For render(): the trend data, asking for fresh data every 5 seconds. */
   function needTrend() {
     if (Date.now() - trendAt > 5000) setTimeout(loadTrend, 0);
@@ -84,8 +122,8 @@
     if (hi - lo < 1e-9) hi = lo + 1;
     return { lo, hi };
   }
-  /** The SVG path of a series over the time window; the last value holds until now. */
-  function pathOf(points, tr, y) {
+  /** The SVG path of a series over the time window; the last value holds until now (or until endAt, for a cycle that ended). */
+  function pathOf(points, tr, y, endAt) {
     let d = "", area = "", started = false, firstX = 0, lastX = 0, segX = 0, last = null;
     // Each stretch between gaps is closed on its own, so a gap (PLC-Ki was off) is not filled in
     const close = () => { if (started) area += `L${lastX} 100L${segX} 100Z`; };
@@ -95,7 +133,8 @@
       if (!started) { if (!d) firstX = px; segX = px; d += `M${px} ${py}`; area += `M${px} ${py}`; started = true; } else { d += `L${px} ${py}`; area += `L${px} ${py}`; }
       lastX = px; last = v;
     }
-    if (last != null && started) { d += `L1000 ${y(last).toFixed(1)}`; area += `L1000 ${y(last).toFixed(1)}`; lastX = 1000; }
+    const endX = endAt != null ? Math.min(1000, Math.max(0, x(endAt, tr) * 10)).toFixed(1) : 1000;
+    if (last != null && started) { d += `L${endX} ${y(last).toFixed(1)}`; area += `L${endX} ${y(last).toFixed(1)}`; lastX = endX; }
     close();
     return { d, area, firstX, lastX, last };
   }
@@ -110,23 +149,29 @@
     const tag = tagOf(sr.id) || {};
     const vals = sr.points.map((p) => p[1]).filter((v) => v != null);
     const spVals = sp ? sp.points.map((p) => p[1]).filter((v) => v != null) : [];
+    // The previous cycle, shifted onto this one's time axis (Compare with the previous cycle)
+    const cmp = tr.cmp && tr.cmp[sr.id] ? tr.cmp[sr.id] : null;
+    const cmpVals = cmp ? cmp.map((p) => p[1]).filter((v) => v != null) : [];
     const unit = sr.unit ? " " + esc(sr.unit) : "";
-    const { lo, hi } = scaleOf(sr.unit, [...vals, ...spVals]);
+    const { lo, hi } = scaleOf(sr.unit, [...vals, ...spVals, ...cmpVals]);
     const y = (v) => 92 - ((v - lo) / (hi - lo)) * 84;      // a little room at top and bottom
-    const { d, area, last } = pathOf(sr.points, tr, y);
+    const { d, area, last } = pathOf(sr.points, tr, y, tr.endAt);
     const spPath = sp ? pathOf(sp.points, tr, y) : null;
-    const marks = tr.alarms.map((a) => `<i class="tr-al ${a.came ? "came" : "went"}" style="left:${x(a.time, tr).toFixed(2)}%" title="${esc(stampAt(a.time, tr.to - tr.from) + " " + a.text)}"></i>`).join("");
+    const cmpPath = cmp ? pathOf(cmp, tr, y, tr.cmpEnd) : null;
+    const marks = tr.alarms.map((a) => `<i class="tr-al ${a.came ? "came" : "went"}" style="left:${x(a.time, tr).toFixed(2)}%" title="${esc(stampAt(a.time, tr.to - tr.from, tr) + " " + a.text)}"></i>`).join("");
     const t = hover != null ? tr.from + hover * (tr.to - tr.from) : null;
     const hv = t != null ? valueAt(sr.points, t) : null;
     const spNow = sp ? (t != null ? valueAt(sp.points, t) : spPath.last) : null;
+    const cmpNow = cmp ? (t != null ? valueAt(cmp, t) : cmpPath.last) : null;
     return `<div class="tr-row">
       <div class="tr-lab"><span class="tr-name" title="${esc(sr.id)}">${esc(sr.label)}</span>
         <b class="tr-now">${num(hover != null ? hv : last, tag)}${unit}</b>
-        <span class="tr-rng">${sp ? `<span class="tr-sp-k" aria-hidden="true"></span>setpoint ${num(spNow, tagOf(sp.id))}${unit}` : vals.length ? `${num(Math.min(...vals), tag)} to ${num(Math.max(...vals), tag)}` : "no values yet"}</span>
+        <span class="tr-rng">${cmp ? `<span class="tr-cmp-k" aria-hidden="true"></span>previous cycle ${num(cmpNow, tag)}${unit}` : sp ? `<span class="tr-sp-k" aria-hidden="true"></span>setpoint ${num(spNow, tagOf(sp.id))}${unit}` : vals.length ? `${num(Math.min(...vals), tag)} to ${num(Math.max(...vals), tag)}` : "no values yet"}</span>
         <button type="button" class="tr-x" data-tr-remove="${esc(sr.id)}" aria-label="Remove ${esc(sr.label)} from the chart" title="Remove from the chart">×</button></div>
       <div class="tr-plot" data-plot>
         <svg viewBox="0 0 1000 100" preserveAspectRatio="none" aria-hidden="true">
           <line x1="0" y1="50" x2="1000" y2="50" class="tr-grid"/>
+          ${cmpPath && cmpPath.d ? `<path class="tr-cmp" d="${cmpPath.d}" vector-effect="non-scaling-stroke"/>` : ""}
           ${area ? `<path class="tr-area" d="${area}"/><path class="tr-line" d="${d}" vector-effect="non-scaling-stroke"/>` : ""}
           ${spPath && spPath.d ? `<path class="tr-sp" d="${spPath.d}" vector-effect="non-scaling-stroke"/>` : ""}
         </svg>
@@ -140,10 +185,10 @@
     const def = seqDef(seq.id);
     const now = state.status && state.status.sequences.find((q) => q.id === seq.id);
     const spans = seq.spans.map((s, i) => {
-      const to = i === seq.spans.length - 1 ? tr.to : s.to;       // the step it is in now runs to "now"
+      const to = i === seq.spans.length - 1 ? (tr.endAt || tr.to) : s.to;       // the step it is in now runs to "now"
       const l = Math.max(0, x(s.from, tr)), w = Math.max(0.3, x(to, tr) - l);
       const name = stepName(def, s.step);
-      return `<span class="tr-span ${stepColour(def, s.step)}" style="left:${l.toFixed(2)}%;width:${w.toFixed(2)}%" title="${esc(`Step ${s.step} ${name}: ${dur(to - s.from)}, from ${stampAt(s.from, tr.to - tr.from)}`)}">${w > 4 ? s.step : ""}</span>`;
+      return `<span class="tr-span ${stepColour(def, s.step)}" style="left:${l.toFixed(2)}%;width:${w.toFixed(2)}%" title="${esc(`Step ${s.step} ${name}: ${dur(to - s.from)}, from ${stampAt(s.from, tr.to - tr.from, tr)}`)}">${w > 4 ? s.step : ""}</span>`;
     }).join("");
     const t = hover != null ? tr.from + hover * (tr.to - tr.from) : null;
     const at = t != null ? [...seq.spans].reverse().find((s) => s.from <= t) : null;
@@ -157,14 +202,15 @@
   function axisRow(tr, label = true) {
     const span = tr.to - tr.from;
     // Clock times ("18:12"), with seconds when the window is short; the right end is "now"
-    const clock = (ms) => span > 36 * 3600000 ? new Date(ms).toLocaleDateString([], { weekday: "short", day: "2-digit", month: "2-digit" })
+    const cycle = !!tr.cycle;
+    const clock = (ms) => cycle ? elapsed(ms - tr.from) : span > 36 * 3600000 ? new Date(ms).toLocaleDateString([], { weekday: "short", day: "2-digit", month: "2-digit" })
       : span > 20 * 3600000 ? new Date(ms).toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" })
       : new Date(ms).toLocaleTimeString([], span <= 600000 ? { hour: "2-digit", minute: "2-digit", second: "2-digit" } : { hour: "2-digit", minute: "2-digit" });
     const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) =>
-      `<span class="tr-tick" style="left:${f * 100}%">${f === 1 ? "now" : clock(tr.from + f * span)}</span>`).join("");
+      `<span class="tr-tick" style="left:${f * 100}%">${f === 1 && !cycle ? "now" : clock(tr.from + f * span)}</span>`).join("");
     const t = hover != null ? tr.from + hover * span : null;
     return `<div class="tr-row axis ${label ? "" : "nolab"}">${label ? `<div class="tr-lab"></div>` : ""}<div class="tr-plot axis">${ticks}
-      ${t != null ? `<span class="tr-tick at" style="left:${(hover * 100).toFixed(2)}%">${stampAt(t, span)}</span>` : ""}</div></div>`;
+      ${t != null ? `<span class="tr-tick at" style="left:${(hover * 100).toFixed(2)}%">${stampAt(t, span, tr)}</span>` : ""}</div></div>`;
   }
 
   function windowChoice(tr) {
@@ -177,22 +223,42 @@
     const opts = [...new Set([5, 15, ...more.filter((m) => m <= keep), keep, ...reach, ...(nextMore ? [nextMore] : [])].filter((m) => m <= keep || m <= (nextMore || 0)))].sort((a, b) => a - b);
     const cur = trendMin || keep;
     const label = (m) => m < 60 ? m + " min" : m < 2880 ? Math.round(m / 60) + " h" : Math.round(m / 1440) + " d";
-    return opts.length > 1 ? PK.ui.choice("Time shown", opts.map((m) => ({ label: label(m), on: m === cur, data: { "data-tr-min": m } }))) : "";
+    const items = opts.map((m) => ({ label: label(m), on: !mode && m === cur, data: { "data-tr-min": m } }));
+    // The cycle of the machine (concept view 6: This batch, Compare with the previous batch)
+    if (cycInfo.count >= 1) items.push({ label: "This cycle", on: mode === "cycle", data: { "data-tr-mode": "cycle" } });
+    if (cycInfo.count >= 2) items.push({ label: "Compare with the previous cycle", on: mode === "compare", data: { "data-tr-mode": "compare" } });
+    return items.length > 1 ? PK.ui.choice("Time shown", items) : "";
   }
 
   /** "Last 15 minutes": the measured values stacked over one time axis, the step band and alarm marks. */
   function trends() {
-    const tr = needTrend();
+    let tr;
+    if (mode) {
+      if (Date.now() - cycAt > 5000) setTimeout(loadCycle, 0);
+      tr = cyc;
+      if (!tr && cycAsked && !cycBusy) {
+        const none = mode === "compare" ? "There are not two cycles with saved values yet." : "No cycle with saved values yet.";
+        return `<div class="trends"><div class="toolbar tr-tools">${windowChoice(trend || { keepMinutes: 15 })}</div><p class="muted">${none} A cycle is one run of the sequence${cycInfo.sequence ? ` "${esc(cycInfo.sequence)}"` : ""}, from its first step and back (set on the Reports page).</p></div>`;
+      }
+    } else {
+      if (Date.now() - cycInfoAt > 20000) setTimeout(loadCycleCount, 0);
+      tr = needTrend();
+    }
     if (!tr) return PK.ui.loading("chart", { label: "Loading the values" });
-    const short = (trendMin || tr.keepMinutes) * 60000 - (tr.to - tr.from) > 30000;
-    const note = short ? (tr.source === "disk" ? `PLC-Ki has values from ${dur(tr.to - tr.from)} back, so the charts start there.`
+    const short = !tr.cycle && (trendMin || tr.keepMinutes) * 60000 - (tr.to - tr.from) > 30000;
+    const cy = tr.cycle;
+    const clockAt = (ms) => new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    const cycNote = cy ? `${cy.a.running ? "The cycle running now" : "The last finished cycle"}: ${clockAt(cy.a.start)} to ${cy.a.running ? "now" : clockAt(cy.a.end)}, ${dur(cy.a.end - cy.a.start)}.`
+      + (cy.b ? ` Grey dashed: the previous cycle, ${clockAt(cy.b.start)} to ${clockAt(cy.b.end)}, ${dur(cy.b.end - cy.b.start)}.` : "")
+      + " The time axis starts at 0:00 with the cycle." : "";
+    const note = cy ? cycNote : short ? (tr.source === "disk" ? `PLC-Ki has values from ${dur(tr.to - tr.from)} back, so the charts start there.`
       : `PLC-Ki started watching ${dur(tr.to - tr.from)} ago, so the charts start there.`) : "";
     const ids = tr.series.map((s) => s.id);
     // A setpoint goes on its value's chart as a dashed line, not on a chart of its own
     const spFor = new Map(), onBase = new Set();
     tr.series.forEach((s) => { const b = baseOf(s, tr.series); if (b && !spFor.has(b.id)) { spFor.set(b.id, s); onBase.add(s.id); } });
     const admin = state.user && state.user.role === "admin";
-    const res = tr.source === "disk" && tr.resolutionSec ? ` One point on a chart is ${dur(tr.resolutionSec * 1000)}; a step shorter than that does not show.` : "";
+    const res = tr.source === "disk" && tr.resolutionSec && !cy ? ` One point on a chart is ${dur(tr.resolutionSec * 1000)}; a step shorter than that does not show.` : "";
     const keep = `${res} Values are saved on this PC (every read for the newest days, a minute at a time for older ones), so charts survive a restart.`
       + (admin ? ` <a href="#/setup/settings">How long they are kept is set in Setup › Settings › Storage.</a>` : " An administrator sets how long they are kept.");
     return `<div class="trends">
@@ -228,21 +294,24 @@
       PK.on(rows, "pointerdown", move);
       PK.on(rows, "pointerleave", () => { hover = null; PK.draw(); });
     }
-    page.querySelectorAll("[data-tr-min]").forEach((b) => b.onclick = () => { trendMin = Number(b.dataset.trMin); loadTrend(true); });
+    page.querySelectorAll("[data-tr-min]").forEach((b) => b.onclick = () => { mode = null; trendMin = Number(b.dataset.trMin); loadTrend(true); });
+    page.querySelectorAll("[data-tr-mode]").forEach((b) => b.onclick = () => { mode = b.dataset.trMode; cyc = null; cycAsked = false; loadCycle(); PK.draw(); });
     page.querySelectorAll("[data-tr-remove]").forEach((b) => b.onclick = () => {
-      picked = (trend ? trend.series.map((s) => s.id) : []).filter((id) => id !== b.dataset.trRemove);
-      savePicked(); loadTrend(true);
+      const cur = mode ? cyc : trend;
+      picked = (cur ? cur.series.map((s) => s.id) : []).filter((id) => id !== b.dataset.trRemove);
+      savePicked(); mode ? loadCycle() : loadTrend(true);
     });
     const r = page.querySelector("[data-tr-reset]");
-    if (r) r.onclick = () => { picked = null; savePicked(); loadTrend(true); };
+    if (r) r.onclick = () => { picked = null; savePicked(); mode ? loadCycle() : loadTrend(true); };
     const add = page.querySelector("#tr-add");
     if (add) add.onchange = () => {
       const v = add.value.trim();
       const c = trend && trend.choices.find((x) => x.id === v || x.label.toLowerCase() === v.toLowerCase());
       if (!c) { if (v) PK.toast("No number value with that name. Pick one from the list."); return; }
-      picked = [...new Set([...(trend ? trend.series.map((s) => s.id) : []), c.id])];
+      const cur = mode ? cyc : trend;
+      picked = [...new Set([...(cur ? cur.series.map((s) => s.id) : []), c.id])];
       add.value = "";
-      savePicked(); loadTrend(true);
+      savePicked(); mode ? loadCycle() : loadTrend(true);
     };
   }
 
