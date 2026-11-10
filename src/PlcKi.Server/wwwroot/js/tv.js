@@ -35,7 +35,7 @@
     const stationsOf = (a) => all.stations.filter((st) => st.alarms.some((x) => x.id === a.id)).map((st) => st.name);
     if (param == null || param === "") {
       const [level, word] = PKStations.levelOf({ alarms: s.activeAlarms, equipment: s.equipment, sequences: s.sequences });
-      return { name: s.machine || PK.t("Machine"), station: null, alarms: s.activeAlarms, equipment: s.equipment, sequences: s.sequences, level, word, stationsOf };
+      return { name: s.machine || PK.t("Machine"), station: null, alarms: s.activeAlarms, equipment: s.equipment, sequences: s.sequences, level, word, stationsOf, single: all.stations.length <= 1 };
     }
     const want = param === "-" ? "" : param, low = want.toLowerCase();
     const st = all.stations.find((x) => x.key === want) || all.stations.find((x) => x.key.toLowerCase() === low || x.name.toLowerCase() === low);
@@ -43,7 +43,7 @@
     const mine = new Set([...st.alarms, ...all.machineAlarms]);
     const alarms = s.activeAlarms.filter((a) => mine.has(a));      // in the server's order: the first that came first
     const [level, word] = PKStations.levelOf({ ...st, alarms });
-    return { name: st.name, station: st, alarms, equipment: st.equipment, sequences: st.sequences, level, word, stationsOf };
+    return { name: st.name, station: st, alarms, equipment: st.equipment, sequences: st.sequences, level, word, stationsOf, single: all.stations.length <= 1 };
   }
 
   /** The cycle and the parts of this shift, when PLC-Ki knows them (a machine without a cycle sequence or shifts has none). */
@@ -88,7 +88,7 @@
   function pictureHtml(equipment, ring, { dim = false } = {}) {
     const V = window.PKVis;
     if (!V || !equipment.length) return `<div class="tv-pic tv-none">${dim ? "" : PK.t("No devices in the model for this screen.")}</div>`;
-    return `<div class="tv-pic ${dim ? "dim" : ""}" inert>${V.plantMap(equipment, null, ring)}</div>`;
+    return `<div class="tv-pic ${dim ? "dim" : ""}" inert>${V.plantMap(equipment, null, ring, { split: true })}</div>`;
   }
 
   /** The alarm, large: text, station, since when, first or not, what else is on, the first steps of the fix. */
@@ -98,14 +98,15 @@
     const atStart = al.filter((x) => x.atStart).length;
     const first = al.length > 1 && al[0] === a && (!a.atStart || atStart === 1);     // as Active alarm says "First"
     const where = sc.stationsOf(a);
-    const station = where.length ? where.join(", ") : PK.t("Whole machine");
+    // With one station only, the band already says which machine this is; a name such as "Station" would tell nothing
+    const station = sc.single ? "" : where.length ? where.join(", ") : PK.t("Whole machine");
     const since = a.atStart ? PK.t("On since PLC-Ki started watching") : a.since ? PK.t("Since {when} · {ago}", { when: PK.when(a.since), ago: PK.ago(a.since) }) : "";
     const others = al.filter((x) => x !== a);
     const fix = (a.fix || []).slice(0, 3);
     return `<div class="tv-al ${warn ? "warn" : "fault"}" role="alert">
       <div class="tv-al-top"><span class="tv-al-sev">${esc(warn ? PK.t("Warning") : PK.t("Fault"))} · ${esc(a.id)}</span>${first ? `<span class="tv-al-first">${PK.t("First alarm")}</span>` : ""}</div>
       <div class="tv-al-text" role="heading" aria-level="2">${esc(a.text)}</div>
-      <div class="tv-al-facts"><span>${icon("plant")}${esc(station)}</span>${since ? `<span>${icon("clock")}${esc(since)}</span>` : ""}</div>
+      <div class="tv-al-facts">${station ? `<span>${icon("plant")}${esc(station)}</span>` : ""}${since ? `<span>${icon("clock")}${esc(since)}</span>` : ""}</div>
       ${a.condition ? `<p class="tv-al-cond">${esc(a.condition)}</p>` : ""}
       ${others.length ? `<div class="tv-al-more"><b>${PK.t("Also on:")}</b> ${others.slice(0, 4).map((x) => `<span class="tv-al-chip ${x.severity === "WARNING" ? "warn" : ""}">${esc(x.id)} ${esc(x.text.length > 44 ? x.text.slice(0, 42) + "…" : x.text)}</span>`).join("")}${others.length > 4 ? ` <span>${PK.t("and {n} more", { n: others.length - 4 })}</span>` : ""}</div>` : ""}
       ${fix.length ? `<div class="tv-al-fix"><b>${PK.t("What to do")}</b><ol>${fix.map((f) => `<li>${esc(f)}</li>`).join("")}</ol></div>` : ""}

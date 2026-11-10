@@ -665,7 +665,22 @@
 
   /** Every device as a symbol in its state colour, grouped by station. Uses the Plant page's [data-eq] selection.
    *  ring: device ids to ring (the device an alarm is about, on Active alarm). */
-  function plantMap(equipment, selected, ring) {
+  /**
+   * A state text the model wrote ("running at 1200 rpm (setpoint 1200 rpm)", "heating (48.2 °C, target 60 °C)") as
+   * a short word and the rest, for a big tile: the value is shown on its own line, so it is left out of both.
+   */
+  function splitState(word, valueText) {
+    // The model's texts write 48.2, the tile writes 48,2 in German: a . and a , count as the same
+    const body = valueText ? valueText.split(/[.,]/).map((x) => x.replace(/[*+?^${}()|[\]\\]/g, "\\$&")).join("[.,]") : null;
+    const same = body ? new RegExp("^" + body + "$") : null;
+    let head = String(word), detail = "";
+    const m = /^(.*?)\s*\((.*)\)\s*$/.exec(head);
+    if (m && m[1]) { head = m[1]; detail = m[2].split(/,\s+/).filter((x) => x && !(same && same.test(x))).join(", "); }
+    if (body) head = head.replace(new RegExp("\\s*(?:\\b(?:at|bei|with|mit)\\s+|@\\s*)?" + body), "").replace(/\s{2,}/g, " ").trim() || head;
+    return { head, detail };
+  }
+
+  function plantMap(equipment, selected, ring, opts = {}) {
     if (!equipment.length) return "";
     const groups = new Map();
     equipment.forEach((e) => { const g = stationOf(e.location); groups.set(g, [...(groups.get(g) || []), e]); });
@@ -673,9 +688,10 @@
     const tile = (e) => {
       const look = devLook(e);
       const kv = keyValue(e);
+      const sp = opts.split && !look.alarms.length && !e.blockedBy ? splitState(look.word, kv && kv.text) : null;
       const said = `${e.name}: ${stT(e.state)}${kv ? `, ${kv.label} ${kv.text}` : ""}` + look.alarms.map((a) => ". " + (a.severity === "WARNING" ? PK.t("Warning {id}: {text}", { id: a.id, text: a.text }) : PK.t("Alarm {id}: {text}", { id: a.id, text: a.text }))).join("");
       return `<div class="pm-dev lv-${esc(look.lvl)} ${e.id === selected ? "sel" : ""} ${ring && ring.includes(e.id) ? "ring" : ""}" data-eq="${esc(e.id)}" role="button" tabindex="0" aria-label="${esc(said)}" title="${esc(said)}">
-        <span class="pm-sym">${symbolFor(e.kind, e.id)}</span><b>${esc(e.id)}</b><span class="pm-st">${esc(look.word)}</span>${kv ? `<span class="pm-v" title="${esc(kv.label)}">${esc(kv.text)}</span>` : ""}</div>`;
+        <span class="pm-sym">${symbolFor(e.kind, e.id)}</span><b>${esc(e.id)}</b><span class="pm-st">${esc(sp ? sp.head : look.word)}</span>${kv ? `<span class="pm-v" title="${esc(kv.label)}">${esc(kv.text)}</span>` : ""}${sp && sp.detail ? `<span class="pm-d">${esc(sp.detail)}</span>` : ""}</div>`;
     };
     return `<div class="pmap">${[...groups].map(([g, list]) => `<div class="pm-grp">${many ? `<div class="pm-h">${esc(g ? (typeof PKStations !== "undefined" ? PKStations.pretty(g) : g) : PK.t("Other devices"))}</div>` : ""}<div class="pm-devs">${list.map(tile).join("")}</div></div>`).join("")}
       <div class="pm-key small"><span class="lv-ok">${PK.t("running or fine")}</span><span class="lv-idle">${PK.t("off")}</span><span class="lv-blocked">${PK.t("asked for but blocked")}</span><span class="lv-warn">${PK.t("warning")}</span><span class="lv-fault">${PK.t("fault")}</span></div></div>`;

@@ -6,6 +6,8 @@
 //   PK.t("{n} alarm|{n} alarms", { n })         "singular|plural" with n: one form for n = 1, the other for the rest
 //   PK.T("Waiting")                             marks a text in a table (changes nothing); translate where it is shown
 //                                               with PK.t(variable). The marker lets the tests find the text.
+//   I18N.fixed(text)                            German only when the whole text has an entry (Ki's fixed answers; the model's own
+//                                               answers pass unchanged)
 //   PK.srv(message)                             a message the server wrote (refusal, validation error): exact German
 //                                               entry, else a rule from i18n-de.js, else the message as it came
 //
@@ -28,12 +30,34 @@ const I18N = (() => {
   }
   const T = (s) => s;
 
+  /** $C1 in a rule: "once", "twice" or "5 times" as the server writes a count, in German. */
+  function count(x) {
+    const m = String(x ?? "");
+    return m === "once" ? "einmal" : m === "twice" ? "zweimal" : /^(\d+) times$/.test(m) ? m.replace(/^(\d+) times$/, "$1-mal") : m;
+  }
+  const MONTH_DE = { Jan: "Jan", Feb: "Feb", Mar: "März", Apr: "Apr", May: "Mai", Jun: "Juni", Jul: "Juli", Aug: "Aug", Sep: "Sept", Oct: "Okt", Nov: "Nov", Dec: "Dez" };
+  /** $D1 in a rule: "today 14:05", "yesterday 14:05" or "3 Nov" as the server writes a date, in German. */
+  function when(x) {
+    const m = String(x ?? "");
+    return m.replace(/^today /, "heute ").replace(/^yesterday /, "gestern ").replace(/^(\d{1,2}) ([A-Z][a-z]{2})$/, (_, d, mo) => `${d}. ${MONTH_DE[mo] || mo}`);
+  }
+  /** $W1 in a rule: the text caught by group 1 when it has an exact entry (a single word too), else as it is. */
+  const word = (x) => (x != null && own(de, String(x)) ? de[x] : String(x ?? ""));
+  /** $I1 in a rule: the list of tags of a generator summary ("Run (address %I0.0 to %I0.1, type Bool to Int, comment), Speed (%IW4) and 3 more"). */
+  function tagChanges(x) {
+    return String(x ?? "")
+      .replace(/ and (\d+) more$/, " und $1 weitere")
+      .replace(/\(((?:address|type|comment)[^()]*)\)/g, (_, d) => "(" + d
+        .replace(/^address (.+?) to (.+?)(?=, type |, comment$|$)/, "Adresse $1 auf $2")
+        .replace(/(^|, )type (.+?) to (.+?)(?=, comment$|$)/, "$1Datentyp $2 auf $3")
+        .replace(/(^|, )comment$/, "$1Kommentar") + ")");
+  }
   /** The whole text: an exact German entry, else the first rule that matches; null when there is none. */
   function whole(m, depth = 0) {
     // A single word inside a longer message ("Open." after "Valve XV101:") is the program's own state word, not a menu word:
     // only the rules may translate it there
     if (own(de, m) && (depth === 0 || /\s/.test(m))) return de[m];
-    for (const [re, to] of rules) if (re.test(m)) return m.replace(re, (...a) => to.replace(/\$(T?)(\d)/g, (_, tr, i) => (tr ? inner(a[+i], depth) : a[+i] ?? "")));
+    for (const [re, to] of rules) if (re.test(m)) return m.replace(re, (...a) => to.replace(/\$([TCDWI]?)(\d)/g, (_, tr, i) => (tr === "T" ? inner(a[+i], depth) : tr === "C" ? count(a[+i]) : tr === "D" ? when(a[+i]) : tr === "W" ? word(a[+i]) : tr === "I" ? tagChanges(a[+i]) : a[+i] ?? "")));
     return null;
   }
   /** $T1 in a rule: the text caught by group 1, translated on its own (clauses joined with "), " are taken apart first). */
@@ -72,7 +96,17 @@ const I18N = (() => {
     const m = String(message == null ? "" : message);
     if (lang !== "de" || !m) return m;
     const r = parts(m, 0);
-    return r != null ? r : m;
+    if (r != null) return r;
+    // A job log line is indented ("  - problem", "  Export saved: …"): the text after the indent is translated, the indent stays
+    const ind = /^(\s+(?:- )?)(\S[\s\S]*)$/.exec(m);
+    if (ind) { const t = parts(ind[2], 0); if (t != null) return ind[1] + t; }
+    return m;
+  }
+
+  /** A text PLC-Ki wrote itself, translated only when the whole text has an entry: for places that may also hold the model's own words. */
+  function fixed(message) {
+    const m = String(message == null ? "" : message);
+    return lang === "de" && own(de, m) ? de[m] : m;
   }
 
   /** Translates the text and the title, aria-label, placeholder and alt of what is already in the page (the shell in index.html). */
@@ -95,7 +129,7 @@ const I18N = (() => {
   function setLang(l) { lang = l === "de" ? "de" : "en"; document.documentElement.lang = lang; }
 
   return {
-    t, T, srv, dom, setLang,
+    t, T, srv, fixed, dom, setLang,
     get lang() { return lang; },
     /** i18n-de.js: I18N.add({ "English": "Deutsch", … }) */
     add(o) { Object.assign(de, o); },
