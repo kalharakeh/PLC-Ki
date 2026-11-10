@@ -10,7 +10,7 @@
     ho: null };    // the shift's handover note: { key, data: { note, canWrite, maxLength }, err, draft, saving }
 
   // ---- formatting ----
-  const pct = (x) => (x == null ? "—" : `${(x * 100).toFixed(x >= 0.995 || x === 0 ? 0 : 1)} %`);
+  const pct = (x) => (x == null ? "—" : `${PK.num(x * 100, x >= 0.995 || x === 0 ? 0 : 1)} %`);
   const mins = (m) => {
     if (m == null) return "—";
     if (m < 1) return `${Math.round(m * 60)} s`;
@@ -18,17 +18,18 @@
     const h = Math.floor(m / 60), rest = Math.round(m - h * 60);
     return rest ? `${h} h ${rest} min` : `${h} h`;
   };
-  const hm = (t) => { const d = new Date(t); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
+  const hm = (t) => PK.hm(t);
   const dayName = (day) => {
     const d = new Date(day + "T12:00:00");
     const today = new Date(); today.setHours(12, 0, 0, 0);
     const diff = Math.round((today - d) / 86400000);
-    return diff === 0 ? "Today" : diff === 1 ? "Yesterday" : d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
+    return diff === 0 ? "Today" : diff === 1 ? "Yesterday" : PK.weekdayDay(d);
   };
   const oeeCls = (x) => (x == null ? "" : x >= 0.85 ? "ok" : x >= 0.6 ? "warn" : "bad");
   const STATE = PK.ui.states;
   /** "2026-11-10 06:00": a local time as Ki's tools take it */
-  const local = (t) => { const d = new Date(t); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${hm(d)}`; };
+  const p2 = (n) => String(n).padStart(2, "0");
+  const local = (t) => { const d = new Date(t); return `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())}`; };
   const addDays = (day, n) => { const d = new Date(day + "T12:00:00"); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
 
   // ---- loading ----
@@ -115,7 +116,7 @@
 
   // ---- pieces ----
   function tabs(t) {
-    const admin = PK.state.user && PK.state.user.role === "admin";
+    const admin = PK.can("settings");
     return PK.ui.tabs("Reports", [["shift", "Shift report"], ["summary", "Summary"], ["settings", "Report setup"]].map(([id, label]) => ({ label, on: t === id, href: "#/reports/" + id })));
   }
 
@@ -198,7 +199,7 @@
         text: L.list.length ? "" : "PLC-Ki records what happens while it runs and is connected to the PLC." })
       : PK.ui.events(shown, { cls: "rp-log", hit })
         + (list.length > shown.length ? `<div class="mt-2 row no-print"><button class="btn gray small" type="button" data-logall>Show all ${list.length}</button></div>` : "")
-        + (L.busyCut && kinds !== LOG_F[1][2] ? `<p class="mt-2 mb-0 faint small">Steps and outputs: the latest ${LOG_MAX.toLocaleString()}. Download for Excel has every line.</p>` : "");
+        + (L.busyCut && kinds !== LOG_F[1][2] ? `<p class="mt-2 mb-0 faint small">Steps and outputs: the latest ${LOG_MAX}. Download for Excel has every line.</p>` : "");
     return `<div class="card">${h}<p class="mt-0 muted small">Newest first. Steps, alarms, halts, values changed from PLC-Ki: everything PLC-Ki saw in this shift.</p>${bar}${body}</div>`;
   }
 
@@ -296,7 +297,7 @@
   function settingsPage() {
     const c = r.cfg;
     if (!c) return PK.sec("tight rp", r.err ? PK.ui.error(r.err) : PK.ui.loading("tiles"));
-    const admin = PK.state.user && PK.state.user.role === "admin";
+    const admin = PK.can("settings");
     const s = r.draft || c.settings;
     const dis = admin ? "" : "disabled";
     const counterOpts = (sel, kind) => `<option value="">${kind === "good" ? "None: count finished cycles" : "None: quality not counted"}</option>` +

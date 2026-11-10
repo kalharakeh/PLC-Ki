@@ -20,7 +20,8 @@ public sealed record WriteLogEntry(DateTimeOffset Time, string User, string Plc,
     string? Rule = null);
 
 /// <summary>
-/// Changing a value in the PLC from the Tags and Program pages. Administrators only (/api/admin).
+/// Changing a value in the PLC from the Tags and Program pages. Administrators, and technicians on PLCSIM only
+/// (/api/admin; Roles decides, checked in PlantHost.Gate and again here against the freshly confirmed target).
 /// What may be changed is decided in ChangeRules (shared with Hold); in short:
 ///   PLCSIM, confirmed by the TIA helper: inputs, outputs, memory and data block values, also safety inputs and
 ///             values the safety program reads, after "I understand" under the warning.
@@ -42,9 +43,10 @@ public static class WriteEndpoints
         var api = app.MapGroup("/api/admin/write");     // administrators only (UsePlant)
 
         api.MapGet("/check", async (string? symbol, PlcKiOptions opt, ProgramService program, HardwareService hardware, TiaConnection tia, LiveState live,
-            SettingsStore settings, CancellationToken ct) =>
+            SettingsStore settings, HttpContext http, CancellationToken ct) =>
         {
             var p = await PlanAsync(symbol ?? "", opt, program, hardware, tia, live, settings, false, ct);
+            if (p.Refused == null && Roles.ValueChangeRefused(RoleOf(http), p.Target) is { } notYours) p = p with { Refused = notYours };
             return Results.Ok(new
             {
                 symbol,
@@ -64,14 +66,16 @@ public static class WriteEndpoints
         // What this PLC-Ki may change right now, for the top bar of every page. Reads only: it asks the same
         // questions as a change would (minus the ones about one tag) and changes nothing.
         //   values: "none" | "plcsim" | "real" (a real PLC on the allow list); startStop: PLCSIM Start/Stop works
-        api.MapGet("/state", async (PlcKiOptions opt, TiaConnection tia, LiveState live, SettingsStore settings, CancellationToken ct) =>
+        api.MapGet("/state", async (PlcKiOptions opt, TiaConnection tia, LiveState live, SettingsStore settings, HttpContext http, CancellationToken ct) =>
         {
             var plc = opt.Plc.Address.Trim();
             var plcsim = await PlcKi.Server.Hardware.HardwareEndpoints.PlcsimAsync(opt, tia, false, ct);
             bool sim = (await PlcsimConfirm.CheckAsync(opt, tia, live, false, ct)).NotConfirmed == null;   // confirmed, as a change needs
             string values = !opt.Source.Equals("s7", StringComparison.OrdinalIgnoreCase) || opt.Plc.Via == "link" || plc.Length == 0 ? "none"
                 : sim ? "plcsim" : RealAllowed(settings, plc) ? "real" : "none";
-            return Results.Ok(new { values, startStop = plcsim["applies"] is true && plcsim["found"] is true, plc });
+            var role = RoleOf(http);
+            if (values != "none" && Roles.ValueChangeRefused(role, values) != null) values = "none";   // a technician on a real PLC
+            return Results.Ok(new { values, startStop = role == Roles.Admin && plcsim["applies"] is true && plcsim["found"] is true, plc });
         });
 
         api.MapPost("", async (WriteRequest req, PlcKiOptions opt, ProgramService program, HardwareService hardware, TiaConnection tia, LiveState live,
@@ -84,7 +88,7 @@ public static class WriteEndpoints
             var log = lf.CreateLogger("write");
             var p = await PlanAsync(symbol, opt, program, hardware, tia, live, settings, true, ct);   // fresh: PLCSIM confirmed now
 
-            string? refused = p.Refused;
+            string? refused = p.Refused ?? Roles.ValueChangeRefused(RoleOf(http), p.Target);
             if (refused == null && value.Length == 0) refused = "Type the new value.";
             if (refused == null && p.Warning != null && req.Understood != true) refused = p.Warning + " Click \"I understand\" to change it anyway.";
             if (refused == null && p.Target == "real")
@@ -132,6 +136,8 @@ public static class WriteEndpoints
         api.MapGet("/log", (PlantContext ctx, int? max) => Results.Ok(ReadLog(ctx, Math.Clamp(max ?? 50, 1, 500))));
         return app;
     }
+
+    internal static string? RoleOf(HttpContext http) => http.User.FindFirst(PlantHost.RoleClaim)?.Value;
 
     private static async Task<Plan> PlanAsync(string symbol, PlcKiOptions opt, ProgramService program, HardwareService hardware, TiaConnection tia,
         LiveState live, SettingsStore settings, bool fresh, CancellationToken ct)

@@ -7,14 +7,16 @@ public sealed record PlantUser(string Name, string Role, string Hash, string Sal
 
 /// <summary>
 /// The people who may log in, kept in users.json in the data folder. Passwords are stored only as
-/// PBKDF2-SHA256 hashes with a random salt. Two roles:
-///   admin    - everything, including settings and users
-///   operator - all machine views and the assistant, no settings
+/// PBKDF2-SHA256 hashes with a random salt. Three roles (what each may do: <see cref="Roles"/>):
+///   admin      - everything, including settings and users
+///   technician - also notes, documents and values on PLCSIM; no settings, no real PLC
+///   operator   - all machine views and the assistant, no settings
 /// </summary>
 public sealed class UserStore
 {
-    public const string Admin = "admin";
-    public const string Operator = "operator";
+    public const string Admin = Roles.Admin;
+    public const string Technician = Roles.Technician;
+    public const string Operator = Roles.Operator;
     public const int MinPasswordLength = 8;
     private const int Iterations = 210_000;
 
@@ -137,8 +139,9 @@ public sealed class UserStore
     private static string CheckRole(string? role) => role?.Trim().ToLowerInvariant() switch
     {
         Admin => Admin,
+        Technician => Technician,
         Operator => Operator,
-        _ => throw new PlantException("The role is either 'admin' or 'operator'."),
+        _ => throw new PlantException("The role is 'admin', 'technician' or 'operator'."),
     };
 
     private static void CheckPassword(string? password)

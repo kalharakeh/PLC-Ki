@@ -1,5 +1,5 @@
 // Documents: device manuals, electrical drawings and fault lists, for this machine or for every machine.
-// Ask and the Active alarm page look things up in them. Adding and removing is for administrators.
+// Ask and the Active alarm page look things up in them. Technicians and administrators add them; removing is for administrators.
 "use strict";
 
 const PKDocs = (() => {
@@ -7,7 +7,7 @@ const PKDocs = (() => {
 
   const KINDS = [["manual", "Manual"], ["drawing", "Drawing"], ["faults", "Fault list"], ["other", "Other"]];
   const kindName = (k) => (KINDS.find((x) => x[0] === k) || KINDS[3])[1];
-  const isAdmin = () => !!(state.user && state.user.role === "admin");
+  const isAdmin = () => PK.can("docs");     // may add documents and change their details
   const fileUrl = (id, page) => `/api/documents/${encodeURIComponent(id)}/file${page ? "#page=" + page : ""}`;
   const stem = (f) => f.replace(/\.[^.]+$/, "");
 
@@ -105,14 +105,14 @@ const PKDocs = (() => {
             <input type="file" id="doc-file" accept=".pdf,.csv,.tsv,.txt,.md" multiple class="hidden"></div>` : ""}
         <div class="grid two" style="margin-top:${admin ? 22 : 0}px">
           ${group("For this machine", `Only for ${esc(lib.machine)}: its drawings, the leak detector or robot manual of this station.`, mine,
-            admin ? "None yet. Drop the machine's EPLAN drawing or a device manual above." : "None yet. An administrator can add them here.")}
+            admin ? "None yet. Drop the machine's EPLAN drawing or a device manual above." : "None yet. A technician or an administrator can add them here.")}
           ${group("For every machine", "Shared by all machines on this PLC-Ki, such as the SINAMICS list manual.", shared,
             admin ? "None yet. Choose “Every machine” when adding a manual you use everywhere." : "None yet.")}
         </div>
         <div class="mt-5 card"><div class="row" style="align-items:flex-start">
           <span class="ico doc-bi">${icon("shield")}</span>
           <div class="grow"><b>Built in</b><div class="muted small">${builtIn} entries of general knowledge: Siemens CPU, PROFINET, module, safety and SINAMICS drive messages, FANUC robot alarms and IO-Link events. Your own manuals come first when both know a code.</div></div></div>
-          ${admin ? `<details class="doc-folders"><summary>Copy files in instead</summary>
+          ${PK.can("settings") ? `<details class="doc-folders"><summary>Copy files in instead</summary>
             <p class="small muted">PLC-Ki also reads files you copy into these folders on this PC. Press Look for new files after copying.</p>
             <p class="small"><b>This machine</b><br><code>${esc(lib.folders.machine)}</code></p>
             <p class="small"><b>Every machine</b><br><code>${esc(lib.folders.shared)}</code></p>
@@ -185,15 +185,17 @@ const PKDocs = (() => {
     const d = lib.items.find((x) => x.id === id);
     if (!d) return;
     const s = PK.sheet(settingsForm({ title: stem(d.file), kind: d.kind, device: d.device, scopeFixed: true, okText: "Save",
-      extra: `<p class="mt-3 mb-0 faint small">${d.scope === "shared" ? "For every machine" : "For this machine"}. To move it, remove it and add it again.</p>
-        <div class="mt-4 row"><button class="btn red small" type="button" data-remove>Remove from PLC-Ki</button></div>` }));
+      extra: PK.can("settings") ? `<p class="mt-3 mb-0 faint small">${d.scope === "shared" ? "For every machine" : "For this machine"}. To move it, remove it and add it again.</p>
+        <div class="mt-4 row"><button class="btn red small" type="button" data-remove>Remove from PLC-Ki</button></div>`
+        : `<p class="mt-3 mb-0 faint small">${d.scope === "shared" ? "For every machine" : "For this machine"}. Only an administrator can remove it.</p>` }));
     bindSegments(s.el);
     s.el.querySelector("[data-ok]").onclick = async () => {
       try { await api("PATCH", "/api/admin/documents/" + encodeURIComponent(id), { kind: segValue(s.el, "kind"), device: s.el.querySelector("#doc-device").value }); s.close(); toast("Saved."); }
       catch (e) { toast(e.message, "error"); return; }
       await load(); PK.draw();
     };
-    s.el.querySelector("[data-remove]").onclick = async () => {
+    const remove = s.el.querySelector("[data-remove]");
+    if (remove) remove.onclick = async () => {
       s.close();
       if (!(await PK.confirmSheet({ title: `Remove ${stem(d.file)}?`, text: "The file is deleted from PLC-Ki. Ask and the alarm page no longer use it.", ok: "Remove", danger: true }))) return;
       try { await api("DELETE", "/api/admin/documents/" + encodeURIComponent(id)); toast("Removed."); } catch (e) { toast(e.message, "error"); }

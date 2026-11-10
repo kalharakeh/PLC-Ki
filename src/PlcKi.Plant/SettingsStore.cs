@@ -156,6 +156,55 @@ public sealed class SettingsStore
     /// <summary>The port the TIA helper listens on when PLC-Ki starts it on this PC (appsettings.json, not on the settings page).</summary>
     public int TiaPort => _config.GetValue("PlcKi:Tia:Port", 5090);
 
+    /// <summary>
+    /// The page each role opens on when PLC-Ki is opened without a page in the address (review 53), "#/..." or empty
+    /// for Active alarm. Read live: a change works at the next page load, without a restart.
+    /// </summary>
+    public Dictionary<string, string> StartPages() =>
+        Roles.All.ToDictionary(r => r, r => _config[$"Plant:StartPages:{r}"] is { } p && StartPageProblem(p) == null ? p : "");
+
+    /// <summary>How dates, times and numbers are written (review 57): text "3 Nov 2026, 14:02 · 12.5", dot "03.11.2026 · 12,5",
+    /// iso "2026-11-03", us "11/03/2026, 2:02 pm". The page knows how each looks.</summary>
+    public static readonly IReadOnlyList<string> Formats = new[] { "text", "dot", "iso", "us" };
+
+    /// <summary>The plant's format; each login may choose its own. Read live.</summary>
+    public string Format => _config["Plant:Format"] is { } f && Formats.Contains(f) ? f : "text";
+
+    public void SaveFormat(string? format)
+    {
+        if (format == null || !Formats.Contains(format)) throw new PlantException("The format is text, dot, iso or us.");
+        lock (_lock)
+        {
+            var root = Load();
+            Obj(root, "Plant")["Format"] = format;
+            AtomicFile.Save(_ctx.SettingsFile, root.ToJsonString(Json));
+            (_config as IConfigurationRoot)?.Reload();
+        }
+    }
+
+    /// <summary>Why this is not a page address PLC-Ki can open, or null.</summary>
+    public static string? StartPageProblem(string? page) =>
+        string.IsNullOrEmpty(page) || System.Text.RegularExpressions.Regex.IsMatch(page, @"^#/[A-Za-z0-9/_.%~-]{0,120}$") ? null
+            : "A start page is an address inside PLC-Ki that starts with #/, for example #/reports.";
+
+    public void SaveStartPages(IReadOnlyDictionary<string, string?> pages)
+    {
+        foreach (var (role, page) in pages)
+        {
+            if (!Roles.All.Contains(role)) throw new PlantException($"There is no role called '{role}'.");
+            if (StartPageProblem(page) is { } bad) throw new PlantException(bad);
+        }
+        lock (_lock)
+        {
+            var root = Load();
+            var plant = Obj(root, "Plant");
+            var start = Obj(plant, "StartPages");
+            foreach (var (role, page) in pages) start[role] = page ?? "";
+            AtomicFile.Save(_ctx.SettingsFile, root.ToJsonString(Json));
+            (_config as IConfigurationRoot)?.Reload();
+        }
+    }
+
     /// <summary>The storage limits in force. Saved ones that are out of range fall back to the defaults.</summary>
     public RetentionLimits Retention() => RetentionFrom(_config);
 

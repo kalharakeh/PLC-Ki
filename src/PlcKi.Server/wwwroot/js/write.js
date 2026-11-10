@@ -11,12 +11,14 @@
   const { esc, icon, api, toast } = PK;
   const TYPES = new Set(["Bool", "Byte", "Word", "DWord", "LWord", "SInt", "USInt", "Int", "UInt", "DInt", "UDInt", "LInt", "ULInt",
     "Real", "LReal", "Time", "String", "WString"]);
-  const isAdmin = () => !!(PK.state.user && PK.state.user.role === "admin");
+  const isAdmin = () => PK.can("plcsim");     // may change and hold values (on a real PLC only an administrator; the server decides)
   const typeOf = (t) => String(t.datatype || t.type || "").replace(/\[.*$/, "").trim();
 
   /** The small "Change" button next to a live value, or nothing (operators, arrays, structs, unknown types). */
   function button(t) {
     if (!isAdmin() || !TYPES.has(typeOf(t)) || !t.symbol) return "";
+    // A technician only gets the pen while the PLC is confirmed PLCSIM (the server refuses anything else anyway)
+    if (!PK.can("real") && !(PK.state.changes && PK.state.changes.values === "plcsim")) return "";
     return `<button type="button" class="btn plain small write-btn" data-write="${esc(t.symbol)}" data-wtype="${esc(typeOf(t))}" title="Change this value in the PLC" aria-label="Change ${esc(t.symbol)}">${icon("pen")}</button>`;
   }
 
@@ -92,7 +94,7 @@
       }).catch(() => { /* no program search: say nothing */ });
     }
     let boolVal = isBool ? (el.querySelector("[data-b].on") || {}).dataset?.b || null : null;
-    const val = () => isBool ? boolVal : (el.querySelector("#w-val").value || "").trim();
+    const val = () => { const x = isBool ? boolVal : (el.querySelector("#w-val").value || "").trim(); return /^L?Real$/.test(type) ? x.replace(/^(-?\d+),(\d+)$/, "$1.$2") : x; };   // a decimal comma: 12,5 = 12.5
     const why = () => el.querySelector("#w-why").value.trim();
     let acked = () => true;
     const ready = () => !!val() && acked() && (!real || (why().length >= 5 && (el.querySelector("#w-ok").value || "").trim() === check.plc));
@@ -166,7 +168,7 @@
       <div class="row end"><button class="btn gray" data-close>Cancel</button><button class="btn" data-go>Hold</button></div>`);
     const el = s.el, go = el.querySelector("[data-go]");
     let boolVal = isBool ? (el.querySelector("[data-b].on") || {}).dataset?.b || null : null;
-    const val = () => isBool ? boolVal : (el.querySelector("#h-val").value || "").trim();
+    const val = () => { const x = isBool ? boolVal : (el.querySelector("#h-val").value || "").trim(); return /^L?Real$/.test(type) ? x.replace(/^(-?\d+),(\d+)$/, "$1.$2") : x; };   // a decimal comma: 12,5 = 12.5
     let acked = () => true;
     const ready = () => !!val() && acked();
     const update = () => { go.disabled = !ready(); };

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>PLC-Ki login</title>
   <link rel="stylesheet" href="ui.css">
-  <script>try { var t = localStorage.getItem("plcki.theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch (e) { /* private window */ }</script>
+  <script>try { var t = localStorage.getItem("plcki.paint") || localStorage.getItem("plcki.theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch (e) { /* private window */ }</script>
 </head>
 <body>
   <div class="login-wrap">

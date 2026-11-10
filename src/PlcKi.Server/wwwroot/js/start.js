@@ -4,7 +4,7 @@
 
 const PKStart = (() => {
   const { esc, icon, api, state, toast, cmd } = PK;
-  const SEEN = "plcki.getStarted";
+  // "Get started" was seen: kept per login (PK.prefs "getStarted")
   const HIDE = "plcki.hideGuide";
   const store = (s) => ({
     get: (k) => { try { return s.getItem(k); } catch { return null; } },
@@ -63,7 +63,7 @@ const PKStart = (() => {
 
   /** The "Getting started" card at the top of the machine pages, for administrators, until everything needed is done. */
   function card() {
-    if (!state.user || state.user.role !== "admin") return "";
+    if (!PK.can("settings")) return "";
     if (!ready) { readiness().then((r) => r && PK.draw()); return ""; }
     // The disk nearly full: shown to administrators even when everything is set up (Setup › Settings › Storage)
     const disk = ready.disk && ready.disk.low ? `<section class="guide-sec"><div class="wrap"><div class="notice red" role="alert">${icon("info")}
@@ -342,7 +342,7 @@ const PKStart = (() => {
         const p = PKSetup.presets[b.dataset.preset];
         w.tiaMode = p.tiaMode; w.plcVia = p.plcVia; PK.draw();
       });
-      page.querySelectorAll("[data-seen]").forEach((a) => PK.on(a, "click", () => local.set(SEEN, "1")));
+      page.querySelectorAll("[data-seen]").forEach((a) => PK.on(a, "click", () => PK.prefs.set("getStarted", "1")));
       const t = page.querySelector("[data-test]");
       if (t) t.onclick = async () => {
         read(page);
@@ -369,13 +369,13 @@ const PKStart = (() => {
         busy = true; PK.draw();
         try {
           await save(page);
-          if (key === "setup") local.set(SEEN, "1");
+          if (key === "setup") PK.prefs.set("getStarted", "1");
           busy = false;
           PK.go("#/setup/start/" + nextKey);
           if (nextKey === "done") readiness(true).then(PK.draw);
         } catch (e) { busy = false; toast(e, "error"); PK.draw(); }
       };
-      if (key === "done") page.querySelectorAll("[data-restart]").forEach((b) => PK.on(b, "click", () => local.set(SEEN, "1")));
+      if (key === "done") page.querySelectorAll("[data-restart]").forEach((b) => PK.on(b, "click", () => PK.prefs.set("getStarted", "1")));
     },
   });
 
@@ -383,7 +383,7 @@ const PKStart = (() => {
     card, bindCard, readiness,
     /** First visit of an administrator: open Get started once. */
     async firstRun() {
-      if (local.get(SEEN) === "1") return false;
+      if (PK.prefs.get("getStarted") === "1") return false;
       const r = await readiness();
       return !(r && r.settings && r.settings.setupChosen);
     },

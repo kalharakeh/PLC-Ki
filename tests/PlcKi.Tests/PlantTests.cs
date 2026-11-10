@@ -107,6 +107,8 @@ public class PlantTests : IDisposable
         app.MapPost("/api/ask", () => Results.Ok(new { answer = "spent credit" }));
         app.MapDelete("/api/ask/{id}", (string id) => Results.NoContent());
         app.MapPost("/api/watch", () => Results.Ok(new { values = new { } }));
+        app.MapPut("/api/reports/handover", () => Results.Ok(new { saved = true }));
+        app.MapPost("/api/memory/occurrences/{id}/note", (string id) => Results.Ok(new { id }));
         app.MapPlant();
         await app.StartAsync();
         return app;
@@ -160,6 +162,9 @@ public class PlantTests : IDisposable
         Assert.Equal(HttpStatusCode.Unauthorized, (await anon.Send(HttpMethod.Post, "/API/Ask", new { question = "why?" })).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await anon.Send(HttpMethod.Delete, "/api/ask/abc")).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await anon.Send(HttpMethod.Get, "/api/admin/settings")).StatusCode);
+        // Public view is read-only: notes and the handover note need a login too
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anon.Send(HttpMethod.Put, "/api/reports/handover", new { text = "x" })).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anon.Send(HttpMethod.Post, "/api/memory/occurrences/a1/note", new { text = "x" })).StatusCode);
 
         Assert.Equal(HttpStatusCode.OK, (await admin.Send(HttpMethod.Post, "/api/ask", new { question = "why?" })).StatusCode);
     }
@@ -235,6 +240,90 @@ public class PlantTests : IDisposable
         other.HistoryMinutes = 30;
         var ok = await c.Send(HttpMethod.Put, "/api/admin/settings", other);
         Assert.True(ok.IsSuccessStatusCode, await ok.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public void Preferences_are_kept_per_login_and_only_known_small_ones()
+    {
+        Directory.CreateDirectory(_dir);
+        var file = Path.Combine(_dir, "prefs.json");
+        var prefs = new PreferenceStore(file);
+        prefs.Set("Anna", new System.Text.Json.Nodes.JsonObject { ["theme"] = "dark", ["trendTags"] = new System.Text.Json.Nodes.JsonArray("LT101", "TT201") });
+        prefs.Set("ben", new System.Text.Json.Nodes.JsonObject { ["theme"] = "light" });
+        Assert.Equal("dark", (string?)prefs.Get("anna")["theme"]);           // names are not case sensitive
+        Assert.Equal("light", (string?)new PreferenceStore(file).Get("BEN")["theme"]);
+        Assert.Empty(prefs.Get("carl"));
+
+        prefs.Set("anna", new System.Text.Json.Nodes.JsonObject { ["theme"] = null, ["startPage"] = "#/reports" });
+        var anna = prefs.Get("anna");
+        Assert.False(anna.ContainsKey("theme"));                              // null removes a choice
+        Assert.Equal(2, anna.Count);                                          // the others stay
+
+        Assert.Throws<PlantException>(() => prefs.Set("anna", new System.Text.Json.Nodes.JsonObject { ["password"] = "x" }));
+        Assert.Throws<PlantException>(() => prefs.Set("anna", new System.Text.Json.Nodes.JsonObject { ["trendTags"] = new string('x', 9000) }));
+
+        prefs.Remove("anna");
+        Assert.Empty(new PreferenceStore(file).Get("anna"));
+        Assert.Equal("light", (string?)prefs.Get("ben")["theme"]);
+
+        File.WriteAllText(file, "{ broken");
+        Assert.Empty(new PreferenceStore(file).Get("ben"));                  // a broken file does not stop PLC-Ki
+    }
+
+    [Fact]
+    public async Task Each_login_gets_its_own_choices_and_start_page()
+    {
+        await using var app = await Start(publicView: true);
+        var admin = new Client(app.GetTestClient());
+        Assert.True((await admin.Send(HttpMethod.Post, "/api/auth/setup", new { name = "anna", password = AdminPw })).IsSuccessStatusCode);
+        await admin.Send(HttpMethod.Post, "/api/admin/users", new { name = "ben", password = OperatorPw, role = "operator" });
+        var ben = new Client(app.GetTestClient());
+        await ben.Send(HttpMethod.Post, "/api/auth/login", new { name = "ben", password = OperatorPw });
+
+        Assert.Equal(HttpStatusCode.OK, (await admin.Send(HttpMethod.Put, "/api/me/prefs", new { theme = "dark" })).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await ben.Send(HttpMethod.Put, "/api/me/prefs", new { theme = "light", startPage = "#/reports" })).StatusCode);
+        Assert.Contains("\"dark\"", await (await admin.Send(HttpMethod.Get, "/api/me/prefs")).Content.ReadAsStringAsync());
+        Assert.Contains("\"light\"", await (await ben.Send(HttpMethod.Get, "/api/me/prefs")).Content.ReadAsStringAsync());
+        Assert.Equal(HttpStatusCode.BadRequest, (await ben.Send(HttpMethod.Put, "/api/me/prefs", new { role = "admin" })).StatusCode);
+
+        // Logged out (public view): no choices on the server, the page keeps them in the browser
+        var anon = new Client(app.GetTestClient());
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anon.Send(HttpMethod.Get, "/api/me/prefs")).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anon.Send(HttpMethod.Put, "/api/me/prefs", new { theme = "dark" })).StatusCode);
+
+        // Start page per role: administrators set it, it comes with the login state
+        Assert.Equal(HttpStatusCode.Forbidden, (await ben.Send(HttpMethod.Put, "/api/admin/start-pages", new Dictionary<string, string> { ["operator"] = "" })).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await admin.Send(HttpMethod.Put, "/api/admin/start-pages", new Dictionary<string, string> { ["operator"] = "#/station/Mixer", ["technician"] = "#/alarm" })).StatusCode);
+        Assert.Contains("#/station/Mixer", await (await ben.Send(HttpMethod.Get, "/api/auth/state")).Content.ReadAsStringAsync());
+        Assert.Equal(HttpStatusCode.BadRequest, (await admin.Send(HttpMethod.Put, "/api/admin/start-pages", new Dictionary<string, string> { ["operator"] = "https://evil.example" })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await admin.Send(HttpMethod.Put, "/api/admin/start-pages", new Dictionary<string, string> { ["shiftlead"] = "#/reports" })).StatusCode);
+
+        // A deleted login takes its choices along: a new "ben" starts fresh
+        await admin.Send(HttpMethod.Delete, "/api/admin/users/ben");
+        await admin.Send(HttpMethod.Post, "/api/admin/users", new { name = "ben", password = OperatorPw, role = "operator" });
+        var newBen = new Client(app.GetTestClient());
+        await newBen.Send(HttpMethod.Post, "/api/auth/login", new { name = "ben", password = OperatorPw });
+        Assert.Equal("{}", (await (await newBen.Send(HttpMethod.Get, "/api/me/prefs")).Content.ReadAsStringAsync()).Trim());
+    }
+
+    [Fact]
+    public async Task The_plant_format_is_set_by_an_administrator_and_read_live()
+    {
+        await using var app = await Start();
+        var admin = new Client(app.GetTestClient());
+        await admin.Send(HttpMethod.Post, "/api/auth/setup", new { name = "anna", password = AdminPw });
+        await admin.Send(HttpMethod.Post, "/api/admin/users", new { name = "ben", password = OperatorPw, role = "operator" });
+        var ben = new Client(app.GetTestClient());
+        await ben.Send(HttpMethod.Post, "/api/auth/login", new { name = "ben", password = OperatorPw });
+        var store = app.Services.GetRequiredService<SettingsStore>();
+
+        Assert.Equal("text", store.Format);                                   // "3 Nov 2026, 14:02" until chosen
+        Assert.Equal(HttpStatusCode.OK, (await admin.Send(HttpMethod.Put, "/api/admin/format", new { format = "dot" })).StatusCode);
+        Assert.Equal("dot", store.Format);                                    // no restart
+        Assert.Equal(HttpStatusCode.BadRequest, (await admin.Send(HttpMethod.Put, "/api/admin/format", new { format = "dd/mm" })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await ben.Send(HttpMethod.Put, "/api/admin/format", new { format = "us" })).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await ben.Send(HttpMethod.Put, "/api/me/prefs", new { format = "us" })).StatusCode);   // their own
+        Assert.Equal("dot", store.Format);
     }
 }
 

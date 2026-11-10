@@ -150,7 +150,7 @@
     PK.state.ask = s;
     document.documentElement.classList.toggle("ask-off", !s.enabled);
     if (s.enabled) return;
-    const admin = PK.state.user && PK.state.user.role === "admin";
+    const admin = PK.can("settings");
     const off = $("ask-off");
     const fix = s.code === "nokey"
       ? (admin ? "Add the key under Setup, Settings (Assistant). PLC-Ki restarts by itself, then Ask works." : "Ask an administrator to add a Claude key to PLC-Ki.")

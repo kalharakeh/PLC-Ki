@@ -85,6 +85,95 @@ const PK = (() => {
 
   // ---- shared state ----
   const state = { status: null, model: null, values: null, info: null, user: null, program: null, programError: null, lastOk: 0, jobs: [] };
+
+  // ---- What this login may do (review 55). The server checks the same (Roles.cs); this only hides what would be refused.
+  //   settings: Setup, logins, imports, PLCSIM Start/Stop · plcsim: change and hold values on PLCSIM
+  //   real: change values on a real PLC · docs: add documents and change their details · notes: alarm and handover notes
+  const ROLE_CAN = {
+    admin: ["settings", "plcsim", "real", "docs", "notes"],
+    technician: ["plcsim", "docs", "notes"],
+    operator: ["notes"],
+  };
+  const can = (what) => !!(state.user && (ROLE_CAN[state.user.role] || []).includes(what));
+  const ROLE_TITLE = { admin: "Administrator", technician: "Technician", operator: "Operator" };
+  const roleTitle = (role) => ROLE_TITLE[role] || "Operator";
+
+  // ---- Choices per login (review 52): saved on the server, so they follow the person to another PC or a phone.
+  // Logged out (public view) they stay in this browser under the old keys, as before. A login's choices are also
+  // cached in this browser ("plcki.prefs.<name>"), apart from the logged-out copy, so one person never gets another's.
+  const LEGACY = { theme: "plcki.theme", screen: "plcki.screen", trendTags: "plcki.trendTags", timeline: "pk.timeline",
+    netFilter: "plcki.netFilter", getStarted: "plcki.getStarted", handoverSeen: "pk.handover.seen" };
+  const JSON_PREFS = new Set(["screen", "trendTags", "alarmSound", "format"]);
+  const ls = {
+    get: (k) => { try { return localStorage.getItem(k); } catch { return null; } },
+    set: (k, v) => { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch { /* private window */ } },
+  };
+  let mine = null;            // this login's choices; null while logged out
+  let prefsOut = {}, prefsTimer = null;
+  const prefsCache = () => "plcki.prefs." + state.user.name.toLowerCase();
+  function readLocal(key) {
+    const raw = ls.get(LEGACY[key] || "plcki." + key);
+    if (raw == null) return undefined;
+    if (!JSON_PREFS.has(key)) return raw;
+    try { return JSON.parse(raw); } catch { return undefined; }
+  }
+  const writeLocal = (key, v) => ls.set(LEGACY[key] || "plcki." + key, v == null ? null : JSON_PREFS.has(key) ? JSON.stringify(v) : String(v));
+  function sendPrefs(keepalive) {
+    clearTimeout(prefsTimer); prefsTimer = null;
+    const body = prefsOut; prefsOut = {};
+    if (!Object.keys(body).length) return;
+    if (keepalive) { fetch("/api/me/prefs", { method: "PUT", keepalive: true, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).catch(() => {}); return; }
+    api("PUT", "/api/me/prefs", body).catch(() => { prefsOut = { ...body, ...prefsOut }; });   // tried again with the next change
+  }
+  const prefs = {
+    /** This login's choice, or this browser's when logged out; dflt when there is none. */
+    get(key, dflt) { const v = mine ? mine[key] : readLocal(key); return v === undefined || v === null ? dflt : v; },
+    /** null removes the choice (back to the default). */
+    set(key, v) {
+      if (v === undefined) v = null;
+      if (!mine) { writeLocal(key, v); return; }
+      if (v === null) delete mine[key]; else mine[key] = v;
+      ls.set(prefsCache(), JSON.stringify(mine));
+      prefsOut[key] = v;
+      clearTimeout(prefsTimer); prefsTimer = setTimeout(() => sendPrefs(false), 500);
+    },
+    /** True when the choices are kept for the login (and follow the person). */
+    get perLogin() { return !!mine; },
+  };
+  window.addEventListener("pagehide", () => { if (prefsTimer) sendPrefs(true); });
+  async function loadPrefs() {
+    if (!state.user) return;
+    let cached = null;
+    try { cached = JSON.parse(ls.get(prefsCache()) || "null"); } catch { /* none */ }
+    let server = null;
+    try { server = await api("GET", "/api/me/prefs"); } catch { /* PLC-Ki not answering: this browser's copy */ }
+    mine = server || cached || {};
+    // The first login on this browser after the update takes the browser's old choices along, once. Later logins
+    // (another person on a shared PC) start from their own, never from what is in this browser.
+    if (server && !ls.get("plcki.prefsMoved")) {
+      if (!Object.keys(server).length) {
+        const up = {};
+        for (const k of Object.keys(LEGACY)) { const v = readLocal(k); if (v !== undefined) up[k] = v; }
+        if (Object.keys(up).length) { try { mine = await api("PUT", "/api/me/prefs", up); } catch { mine = up; } }
+      }
+      ls.set("plcki.prefsMoved", "1");
+    }
+    ls.set(prefsCache(), JSON.stringify(mine));
+    document.dispatchEvent(new Event("pk:prefs"));     // pages that read a choice at load read it again
+  }
+  /** Where this login starts: its own choice, else its role's (Setup, Settings), else Active alarm. */
+  const PAGE = /^#\/[A-Za-z0-9/_.%~-]{0,120}$/;
+  const startPage = () => [prefs.get("startPage", ""), state.roleStart].find((p) => typeof p === "string" && PAGE.test(p)) || "#/alarm";
+  /** What a start page can be: the main pages (not Setup) and each station. [[address, label]] */
+  function startChoices(also) {
+    const out = [...document.querySelectorAll("#nav a[data-route]")].filter((a) => !a.classList.contains("admin-only"))
+      .map((a) => [a.getAttribute("href"), (a.title || a.textContent).split(":")[0].trim()]);
+    const st = typeof PKStations !== "undefined" && state.status ? PKStations.list(state.status).stations : [];
+    st.filter((x) => x.key).forEach((x) => out.push([PKStations.href(x.key), "Station: " + x.name]));
+    for (const h of also || []) if (h && !out.some(([v]) => v === h)) out.push([h, h.replace(/^#\//, "")]);    // a saved page not listed now
+    return out;
+  }
+  const startLabel = (h) => (startChoices([h]).find(([v]) => v === h) || [h, h])[1];
   const views = {};
   let current = null;       // { name, view, params }
   let lastHtml = "";
@@ -169,7 +258,6 @@ const PK = (() => {
     timeline({ spans, from, to, marks = [], sel = -1, label = "Machine state over time" }) {
       const a = new Date(from).getTime(), b = new Date(to).getTime(), len = Math.max(1, b - a);
       const at = (t) => ((new Date(t).getTime() - a) / len * 100);
-      const hm = (t) => { const d = new Date(t); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
       const days = len > 36 * 3600000;
       const dayName = (t) => { const d = new Date(t); return `${["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d.getDay()]} ${d.getDate()}`; };
       const segs = spans.map((s) => {
@@ -296,7 +384,7 @@ const PK = (() => {
     window.scrollTo(0, 0);
     showAccess();
     showHandover();
-    if (state.user && state.user.role === "admin" && (!state.changes || Date.now() - state.changes.at > 30000)) loadChanges();
+    if (can("plcsim") && (!state.changes || Date.now() - state.changes.at > 30000)) loadChanges();
     setTitle();
   }
 
@@ -305,7 +393,7 @@ const PK = (() => {
   // Operators and visitors can never change anything, so they need no question.
   let changesBusy = false;
   async function loadChanges() {
-    if (changesBusy || !state.user || state.user.role !== "admin") return;
+    if (changesBusy || !can("plcsim")) return;
     changesBusy = true;
     try { state.changes = { ...(await api("GET", "/api/admin/write/state")), at: Date.now() }; }
     catch { /* keeps the last answer */ }
@@ -321,7 +409,7 @@ const PK = (() => {
   function access(name = current ? current.name : "alarm") {
     const reads = (text) => ({ badge: "Reads only", short: "Reads only", level: "", text });
     if (!state.user) return reads("Without a login, PLC-Ki only reads the PLC.");
-    if (state.user.role !== "admin") return reads("With an operator login, PLC-Ki only reads the PLC.");
+    if (!can("plcsim")) return reads("With an operator login, PLC-Ki only reads the PLC.");
     const ch = state.changes;
     if (!ch) return { badge: null, short: null, level: "", text: "" };
     const plc = ch.plc || "the PLC";
@@ -336,8 +424,9 @@ const PK = (() => {
     else if (name === "plc" && ch.startStop && !["racks", "diagnostics"].includes((current && current.params[0]) || "")) a = { badge: "Can start and stop PLCSIM", short: "Start/Stop", level: "except",
       text: "Start and Stop on this page switch the PLCSIM CPU, after you confirm. A real PLC is never started or stopped." };
     else a = reads("This page only reads the PLC."
-      + (ch.values === "plcsim" ? " On Tags and Program, administrators can change values on PLCSIM."
-        : ch.values === "real" ? ` On Tags and Program, administrators can change values on the real PLC ${plc}.` : ""));
+      + (ch.values === "plcsim" ? " On Tags and Program, you can change values on PLCSIM."
+        : ch.values === "real" ? ` On Tags and Program, administrators can change values on the real PLC ${plc}.`
+        : !can("real") && ch.plc ? " A technician login changes values on PLCSIM only." : ""));
     // A real PLC that may be changed is said on every page, in amber
     if (ch.values === "real") { a.badge = `Changes allowed on the real PLC ${plc}`; a.short = "Real PLC"; a.level = "real"; }
     return a;
@@ -572,11 +661,11 @@ const PK = (() => {
     if (!bar) return;
     const list = (!stale && state.status && state.status.notices) || [];
     const ho = handoverShown();     // the last shift's handover note: one entry in the same strip (review 47)
-    const admin = state.user && state.user.role === "admin";
+    const admin = can("settings");
     const html = list.map((n) => {
       const items = n.items || [];
       const shown = items.slice(0, 4).map((i) => `<span class="mono">${esc(i)}</span>`).join(", ") + (items.length > 4 ? `, and ${items.length - 4} more` : "");
-      const link = n.link && (n.kind !== "program" || admin)
+      const link = n.link && (n.kind !== "program" || can("settings"))
         ? `<a class="btn gray small" href="${esc(n.link)}">${n.kind === "program" ? "Import again" : "Show"}</a>` : "";
       const who = n.kind === "program" && !admin ? " Tell an administrator." : "";
       return `<div class="notice gold notice-strip" role="status" data-kind="${esc(n.kind)}">${icon(n.kind === "program" ? "file" : "warn")}
@@ -604,7 +693,7 @@ const PK = (() => {
   function cpuSince(c) {
     if (!c || !c.since) return "";
     const d = new Date(c.since), today = d.toDateString() === new Date().toDateString();
-    return (c.atStart ? "since at least " : "since ") + (today ? `${pad(d.getHours())}:${pad(d.getMinutes())}` : date(c.since));
+    return (c.atStart ? "since at least " : "since ") + (today ? hm(d) : date(c.since));
   }
 
   /** The red STOP chip next to the connection: only for a mode that was really read and is not RUN. */
@@ -668,8 +757,25 @@ const PK = (() => {
   }
 
   // ---- This screen: alert on new alarms, keep the screen on. Saved per browser. ----
-  const screenOpt = (() => { try { return JSON.parse(localStorage.getItem("plcki.screen") || "{}"); } catch { return {}; } })();
-  const saveScreenOpt = () => { try { localStorage.setItem("plcki.screen", JSON.stringify(screenOpt)); } catch { /* private window */ } };
+  // Sound, notices and spacing follow the login; "keep this screen on" belongs to the device, so it stays in this browser.
+  // A screen set to stay on before the update keeps it: until "plcki.awake" is written, it is read from the old "plcki.screen".
+  const awakeHere = () => {
+    const a = ls.get("plcki.awake");
+    if (a != null) return a === "1";
+    try { return !!(JSON.parse(ls.get("plcki.screen") || "{}") || {}).awake; } catch { return false; }
+  };
+  const screenOpt = {};
+  const readScreenOpt = () => {
+    for (const k of Object.keys(screenOpt)) delete screenOpt[k];
+    Object.assign(screenOpt, prefs.get("screen", {}));
+    screenOpt.awake = awakeHere();
+  };
+  readScreenOpt();
+  const saveScreenOpt = () => {
+    const { awake, ...rest } = screenOpt;
+    ls.set("plcki.awake", awake ? "1" : "0");
+    prefs.set("screen", rest);
+  };
 
   // ---- Spacing (item 36): Compact for control-room PCs, Touch for tablets and gloves. "auto" is Touch on a touch screen. ----
   const coarse = window.matchMedia ? matchMedia("(pointer: coarse)") : { matches: false, addEventListener() {} };
@@ -680,14 +786,32 @@ const PK = (() => {
   }
   applyDensity();
   coarse.addEventListener("change", applyDensity);
+  // Which alarms beep or show a notice (review 56), kept per login: per severity and per station.
+  //   { fault: "all" | "notice" | "none", warning: same, quiet: [station keys] }
+  //   all = beep and notice (each as switched on), notice = a notice only, none = nothing. Default: all, as before.
+  const soundRule = () => ({ fault: "all", warning: "all", quiet: [], ...prefs.get("alarmSound", {}) });
+  const isWarning = (a) => String(a.severity || "").toUpperCase() === "WARNING";
+  /** "all", "notice" or null (nothing) for one alarm. */
+  function alarmWants(a, rule = soundRule()) {
+    const level = isWarning(a) ? rule.warning : rule.fault;
+    if (level === "none") return null;
+    if ((rule.quiet || []).length && typeof PKStations !== "undefined" && state.status) {
+      const at = PKStations.list(state.status).stations.filter((s) => s.alarms.some((x) => x.id === a.id));
+      if (at.length && at.every((s) => rule.quiet.includes(s.key))) return null;     // only at quiet stations
+    }
+    return level === "notice" ? "notice" : "all";
+  }
   let seenAlarms = null;
   function alertNew(al) {
     if (!state.status || Date.now() - state.lastOk > 5000) return;
     const ids = new Set(al.map((a) => a.id));
-    const fresh = seenAlarms ? al.filter((a) => !seenAlarms.has(a.id)) : [];
+    const news = seenAlarms ? al.filter((a) => !seenAlarms.has(a.id)) : [];
     seenAlarms = ids;
+    const rule = soundRule();
+    const fresh = news.filter((a) => alarmWants(a, rule));
     if (!fresh.length) return;
-    if (screenOpt.sound) beep(fresh.some((a) => a.severity === "FAULT"));
+    const beeps = fresh.filter((a) => alarmWants(a, rule) === "all");
+    if (screenOpt.sound && beeps.length) beep(beeps.some((a) => !isWarning(a)));
     if (screenOpt.notify && "Notification" in window && Notification.permission === "granted") {
       const a = fresh[0];
       try { const n = new Notification(`${a.severity} ${a.id}: ${a.text}`, { body: state.status.machine || "PLC-Ki", tag: "plcki-" + a.id }); n.onclick = () => { window.focus(); go("#/alarm"); }; } catch { /* not allowed here */ }
@@ -701,7 +825,9 @@ const PK = (() => {
     const was = seenStop;
     seenStop = !!c;
     if (!c || was !== false) return;
-    if (screenOpt.sound) beep(true);
+    const level = soundRule().fault;      // STOP counts as a fault
+    if (level === "none") return;
+    if (screenOpt.sound && level === "all") beep(true);
     if (screenOpt.notify && "Notification" in window && Notification.permission === "granted") {
       try {
         const n = new Notification(`The PLC is in ${c.word || "STOP"}`, { body: `${state.status.machine || "PLC-Ki"}: the program is not running.`, tag: "plcki-cpu" });
@@ -768,10 +894,14 @@ const PK = (() => {
   const sysDark = window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : { matches: false, addEventListener() {} };
   const themeChoice = () => document.documentElement.dataset.theme || "auto";
   const darkNow = () => themeChoice() === "dark" || (themeChoice() === "auto" && sysDark.matches);
-  function setTheme(t) {
+  function applyTheme(t) {
     if (t === "auto") delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = t;
-    try { t === "auto" ? localStorage.removeItem("plcki.theme") : localStorage.setItem("plcki.theme", t); } catch { /* private window */ }
+    ls.set("plcki.paint", t === "auto" ? null : t);     // the first paint of the next page load (index.html), before the login is known
     showTheme();
+  }
+  function setTheme(t) {
+    prefs.set("theme", t === "auto" ? null : t);
+    applyTheme(t);
   }
   function showTheme() {
     const b = $("theme-btn");
@@ -783,6 +913,19 @@ const PK = (() => {
   }
   if (sysDark.addEventListener) sysDark.addEventListener("change", showTheme);
 
+  /** "Which alarms" in the sound sheet: faults and warnings each beep, notice only or nothing; stations kept quiet. */
+  function soundRulesHtml() {
+    const r = soundRule();
+    const pick = (key, label) => `<label class="field small">${label}<select data-sound="${key}">${[["all", "Beep"], ["notice", "Notice only"], ["none", "Nothing"]]
+      .map(([v, l]) => `<option value="${v}" ${r[key] === v ? "selected" : ""}>${l}</option>`).join("")}</select></label>`;
+    const stations = typeof PKStations !== "undefined" && state.status ? PKStations.list(state.status).stations.filter((s) => s.key) : [];
+    const quiet = stations.length > 1 ? `<details class="quiet-st"${(r.quiet || []).length ? " open" : ""}><summary>Quiet stations</summary>
+      <p class="muted small m-0">No beep or notice for alarms that only concern these stations. Alarms of the whole machine always count.</p>
+      ${stations.map((s) => `<label class="row small"><input type="checkbox" data-quiet="${esc(s.key)}" ${(r.quiet || []).includes(s.key) ? "checked" : ""}> ${esc(s.name)}</label>`).join("")}</details>` : "";
+    return `<div class="opt-row" style="cursor:default;flex-wrap:wrap"><span class="grow"><b>Which alarms</b><br><span class="muted small">For example warnings silent and faults beep. Beep also shows a notice when notices are on. A CPU STOP counts as a fault.</span></span>
+      <div class="sound-rules">${pick("fault", "Faults")}${pick("warning", "Warnings")}</div>${quiet}</div>`;
+  }
+
   function screenSheet() {
     const secure = window.isSecureContext;
     const canNotify = secure && "Notification" in window;
@@ -791,13 +934,20 @@ const PK = (() => {
       <span><b>${esc(title)}</b><br><span class="muted small">${esc(ok ? text : why)}</span></span></label>`;
     const notHere = "Not possible on this connection: the browser allows it only on the PLC-Ki PC itself (localhost) or over https.";
     const s = sheet(`<span class="eyebrow">This screen</span><h2>Alarm sound and screen</h2>
-      <p class="m-0 muted">Only for this browser on this device. Nothing here changes the machine.</p>
+      <p class="m-0 muted">${prefs.perLogin ? `Saved for ${esc(state.user.name)}, on every device you log in on. "Keep this screen on" is for this device only.` : "Only for this browser on this device."} Nothing here changes the machine.</p>
       <div class="gap-3 stack">
         ${row("sound", "Beep when a new alarm comes", "A short tone: three beeps for a fault, one for a warning. Leave this page open in a tab.", true, "")}
         ${row("notify", "Show a notice when a new alarm comes", "A message from the browser, also when PLC-Ki is in a background tab.", canNotify, notHere)}
         ${row("awake", "Keep this screen on", "For a screen on the line: the display does not go dark while this page is open.", canWake, notHere)}
         <div class="opt-row" style="cursor:default"><span class="grow"><b>Screen colours</b><br><span class="muted small">Dark suits a wall screen in a bright hall.</span></span>
           ${ui.choice("Screen colours", [["auto", "Like this PC"], ["light", "Light"], ["dark", "Dark"]].map(([k, l]) => ({ label: l, on: themeChoice() === k, data: { "data-theme-set": k } })))}</div>
+        ${soundRulesHtml()}
+        <label class="opt-row" style="cursor:default;flex-wrap:wrap"><span class="grow"><b>Dates and numbers</b><br><span class="muted small">How times, dates and decimals are written on every page.</span></span>
+          <select id="fmt-pick" class="start-sel" aria-label="Dates and numbers"><option value="">As for this plant: ${esc(FORMATS[(state.info && state.info.format) || "text"] ? FORMATS[(state.info && state.info.format) || "text"].label : FORMATS.text.label)}</option>
+            ${Object.entries(FORMATS).map(([k, f]) => `<option value="${k}" ${prefs.get("format", "") === k ? "selected" : ""}>${esc(f.label)}</option>`).join("")}</select></label>
+        ${state.user ? `<label class="opt-row" style="cursor:default;flex-wrap:wrap"><span class="grow"><b>Start page</b><br><span class="muted small">Where PLC-Ki opens for you when no page is in the address. A link or a bookmark still opens its own page.</span></span>
+          <select id="start-page" class="start-sel" aria-label="Start page"><option value="">As for ${esc(roleTitle(state.user.role).toLowerCase())}s: ${esc(startLabel(state.roleStart || "#/alarm"))}</option>
+            ${startChoices([prefs.get("startPage", "")]).map(([h, l]) => `<option value="${esc(h)}" ${prefs.get("startPage", "") === h ? "selected" : ""}>${esc(l)}</option>`).join("")}</select></label>` : ""}
         <div class="opt-row" style="cursor:default"><span class="grow"><b>Spacing</b><br><span class="muted small">Compact fits more on a control-room PC. Touch makes buttons bigger for a tablet or gloves.</span></span>
           ${ui.choice("Spacing", [["auto", "Like this device"], ["compact", "Compact"], ["touch", "Touch"]].map(([k, l]) => ({ label: l, on: densityChoice() === k, data: { "data-density-set": k } })))}</div>
       </div>
@@ -814,6 +964,18 @@ const PK = (() => {
       if (key === "sound" && box.checked) beep(false);
     });
     s.el.querySelector("[data-test-beep]").onclick = () => beep(true);
+    const fp = s.el.querySelector("#fmt-pick");
+    fp.onchange = () => { prefs.set("format", fp.value || null); draw(); toast("Saved: " + date(Date.now()) + "."); };
+    s.el.querySelectorAll("[data-sound]").forEach((sel) => sel.onchange = () => { const r = soundRule(); r[sel.dataset.sound] = sel.value; prefs.set("alarmSound", r); });
+    s.el.querySelectorAll("[data-quiet]").forEach((box) => box.onchange = () => {
+      const r = soundRule();
+      const q = new Set(r.quiet || []);
+      if (box.checked) q.add(box.dataset.quiet); else q.delete(box.dataset.quiet);
+      r.quiet = [...q];
+      prefs.set("alarmSound", r);
+    });
+    const sp = s.el.querySelector("#start-page");
+    if (sp) sp.onchange = () => { prefs.set("startPage", sp.value || null); toast("Start page saved."); };
     s.el.querySelectorAll("[data-theme-set]").forEach((b) => b.onclick = () => {
       setTheme(b.dataset.themeSet);
       s.el.querySelectorAll("[data-theme-set]").forEach((x) => { x.classList.toggle("on", x === b); x.setAttribute("aria-pressed", x === b); });
@@ -828,7 +990,7 @@ const PK = (() => {
     try {
       const r = await fetch("/api/status", { cache: "no-store" });
       if (r.status === 401) { location.href = "/login.html?next=" + encodeURIComponent("/" + location.hash); return; }
-      if (r.ok) { state.status = await r.json(); state.lastOk = Date.now(); }
+      if (r.ok) { state.status = localTexts(await r.json()); state.lastOk = Date.now(); }
       const run = r.headers.get("X-PlcKi-Run");
       if (run && state.run && run !== state.run) {
         // PLC-Ki was restarted (maybe with another model or program): start this page fresh
@@ -844,7 +1006,7 @@ const PK = (() => {
 
   async function pollValues() {
     if (current && current.view.needsValues) {
-      try { state.values = await api("GET", "/api/values"); } catch { /* next time */ }
+      try { state.values = localTexts(await api("GET", "/api/values")); } catch { /* next time */ }
       draw();
     }
     setTimeout(pollValues, 2000);
@@ -852,7 +1014,7 @@ const PK = (() => {
 
   const refreshing = new Set();
   async function pollJobs() {
-    if (state.user && state.user.role === "admin") {
+    if (can("settings")) {
       try {
         state.jobs = await api("GET", "/api/admin/jobs");
         // A "Refresh from TIA" finished (also the one the block generator starts by itself): show the new program
@@ -1103,22 +1265,77 @@ const PK = (() => {
     return out.join("");
   }
 
-  // ---- dates: one format everywhere, "3 Nov 2026, 14:02" (no ambiguous 03/11) ----
+  // ---- Dates, times and numbers: one format everywhere (review 57). The plant picks one (Setup, Settings), each
+  // login may pick its own (Alarm sound and screen). "text" is the default: "3 Nov 2026, 14:02", no ambiguous 03/11.
   const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const pad = (n) => String(n).padStart(2, "0");
+  const FORMATS = {
+    text: { h12: false, order: "text", comma: false, label: "3 Nov 2026, 14:02 · 12.5" },
+    dot: { h12: false, order: "dot", comma: true, label: "03.11.2026, 14:02 · 12,5" },
+    iso: { h12: false, order: "iso", comma: false, label: "2026-11-03 14:02 · 12.5" },
+    us: { h12: true, order: "us", comma: false, label: "11/03/2026, 2:02 pm · 12.5" },
+  };
+  /** The format in use: this login's choice, else the plant's, else "text". */
+  const fmtKey = () => { const k = prefs.get("format", "") || (state.info && state.info.format) || "text"; return FORMATS[k] ? k : "text"; };
+  const fmt = () => FORMATS[fmtKey()];
+  /** "14:02", or "2:02 pm" with the 12-hour clock */
+  const hm = (t, secs) => {
+    const d = new Date(t);
+    if (isNaN(d)) return "";
+    const s = secs ? ":" + pad(d.getSeconds()) : "";
+    if (!fmt().h12) return `${pad(d.getHours())}:${pad(d.getMinutes())}${s}`;
+    const h = d.getHours() % 12 || 12;
+    return `${h}:${pad(d.getMinutes())}${s} ${d.getHours() < 12 ? "am" : "pm"}`;
+  };
   /** "14:02:13" */
-  const clock = (t) => { const d = new Date(t); return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; };
-  /** "3 Nov 2026" or, with time, "3 Nov 2026, 14:02" */
+  const clock = (t) => hm(t, true);
+  /** The day without the year: "3 Nov", "03.11.", "11-03", "11/03" */
+  const dayMonth = (t) => {
+    const d = new Date(t), o = fmt().order;
+    return o === "dot" ? `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.` : o === "iso" ? `${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+      : o === "us" ? `${pad(d.getMonth() + 1)}/${pad(d.getDate())}` : `${d.getDate()} ${MONTHS[d.getMonth()]}`;
+  };
+  /** "Tue 3 Nov" */
+  const weekdayDay = (t) => `${WEEKDAYS[new Date(t).getDay()]} ${dayMonth(t)}`;
+  const joint = () => (fmt().order === "iso" ? " " : ", ");
+  /** "3 Nov 2026" or, with time, "3 Nov 2026, 14:02" (in the format in use) */
   const date = (t, withTime = true) => {
     const d = new Date(t);
     if (isNaN(d)) return "";
-    return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}` + (withTime ? `, ${pad(d.getHours())}:${pad(d.getMinutes())}` : "");
+    const o = fmt().order, y = d.getFullYear(), m = pad(d.getMonth() + 1), day = pad(d.getDate());
+    const ds = o === "dot" ? `${day}.${m}.${y}` : o === "iso" ? `${y}-${m}-${day}` : o === "us" ? `${m}/${day}/${y}` : `${d.getDate()} ${MONTHS[d.getMonth()]} ${y}`;
+    return ds + (withTime ? joint() + hm(d) : "");
   };
   /** "14:02:13" today, "3 Nov, 14:02" before */
   const when = (t) => {
     const d = new Date(t), now = new Date();
-    return d.toDateString() === now.toDateString() ? clock(d) : `${d.getDate()} ${MONTHS[d.getMonth()]}, ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    return d.toDateString() === now.toDateString() ? clock(d) : dayMonth(d) + joint() + hm(d);
   };
+  /** A number for people: 12.5 or 12,5. digits: fixed decimals (optional). */
+  const num = (x, digits) => {
+    if (x == null || x === "" || !isFinite(x)) return "–";
+    const s = digits == null ? String(Number(x)) : Number(x).toFixed(digits);
+    return fmt().comma ? s.replace(".", ",") : s;
+  };
+  /**
+   * A value text from the server ("12.5 bar") in the format in use ("12,5 bar"). Only a whole text that is one
+   * decimal number with an optional unit is changed; addresses (%I4.2), IPs, versions and sentences stay as they are.
+   */
+  const VALUE_TEXT = /^(-?\d+)\.(\d+)((?: ?[^\d.,:\s][^\d.,:]{0,11})?)$/;
+  const numText = (s) => (typeof s === "string" && fmt().comma ? s.replace(VALUE_TEXT, "$1,$2$3") : s);
+  /** Every "text" of a value from /api/values or /api/status, in place. */
+  function localTexts(o, depth = 0) {
+    if (!fmt().comma || !o || typeof o !== "object" || depth > 12) return o;
+    if (Array.isArray(o)) { o.forEach((x) => localTexts(x, depth + 1)); return o; }
+    const textual = typeof o.type === "string" && /string|char/i.test(o.type);     // a String tag's text is not a number
+    for (const k of Object.keys(o)) {
+      const v = o[k];
+      if (typeof v === "string") { if (k === "text" && !textual) o[k] = numText(v); }
+      else if (v && typeof v === "object") localTexts(v, depth + 1);
+    }
+    return o;
+  }
 
   const ago = (t) => {
     const s = Math.round((Date.now() - new Date(t).getTime()) / 1000);
@@ -1169,15 +1386,14 @@ const PK = (() => {
   function plainFor(message, where) {
     const m = String((message && message.message) || message || "");
     const p = plainProgram(m) || plainHttp(m) || ((where && where.plc) || ABOUT_A_LINK.test(m) ? plain(m, where) : { text: m, todo: "" });
-    const admin = state.user && state.user.role === "admin";
-    if (!admin && p.op != null && /Setup/.test(p.todo)) p.todo = p.op;
+    if (!can("settings") && p.op != null && /Setup/.test(p.todo)) p.todo = p.op;
     return p;
   }
 
   /** What the PLC connection state means, for the pill sheet and empty pages. Operators cannot open Setup, so they read who to ask. */
   function connInfo() {
     const i = connInfoAll();
-    if (state.user && state.user.role === "admin") return i;
+    if (can("settings")) return i;
     if (i.todo && /Setup|Connections|Link/.test(i.todo)) i.todo = i.op || "Ask an administrator of PLC-Ki to check the connection to the PLC.";
     return i;
   }
@@ -1196,7 +1412,7 @@ const PK = (() => {
 
   function connSheet() {
     const i = connInfo();
-    const admin = state.user && state.user.role === "admin";
+    const admin = can("settings");
     const a = access();
     sheet(`<span class="pill ${i.level}" style="align-self:flex-start;justify-self:start"><span class="dot"></span>${{ ok: "Connected", bad: "Not connected", warn: "Waiting", info: "Test values" }[i.level]}</span>
       <h2>${esc(i.title)}</h2>${i.text ? `<p class="m-0 muted">${esc(i.text)}</p>` : ""}
@@ -1317,7 +1533,7 @@ const PK = (() => {
   // ---- Page not found: an unknown address says so, with a way out, instead of quietly showing Active alarm ----
   /** The page an unknown address most likely meant, only when it is obvious ("generator" → Block generator). */
   function closestPage(typed) {
-    const admin = state.user && state.user.role === "admin";
+    const admin = can("settings");
     const t = String(typed || "").toLowerCase();
     const want = t.split("/").pop();
     const names = Object.keys(views).filter((n) => n !== "notfound" && HELP[n] && (admin || !n.startsWith("setup/")));
@@ -1347,7 +1563,7 @@ const PK = (() => {
   function helpSheet() {
     const name = current ? current.name : "alarm";
     const [title, intro, tips] = HELP[name] || HELP.alarm;
-    const admin = state.user && state.user.role === "admin";
+    const admin = can("settings");
     const a = access(name);
     const h = sheet(`<span class="eyebrow">Help</span><h2>${esc(title)}</h2><p class="m-0 muted">${esc(intro)}</p>
       <ul class="plainlist">${tips.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>
@@ -1381,7 +1597,7 @@ const PK = (() => {
       state.user ? row(item("key", "Change my password"), 'data-m="pw"') : "",
       row(item("logout", state.user ? "Log out" : "Log in"), 'data-m="logout"'),
     ].join("");
-    const who = state.user ? `<p class="faint small more-who">${esc(state.user.name)} · ${state.user.role === "admin" ? "administrator" : "operator"}</p>` : "";
+    const who = state.user ? `<p class="faint small more-who">${esc(state.user.name)} · ${roleTitle(state.user.role).toLowerCase()}</p>` : "";
     const s = sheet(`<div class="more-head"><h2>More</h2><button class="btn plain small" type="button" data-close>Done</button></div>
       ${pageLists}
       ${who}<ul class="mlist" aria-label="Account">${acct}</ul>`);
@@ -1410,7 +1626,7 @@ const PK = (() => {
     const items = (held && held.items) || [];
     bar.classList.toggle("hidden", !items.length);
     if (!items.length) { bar.innerHTML = ""; return; }
-    const admin = state.user && state.user.role === "admin";
+    const admin = can("plcsim");     // who may release (technicians too: holds are PLCSIM only)
     const list = items.slice(0, 3).map((h) => `<b class="mono">${esc(String(h.symbol).replace(/^"|"$/g, ""))}</b> = ${esc(h.value)}`).join(", ")
       + (items.length > 3 ? `, and ${items.length - 3} more` : "");
     bar.innerHTML = `<div class="wrap"><div class="notice gold held-strip" role="status">${icon("warn")}
@@ -1424,7 +1640,7 @@ const PK = (() => {
   // whose page stays open across the shift change shows it too.
   let handover = null;
   const hoKey = (n) => `${n.day}|${n.shiftIndex}|${n.editedAt || n.at}`;
-  const hoSeen = () => { try { return localStorage.getItem("pk.handover.seen") || ""; } catch { return ""; } };
+  const hoSeen = () => prefs.get("handoverSeen", "");
   async function loadHandover() {
     if (document.hidden && handover) return;
     try { handover = (await api("GET", "/api/handover/now")).note; } catch { return; }
@@ -1439,12 +1655,12 @@ const PK = (() => {
     const at = new Date(n.editedAt || n.at);
     const text = n.text.length > 220 ? n.text.slice(0, 219).trimEnd() + "…" : n.text;
     return `<div class="notice notice-strip ho-strip" role="status" data-kind="handover">${icon("chat")}
-      <div><b>Handover from the ${esc(n.shift)} shift</b> <span class="small">(${esc(n.editedBy || n.by)}, ${pad(at.getHours())}:${pad(at.getMinutes())})</span>
+      <div><b>Handover from the ${esc(n.shift)} shift</b> <span class="small">(${esc(n.editedBy || n.by)}, ${hm(at)})</span>
         <div class="ho-text">${esc(text)}</div></div>
       <a class="btn gray small" href="#/reports/shift/${esc(n.day)}/${n.shiftIndex}">Read</a><button type="button" class="btn small" data-ho-ok>Got it</button></div>`;
   }
   function handoverSeen() {
-    if (handover) try { localStorage.setItem("pk.handover.seen", hoKey(handover)); } catch { /* shown again on the next page load */ }
+    if (handover) prefs.set("handoverSeen", hoKey(handover));
     handover = null;
     renderNotices();
   }
@@ -1470,13 +1686,18 @@ const PK = (() => {
     try {
       const st = await api("GET", "/api/auth/state");
       state.user = st.user;
+      state.roleStart = st.roleStart || "";
     } catch { /* public view */ }
-    const admin = state.user && state.user.role === "admin";
+    await loadPrefs();
+    readScreenOpt();
+    applyDensity();
+    applyTheme(prefs.get("theme", "auto"));
+    const admin = can("settings");
     document.querySelectorAll(".admin-only").forEach((el) => el.classList.toggle("hidden", !admin));
     // Public view without a login: Ask needs a login (it spends Claude credit), so its buttons are hidden
     document.documentElement.classList.toggle("anon", !state.user);
-    if (admin) setInterval(loadChanges, 60000);   // "changes allowed" can change without a restart
-    const who = state.user ? state.user.name + (admin ? " · administrator" : " · operator") : "Not logged in";
+    if (can("plcsim")) setInterval(loadChanges, 60000);   // "changes allowed" can change without a restart
+    const who = state.user ? state.user.name + " · " + roleTitle(state.user.role).toLowerCase() : "Not logged in";
     document.querySelectorAll(".who").forEach((el) => { el.textContent = who; });
     document.querySelectorAll(".act-logout").forEach((el) => { el.textContent = state.user ? "Log out" : "Log in"; });
     const acts = {
@@ -1582,6 +1803,11 @@ const PK = (() => {
       catch { return false; }
     };
     if (admin && !location.hash && typeof PKStart !== "undefined" && (await PKStart.firstRun()) && !(await alarmOn())) history.replaceState(null, "", "#/setup/start");
+    // Start page (review 53): only when PLC-Ki opens without a page in the address; a link or bookmark wins
+    if (!location.hash || location.hash === "#" || location.hash === "#/") {
+      const startAt = startPage();
+      if (startAt !== "#/alarm") history.replaceState(null, "", startAt);
+    }
     route();
     pollStatus();
     pollValues();
@@ -1590,6 +1816,6 @@ const PK = (() => {
     loadHandover(); setInterval(loadHandover, 60000);
   }
 
-  return { AI, ui, BP, screenSize, dirty: setDirty, get isDirty() { return !!dirty; }, plain, connInfo, connSheet, helpSheet, screenSheet, passwordSheet, setHash, cmd, sec, hero, on, $, esc, icon, fillIcons, kindIcon, api, state, view, go, draw, route, toast, copyText, sheet, confirmSheet, cond, md, ago, clock, date, when,
+  return { AI, ui, BP, can, roleTitle, prefs, startPage, startChoices, startLabel, hm, num, numText, dayMonth, weekdayDay, FORMATS, fmtKey, alarmWants, screenSize, dirty: setDirty, get isDirty() { return !!dirty; }, plain, connInfo, connSheet, helpSheet, screenSheet, passwordSheet, setHash, cmd, sec, hero, on, $, esc, icon, fillIcons, kindIcon, api, state, view, go, draw, route, toast, copyText, sheet, confirmSheet, cond, md, ago, clock, date, when,
     loadProgram, blockOf, valueBySymbol, norm, start, cpuStop, cpuSince, loadHeld, releaseAll, loadHandover, get current() { return current; } };
 })();

@@ -31,7 +31,7 @@
   /** The PLC is not read (not connected, or waiting for Link): explain instead of showing old values. */
   function offlinePage() {
     const i = PK.connInfo();
-    const admin = state.user && state.user.role === "admin";
+    const admin = PK.can("settings");
     return hero({
       cls: "hero offline-page",
       eyebrow: `<span class="pill ${i.level}"><span class="dot"></span>${i.level === "warn" ? "Waiting" : "Not connected"}</span>`,
@@ -305,7 +305,7 @@
       <br><span class="small">Set it on the HMI (or in the recipe). <a href="#/plant/settings">All settings</a></span></div></div>`;
   }
   /** "This is wrong" for administrators: correct the model entry with Ki (Setup > Program has the live check). */
-  const modelFix = (target) => state.user && state.user.role === "admin" && typeof PKModel !== "undefined"
+  const modelFix = (target) => PK.can("settings") && typeof PKModel !== "undefined"
     ? `<button type="button" class="btn gray small" data-modelfix="${esc(target)}">This is wrong</button>` : "";
   /** Opening the full step list shows the current step in the middle of it, not step 1. */
   function bindSteps(page) {
@@ -522,7 +522,9 @@
   // ---- Timeline strip on Plant › Overview (review 3, item 40): this shift, 24 h or 7 days, from /api/timeline ----
   // The machine's states as one bar, marks for alarms, halts, STOP, connection lost and values changed, and the latest lines.
   const TL = { win: "shift", data: null, at: 0, busy: false, err: null, sel: -1 };
-  try { TL.win = localStorage.getItem("pk.timeline") || "shift"; } catch { /* private window: this shift */ }
+  const readTlWin = () => { TL.win = PK.prefs.get("timeline", "shift"); };
+  readTlWin();
+  document.addEventListener("pk:prefs", readTlWin);
   async function loadTimeline() {
     if (TL.busy) return;
     TL.busy = true;
@@ -754,7 +756,7 @@
       // Timeline: the time window (remembered in this browser) and a mark picked to read its line
       page.querySelectorAll("[data-tlwin]").forEach((b) => b.onclick = () => {
         TL.win = b.dataset.tlwin; TL.data = null; TL.sel = -1; TL.at = 0;
-        try { localStorage.setItem("pk.timeline", TL.win); } catch { /* not kept */ }
+        PK.prefs.set("timeline", TL.win);
         loadTimeline();
       });
       page.querySelectorAll("[data-tlmk]").forEach((b) => b.onclick = () => { const i = +b.dataset.tlmk; TL.sel = TL.sel === i ? -1 : i; PK.draw(); });

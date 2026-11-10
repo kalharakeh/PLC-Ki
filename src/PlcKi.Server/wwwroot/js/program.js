@@ -252,7 +252,9 @@
   let drawBlock = null;     // the block being drawn, set by whoever draws: a call to #inst links to the instance's type
   // Program page: all networks, or only those holding back an output now (remembered in this browser)
   let netFilter = "all";
-  try { if (localStorage.getItem("plcki.netFilter") === "holding") netFilter = "holding"; } catch { /* private window */ }
+  const readNetFilter = () => { netFilter = PK.prefs.get("netFilter", "all") === "holding" ? "holding" : "all"; };
+  readNetFilter();
+  document.addEventListener("pk:prefs", readNetFilter);
   function tokenize(expr) {
     const re = /\s*(\(|\)|AND\b|OR\b|XOR\b|NOT\b|<>|>=|<=|=|<|>|"[^"]+"(?:\.(?:[A-Za-z_]\w*|"[^"]+")|\[\d+\])*|#?[A-Za-z_][\w.]*(?:\[\d+\])?|T#\w+|-?\d+(?:\.\d+)?)/gy;
     const toks = [];
@@ -977,10 +979,10 @@
       render(params) {
         if (!state.program) {
           if (state.programError) return PK.hero({ title: "No program loaded yet.",
-            sub: "This page explains the PLC program in plain words, with live values, once PLC-Ki has read it from a TIA archive. " + (state.user && state.user.role === "admin"
+            sub: "This page explains the PLC program in plain words, with live values, once PLC-Ki has read it from a TIA archive. " + (PK.can("settings")
               ? "Import it under Setup, Import a program: it takes a few minutes." : "Ask an administrator to import it into PLC-Ki."),
             extra: `<details class="pk-detail mt-3"><summary>Details</summary><code>${esc(state.programError)}</code></details>`,
-            actions: state.user && state.user.role === "admin" ? `<a class="btn" href="#/setup/program">Import the program</a>` : "" });
+            actions: PK.can("settings") ? `<a class="btn" href="#/setup/program">Import the program</a>` : "" });
           return PK.hero({ title: "Program" }) + PK.sec("", PK.ui.loading("cards", { rows: 4, label: "Loading the program" }));
         }
         if (params.join("/") !== (sel ? sel.params.join("/") : "") && loading == null) select(params);
@@ -1101,7 +1103,7 @@
         if (all) all.onclick = () => { allParts = !allParts; PK.draw(); };
         page.querySelectorAll("[data-netf]").forEach((b) => b.onclick = () => {
           netFilter = b.dataset.netf === "holding" ? "holding" : "all";
-          try { localStorage.setItem("plcki.netFilter", netFilter); } catch { /* private window */ }
+          PK.prefs.set("netFilter", netFilter);
           PK.draw();
         });
         page.querySelectorAll("[data-goto-net]").forEach((b) => b.onclick = () => {
