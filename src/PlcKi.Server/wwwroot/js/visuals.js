@@ -574,7 +574,9 @@
   function devSteps(e, s = state.status) {
     const look = devLook(e, s);
     const fault = look.alarms.find((a) => a.severity !== "WARNING");
-    const halted = s && s.sequences.find((q) => q.halted);
+    // The halted sequence of the device's own station (a Mixer valve is not off because the Filler halted)
+    const own = s && typeof PKStations !== "undefined" ? PKStations.list(s).stations.find((x) => x.equipment.some((q) => q.id === e.id)) : null;
+    const halted = own && own.sequences.length ? own.sequences.find((q) => q.halted) : s && s.sequences.find((q) => q.halted);
     const blocking = e.permits.filter((p) => p.met === false);
     const permOk = !blocking.length;
     const by = (id) => (s && s.equipment.find((x) => x.id === id)) || null;
@@ -675,7 +677,7 @@
       return `<div class="pm-dev lv-${esc(look.lvl)} ${e.id === selected ? "sel" : ""} ${ring && ring.includes(e.id) ? "ring" : ""}" data-eq="${esc(e.id)}" role="button" tabindex="0" aria-label="${esc(said)}" title="${esc(said)}">
         <span class="pm-sym">${symbolFor(e.kind, e.id)}</span><b>${esc(e.id)}</b><span class="pm-st">${esc(look.word)}</span>${kv ? `<span class="pm-v" title="${esc(kv.label)}">${esc(kv.text)}</span>` : ""}</div>`;
     };
-    return `<div class="pmap">${[...groups].map(([g, list]) => `<div class="pm-grp">${many ? `<div class="pm-h">${esc(g || PK.t("Other devices"))}</div>` : ""}<div class="pm-devs">${list.map(tile).join("")}</div></div>`).join("")}
+    return `<div class="pmap">${[...groups].map(([g, list]) => `<div class="pm-grp">${many ? `<div class="pm-h">${esc(g ? (typeof PKStations !== "undefined" ? PKStations.pretty(g) : g) : PK.t("Other devices"))}</div>` : ""}<div class="pm-devs">${list.map(tile).join("")}</div></div>`).join("")}
       <div class="pm-key small"><span class="lv-ok">${PK.t("running or fine")}</span><span class="lv-idle">${PK.t("off")}</span><span class="lv-blocked">${PK.t("asked for but blocked")}</span><span class="lv-warn">${PK.t("warning")}</span><span class="lv-fault">${PK.t("fault")}</span></div></div>`;
   }
 

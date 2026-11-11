@@ -118,6 +118,22 @@ so you can edit values and watch the page change.
 Ready-made files in `models/snapshots/`: `step10-xv101-not-open` (one alarm, A02), `step30-agitator-blocked`,
 `step30-mix-heat`, `step50-drain`, and `step30-estop-and-drive` (two alarms: A01 emergency stop, then A08 drive not ready).
 
+### Test mode with two stations
+
+`models/demo-two-stations.json` is a second test model: a **Mixer** and a **Filler Line**, each with its own devices,
+sequence step and alarms, plus two alarms that belong to no station (air pressure, E-stop). Use it to check the pages that
+only make sense with more than one station: Stations, TV mode (`#/tv/Mixer`), alarm sound per station, a station as start page.
+It has no PLC program behind it; the Program page is left empty (`--PlcKi:Export=`).
+
+```
+dotnet run --project src\PlcKi.Server -- --PlcKi:Model=models/demo-two-stations.json --PlcKi:Export= --PlcKi:Source=snapshot --PlcKi:SnapshotFile=models/snapshots/two-stations-alarms-both.json
+```
+
+Pick the situation with `--PlcKi:SnapshotFile` (or edit the file while the app runs): `two-stations-both-running` (no alarms),
+`two-stations-filler-fault` (Filler Line halted by F02 while the Mixer runs), `two-stations-alarms-both` (M02 on the Mixer,
+F01 and F03 on the Filler Line, L01 for the machine). Add `--Urls=http://localhost:5098` and your own data folder (environment variable `PLCKI_DATADIR`),
+so a test copy does not touch the real data. The tests in `TwoStationTests.cs` check the model and the files.
+
 ## Ask about the machine
 
 The box under the summary answers questions such as *"Why is the agitator not running?"*,

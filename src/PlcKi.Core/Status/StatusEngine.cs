@@ -177,8 +177,8 @@ public sealed class StatusEngine
         var stop = cpu is { Stopped: true } ? cpu : null;
 
         var sequences = _model.Sequences.Select(s => EvaluateSequence(s, Get)).ToList();
-        var halted = sequences.Where(q => q.Halted).Select(q => q.Name).ToList();
-        var equipment = LinkDevices(_model.Equipment.Select(e => EvaluateEquipment(e, Get, halted)).ToList());
+        // A halted sequence switches off the step outputs of its own station only (a Mixer valve is not off because the Filler halted)
+        var equipment = LinkDevices(_model.Equipment.Select(e => EvaluateEquipment(e, Get, HaltedFor(e, sequences))).ToList());
         sequences = LinkSteps(sequences, equipment);
         if (stop != null)
         {
@@ -356,6 +356,37 @@ public sealed class StatusEngine
 
         return new SequenceStatus(s.Id, s.Name, s.Block, stepNo, stepName, step?.Does != null ? Fill(step.Does, get) : null,
             timeInStep, step?.Limit != null ? Fill(step.Limit, get) : null, halted, reasons, next, string.Join(" ", parts));
+    }
+
+    /// <summary>
+    /// The halted sequences that can explain why a device is off: those of the device's own station (the instance named in
+    /// its location, matched with the sequence's "called in" block or instance). When the model names no station for the
+    /// device or for any sequence, all halted sequences count, as in a one-station machine.
+    /// </summary>
+    private IReadOnlyList<string> HaltedFor(EquipmentDef e, List<SequenceStatus> sequences)
+    {
+        var mine = StationKey(e.Location);
+        var keys = sequences.Select(q => SequenceStation(q.Block)).ToList();
+        var own = mine != "" && keys.Contains(mine);
+        return sequences.Where((q, i) => q.Halted && (!own || keys[i] == mine)).Select(q => q.Name).ToList();
+    }
+
+    /// <summary>The station named in a location, as the pages read it: instance "Mixer".XV101, else a quoted name, else FB_Mixer.</summary>
+    private static string StationKey(string? location)
+    {
+        var text = location ?? "";
+        var m = System.Text.RegularExpressions.Regex.Match(text, @"instance\s+""([^""]+)""");
+        if (!m.Success) m = System.Text.RegularExpressions.Regex.Match(text, @"""([^""]+)""");
+        if (m.Success) return m.Groups[1].Value;
+        m = System.Text.RegularExpressions.Regex.Match(text, @"^\s*(?:FB|FC)_?([A-Za-z0-9_]+)");
+        return m.Success ? m.Groups[1].Value : "";
+    }
+
+    /// <summary>The station of a sequence: the block it is "called in", else the instance in its own block text.</summary>
+    private static string SequenceStation(string? block)
+    {
+        var m = System.Text.RegularExpressions.Regex.Match(block ?? "", @"called in\s+(?:(?:FB|FC)_?)?""?([A-Za-z0-9_ .]+?)""?(?:[,;)]|$)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        return m.Success ? m.Groups[1].Value.Trim() : StationKey(block);
     }
 
     /// <param name="haltedSequences">Names of the sequences that are halted now: their step outputs are off, so a device

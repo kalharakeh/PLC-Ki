@@ -402,6 +402,24 @@
     + (seq ? sec(alarms.length ? "" : "alt", `<h2>${esc(seq.name)}</h2><p class="sub">${esc(sentences(seq.explanation))}</p>${stepStrip(seq)}`) : "");
   }
 
+  /** The station(s) an alarm is about, when the machine has more than one: "Mixer", "Filler Line", or "Whole machine"
+   *  for an alarm of no station (E-stop, air). "" on a one-station machine, where it would only repeat the page title. */
+  function alarmStations(a, s) {
+    if (typeof PKStations === "undefined") return "";
+    const { stations } = PKStations.list(s);
+    if (stations.length < 2) return "";
+    const own = stations.filter((st) => st.alarms.some((x) => x.id === a.id)).map((st) => st.name);
+    return own.length ? own.join(", ") : PK.t("Whole machine");
+  }
+  /** The sequence of the alarm's station (the halted one first); null for an alarm of no station or a one-station machine. */
+  function alarmSequence(a, s) {
+    if (typeof PKStations === "undefined") return null;
+    const { stations } = PKStations.list(s);
+    if (stations.length < 2) return null;
+    const qs = stations.filter((st) => st.alarms.some((x) => x.id === a.id)).flatMap((st) => st.sequences);
+    return qs.find((q) => q.halted) || qs[0] || null;
+  }
+
   PK.view("alarm", {
     live: true,
     mount() {
@@ -413,7 +431,7 @@
       const s = state.status;
       if (!s) return waitingPage();
       const alarms = s.activeAlarms;      // first-out first: the server orders them by when they came
-      const seq = s.sequences.find((q) => q.halted) || s.sequences[0];
+      let seq = s.sequences.find((q) => q.halted) || s.sequences[0];
       if (offline()) return offlinePage() + guide();
       const stop = PK.cpuStop(s);
       if (stop) return stopPage(s, stop, seq) + guide();
@@ -450,6 +468,9 @@
 
       if (!alarms.some((a) => a.id === selectedAlarm)) selectedAlarm = alarms[0].id;
       const a = alarms.find((x) => x.id === selectedAlarm);
+      // More than one station: the alarm's own station and its sequence, not the first halted one of the machine
+      const stationNames = alarmStations(a, s);
+      seq = alarmSequence(a, s) || seq;
       const warn = a.severity === "WARNING";
       const eqs = relatedEquipment(a);
       const done = fixDone[a.id] || new Set();
@@ -486,7 +507,7 @@
 
       // Left: the alarm, then straight to the fix. Right: where it is, in the machine and in the program.
       // On a phone the right column follows the left, so the fix is on the first screen.
-      const main = `<div class="eyebrow"><span class="pill ${warn ? "warn" : "bad"}"><span class="dot"></span>${esc(sevWord(a))} · ${esc(a.id)}</span></div>
+      const main = `<div class="eyebrow"><span class="pill ${warn ? "warn" : "bad"}"><span class="dot"></span>${esc(sevWord(a))} · ${esc(a.id)}</span>${stationNames ? `<span class="faint">${icon("plant")} ${esc(stationNames)}</span>` : ""}</div>
           <h1>${esc(a.text)}</h1>
           ${follow ? `<div class="notice aa-follow">${icon("info")}<div>${esc(followText(follow.root.id, follow.ms))} <button type="button" class="btn plain small" data-alarm="${esc(follow.root.id)}">${PK.t("Open {id} ›", { id: esc(follow.root.id) })}</button></div></div>` : ""}
           ${a.condition ? `<p class="sub">${esc(a.condition)}</p>` : ""}
