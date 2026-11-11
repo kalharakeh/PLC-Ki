@@ -73,7 +73,7 @@
       newBtn.classList.remove("hidden");
       const steps = data.steps || [];
       const meta = (steps.length ? PK.t("Looked at") + ": " + lookedAt(steps) : PK.t("Answered from the live summary")) + ` · ${esc(String(data.seconds))} s`;
-      add("a", `<div class="ans">${PK.md(data.answer)}</div>` + (data.note ? `<div class="meta">${esc(PK.srv(data.note))}</div>` : "")
+      add("a", `<div class="ans">${PK.md(I18N.fixed(data.answer))}</div>` + (data.note ? `<div class="meta">${esc(PK.srv(data.note))}</div>` : "")
         + `<div class="meta">${meta} · <button type="button" class="linkbtn" data-copy-ans>${PK.t("Copy")}</button></div>`);
     } catch (e) {
       pending.remove();

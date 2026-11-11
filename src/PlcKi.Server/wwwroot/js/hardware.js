@@ -92,11 +92,11 @@
     if (dr.speedPercent != null) facts.push([PK.T("Speed"), dr.speedPercent + " %"]);
     else if (dr.speed != null) facts.push([PK.T("Speed"), String(Math.round(dr.speed * 10) / 10)]);
     if (dr.statusWord != null) facts.push([PK.T("Status word"), "16#" + dr.statusWord.toString(16).toUpperCase().padStart(4, "0")]);
-    if (dr.telegram) facts.push([PK.T("Telegram"), dr.telegram]);
+    if (dr.telegram) facts.push([PK.T("Telegram"), PK.srv(dr.telegram)]);
     if (dr.block) facts.push([PK.T("Drive block"), dr.block]);
     const vals = dr.values || [];
     const table = vals.length ? `<details class="mt-2 more"><summary><span class="small">${PK.t("Values read ({n})", { n: vals.length })}</span></summary>
-      <table class="mt-2 tbl"><tr><th>${PK.t("Value")}</th><th>${PK.t("Tag")}</th><th>${PK.t("Now")}</th></tr>${vals.map((v) => `<tr><td>${esc(v.label)}</td><td class="mono small">${esc(v.from)}</td>
+      <table class="mt-2 tbl"><tr><th>${PK.t("Value")}</th><th>${PK.t("Tag")}</th><th>${PK.t("Now")}</th></tr>${vals.map((v) => `<tr><td>${esc(PK.srv(v.label))}</td><td class="mono small">${esc(v.from)}</td>
         <td>${v.error ? `<span class="faint small" title="${esc(PK.srv(v.error))}">${PK.t("not read")}</span>` : v.value === true || v.value === false ? `<span class="m-0 chip ${v.value ? "t" : "f"}">${v.value ? "TRUE" : "FALSE"}</span>` : v.value == null ? "…" : `<span class="m-0 chip">${esc(v.value)}</span>`}</td></tr>`).join("")}</table></details>` : "";
     return `<div class="card drive-card">
       <div class="row" style="gap:10px;align-items:baseline;flex-wrap:wrap"><h3 class="m-0">${dr.station ? `<a href="#/plc/racks/${encodeURIComponent(dr.station)}">${esc(dr.name)}</a>` : esc(dr.name)}</h3>

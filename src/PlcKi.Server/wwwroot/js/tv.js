@@ -35,7 +35,7 @@
     const stationsOf = (a) => all.stations.filter((st) => st.alarms.some((x) => x.id === a.id)).map((st) => st.name);
     if (param == null || param === "") {
       const [level, word] = PKStations.levelOf({ alarms: s.activeAlarms, equipment: s.equipment, sequences: s.sequences });
-      return { name: s.machine || PK.t("Machine"), station: null, alarms: s.activeAlarms, equipment: s.equipment, sequences: s.sequences, level, word, stationsOf };
+      return { name: s.machine || PK.t("Machine"), station: null, alarms: s.activeAlarms, equipment: s.equipment, sequences: s.sequences, level, word, stationsOf, stations: all.stations, single: all.stations.length <= 1 };
     }
     const want = param === "-" ? "" : param, low = want.toLowerCase();
     const st = all.stations.find((x) => x.key === want) || all.stations.find((x) => x.key.toLowerCase() === low || x.name.toLowerCase() === low);
@@ -43,7 +43,7 @@
     const mine = new Set([...st.alarms, ...all.machineAlarms]);
     const alarms = s.activeAlarms.filter((a) => mine.has(a));      // in the server's order: the first that came first
     const [level, word] = PKStations.levelOf({ ...st, alarms });
-    return { name: st.name, station: st, alarms, equipment: st.equipment, sequences: st.sequences, level, word, stationsOf };
+    return { name: st.name, station: st, alarms, equipment: st.equipment, sequences: st.sequences, level, word, stationsOf, single: all.stations.length <= 1 };
   }
 
   /** The cycle and the parts of this shift, when PLC-Ki knows them (a machine without a cycle sequence or shifts has none). */
@@ -68,9 +68,30 @@
     return items.length ? `<div class="tv-cycle">${items.map(([v, l]) => `<div><b>${esc(v)}</b><span>${esc(l)}</span></div>`).join("")}</div>` : "";
   }
 
-  /** The step block: the sequence that is halted, else the first one. */
-  function stepHtml(sc, { stopped = false } = {}) {
-    const q = sc.sequences.find((x) => x.halted) || sc.sequences[0];
+  /** The sequence a step block is about: the one that is halted, else the first. */
+  const mainOf = (seqs) => seqs.find((x) => x.halted) || seqs[0];
+
+  /**
+   * The step block of a screen. A station's screen (and a machine with one station) shows its sequence. The whole-machine
+   * screen of a machine with several stations shows the station of the alarm on it, else one line for each station,
+   * so a step is never taken for another station's.
+   */
+  function bandStep(sc, alarm, opts = {}) {
+    if (sc.station || sc.single || !sc.stations) return stepHtml(sc.sequences, opts);
+    if (alarm) {
+      const st = sc.stations.filter((x) => x.sequences.length && x.alarms.some((y) => y.id === alarm.id))[0];
+      return st ? stepHtml(st.sequences, { ...opts, label: st.name }) : stepHtml(sc.sequences, opts);
+    }
+    const lines = sc.stations.filter((x) => x.sequences.length).map((st) => {
+      const q = mainOf(st.sequences);
+      return `<div class="tv-line${q.halted ? " halted" : ""}"><b>${esc(st.name)}</b><span>${esc(opts.stopped ? PK.t("Last step") : PK.t("Step"))} ${esc(q.step ?? "?")} · ${esc(q.stepName || q.name)}</span>${q.halted ? `<i>${PK.t("Halted")}</i>` : ""}</div>`;
+    });
+    return lines.length ? `<div class="tv-step tv-lines">${lines.join("")}</div>` : `<div class="tv-step"></div>`;
+  }
+
+  /** The step block: the sequence that is halted, else the first one. label: the station, on a screen of several. */
+  function stepHtml(seqs, { stopped = false, label = "" } = {}) {
+    const q = mainOf(seqs);
     if (!q) return `<div class="tv-step"></div>`;
     const s = state.status;
     const waits = q.next.flatMap((n) => n.conditions).filter((c) => c.met === false).map((c) => {
@@ -79,7 +100,7 @@
     });
     const line = stopped ? "" : q.halted ? PK.t("Halted: {why}", { why: q.haltReasons.map((x) => PK.srv(x)).join("; ") || PK.t("the outputs are off.") }) : waits.length ? PK.t("Waiting for: {what}", { what: waits.join("; ") }) : q.does || "";
     return `<div class="tv-step">
-      <div class="tv-step-n">${esc(stopped ? PK.t("Last step") : PK.t("Step"))} ${esc(q.step ?? "?")}${q.timeInStep && !stopped ? `<span class="tv-for">${PK.t("for {time}", { time: esc(q.timeInStep) })}</span>` : ""}</div>
+      <div class="tv-step-n">${label ? `${esc(label)} · ` : ""}${esc(stopped ? PK.t("Last step") : PK.t("Step"))} ${esc(q.step ?? "?")}${q.timeInStep && !stopped ? `<span class="tv-for">${PK.t("for {time}", { time: esc(q.timeInStep) })}</span>` : ""}</div>
       <div class="tv-step-t">${esc(q.stepName || q.name)}</div>
       ${line ? `<div class="tv-step-w">${esc(line)}</div>` : ""}</div>`;
   }
@@ -88,7 +109,7 @@
   function pictureHtml(equipment, ring, { dim = false } = {}) {
     const V = window.PKVis;
     if (!V || !equipment.length) return `<div class="tv-pic tv-none">${dim ? "" : PK.t("No devices in the model for this screen.")}</div>`;
-    return `<div class="tv-pic ${dim ? "dim" : ""}" inert>${V.plantMap(equipment, null, ring)}</div>`;
+    return `<div class="tv-pic ${dim ? "dim" : ""}" inert>${V.plantMap(equipment, null, ring, { split: true })}</div>`;
   }
 
   /** The alarm, large: text, station, since when, first or not, what else is on, the first steps of the fix. */
@@ -98,14 +119,15 @@
     const atStart = al.filter((x) => x.atStart).length;
     const first = al.length > 1 && al[0] === a && (!a.atStart || atStart === 1);     // as Active alarm says "First"
     const where = sc.stationsOf(a);
-    const station = where.length ? where.join(", ") : PK.t("Whole machine");
+    // With one station only, the band already says which machine this is; a name such as "Station" would tell nothing
+    const station = sc.single ? "" : where.length ? where.join(", ") : PK.t("Whole machine");
     const since = a.atStart ? PK.t("On since PLC-Ki started watching") : a.since ? PK.t("Since {when} · {ago}", { when: PK.when(a.since), ago: PK.ago(a.since) }) : "";
     const others = al.filter((x) => x !== a);
     const fix = (a.fix || []).slice(0, 3);
     return `<div class="tv-al ${warn ? "warn" : "fault"}" role="alert">
       <div class="tv-al-top"><span class="tv-al-sev">${esc(warn ? PK.t("Warning") : PK.t("Fault"))} · ${esc(a.id)}</span>${first ? `<span class="tv-al-first">${PK.t("First alarm")}</span>` : ""}</div>
       <div class="tv-al-text" role="heading" aria-level="2">${esc(a.text)}</div>
-      <div class="tv-al-facts"><span>${icon("plant")}${esc(station)}</span>${since ? `<span>${icon("clock")}${esc(since)}</span>` : ""}</div>
+      <div class="tv-al-facts">${station ? `<span>${icon("plant")}${esc(station)}</span>` : ""}${since ? `<span>${icon("clock")}${esc(since)}</span>` : ""}</div>
       ${a.condition ? `<p class="tv-al-cond">${esc(a.condition)}</p>` : ""}
       ${others.length ? `<div class="tv-al-more"><b>${PK.t("Also on:")}</b> ${others.slice(0, 4).map((x) => `<span class="tv-al-chip ${x.severity === "WARNING" ? "warn" : ""}">${esc(x.id)} ${esc(x.text.length > 44 ? x.text.slice(0, 42) + "…" : x.text)}</span>`).join("")}${others.length > 4 ? ` <span>${PK.t("and {n} more", { n: others.length - 4 })}</span>` : ""}</div>` : ""}
       ${fix.length ? `<div class="tv-al-fix"><b>${PK.t("What to do")}</b><ol>${fix.map((f) => `<li>${esc(f)}</li>`).join("")}</ol></div>` : ""}
@@ -157,18 +179,18 @@
 
     // Values that are not live are said on the screen itself: the banner and the top bar are hidden here
     if (Date.now() - state.lastOk > STALE_MS) {
-      return frame({ level: "fault", word: PK.t("No data"), title, step: stepHtml(sc), body: `<div class="tv-split">
+      return frame({ level: "fault", word: PK.t("No data"), title, step: bandStep(sc, null), body: `<div class="tv-split">
         <div class="tv-al fault" role="alert"><div class="tv-al-text" role="heading" aria-level="2">${PK.t("PLC-Ki is not answering")}</div><p class="tv-al-cond">${PK.t("The values are frozen since {time}. Check that the PLC-Ki PC is on and on the network.", { time: esc(PK.clock(state.lastOk)) })}</p></div>
         ${pictureHtml(sc.equipment, [], { dim: true })}</div>` });
     }
     if (["disconnected", "connecting", "waiting", "notset"].includes(conn.state)) {
-      return frame({ level: "warn", word: PK.t("No PLC connection"), title, step: stepHtml(sc), body: `<div class="tv-split">
+      return frame({ level: "warn", word: PK.t("No PLC connection"), title, step: bandStep(sc, null), body: `<div class="tv-split">
         <div class="tv-al warn" role="alert"><div class="tv-al-text" role="heading" aria-level="2">${PK.t("PLC-Ki cannot read the PLC")}</div><p class="tv-al-cond">${conn.lastGoodRead ? PK.t("The values are from the last good read at {time}.", { time: esc(PK.clock(conn.lastGoodRead)) }) : PK.t("There are no values yet.")}</p></div>
         ${pictureHtml(sc.equipment, [], { dim: true })}</div>` });
     }
     const stop = PK.cpuStop(s);
     if (stop) {
-      return frame({ level: "fault", word: stop.word || "STOP", title, step: stepHtml(sc, { stopped: true }), alarm: true,
+      return frame({ level: "fault", word: stop.word || "STOP", title, step: bandStep(sc, null, { stopped: true }), alarm: true,
         body: `<div class="tv-split">${stopHtml(stop)}${pictureHtml(sc.equipment, [])}</div>` });
     }
     if (sc.alarms.length) {
@@ -176,10 +198,10 @@
       const a = sc.alarms[0];
       const ring = sc.equipment.filter((e) => PK.deviceAlarms(e, s).includes(a)).map((e) => e.id);
       const shown = !sc.station && ring.length && window.PKVis ? PKVis.around(ring, 12) : sc.equipment;
-      return frame({ level: sc.level, word: sc.word, title, step: stepHtml(sc), cycle: cycleHtml(sc), alarm: true,
+      return frame({ level: sc.level, word: sc.word, title, step: bandStep(sc, a), cycle: cycleHtml(sc), alarm: true,
         body: `<div class="tv-split">${alarmHtml(sc, a)}${pictureHtml(shown, ring)}</div>` });
     }
-    return frame({ level: sc.level, word: sc.word, title, step: stepHtml(sc), cycle: cycleHtml(sc), body: pictureHtml(sc.equipment, []) });
+    return frame({ level: sc.level, word: sc.word, title, step: bandStep(sc, null), cycle: cycleHtml(sc), body: pictureHtml(sc.equipment, []) });
   }
 
   /** Where the × goes: the page the screen was opened from, else the station's page or Active alarm. */
