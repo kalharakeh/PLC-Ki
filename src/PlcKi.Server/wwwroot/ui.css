@@ -1988,6 +1988,11 @@ html.tv:not(.tv-moved) .tv { cursor: none; }
 .tv-for { margin-left: 0.6em; font-weight: 500; }
 .tv-step-t { font-size: clamp(22px, min(4.6vh, 3.2vw), 68px); line-height: 1.1; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tv-step-w { font-size: clamp(14px, min(2.3vh, 1.6vw), 32px); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tv-lines { gap: 2px; }
+.tv-line { display: flex; align-items: baseline; gap: 0.7em; min-width: 0; font-size: clamp(16px, min(3.2vh, 2.2vw), 44px); line-height: 1.15; }
+.tv-line b { font-weight: 700; flex: none; }
+.tv-line span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-weight: 600; min-width: 0; }
+.tv-line i { font-style: normal; font-weight: 700; color: var(--fault-ink); flex: none; }
 .tv-cycle { display: flex; gap: clamp(12px, 2vw, 40px); }
 .tv-cycle > div, .tv-clock { display: grid; justify-items: end; line-height: 1.05; }
 .tv-cycle b { font-size: clamp(20px, min(4.4vh, 3vw), 64px); font-weight: 700; }

@@ -168,4 +168,108 @@ public class LanguageTests
         Assert.Equal(new[] { "en", "de" }, SettingsStore.Languages);
         Assert.Contains("language", PreferenceStore.Keys);
     }
+
+    // ---- the server's texts run through the German entries and rules, the way PK.srv does (the entry first, then the first rule that fits) ----
+
+    private static List<(Regex Re, string To)> RulesWithTarget()
+    {
+        var js = Read(Path.Combine(Www(), "js", "i18n-de.js"));
+        var list = new List<(Regex, string)>();
+        foreach (Match m in Regex.Matches(js, @"^\s*\[/(?<re>.+)/(?<f>[a-z]*),\s*""(?<to>(?:[^""\\]|\\.)*)""\],?\s*$", RegexOptions.Multiline))
+            list.Add((new Regex(m.Groups["re"].Value, m.Groups["f"].Value.Contains('i') ? RegexOptions.IgnoreCase : RegexOptions.None), JsonSerializer.Deserialize<string>("\"" + m.Groups["to"].Value + "\"")!));
+        return list;
+    }
+
+    /// <summary>The German of a whole server text, or null when there is no entry or rule. $T1, $C1, $D1, $W1 and $I1 only insert the group as it is here.</summary>
+    private static string? Srv(string text)
+    {
+        var de = Dictionary();
+        if (de.TryGetValue(text, out var exact)) return exact;
+        foreach (var (re, to) in RulesWithTarget())
+        {
+            var m = re.Match(text);
+            if (m.Success) return Regex.Replace(to, @"\$[TCDWI]?(\d)", g => m.Groups[int.Parse(g.Groups[1].Value)].Value);
+        }
+        return null;
+    }
+
+    // A word that only an English sentence has: a German text of ours must not keep it
+    private static readonly Regex English = new(@"(the|was|were|with|without|failed|could not|compile|error|warning|refused|download|check|then|import|not found)", RegexOptions.IgnoreCase);
+
+    [Theory]
+    // History insight (AlarmMemory.Insight): the frame is German, the technicians' own words stay
+    [InlineData("Happened 3 times in the last 30 days (12 times in all).", new[] { "3", "12" })]
+    [InlineData("Happened twice in the last 30 days.", new[] { "30" })]
+    [InlineData("Last time (3 Mar) it was fixed by: replaced the filter.", new[] { "3 Mar", "replaced the filter" })]
+    [InlineData("Most often noted cause: dirty sensor (4 times).", new[] { "dirty sensor", "4" })]
+    [InlineData("Usually comes in Step 20 (5 of 7 times).", new[] { "5", "7" })]
+    // generator summary (PackageSummary)
+    [InlineData("Wrote function block FB_Mixer: 4 networks.", new[] { "FB_Mixer", "4" })]
+    [InlineData("Changed function block FB_Mixer: now 6 networks (was 4).", new[] { "FB_Mixer", "6", "4" })]
+    [InlineData("Added 2 tags: XV101_Open, XV101_Close.", new[] { "XV101_Open", "XV101_Close", "2" })]
+    // job log (develop, generate): paths, tag names and TIA's own words stay
+    [InlineData("=== V3: import and compile on the TIA PC ===", new[] { "V3" })]
+    [InlineData("TIA report for V3: 1 refused file(s), 2 error(s), 0 warning(s).", new[] { "V3", "1", "2", "0" })]
+    [InlineData("Download to PLCSIM failed: PLCSIM is not running", new[] { "PLCSIM is not running" })]
+    [InlineData("PLC before download: Run, 2 active alarm(s).", new[] { "Run", "2" })]
+    // drive texts (Telegrams, DeviceDiagnostics)
+    [InlineData("Telegram 1", new[] { "1" })]
+    [InlineData("Drive block FB_Drive reports an error (DiagId 16#8001).", new[] { "FB_Drive", "16#8001" })]
+    // TIA import errors (ImportReport.AsProblems): our frame is German, TIA's own words stay as they came
+    [InlineData("TIA refused FB_GenValve.xml: Block FB_GenValve is already in the project", new[] { "FB_GenValve.xml", "Block FB_GenValve is already in the project" })]
+    [InlineData("Compile error in FB_GenValve: Tag \"XV201_Open\" not defined", new[] { "FB_GenValve", "Tag \"XV201_Open\" not defined" })]
+    [InlineData("Compile warning in OB1: Network 3 is never reached", new[] { "OB1", "Network 3 is never reached" })]
+    [InlineData("While running on PLCSIM: Alarm came up: Motor overload (Fault)", new[] { "Motor overload (Fault)" })]
+    [InlineData("While running on PLCSIM: The CPU is in Stop instead of RUN.", new[] { "Stop" })]
+    [InlineData("Lost the connection to the PLC: timed out", new[] { "timed out" })]
+    public void A_server_text_comes_out_German_with_its_values_kept(string english, string[] kept)
+    {
+        var de = Srv(english);
+        Assert.True(de != null, "no German entry or rule for: " + english);
+        Assert.NotEqual(english, de);
+        foreach (var k in kept) Assert.True(de!.Contains(k), $"'{k}' is lost: {english}  →  {de}");
+    }
+
+    [Fact]
+    public void The_TIA_import_problems_the_server_builds_come_out_German()
+    {
+        var report = new PlcKi.Core.Generate.ImportReport { Download = "PLCSIM Advanced instance not found", CompileState = "Error" };
+        report.FileErrors.Add(new PlcKi.Core.Generate.ReportFileError { File = "FB_A.xml", Error = "Duplicate block name" });
+        report.Messages.Add(new PlcKi.Core.Generate.ReportMessage { State = "Error", Path = "FB_A", Description = "Tag X is not defined" });
+        report.Messages.Add(new PlcKi.Core.Generate.ReportMessage { State = "Warning", Path = "OB1", Description = "Unused variable" });
+        report.Runtime.Add("The CPU is in Stop instead of RUN.");
+        var problems = report.AsProblems();
+        Assert.Equal(5, problems.Count);
+        foreach (var p in problems)
+        {
+            var de = Srv(p);
+            Assert.True(de != null && de != p, "no German for: " + p);
+            Assert.False(English.IsMatch(de!.Split(':')[0]), "the frame is still English: " + de);
+        }
+        Assert.Contains("Tag X is not defined", Srv(problems[1]));      // TIA's own words stay
+        Assert.Contains("PLCSIM Advanced instance not found", Srv(problems[3]));
+    }
+
+    [Theory]
+    [InlineData("The TIA project is open in TIA Portal, or a hidden TIA still holds it.", "already been opened by user")]
+    [InlineData("The TIA project was not found on the TIA PC.", "project not found")]
+    [InlineData("Check that TIA Portal and the TIA helper run on the TIA PC", "something else")]
+    public void The_import_hint_comes_out_German_as_a_whole(string startsWith, string tiaSaid)
+    {
+        var hint = PlcKi.Core.Generate.ImportReport.ImportHint(tiaSaid);
+        Assert.StartsWith(startsWith, hint);
+        var de = Srv(hint);
+        Assert.True(de != null && de != hint, "no German for: " + hint);
+        Assert.DoesNotMatch(English, de!.Replace("taskkill /im Siemens.Automation.Portal.exe /f", ""));
+    }
+
+    [Theory]
+    [InlineData("fail-safe program")]
+    [InlineData("PLCSIM not running")]
+    public void The_download_hint_comes_out_German(string tiaSaid)
+    {
+        var hint = PlcKi.Server.Generate.DevelopCommand.DownloadHint(tiaSaid);
+        var de = Srv(hint);
+        Assert.True(de != null && de != hint, "no German for: " + hint);
+    }
 }

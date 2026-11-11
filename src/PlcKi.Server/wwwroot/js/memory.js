@@ -27,7 +27,7 @@
       <div class="mem-when"><b>${esc(PK.when(o.came))}</b><span class="muted small">${o.went ? esc(dur(o)) + (o.endUnknown ? " " + PK.t("or less") : "") : `<span class="pill bad small-pill"><span class="dot"></span>${PK.t("still on")}</span>`}${o.repeats ? ` · ${PK.t("came back {n}×", { n: o.repeats })}` : ""}</span></div>
       <div class="mem-body">
         ${showAlarm ? `<div>${sevTag(o.severity, o.alarmId)} <a href="#/alarms/${encodeURIComponent(o.alarmId)}">${esc(o.text)}</a></div>` : ""}
-        ${o.steps && o.steps.length ? `<div class="muted small">${o.atStart ? PK.t("Already on when PLC-Ki started watching") + " · " : ""}${esc(o.steps.join(" · "))}</div>` : o.atStart ? `<div class="muted small">${PK.t("Already on when PLC-Ki started watching")}</div>` : ""}
+        ${o.steps && o.steps.length ? `<div class="muted small">${o.atStart ? PK.t("Already on when PLC-Ki started watching") + " · " : ""}${esc(o.steps.map((x) => PK.srv(x)).join(" · "))}</div>` : o.atStart ? `<div class="muted small">${PK.t("Already on when PLC-Ki started watching")}</div>` : ""}
         ${o.checks && o.checks.length ? `<div class="muted small">${PK.t("Failed:")} ${esc(o.checks.join("; "))}</div>` : ""}
         ${n ? `<div class="mem-note">${n.cause ? `<span><b>${PK.t("Cause")}</b> ${esc(n.cause)}</span>` : ""}${n.fix ? `<span><b>${PK.t("Fix")}</b> ${esc(n.fix)}</span>` : ""}${n.text ? `<span>${esc(n.text)}</span>` : ""}<span class="faint small">${esc(n.by)}, ${esc(PK.when(n.at))}</span></div>` : ""}
       </div>
@@ -54,7 +54,7 @@
     const n = o.note || {};
     const s = PK.sheet(`<h2>${o.went ? PK.t("What caused it, what fixed it?") : PK.t("Note on this alarm")}</h2>
       <p class="muted" style="margin:-4px 0 14px">${sevTag(o.severity, o.alarmId)} ${esc(o.text)}<br>
-        <span class="small">${o.went ? PK.t("Came {when}, went after {dur}", { when: esc(PK.when(o.came)), dur: esc(dur(o)) }) : PK.t("Came {when}, still on", { when: esc(PK.when(o.came)) })}${o.steps && o.steps.length ? ` · ${esc(o.steps[0])}` : ""}</span></p>
+        <span class="small">${o.went ? PK.t("Came {when}, went after {dur}", { when: esc(PK.when(o.came)), dur: esc(dur(o)) }) : PK.t("Came {when}, still on", { when: esc(PK.when(o.came)) })}${o.steps && o.steps.length ? ` · ${esc(PK.srv(o.steps[0]))}` : ""}</span></p>
       <form class="gap-4 stack" data-note-form>
         <label class="field">${PK.t("Cause")} <span class="hint">${PK.t("what was wrong at the machine")}</span>
           <input type="text" id="n-cause" maxlength="1000" value="${esc(n.cause || "")}" placeholder="${esc(PK.t("e.g. dirty light barrier B23"))}" autocomplete="off"></label>

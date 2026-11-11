@@ -2799,6 +2799,11 @@ I18N.add({
   "change": "Änderung",
   "fix": "Korrektur",
   // ==== leftovers: dictionary ====
+  // ---- TIA import and download problems (ImportReport.cs, DevelopCommand.cs): our own sentences
+  "The TIA project is open in TIA Portal, or a hidden TIA still holds it. Close it in TIA Portal on the TIA PC. If it is not open there: close the TIA helper window, run taskkill /im Siemens.Automation.Portal.exe /f, wait 2 minutes, start the TIA helper again, then import again.": "Das TIA-Projekt ist in TIA Portal geöffnet, oder ein verstecktes TIA hält es noch fest. Schließen Sie es in TIA Portal auf dem TIA-PC. Ist es dort nicht geöffnet: Schließen Sie das Fenster des TIA-Helfers, führen Sie taskkill /im Siemens.Automation.Portal.exe /f aus, warten Sie 2 Minuten, starten Sie den TIA-Helfer erneut und importieren Sie dann noch einmal.",
+  "The TIA project was not found on the TIA PC. Check the project path, then import again.": "Das TIA-Projekt wurde auf dem TIA-PC nicht gefunden. Prüfen Sie den Projektpfad und importieren Sie dann erneut.",
+  "OK (real PLC, left in STOP)": "OK (echte SPS, in STOP belassen)",
+  "not confirmed": "nicht bestätigt",
 
 });
 
@@ -3307,6 +3312,15 @@ I18N.addRules([
   [/^(\d+) problem\(s\) are left\. PLC-Ki will not start with this model until they are fixed:$/, "Es bleiben $1 Problem(e). PLC-Ki startet mit diesem Modell erst, wenn sie behoben sind:"],
   [/^PLC-Ki cannot show this export: (.*)$/, "PLC-Ki kann diesen Export nicht anzeigen: $1"],
   [/^Shown now, but not saved for the next start: (.*)$/, "Jetzt angezeigt, aber nicht für den nächsten Start gespeichert: $1"],
+  [/^TIA refused (.+?): (.*)$/, "TIA hat $1 abgelehnt: $2"],
+  [/^Compile error in (.+?): (.*)$/, "Kompilierfehler in $1: $2"],
+  [/^Compile warning in (.+?): (.*)$/, "Kompilierwarnung in $1: $2"],
+  [/^Download to PLCSIM failed: (.*)$/, "Der Download auf PLCSIM ist fehlgeschlagen: $1"],
+  [/^While running on PLCSIM: (.*)$/, "Beim Lauf auf PLCSIM: $1"],
+  [/^Lost the connection to the PLC: (.*)$/, "Die Verbindung zur SPS ist abgebrochen: $1"],
+  [/^The CPU is in (.+?) instead of RUN\.$/, "Die CPU steht in $1 statt in RUN."],
+  [/^Alarm came up: (.*)$/, "Alarm ist aufgetreten: $1"],
+  [/^(\s+)new alarm: (.*)$/, "$1neuer Alarm: $2"],
   // ==== leftovers: rules ====
 
 ]);
