@@ -215,7 +215,7 @@
       if (params[0] === "db" && params[1] && params[1] !== db) { tab = "dbs"; query = ""; openDb(params[1]); }
       const head = PK.hero({ cls: "hero compact", title: PK.t("Tags"),
         sub: PK.t("Every tag of the PLC tag tables with its address, and every value of the data blocks, read live from the PLC.")
-          + (PK.can("real") ? " " + PK.t("Change a value with the pen: on PLCSIM (safety values after a warning), on a real PLC only memory and data values, when allowed and confirmed.")
+          + (PK.testValues() ? "" : PK.can("real") ? " " + PK.t("Change a value with the pen: on PLCSIM (safety values after a warning), on a real PLC only memory and data values, when allowed and confirmed.")
             : PK.can("plcsim") ? " " + PK.t("Change a value with the pen on PLCSIM (safety values after a warning).") : "") });
       if (dataError) return head + PK.sec("", PK.ui.error(dataError, { level: "warn" }));
       if (!data) return head + PK.sec("", PK.ui.loading("table", { rows: 8 }));

@@ -96,6 +96,8 @@ const PK = (() => {
     operator: ["notes"],
   };
   const can = (what) => !!(state.user && (ROLE_CAN[state.user.role] || []).includes(what));
+  /** PLC-Ki reads test values from a file (Source=snapshot), not a PLC: nothing on the page can be changed. */
+  const testValues = () => { const c = state.status && state.status.connection; return !!c && c.state === "snapshot"; };
   const ROLE_TITLE = { admin: I18N.T("Administrator"), technician: I18N.T("Technician"), operator: I18N.T("Operator") };
   const roleTitle = (role) => PK.t(ROLE_TITLE[role] || "Operator");
   /** The role as a word inside a sentence ("anna · operator"): lower case in English; German nouns keep their capital. */
@@ -352,7 +354,10 @@ const PK = (() => {
   ];
   const movedTo = (hash) => { for (const [re, to] of MOVED) if (re.test(hash)) return hash.replace(re, to); return null; };
 
-  function go(hash) { if (location.hash !== hash) location.hash = hash; else route(); }
+  function go(hash) {
+    if (leaveSheetTo(hash)) return;    // a Search result: the sheet's Back step goes first, then the page
+    if (location.hash !== hash) location.hash = hash; else route();
+  }
 
   // ---- unsaved changes: a bar with Discard / Save, and a question before leaving the page ----
   let dirty = null;          // { save } while the page has changes that are not saved
@@ -378,12 +383,15 @@ const PK = (() => {
 
   function route() {
     setDirty(null);
+    closeSheets();          // a sheet belongs to the page it was opened on (More, Help or Search left open after Back)
     const moved = movedTo(location.hash);
     if (moved) history.replaceState(history.state, "", moved);
     const leftHash = shownHash;
     shownHash = location.hash;
     let { name, params } = parseRoute();
     let v = views[name];
+    // Setup is for administrators: an old bookmark or a shared link says so, instead of waiting for answers the server refuses
+    if (name.startsWith("setup/") && !can("settings")) { params = []; name = "noaccess"; v = views.noaccess; }
     if (!v) { params = [name, ...params]; name = "notfound"; v = views.notfound; }   // say so, instead of showing Active alarm
     const back = backFor(leftHash);
     const navName = v.nav || name;   // a page can light another menu item (Stations lights Plant)
@@ -397,12 +405,16 @@ const PK = (() => {
     showBack();
     lastHtml = "";
     page.innerHTML = "";
+    // A new page opens at the top. Instant, not the smooth scroll of html: draw() keeps the scroll position it finds,
+    // and during a smooth scroll that is still the old page's position (a link low on Active alarm opened Sequence near its end).
+    page.scrollTop = 0;
+    window.scrollTo({ top: 0, behavior: "instant" });
     quiet(2000);            // a new page: its first values are not "changes"
     tabsIntoView = true;    // and its open tab is shown, also at the end of a long row on a phone
     if (v.mount) v.mount(page, params);
     else draw();
     page.scrollTop = 0;
-    window.scrollTo(0, 0);
+    window.scrollTo({ top: 0, behavior: "instant" });
     showAccess();
     showHandover();
     if (can("plcsim") && (!state.changes || Date.now() - state.changes.at > 30000)) loadChanges();
@@ -612,7 +624,7 @@ const PK = (() => {
         try { if (keep.a != null) el.setSelectionRange(keep.a, keep.b); } catch { /* not a text field */ }
       }
     }
-    window.scrollTo(0, y);
+    window.scrollTo({ top: y, behavior: "instant" });
   }
 
   // ---- live polling ----
@@ -1190,11 +1202,37 @@ const PK = (() => {
     return ok;
   }
 
+  // ---- Sheets and the Back button ----
+  // A sheet opened with { back: true } (More, Help, Search) gets a history entry of its own, so the phone's or the
+  // browser's Back closes the sheet first and leaves the page as it is. A link inside it goes back over that entry
+  // first, then to the link, so the history holds no step that only reopens nothing.
+  const openSheets = [];       // newest last: { close, dismiss, mark }
+  let afterSheetBack = null;   // where to go once Back has taken a sheet's entry away
+  const sheetEntry = (mark) => !!mark && !!history.state && history.state.pkSheet === mark;
+  window.addEventListener("popstate", () => {
+    const now = history.state && history.state.pkSheet;
+    openSheets.filter((s) => s.mark && s.mark !== now).reverse().forEach((s) => s.close("pop"));
+    if (afterSheetBack != null) { const h = afterSheetBack; afterSheetBack = null; go(h); }
+  });
+  /** route(): the sheets of the page that is left close with it (not the ones that wait for a job). */
+  function closeSheets() { openSheets.filter((s) => s.dismiss).reverse().forEach((s) => s.close("route")); }
+  /** Going to a page from a sheet that has its own Back step: take that step first, then go. True when it did. */
+  function leaveSheetTo(hash) {
+    const s = [...openSheets].reverse().find((x) => sheetEntry(x.mark));
+    if (!s) return false;
+    afterSheetBack = hash;
+    s.close();
+    return true;
+  }
+
   /**
    * A modal sheet; returns {el, close}. Esc, a click outside it and any [data-close] button close it,
    * unless dismiss is false (sheets that wait for a job, such as a real-PLC confirmation or a restart).
+   * back: true gives it a history entry, so Back closes it (see above).
    */
-  function sheet(html, { dismiss = true, onClose } = {}) {
+  function sheet(html, { dismiss = true, onClose, back: withBack = false } = {}) {
+    const mark = withBack && dismiss ? "s" + Math.random().toString(36).slice(2, 8) : null;
+    if (mark) history.pushState({ ...(history.state || {}), pkSheet: mark }, "");
     const back = document.activeElement;
     const wrap = document.createElement("div");
     wrap.className = "sheet-wrap";
@@ -1207,14 +1245,20 @@ const PK = (() => {
     const h = el.querySelector("h2, h1");   // screen readers name the dialog by its heading
     if (h) { h.id = h.id || "sheet-h-" + Math.random().toString(36).slice(2, 8); el.setAttribute("aria-labelledby", h.id); }
     let closed = false;
-    const close = () => {
+    const entry = { dismiss, mark };
+    const close = (how) => {
       if (closed) return;
       closed = true;
+      openSheets.splice(openSheets.indexOf(entry), 1);
       wrap.classList.add("out");
       setTimeout(() => wrap.remove(), matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 160);
       if (back && back.isConnected && back.focus) back.focus({ preventScroll: true });
+      // Closed with Done, Esc or a click outside: take its history entry away again (Back already did, a new page left it behind)
+      if (how !== "pop" && how !== "route" && sheetEntry(mark)) history.back();
       if (onClose) onClose();
     };
+    entry.close = close;
+    openSheets.push(entry);
     const focusables = () => [...el.querySelectorAll("a[href],button:not([disabled]),input:not([disabled]),select,textarea,summary,[tabindex]:not([tabindex='-1'])")].filter((x) => x.offsetParent !== null);
     wrap.addEventListener("keydown", (e) => {
       if (e.key === "Escape") { e.stopPropagation(); if (dismiss) close(); }
@@ -1225,7 +1269,17 @@ const PK = (() => {
       }
     });
     if (dismiss) wrap.addEventListener("mousedown", (e) => { if (e.target === wrap) close(); });
-    el.addEventListener("click", (e) => { if (e.target.closest("[data-close]")) close(); });
+    el.addEventListener("click", (e) => {
+      // A page link in a sheet with its own Back step: that step first, then the page (a new tab or window as usual)
+      const a = mark && e.target.closest('a[href^="#"]');
+      if (a && !e.defaultPrevented && !e.button && !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey && !a.target && sheetEntry(mark)) {
+        e.preventDefault();
+        afterSheetBack = a.getAttribute("href");
+        close();
+        return;
+      }
+      if (e.target.closest("[data-close]")) close();
+    });
     requestAnimationFrame(() => { if (!el.contains(document.activeElement)) (el.querySelector("[autofocus]") || el.querySelector(".row.end .btn:last-child") || el).focus({ preventScroll: true }); });
     return { el, close };
   }
@@ -1605,6 +1659,9 @@ const PK = (() => {
     notfound: [I18N.T("Page not found"), I18N.T("The address in the browser does not match a page of PLC-Ki."), [
       I18N.T("Pick a page in the menu, or use one of the links on the page."),
       I18N.T("An old bookmark or a mistyped address leads here. Nothing is wrong with the machine.")]],
+    noaccess: [I18N.T("Setup is for administrators"), I18N.T("This address is a Setup page, and only administrators can open Setup."), [
+      I18N.T("Every machine page is in the menu."),
+      I18N.T("If something in Setup needs changing, ask an administrator.")]],
   };
   // ---- Page not found: an unknown address says so, with a way out, instead of quietly showing Active alarm ----
   /** The page an unknown address most likely meant, only when it is obvious ("generator" → Block generator). */
@@ -1612,7 +1669,7 @@ const PK = (() => {
     const admin = can("settings");
     const t = String(typed || "").toLowerCase();
     const want = t.split("/").pop();
-    const names = Object.keys(views).filter((n) => n !== "notfound" && HELP[n] && (admin || !n.startsWith("setup/")));
+    const names = Object.keys(views).filter((n) => n !== "notfound" && n !== "noaccess" && HELP[n] && (admin || !n.startsWith("setup/")));
     const last = (n) => n.split("/").pop();
     if (want.length >= 3) {
       const hit = names.find((n) => last(n) === want)
@@ -1635,6 +1692,17 @@ const PK = (() => {
         sub: `${PK.t("There is no page at {address}.", { address: `<code>#/${esc(typed)}</code>` })}${near ? " " + PK.t("Did you mean {page}?", { page: esc(PK.t(HELP[near][0])) }) : " " + PK.t("It may be an old bookmark or a typo.")}` });
     },
   });
+  // ---- Setup for a technician or an operator (an old bookmark, a link from a colleague): say so, with the way to their start page.
+  // route() sends every setup/* address here for a login that may not change settings; the server refuses those answers anyway.
+  view("noaccess", {
+    transient: true,      // the back chip skips it: it only says where to go
+    render() {
+      const start = /^#\/setup(\/|$)/.test(startPage()) ? "#/alarm" : startPage();
+      return hero({ title: PK.t("Setup is for administrators"),
+        sub: PK.t("This login sees the machine pages, not Setup. If something in Setup needs changing, ask an administrator."),
+        actions: `<a class="btn" href="${esc(start)}">${PK.t("Open {page}", { page: esc(startLabel(start)) })}</a>` });
+    },
+  });
 
   function helpSheet() {
     const name = current ? current.name : "alarm";
@@ -1647,7 +1715,7 @@ const PK = (() => {
       <p class="m-0 faint small">${PK.t("The light at the top right shows the PLC connection; click it for what it means. Ask answers questions about the machine on every page.")}</p>
       <p class="m-0 faint small"><button type="button" class="linkbtn" data-screen>${PK.t("Alarm sound and screen")}</button>: ${PK.t("beep or show a notice when an alarm comes, keep a line screen on.")}</p>
       <p class="m-0 faint small keys"><kbd>${PK.t("Ctrl K")}</kbd> ${PK.t("search")} · <kbd>?</kbd> ${PK.t("this help")} · <kbd>/</kbd> ${PK.t("ask Ki")} · <kbd>Esc</kbd> ${PK.t("close")}</p>
-      <div class="row end">${admin && name !== "setup/start" ? `<a class="btn b" href="#/setup/start" data-close>${PK.t("Get started")}</a>` : ""}<button class="btn" data-close>${PK.t("Done")}</button></div>`);
+      <div class="row end">${admin && name !== "setup/start" ? `<a class="btn b" href="#/setup/start" data-close>${PK.t("Get started")}</a>` : ""}<button class="btn" data-close>${PK.t("Done")}</button></div>`, { back: true });
     h.el.querySelector("[data-screen]").onclick = () => { h.close(); screenSheet(); };
   }
 
@@ -1676,7 +1744,7 @@ const PK = (() => {
     const who = state.user ? `<p class="faint small more-who">${esc(state.user.name)} · ${roleWord(state.user.role)}</p>` : "";
     const s = sheet(`<div class="more-head"><h2>${PK.t("More")}</h2><button class="btn plain small" type="button" data-close>${PK.t("Done")}</button></div>
       ${pageLists}
-      ${who}<ul class="mlist" aria-label="${PK.t("Account")}">${acct}</ul>`);
+      ${who}<ul class="mlist" aria-label="${PK.t("Account")}">${acct}</ul>`, { back: true });
     s.el.classList.add("more-sheet");
     s.el.addEventListener("click", (e) => {
       const b = e.target.closest("[data-m]");
@@ -1894,6 +1962,9 @@ const PK = (() => {
       const startAt = startPage();
       if (startAt !== "#/alarm") history.replaceState(null, "", startAt);
     }
+    // Reloaded while More, Help or Search was open: its history entry has no sheet now, so step back over it
+    // (else the first Back would do nothing). The same page, so no hashchange.
+    if (history.state && history.state.pkSheet) history.back();
     route();
     pollStatus();
     pollValues();
@@ -1902,6 +1973,6 @@ const PK = (() => {
     loadHandover(); setInterval(loadHandover, 60000);
   }
 
-  return { AI, ui, t: I18N.t, T: I18N.T, srv: I18N.srv, get lang() { return I18N.lang; }, BP, can, roleTitle, prefs, startPage, startChoices, startLabel, hm, num, numText, dayMonth, weekdayDay, FORMATS, fmtKey, plantFormat, alarmWants, screenSize, dirty: setDirty, get isDirty() { return !!dirty; }, plain, connInfo, connSheet, helpSheet, screenSheet, passwordSheet, setHash, cmd, sec, hero, on, $, esc, icon, fillIcons, kindIcon, api, state, view, go, draw, route, toast, copyText, sheet, confirmSheet, cond, md, ago, clock, date, when,
+  return { AI, ui, t: I18N.t, T: I18N.T, srv: I18N.srv, get lang() { return I18N.lang; }, BP, can, testValues, roleTitle, prefs, startPage, startChoices, startLabel, hm, num, numText, dayMonth, weekdayDay, FORMATS, fmtKey, plantFormat, alarmWants, screenSize, dirty: setDirty, get isDirty() { return !!dirty; }, plain, connInfo, connSheet, helpSheet, screenSheet, passwordSheet, setHash, cmd, sec, hero, on, $, esc, icon, fillIcons, kindIcon, api, state, view, go, draw, route, toast, copyText, sheet, confirmSheet, cond, md, ago, clock, date, when,
     loadProgram, blockOf, valueBySymbol, norm, start, cpuStop, cpuSince, loadHeld, releaseAll, loadHandover, tvMode, get current() { return current; } };
 })();

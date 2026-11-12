@@ -17,6 +17,8 @@
   /** The small "Change" button next to a live value, or nothing (operators, arrays, structs, unknown types). */
   function button(t) {
     if (!isAdmin() || !TYPES.has(typeOf(t)) || !t.symbol) return "";
+    // Test values come from a file: there is nothing to change, for anyone (the pen only said so)
+    if (PK.testValues()) return "";
     // A technician only gets the pen while the PLC is confirmed PLCSIM (the server refuses anything else anyway)
     if (!PK.can("real") && !(PK.state.changes && PK.state.changes.values === "plcsim")) return "";
     return `<button type="button" class="btn plain small write-btn" data-write="${esc(t.symbol)}" data-wtype="${esc(typeOf(t))}" title="${esc(PK.t("Change this value in the PLC"))}" aria-label="${esc(PK.t("Change {name}", { name: t.symbol }))}">${icon("pen")}</button>`;
@@ -269,7 +271,8 @@
     if (!isAdmin()) return "";
     loadLog();
     const held = heldHtml();
-    if (!log || !log.length) return held + `<p class="faint small">${PK.t("Values changed from PLC-Ki are listed here. Administrators can change a value with {icon} next to it.", { icon: icon("pen") })}</p>`;
+    // On test values nothing can change, so an empty log needs no line about the pen
+    if (!log || !log.length) return held + (PK.testValues() ? "" : `<p class="faint small">${PK.t("Values changed from PLC-Ki are listed here. Administrators can change a value with {icon} next to it.", { icon: icon("pen") })}</p>`);
     return held + `<div class="card"><details class="more" style="border:0;margin:0;padding:0"><summary>${PK.t("Changes made from PLC-Ki ({count})", { count: log.length + (log.length >= 30 ? "+" : "") })}</summary>
       <table class="mt-2 tbl"><tr><th>${PK.t("When")}</th><th>${PK.t("Who")}</th><th>${PK.t("PLC")}</th><th>${PK.t("Value")}</th><th>${PK.t("Change|Changes", { n: 1 })}</th><th>${PK.t("Why")}</th></tr>
       ${log.map((e) => `<tr><td class="nowrap small">${esc(PK.date(e.time))}</td><td>${esc(e.user)}</td>
