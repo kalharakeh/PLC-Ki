@@ -267,7 +267,7 @@
     const admin = PK.can("settings");
     const res = tr.source === "disk" && tr.resolutionSec && !cy ? PK.t("One point on a chart is {dur}; a step shorter than that does not show.", { dur: dur(tr.resolutionSec * 1000) }) + " " : "";
     const keep = `${res}${PK.t("Values are saved on this PC (every read for the newest days, a minute at a time for older ones), so charts survive a restart.")}`
-      + (admin ? ` <a href="#/setup/settings">${PK.t("How long they are kept is set in Setup › Settings › Storage.")}</a>` : " " + PK.t("An administrator sets how long they are kept."));
+      + (admin ? ` <a href="#/setup/settings/storage">${PK.t("How long they are kept is set in Setup › Settings › Storage.")}</a>` : " " + PK.t("An administrator sets how long they are kept."));
     return `<div class="trends">
       <div class="toolbar tr-tools">${windowChoice(tr)}
         <input type="search" list="tr-choices" id="tr-add" placeholder="${esc(PK.t("Add a value to the chart"))}" aria-label="${esc(PK.t("Add a value to the chart"))}" autocomplete="off">

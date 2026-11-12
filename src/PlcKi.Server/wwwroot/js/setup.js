@@ -738,8 +738,8 @@ const PKSetup = (() => {
   const isoDay = (d) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
   function storageHtml() {
     if (!storage) return "";
-    if (storage.error) return PK.sec("", `<h2>${PK.t("Storage")}</h2>${PK.ui.error(storage.error)}`);
-    const d = storage.disk, l = storage.limits;
+    if (storage.error) return PK.sec("", `${PK.ui.error(storage.error)}${info ? `<p class="mt-4 mb-0 faint">${PK.t("Data folder:")} ${esc(info.dataDir)}</p>` : ""}`);
+    const d = storage.disk, l = (draft && draft.limits) || storage.limits;
     const today = isoDay(new Date()), monthAgo = isoDay(new Date(Date.now() - 30 * 864e5));
     const rows = storage.rows.map((r) => {
       const exp = r.kind === "production" && r.count ? `<button class="btn plain small" data-prod-csv>CSV</button>`
@@ -756,8 +756,7 @@ const PKSetup = (() => {
     const last = storage.lastPrune
       ? (storage.lastRemoved.length ? PK.t("Limits last applied {when}: {what} removed.", { when, what: storage.lastRemoved.map((x) => esc(PK.srv(x.text))).join("; ") }) : PK.t("Limits last applied {when}: nothing was over them.", { when }))
       : PK.t("Limits are applied when PLC-Ki starts and once a day.");
-    return PK.sec("", `<h2 id="storage">${PK.t("Storage")}</h2><p class="sub">${PK.t("What PLC-Ki keeps on this PC, how much, and for how long.")}</p>
-      ${d.warning ? `<div class="mb-4 notice red">${icon("info")}<div>${esc(PK.srv(d.warning))}</div></div>` : ""}
+    return PK.sec("", `${d.warning ? `<div class="mb-4 notice red">${icon("info")}<div>${esc(PK.srv(d.warning))}</div></div>` : ""}
       <p class="mt-0 mb-3 small">${PK.t("Data folder:")} <span class="mono">${esc(storage.dataDir)}</span>${d.total ? ` · ${PK.t("{free} free of {total} ({pct} %)", { free: size(d.free), total: size(d.total), pct: Math.round(d.free / d.total * 100) })}` : ""}</p>
       <div style="overflow-x:auto"><table class="tbl"><tr><th>${PK.t("What")}</th><th>${PK.t("Where")}</th><th>${PK.t("How much")}</th><th>${PK.t("Oldest")}</th><th>${PK.t("Kept")}</th><th></th></tr>${rows}</table></div>
       <div class="row" data-prod-range hidden style="gap:10px;margin-top:10px;flex-wrap:wrap;align-items:end">
@@ -766,9 +765,8 @@ const PKSetup = (() => {
         <a class="btn small" data-prod-dl href="#" download>${PK.t("Download CSV")}</a></div>
       <h3 class="mt-5">${PK.t("Limits")}</h3>
       <div class="grid three">${LIMITS.map(([k, t, unit, hint]) => `<label class="field">${PK.t(t)} <span class="hint">${PK.t(unit)}</span>
-        <input id="lim-${k}" type="number" min="1" value="${l[k]}"><span class="hint">${PK.t(hint)}</span></label>`).join("")}</div>
-      <div class="row" style="gap:12px;margin-top:10px;align-items:center"><button class="btn" data-save-limits>${PK.t("Save limits")}</button>
-        <span class="muted small">${last} ${PK.t("Notes, documents, logins, settings and keys are never removed automatically.")}</span></div>`);
+        <input id="lim-${k}" data-d="limits.${k}" type="number" min="1" value="${l[k]}"><span class="hint">${PK.t(hint)}</span></label>`).join("")}</div>
+      <p class="mt-3 mb-0 muted small">${last} ${PK.t("Notes, documents, logins, settings and keys are never removed automatically.")}</p>`);
   }
   function bindStorage(page) {
     if (!storage || storage.error) return;
@@ -789,23 +787,6 @@ const PKSetup = (() => {
       catch (e) { toast(e.message, "error"); }
       await loadStorage(); PK.draw();
     });
-    const save = page.querySelector("[data-save-limits]");
-    if (save) save.onclick = async () => {
-      const limits = Object.fromEntries(LIMITS.map(([k]) => [k, Number(page.querySelector("#lim-" + k).value)]));
-      save.disabled = true;
-      try {
-        // Tighter limits remove data now: say exactly what, and ask first
-        const dry = await api("PUT", "/api/admin/storage/limits", { limits, dryRun: true });
-        if (dry.removed.length && !(await PK.confirmSheet({ title: PK.t("Save these limits?"),
-          text: `<p class="mt-0">${PK.t("They remove now:")}</p><ul>${dry.removed.map((x) => `<li>${esc(PK.srv(x.text))}${x.bytes ? ` (${size(x.bytes)})` : ""}</li>`).join("")}</ul><p><b>${PK.t("This cannot be undone.")}</b></p>`,
-          ok: PK.t("Save and remove"), danger: true }))) { save.disabled = false; return; }
-        const done = await api("PUT", "/api/admin/storage/limits", { limits, dryRun: false });
-        toast(done.removed.length ? PK.t("Saved. Removed: {what}.", { what: done.removed.map((x) => PK.srv(x.text)).join("; ") }) : PK.t("Saved."));
-        await loadSettings();
-      } catch (e) { toast(e.message, "error"); }
-      save.disabled = false;
-      await loadStorage(); PK.draw();
-    };
   }
 
   // ---------- Settings ----------
@@ -821,88 +802,175 @@ const PKSetup = (() => {
       ${limit > 0 ? `<div class="ask-bar ${pct >= 100 ? "full" : pct >= 80 ? "near" : ""}" role="img" aria-label="${PK.t("{pct}% of the monthly limit", { pct: Math.round(pct) })}"><span style="width:${pct.toFixed(1)}%"></span></div>` : ""}
       <div class="faint small">${PK.t("An estimate from the words (tokens) Ask sent and got, at Anthropic's list prices. The bill comes from Anthropic.")}</div></div>`;
   }
+  // Four tabs, each with one way to save: the unsaved-changes bar (review 4, item 8). The page is drawn from a draft, so a
+  // redraw (a login added, a storage row cleared) keeps what was typed and not saved yet. Leaving the tab with changes asks first.
+  const SET_TABS = [["machine", PK.T("Machine and Ask")], ["storage", PK.T("Storage")], ["logins", PK.T("Logins and access")], ["language", PK.T("Language and formats")]];
+  const SET_SUB = {
+    machine: PK.T("The machine model, and the assistant that answers questions about the machine."),
+    storage: PK.T("What PLC-Ki keeps on this PC, how much, and for how long."),
+    logins: PK.T("Who may open PLC-Ki, from where, and where it opens for each role."),
+    language: PK.T("How the pages are written for everyone. Each person can choose their own under My settings."),
+  };
+  const setTab = (params) => SET_TABS.some(([k]) => k === (params || [])[0]) ? params[0] : "machine";
+  const MACHINE_KEYS = ["model", "historyMinutes", "askEnabled", "askEffort", "askModel", "askMaxTokens", "askMaxToolRounds", "askMonthlyLimitUsd"];
+  const ACCESS_KEYS = ["allowRemote", "publicView", "port"];
+  let draft = null, mountSeq = 0, saving = false;
+  const pick = (o, keys) => Object.fromEntries(keys.map((k) => [k, o[k]]));
+  const plantLang = () => (state.info && state.info.language) || "en";
+  const savedStart = () => Object.fromEntries(ROLES.map(([r]) => [r, (lists.startPages || {})[r] || ""]));
+  function freshDraft() {
+    return { s: pick(settings, [...MACHINE_KEYS, ...ACCESS_KEYS]), apiKey: "", limits: storage && storage.limits ? { ...storage.limits } : null,
+      start: savedStart(), language: plantLang(), format: PK.plantFormat() };
+  }
+  const differs = (a, b, keys) => keys.some((k) => String(a[k]) !== String(b[k]));
+  /** What on this tab differs from what is saved. */
+  function changes(tab) {
+    if (!draft || !settings) return {};
+    if (tab === "machine") return { settings: differs(draft.s, settings, MACHINE_KEYS) || !!draft.apiKey.trim() };
+    if (tab === "storage") return { limits: !!(draft.limits && storage && storage.limits) && differs(draft.limits, storage.limits, LIMITS.map(([k]) => k)) };
+    if (tab === "logins") return { settings: differs(draft.s, settings, ACCESS_KEYS), start: differs(draft.start, savedStart(), ROLES.map(([r]) => r)) };
+    if (tab === "language") return { language: draft.language !== plantLang(), format: draft.format !== PK.plantFormat() };
+    return {};
+  }
+  const anyChange = (tab) => Object.values(changes(tab)).some(Boolean);
+  function track(tab) { PK.dirty(anyChange(tab) ? () => saveTab(tab) : null); }
+
+  async function saveTab(tab) {
+    if (saving) return;
+    saving = true;
+    const ch = changes(tab);
+    let ok = true, note = PK.t("Saved.");
+    try {
+      if (tab === "storage" && ch.limits) {
+        const limits = Object.fromEntries(LIMITS.map(([k]) => [k, Number(draft.limits[k])]));
+        // Tighter limits remove data now: say exactly what, and ask first
+        const dry = await api("PUT", "/api/admin/storage/limits", { limits, dryRun: true });
+        if (dry.removed.length && !(await PK.confirmSheet({ title: PK.t("Save these limits?"),
+          text: `<p class="mt-0">${PK.t("They remove now:")}</p><ul>${dry.removed.map((x) => `<li>${esc(PK.srv(x.text))}${x.bytes ? ` (${size(x.bytes)})` : ""}</li>`).join("")}</ul><p><b>${PK.t("This cannot be undone.")}</b></p>`,
+          ok: PK.t("Save and remove"), danger: true }))) { saving = false; return; }     // still unsaved: the bar stays
+        const done = await api("PUT", "/api/admin/storage/limits", { limits, dryRun: false });
+        if (done.removed.length) note = PK.t("Saved. Removed: {what}.", { what: done.removed.map((x) => PK.srv(x.text)).join("; ") });
+        await loadSettings();
+        await loadStorage();
+        draft.limits = storage.limits ? { ...storage.limits } : draft.limits;
+      }
+      if ((tab === "machine" || tab === "logins") && ch.settings) {
+        const keys = tab === "machine" ? MACHINE_KEYS : ACCESS_KEYS;
+        await saveSettings({ ...pick(draft.s, keys), ...(tab === "machine" ? { apiKey: draft.apiKey.trim() || null } : {}) });
+        Object.assign(draft.s, pick(settings, keys));
+        draft.apiKey = "";
+        if (tab === "machine") { try { askUse = await api("GET", "/api/admin/ask/usage"); } catch { /* keeps the last */ } }
+        if (info.restartNeeded) note = PK.t("Saved. Apply to use the new settings.");
+      }
+      if (tab === "logins" && ch.start) {
+        try { lists.startPages = await api("PUT", "/api/admin/start-pages", { ...draft.start }); if (!ch.settings) note = PK.t("Start pages saved. They are used from the next login."); }
+        catch (e) { ok = false; toast(e.message, "error"); }
+      }
+      if (tab === "language") {
+        if (ch.format) { const r = await api("PUT", "/api/admin/format", { format: draft.format }); if (state.info) { state.info.format = r.format; state.info.formatChosen = true; } }
+        if (ch.language) await api("PUT", "/api/admin/language", { language: draft.language });
+        if (ch.language && state.info) state.info.language = draft.language;
+        note = PK.t("Saved for this plant.");
+        // The pages are written again in the new language, unless this person chose their own
+        if (ch.language && !PK.prefs.get("language", "")) { PK.dirty(null); toast(note); setTimeout(() => location.reload(), 600); saving = false; return; }
+      }
+      if (ok) toast(note);
+    } catch (e) { toast(e.message, "error"); }
+    saving = false;
+    track(tab);         // what is still different keeps the bar up
+    PK.draw();
+  }
+
   PK.view("setup/settings", {
-    async mount() {
+    async mount(page, params) {
+      const tab = setTab(params), seq = ++mountSeq;
+      // Back on a tab already seen: draw it at once, then refresh
+      if (settings && lists && users) { draft = freshDraft(); PK.draw(); } else draft = null;
       try { await loadSettings(); users = await api("GET", "/api/admin/users"); } catch (e) { toast(e.message, "error"); }
-      try { askUse = await api("GET", "/api/admin/ask/usage"); } catch { askUse = null; }
-      await loadStorage();
+      if (tab === "machine") { try { askUse = await api("GET", "/api/admin/ask/usage"); } catch { askUse = null; } }
+      if (tab === "storage") await loadStorage();
+      if (seq !== mountSeq) return;           // another tab opened meanwhile
+      if (!PK.isDirty && settings) draft = freshDraft();
       PK.draw();
     },
-    render() {
-      if (!settings) return PK.hero({ cls: "hero compact", before: setupNav("settings"), title: PK.t("Settings") }) + PK.sec("", PK.ui.loading("cards", { rows: 3 }));
-      const s = settings;
+    render(params) {
+      const tab = setTab(params);
+      const nav = PK.ui.tabs(PK.t("Settings"), SET_TABS.map(([k, l]) => ({ label: PK.t(l), on: k === tab, href: "#/setup/settings" + (k === "machine" ? "" : "/" + k) })));
+      if (!settings || !draft) return PK.hero({ cls: "hero compact", before: setupNav("settings"), title: PK.t("Settings"), extra: nav }) + PK.sec("", PK.ui.loading("cards", { rows: 3 }));
+      const s = settings, d = draft.s;
       const keyText = { settings: PK.t("A key is saved here."), environment: PK.t("A key is already set on this PC (outside PLC-Ki). A key entered here replaces it."), none: PK.t("No key yet: the Ask box stays off until you add one.") }[info.apiKey];
-      const sw = (id, on, title, text) => `<div class="row"><div class="grow"><b class="semibold">${title}</b><div class="muted small">${text}</div></div><label class="switch"><input type="checkbox" id="${id}" ${on ? "checked" : ""}><span></span></label></div>`;
-      return PK.hero({ cls: "hero compact", before: setupNav("settings"), title: PK.t("Settings"),
-        sub: PK.t("The machine model, the assistant, and who can open PLC-Ki from where."),
-        extra: `${restartBar()}` })
-        + PK.sec("alt", `<div class="grid two" data-settings-form>
+      const sw = (id, on, title, text) => `<div class="row"><div class="grow"><b class="semibold">${title}</b><div class="muted small">${text}</div></div><label class="switch"><input type="checkbox" id="${id}" data-d="s.${id}" ${on ? "checked" : ""}><span></span></label></div>`;
+      const head = PK.hero({ cls: "hero compact", before: setupNav("settings"), title: PK.t("Settings"), sub: PK.t(SET_SUB[tab]), extra: `${restartBar()}${nav}` });
+      let body = "";
+      if (tab === "machine") body = PK.sec("alt", `<div class="grid two">
           <div class="card stack"><h3>${PK.t("Machine")}</h3>
-            <label class="field">${PK.t("Machine model")}<select id="model">${(lists.models || []).map((f) => `<option value="${esc(f.path)}" ${f.path === s.model ? "selected" : ""}>${esc(f.label)}${f.uploaded ? ` ${PK.t("(imported)")}` : ""}</option>`).join("")}</select><span class="hint">${PK.t("New models come from the Program page. Its program export is picked with it.")}</span>${runNote("model")}</label>
-            <label class="field">${PK.t("History kept (minutes)")}<input id="historyMinutes" type="number" value="${s.historyMinutes}"><span class="hint">${PK.t("For questions like \"what happened before the alarm?\"")}</span></label></div>
+            <label class="field">${PK.t("Machine model")}<select id="model" data-d="s.model">${(lists.models || []).map((f) => `<option value="${esc(f.path)}" ${f.path === d.model ? "selected" : ""}>${esc(f.label)}${f.uploaded ? ` ${PK.t("(imported)")}` : ""}</option>`).join("")}</select><span class="hint">${PK.t("New models come from the Program page. Its program export is picked with it.")}</span>${runNote("model")}</label>
+            <label class="field">${PK.t("History kept (minutes)")}<input id="historyMinutes" data-d="s.historyMinutes" type="number" value="${esc(d.historyMinutes)}"><span class="hint">${PK.t("For questions like \"what happened before the alarm?\"")}</span></label></div>
           <div class="card stack"><h3>${PK.t("Assistant")}</h3>
-            ${sw("askEnabled", s.askEnabled, PK.t("Ask box"), PK.t("Ki answers questions about the machine."))}
-            <label class="field">${PK.t("Claude API key")} <span class="hint">${esc(keyText)}</span><input id="apiKey" type="password" autocomplete="new-password" placeholder="sk-ant-…"></label>
-            <label class="field">${PK.t("Model")}<select id="askModel">${(askUse ? askUse.models : [{ id: s.askModel, name: s.askModel, note: "" }]).concat(askUse && !askUse.models.some((m) => m.id === s.askModel) ? [{ id: s.askModel, name: s.askModel, note: PK.t("set in the config file") }] : [])
-              .map((m) => `<option value="${esc(m.id)}" ${m.id === s.askModel ? "selected" : ""}>${esc(m.name)}${m.note ? " · " + esc(m.note) : ""}</option>`).join("")}</select>${runNote("askModel")}</label>
-            <label class="field">${PK.t("How hard Ki thinks")}<select id="askEffort">${[PK.T("low"), PK.T("medium"), PK.T("high"), PK.T("max")].map((x) => `<option value="${x}" ${s.askEffort === x ? "selected" : ""}>${PK.t(x)}</option>`).join("")}</select><span class="hint">${PK.t("Higher gives better answers to hard questions, but slower and dearer.")}</span></label>
-            <div class="grid two"><label class="field">${PK.t("Answer length")}<select id="askMaxTokens">${LENGTHS.concat(LENGTHS.some(([n]) => n === s.askMaxTokens) ? [] : [[s.askMaxTokens, PK.t("{n} tokens", { n: s.askMaxTokens })]])
-              .map(([n, t]) => `<option value="${n}" ${n === s.askMaxTokens ? "selected" : ""}>${esc(PK.t(t))}</option>`).join("")}</select>${runNote("askMaxTokens")}</label>
-            <label class="field">${PK.t("Lookups per question")}<input id="askMaxToolRounds" type="number" min="2" max="30" value="${s.askMaxToolRounds}"><span class="hint">${PK.t("2 to 30. More lets Ki look further, at more cost.")}</span>${runNote("askMaxToolRounds")}</label></div>
-            <label class="field" style="max-width:240px">${PK.t("Monthly limit in dollars")}<input id="askLimit" type="number" min="0" step="1" inputmode="decimal" value="${s.askMonthlyLimitUsd > 0 ? s.askMonthlyLimitUsd : ""}" placeholder="${PK.t("No limit")}"><span class="hint">${PK.t("When it is reached, Ask stops until next month. Works at once.")}</span></label>
+            ${sw("askEnabled", d.askEnabled, PK.t("Ask box"), PK.t("Ki answers questions about the machine."))}
+            <label class="field">${PK.t("Claude API key")} <span class="hint">${esc(keyText)}</span><input id="apiKey" data-d="apiKey" type="password" autocomplete="new-password" placeholder="sk-ant-…" value="${esc(draft.apiKey)}"></label>
+            <label class="field">${PK.t("Model")}<select id="askModel" data-d="s.askModel">${(askUse ? askUse.models : [{ id: s.askModel, name: s.askModel, note: "" }]).concat(askUse && !askUse.models.some((m) => m.id === s.askModel) ? [{ id: s.askModel, name: s.askModel, note: PK.t("set in the config file") }] : [])
+              .map((m) => `<option value="${esc(m.id)}" ${m.id === d.askModel ? "selected" : ""}>${esc(m.name)}${m.note ? " · " + esc(m.note) : ""}</option>`).join("")}</select>${runNote("askModel")}</label>
+            <label class="field">${PK.t("How hard Ki thinks")}<select id="askEffort" data-d="s.askEffort">${[PK.T("low"), PK.T("medium"), PK.T("high"), PK.T("max")].map((x) => `<option value="${x}" ${d.askEffort === x ? "selected" : ""}>${PK.t(x)}</option>`).join("")}</select><span class="hint">${PK.t("Higher gives better answers to hard questions, but slower and dearer.")}</span></label>
+            <div class="grid two"><label class="field">${PK.t("Answer length")}<select id="askMaxTokens" data-d="s.askMaxTokens">${LENGTHS.concat(LENGTHS.some(([n]) => n === s.askMaxTokens) ? [] : [[s.askMaxTokens, PK.t("{n} tokens", { n: s.askMaxTokens })]])
+              .map(([n, t]) => `<option value="${n}" ${String(n) === String(d.askMaxTokens) ? "selected" : ""}>${esc(PK.t(t))}</option>`).join("")}</select>${runNote("askMaxTokens")}</label>
+            <label class="field">${PK.t("Lookups per question")}<input id="askMaxToolRounds" data-d="s.askMaxToolRounds" type="number" min="2" max="30" value="${esc(d.askMaxToolRounds)}"><span class="hint">${PK.t("2 to 30. More lets Ki look further, at more cost.")}</span>${runNote("askMaxToolRounds")}</label></div>
+            <label class="field" style="max-width:240px">${PK.t("Monthly limit in dollars")}<input id="askLimit" data-d="s.askMonthlyLimitUsd" type="number" min="0" step="1" inputmode="decimal" value="${Number(d.askMonthlyLimitUsd) > 0 ? esc(d.askMonthlyLimitUsd) : ""}" placeholder="${PK.t("No limit")}"><span class="hint">${PK.t("When it is reached, Ask stops until next month. Works at once.")}</span></label>
             ${askUseHtml(s.askMonthlyLimitUsd)}</div>
+        </div>`);
+      else if (tab === "storage") body = storage ? storageHtml() : PK.sec("", PK.ui.loading("cards", { rows: 2 }));
+      else if (tab === "logins") body = PK.sec("alt", `<div class="grid two">
           <div class="card stack"><h3>${PK.t("Access")}</h3>
-            ${sw("allowRemote", s.allowRemote, PK.t("Other computers may open PLC-Ki"), PK.t("Off: only this PC. On: anyone on the network who has a login."))}
-            ${sw("publicView", s.publicView, PK.t("Viewing without login"), PK.t("For a screen on the line. Setup still needs an administrator."))}
-            <label class="field" style="max-width:200px">${PK.t("Port")}<input id="port" type="number" value="${s.port}">${runNote("port")}</label></div>
-        </div>
-        <div class="mt-5 actions"><button class="btn big" data-save-settings>${PK.t("Save")}</button><span class="muted small">${PK.t("Saves Machine, Assistant and Access. Logins below save on their own.")}</span></div>`)
-        + storageHtml()
+            ${sw("allowRemote", d.allowRemote, PK.t("Other computers may open PLC-Ki"), PK.t("Off: only this PC. On: anyone on the network who has a login."))}
+            ${sw("publicView", d.publicView, PK.t("Viewing without login"), PK.t("For a screen on the line. Setup still needs an administrator."))}
+            <label class="field" style="max-width:200px">${PK.t("Port")}<input id="port" data-d="s.port" type="number" value="${esc(d.port)}">${runNote("port")}</label></div>
+          <div class="card stack"><h3>${PK.t("Start page for each role")}</h3>
+            <p class="m-0 muted small">${PK.t("Where PLC-Ki opens after logging in, when no page is in the address. Each person can choose their own under My settings.")}</p>
+            ${ROLES.map(([r]) => { const now = draft.start[r] || "";
+              return `<label class="field">${esc(PK.t(ROLE_PLURAL[r]))}<select data-start-role="${r}" data-d="start.${r}">${PK.startChoices([now, (lists.startPages || {})[r] || ""]).map(([h, l]) => `<option value="${esc(h)}" ${(now || "#/alarm") === h ? "selected" : ""}>${esc(l)}</option>`).join("")}</select></label>`; }).join("")}</div>
+        </div>`)
         + PK.sec("", `<h2>${PK.t("Logins")}</h2><p class="sub">${PK.t("Operators see every machine page. Technicians also add documents and change values on PLCSIM. Administrators also see Setup.")}</p>
           <ul class="list logins">${(users || []).map((u) => `<li><span class="ico">${icon("user")}</span>
             <span class="grow"><b class="semibold">${esc(u.name)}</b>${state.user && u.name === state.user.name ? ` ${PK.t("(you)")}` : ""}<div class="faint">${esc(PK.roleTitle(u.role))}</div></span>
             <span class="li-acts">${state.user && u.name !== state.user.name ? `<button class="btn plain small" data-role="${esc(u.name)}" data-now="${esc(u.role)}">${PK.t("Change role")}</button>
               <button class="btn plain small" data-pw="${esc(u.name)}">${PK.t("New password")}</button><button class="fg-fault btn plain small" data-del="${esc(u.name)}">${PK.t("Delete")}</button>` : `<button class="btn plain small" data-pw-own>${PK.t("Change my password")}</button>`}</span></li>`).join("")}</ul>
-          <h3 class="mt-5">${PK.t("Start page for each role")}</h3>
-          <p class="sub">${PK.t("Where PLC-Ki opens after logging in, when no page is in the address. Each person can choose their own under Alarm sound and screen.")}</p>
-          <div class="grid three">${ROLES.map(([r]) => { const now = (lists.startPages || {})[r] || "";
-            return `<label class="field">${esc(PK.t(ROLE_PLURAL[r]))}<select data-start-role="${r}">${PK.startChoices([now]).map(([h, l]) => `<option value="${esc(h)}" ${(now || "#/alarm") === h ? "selected" : ""}>${esc(l)}</option>`).join("")}</select></label>`; }).join("")}</div>
-          <div class="mt-3 row end"><button class="btn gray" data-save-start>${PK.t("Save start pages")}</button></div>
-          <h3 class="mt-5">${PK.t("Language")}</h3>
-          <p class="sub">${PK.t("The language of the pages for everyone. Each person can choose their own under Alarm sound and screen. Alarm texts, step names and tag comments stay as the PLC program has them.")}</p>
-          <div class="row"><select id="plant-language" aria-label="${PK.t("Language for this plant")}" style="max-width:100%">${[["en", "English"], ["de", "Deutsch"]].map(([k, l]) =>
-            `<option value="${k}" ${((state.info && state.info.language) || "en") === k ? "selected" : ""}>${l}</option>`).join("")}</select></div>
-          <h3 class="mt-5">${PK.t("Dates and numbers")}</h3>
-          <p class="sub">${PK.t("How times, dates and decimals are written for everyone. Each person can choose their own under Alarm sound and screen.")}</p>
-          <div class="row"><select id="plant-format" aria-label="${PK.t("Dates and numbers for this plant")}" style="max-width:100%">${Object.entries(PK.FORMATS).map(([k, f]) =>
-            `<option value="${k}" ${PK.plantFormat() === k ? "selected" : ""}>${esc(f.label)}</option>`).join("")}</select></div>
           <h3 class="mt-5">${PK.t("Add a login")}</h3>
           <div class="grid three"><label class="field">${PK.t("Name")}<input id="nu-name" autocomplete="off"></label>
             <label class="field">${PK.t("Password")} <span class="hint">${PK.t("at least 8 characters")}</span><input id="nu-pw" type="password" autocomplete="new-password"></label>
             <label class="field">${PK.t("Role")}<select id="nu-role">${ROLES.map(([r, , short]) => `<option value="${r}">${esc(PK.roleTitle(r))}: ${esc(PK.t(short))}</option>`).join("")}</select></label></div>
-          <div class="mt-3 row end"><button class="btn" data-add-user>${PK.t("Add login")}</button></div>
-          <p class="mt-4 mb-0 faint">${PK.t("Data folder:")} ${esc(info.dataDir)}</p>`);
+          <div class="mt-3 row end"><button class="btn" data-add-user>${PK.t("Add login")}</button></div>`);
+      else body = PK.sec("alt", `<div class="grid two">
+          <div class="card stack"><h3>${PK.t("Language")}</h3>
+            <p class="m-0 muted small">${PK.t("The language of the pages for everyone. Each person can choose their own under My settings. Alarm texts, step names and tag comments stay as the PLC program has them.")}</p>
+            <select id="plant-language" data-d="language" aria-label="${PK.t("Language for this plant")}" style="max-width:100%">${[["en", "English"], ["de", "Deutsch"]].map(([k, l]) =>
+              `<option value="${k}" ${draft.language === k ? "selected" : ""}>${l}</option>`).join("")}</select></div>
+          <div class="card stack"><h3>${PK.t("Dates and numbers")}</h3>
+            <p class="m-0 muted small">${PK.t("How times, dates and decimals are written for everyone. Each person can choose their own under My settings.")}</p>
+            <select id="plant-format" data-d="format" aria-label="${PK.t("Dates and numbers for this plant")}" style="max-width:100%">${Object.entries(PK.FORMATS).map(([k, f]) =>
+              `<option value="${k}" ${draft.format === k ? "selected" : ""}>${esc(f.label)}</option>`).join("")}</select></div>
+        </div>`);
+      return head + body;
     },
-    after(page) {
+    after(page, params) {
+      const tab = setTab(params);
       bindRestart(page);
-      bindStorage(page);
+      if (!draft) return;
+      if (tab === "storage") bindStorage(page);
+      // Every setting writes into the draft; the bar shows while the tab differs from what is saved
+      page.querySelectorAll("[data-d]").forEach((el) => {
+        const keep = () => {
+          const [a, b] = el.dataset.d.split(".");
+          let x = el.type === "checkbox" ? el.checked : el.value;
+          if (el.type === "number") x = Number(x) || 0;
+          if (a === "start" && x === "#/alarm") x = "";
+          if (b) draft[a][b] = x; else draft[a] = x;
+          track(tab);
+        };
+        PK.on(el, "input", keep); PK.on(el, "change", keep);
+      });
+      track(tab);
+      if (tab !== "logins") return;
       const v = (id) => page.querySelector("#" + id);
-      const saveBtn = page.querySelector("[data-save-settings]");
-      const form = page.querySelector("[data-settings-form]");
-      const mark = () => PK.dirty(() => saveBtn.click());
-      form.querySelectorAll("input,select").forEach((el) => { PK.on(el, "input", mark); PK.on(el, "change", mark); });
-      saveBtn.onclick = async () => {
-        saveBtn.disabled = true;
-        try {
-          await saveSettings({ model: v("model").value, historyMinutes: Number(v("historyMinutes").value), askEnabled: v("askEnabled").checked,
-            apiKey: v("apiKey").value.trim() || null, askEffort: v("askEffort").value, askModel: v("askModel").value, askMaxTokens: Number(v("askMaxTokens").value),
-            askMaxToolRounds: Number(v("askMaxToolRounds").value), askMonthlyLimitUsd: Number(v("askLimit").value) || 0, allowRemote: v("allowRemote").checked, publicView: v("publicView").checked, port: Number(v("port").value) });
-          PK.dirty(null);
-          try { askUse = await api("GET", "/api/admin/ask/usage"); } catch { /* keeps the last */ }
-          toast(info.restartNeeded ? PK.t("Saved. Apply to use the new settings.") : PK.t("Saved.")); PK.draw();
-        } catch (e) { toast(e.message, "error"); }
-        saveBtn.disabled = false;
-      };
       const act = async (fn, ok) => { try { await fn(); toast(ok); users = await api("GET", "/api/admin/users"); PK.draw(); } catch (e) { toast(e.message, "error"); } };
       page.querySelectorAll("[data-role]").forEach((b) => b.onclick = () => {
         const name = b.dataset.role, now = b.dataset.now;
@@ -916,22 +984,6 @@ const PKSetup = (() => {
           if (o.dataset.to !== now) act(() => api("PUT", `/api/admin/users/${encodeURIComponent(name)}/role`, { role: o.dataset.to }), PK.t("{name} is now {role}.", { name, role: PK.lang === "de" ? PK.roleTitle(o.dataset.to) : PK.roleTitle(o.dataset.to).toLowerCase() }));
         });
       });
-      const pl = page.querySelector("#plant-language");
-      pl.onchange = async () => {
-        try { await api("PUT", "/api/admin/language", { language: pl.value }); if (state.info) state.info.language = pl.value; toast(PK.t("Saved for this plant.")); if (!PK.prefs.get("language", "")) setTimeout(() => location.reload(), 600); }
-        catch (e) { toast(e.message, "error"); }
-      };
-      const pf = page.querySelector("#plant-format");
-      pf.onchange = async () => {
-        try { const r = await api("PUT", "/api/admin/format", { format: pf.value }); if (state.info) { state.info.format = r.format; state.info.formatChosen = true; } PK.draw(); toast(PK.t("Saved for this plant.")); }
-        catch (e) { toast(e.message, "error"); }
-      };
-      page.querySelector("[data-save-start]").onclick = async () => {
-        const pages = {};
-        page.querySelectorAll("[data-start-role]").forEach((sel) => { pages[sel.dataset.startRole] = sel.value === "#/alarm" ? "" : sel.value; });
-        try { lists.startPages = await api("PUT", "/api/admin/start-pages", pages); toast(PK.t("Start pages saved. They are used from the next login.")); }
-        catch (e) { toast(e.message, "error"); }
-      };
       const own = page.querySelector("[data-pw-own]");
       if (own) own.onclick = () => PK.passwordSheet();
       page.querySelectorAll("[data-del]").forEach((b) => b.onclick = async () => {
