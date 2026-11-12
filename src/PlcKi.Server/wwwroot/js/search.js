@@ -131,7 +131,7 @@
     active = 0;
     open = PK.sheet(`<div class="more-head"><h2>${PK.t("Search")}</h2><button class="btn plain small" type="button" data-close>${PK.t("Done")}</button></div>
       <div class="sr-box">${icon("search")}<input type="search" id="sr-q" placeholder="${esc(PK.t("Alarm, device, value, block or manual"))}" aria-label="${esc(PK.t("Search the machine"))}" role="combobox" aria-expanded="true" aria-controls="sr-results" autocomplete="off" value="${esc(q)}"></div>
-      <div id="sr-results" data-results></div>`, { onClose: () => { open = null; } });
+      <div id="sr-results" data-results></div>`, { onClose: () => { open = null; }, back: true });
     open.el.classList.add("more-sheet", "search-sheet");
     const input = open.el.querySelector("#sr-q");
     input.oninput = () => {
