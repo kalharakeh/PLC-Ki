@@ -53,6 +53,7 @@ const PK = (() => {
     sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
     moon: '<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5Z"/>',
     help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14M12 17.5v.01"/>',
+    sliders: '<path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/>',
     sound: '<path d="M4 9v6h4l5 4V5L8 9H4Z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/>',
     key: '<circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M17 6l3 3M15 8l2 2"/>',
     chart: '<path d="M3 20h18"/><path d="M6 16v-5M11 16V6M16 16v-8M21 16v-3"/>',
@@ -500,7 +501,7 @@ const PK = (() => {
     let label = page;
     if (name === "alarm") { const al = (state.status && state.status.activeAlarms) || []; if (al.length) label = al[0].id; }
     else if (name === "plant" && p[0] === "devices" && p[1]) label = p[1];
-    else if (name === "tags" && p[0] === "db" && p[1]) label = p[1];
+    else if (name === "tags" && p[0] === "db" && p[1]) label = /^DB/i.test(p[1]) ? p[1] : "DB " + p[1];     // "Back to DB Station", the block, not a page
     else if (name === "plc" && p[0] === "racks" && p[1]) label = p[1];
     else if (name === "history" && p[0] && !["ranking", "recordings"].includes(p[0])) label = PK.t("{name} history", { name: p[0] });
     else if (["alarms", "program", "sequence", "station"].includes(name) && p[0]) label = p[0];
@@ -992,18 +993,24 @@ const PK = (() => {
       <span><b>${esc(title)}</b><br><span class="muted small">${esc(ok ? text : why)}</span></span></label>`;
     const notHere = PK.t("Not possible on this connection: the browser allows it only on the PLC-Ki PC itself (localhost) or over https.");
     const tvStations = typeof PKStations !== "undefined" && state.status ? PKStations.list(state.status).stations.filter((x) => x.key) : [];
-    const s = sheet(`<span class="eyebrow">${PK.t("This screen")}</span><h2>${PK.t("Alarm sound and screen")}</h2>
+    const group = (t) => `<h3 class="more-group">${t}</h3>`;
+    const s = sheet(`<h2>${PK.t("My settings")}</h2>
       <p class="m-0 muted">${prefs.perLogin ? PK.t("Saved for {name}, on every device you log in on. \"Keep this screen on\" is for this device only.", { name: esc(state.user.name) }) : PK.t("Only for this browser on this device.")} ${PK.t("Nothing here changes the machine.")}</p>
       <div class="gap-3 stack">
+        ${group(PK.t("Alarm sound"))}
         ${row("sound", PK.t("Beep when a new alarm comes"), PK.t("A short tone: three beeps for a fault, one for a warning. Leave this page open in a tab."), true, "")}
         ${row("notify", PK.t("Show a notice when a new alarm comes"), PK.t("A message from the browser, also when PLC-Ki is in a background tab."), canNotify, notHere)}
+        ${soundRulesHtml()}
+        ${group(PK.t("This screen"))}
         ${row("awake", PK.t("Keep this screen on"), PK.t("For a screen on the line: the display does not go dark while this page is open."), canWake, notHere)}
         <div class="opt-row" style="cursor:default;flex-wrap:wrap"><span class="grow"><b>${PK.t("Line screen (TV)")}</b><br><span class="muted small">${PK.t("For a TV on the line: no menu, the state in big letters and the machine picture. It turns to the alarm when one comes and keeps the screen on. Esc leaves it.")}</span></span>
           <span class="row end" style="flex-basis:100%">${tvStations.length ? `<select id="tv-pick" class="start-sel" style="flex:1 1 12em;width:auto" aria-label="${PK.t("Line screen for")}"><option value="#/tv">${PK.t("Whole machine")}</option>${tvStations.map((x) => `<option value="#/tv/${esc(encodeURIComponent(x.key))}">${esc(x.name)}</option>`).join("")}</select>` : ""}
           <button type="button" class="btn" data-tv-open>${PK.t("Line screen (TV)")}</button></span></div>
-        <div class="opt-row" style="cursor:default"><span class="grow"><b>${PK.t("Screen colours")}</b><br><span class="muted small">${PK.t("Dark suits a wall screen in a bright hall.")}</span></span>
+        <div class="opt-row" style="cursor:default;flex-wrap:wrap"><span class="grow"><b>${PK.t("Screen colours")}</b><br><span class="muted small">${PK.t("Dark suits a wall screen in a bright hall.")}</span></span>
           ${ui.choice(PK.t("Screen colours"), [["auto", PK.t("Like this PC")], ["light", PK.t("Light")], ["dark", PK.t("Dark")]].map(([k, l]) => ({ label: l, on: themeChoice() === k, data: { "data-theme-set": k } })))}</div>
-        ${soundRulesHtml()}
+        <div class="opt-row" style="cursor:default;flex-wrap:wrap"><span class="grow"><b>${PK.t("Spacing")}</b><br><span class="muted small">${PK.t("Compact fits more on a control-room PC. Touch makes buttons bigger for a tablet or gloves.")}</span></span>
+          ${ui.choice(PK.t("Spacing"), [["auto", PK.t("Like this device")], ["compact", PK.t("Compact")], ["touch", PK.t("Touch")]].map(([k, l]) => ({ label: l, on: densityChoice() === k, data: { "data-density-set": k } })))}</div>
+        ${group(PK.t("Language and start page"))}
         <label class="opt-row" style="cursor:default;flex-wrap:wrap"><span class="grow"><b>${PK.t("Language")}</b><br><span class="muted small">${PK.t("The language of the menus, buttons and messages. Alarm texts, step names and tag comments stay as the PLC program has them.")}</span></span>
           <select id="lang-pick" class="start-sel" aria-label="${PK.t("Language")}"><option value="">${PK.t("As for this plant: {language}", { language: langName(state.info && state.info.language) })}</option>
             ${["en", "de"].map((k) => `<option value="${k}" ${prefs.get("language", "") === k ? "selected" : ""}>${langName(k)}</option>`).join("")}</select></label>
@@ -1013,8 +1020,6 @@ const PK = (() => {
         ${state.user ? `<label class="opt-row" style="cursor:default;flex-wrap:wrap"><span class="grow"><b>${PK.t("Start page")}</b><br><span class="muted small">${PK.t("Where PLC-Ki opens for you when no page is in the address. A link or a bookmark still opens its own page.")}</span></span>
           <select id="start-page" class="start-sel" aria-label="${PK.t("Start page")}"><option value="">${esc(PK.t(AS_FOR[state.user.role] || "As for operators: {page}", { page: startLabel(state.roleStart || "#/alarm") }))}</option>
             ${startChoices([prefs.get("startPage", "")]).map(([h, l]) => `<option value="${esc(h)}" ${prefs.get("startPage", "") === h ? "selected" : ""}>${esc(l)}</option>`).join("")}</select></label>` : ""}
-        <div class="opt-row" style="cursor:default"><span class="grow"><b>${PK.t("Spacing")}</b><br><span class="muted small">${PK.t("Compact fits more on a control-room PC. Touch makes buttons bigger for a tablet or gloves.")}</span></span>
-          ${ui.choice(PK.t("Spacing"), [["auto", PK.t("Like this device")], ["compact", PK.t("Compact")], ["touch", PK.t("Touch")]].map(([k, l]) => ({ label: l, on: densityChoice() === k, data: { "data-density-set": k } })))}</div>
       </div>
       <div class="row end"><button class="btn plain" type="button" data-test-beep>${PK.t("Test the beep")}</button><button class="btn" data-close>${PK.t("Done")}</button></div>`);
     s.el.addEventListener("change", async (e) => {
@@ -1379,7 +1384,7 @@ const PK = (() => {
   }
 
   // ---- Dates, times and numbers: one format everywhere (review 57). The plant picks one (Setup, Settings), each
-  // login may pick its own (Alarm sound and screen). "text" is the default: "3 Nov 2026, 14:02", no ambiguous 03/11.
+  // login may pick its own (My settings). "text" is the default: "3 Nov 2026, 14:02", no ambiguous 03/11.
   const MONTHS_EN = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const MONTHS_DE = ["Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"];
   const WEEKDAYS_EN = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -1645,15 +1650,16 @@ const PK = (() => {
       I18N.T("Tap a device for its values and interlocks. Open the alarm for the full fix list and where it is set in the program."),
       I18N.T("Values update every second.")]],
     tv: [I18N.T("Line screen (TV)"), I18N.T("A page for a TV on the line, readable from a few metres: the state, the step and the machine picture. It turns to the alarm when one comes."), [
-      I18N.T("Open it from Alarm sound and screen, or bookmark #/tv (the whole machine) or #/tv/<station> (one station). It can also be a start page."),
+      I18N.T("Open it from My settings, or bookmark #/tv (the whole machine) or #/tv/<station> (one station). It can also be a start page."),
       I18N.T("When an alarm comes, the screen shows that alarm large: its text, the station and since when. It goes back to the picture when no alarm is on."),
       I18N.T("The screen stays on and is dark unless Light was chosen. Everything moves a few pixels every few minutes so nothing burns into the TV."),
       I18N.T("It only reads. No login is needed when viewing without login is on. Press Esc or the × in the corner to leave.")]],
     "setup/qr": [I18N.T("QR labels"), I18N.T("Print a QR label per station or device. A phone that scans it opens that station's live page."), [
       I18N.T("Pick the address phones use: the PC's address on the plant network, not localhost. Open it on a phone once to check it works."),
-      I18N.T("Phones only reach PLC-Ki when Settings › Other computers may open PLC-Ki is on."),
+      I18N.T("Phones only reach PLC-Ki when Other computers may open PLC-Ki is on, in Settings › Logins and access."),
       I18N.T("Print on sticker paper or laminate the labels. They keep working after a new program import as long as the station keeps its name.")]],
     "setup/settings": [I18N.T("Settings"), I18N.T("The machine model, the Claude key, who may open PLC-Ki, and logins."), [
+      I18N.T("Four tabs: Machine and Ask, Storage, Logins and access, Language and formats. Change what you need, then Save in the bar at the bottom."),
       I18N.T("Operators see every machine page; administrators also see Setup."),
       I18N.T("Other computers may open PLC-Ki: off means only this PC.")]],
     notfound: [I18N.T("Page not found"), I18N.T("The address in the browser does not match a page of PLC-Ki."), [
@@ -1713,7 +1719,7 @@ const PK = (() => {
       <ul class="plainlist">${tips.map((t) => `<li>${esc(PK.t(t))}</li>`).join("")}</ul>
       ${a.text ? `<p class="m-0 small">${esc(a.text)}</p>` : ""}
       <p class="m-0 faint small">${PK.t("The light at the top right shows the PLC connection; click it for what it means. Ask answers questions about the machine on every page.")}</p>
-      <p class="m-0 faint small"><button type="button" class="linkbtn" data-screen>${PK.t("Alarm sound and screen")}</button>: ${PK.t("beep or show a notice when an alarm comes, keep a line screen on.")}</p>
+      <p class="m-0 faint small"><button type="button" class="linkbtn" data-screen>${PK.t("My settings")}</button>: ${PK.t("the alarm sound, this screen, your language and start page.")}</p>
       <p class="m-0 faint small keys"><kbd>${PK.t("Ctrl K")}</kbd> ${PK.t("search")} · <kbd>?</kbd> ${PK.t("this help")} · <kbd>/</kbd> ${PK.t("ask Ki")} · <kbd>Esc</kbd> ${PK.t("close")}</p>
       <div class="row end">${admin && name !== "setup/start" ? `<a class="btn b" href="#/setup/start" data-close>${PK.t("Get started")}</a>` : ""}<button class="btn" data-close>${PK.t("Done")}</button></div>`, { back: true });
     h.el.querySelector("[data-screen]").onclick = () => { h.close(); screenSheet(); };
@@ -1736,7 +1742,7 @@ const PK = (() => {
     const groups = [...new Set(pages.map((a) => a.dataset.group || ""))];
     const pageLists = groups.map((g) => `${g ? `<h3 class="more-group">${esc(PK.t(g))}</h3>` : ""}<ul class="mlist" aria-label="${esc(g ? PK.t(g) : PK.t("Pages"))}">${pages.filter((a) => (a.dataset.group || "") === g).map(pageRow).join("")}</ul>`).join("");
     const acct = [
-      row(item("sound", PK.t("Alarm sound and screen")), 'data-m="screen"'),
+      row(item("sliders", PK.t("My settings")), 'data-m="screen"'),
       row(item("moon", darkNow() ? PK.t("Light screen") : PK.t("Dark screen")), 'data-m="theme"'),
       state.user ? row(item("key", PK.t("Change my password")), 'data-m="pw"') : "",
       row(item("logout", state.user ? PK.t("Log out") : PK.t("Log in")), 'data-m="logout"'),

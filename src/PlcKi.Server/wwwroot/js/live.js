@@ -742,18 +742,16 @@
             ${q.next.map((n) => `<div><p class="mt-0 mb-2 muted small">${PK.t(`To go to step {n} "{name}" it needs`, { n: n.to, name: esc(n.toName) })}</p><ul class="conds">${n.conditions.map((c) => PK.condHeld(c, s)).join("")}</ul></div>`).join("")}
             ${q.limit ? `<p class="m-0 faint">${esc(q.limit)}</p>` : ""}
           </div>`).join("");
-        body = sec("", `<div class="plant-cols">
+        // The tabs above lead to Values over time and Data exchange; the right column is only the machine picture
+        const glance = V && s.equipment.length ? `<div class="stack"><div class="card stack"><h3 class="m-0">${PK.t("The machine at a glance")}</h3>${V.plantMap(s.equipment, null)}</div></div>` : "";
+        body = sec("", `<div class="${glance ? "plant-cols" : "stack"}">
             <div class="stack">
               <div class="card stack"><div class="row"><h3 class="m-0">${PK.t("Needs attention")}</h3>${nNeeds ? `<span class="count ${stop || s.activeAlarms.some((x) => x.severity !== "WARNING") ? "" : "warn"}">${nNeeds}</span>` : ""}<span class="spacer"></span>
                 <a class="small" href="#/plant/devices">${PK.t("All devices ›")}</a></div>${needs}</div>
               ${timelineCard()}
               ${seqCards}
             </div>
-            <div class="stack">
-              ${V && s.equipment.length ? `<div class="card stack"><h3 class="m-0">${PK.t("The machine at a glance")}</h3>${V.plantMap(s.equipment, null)}</div>` : ""}
-              ${V ? `<a class="card plink" href="#/plant/values"><span class="ico">${icon("clock")}</span><span><b>${PK.t("Values over time")}</b><span class="muted small">${PK.t("The last minutes of every measured value, with steps and alarms.")}</span></span><span class="chev">›</span></a>` : ""}
-              ${s.exchange.length ? `<a class="card plink" href="#/plant/exchange"><span class="ico">${icon("link")}</span><span><b>${PK.t("Data exchange")}</b><span class="muted small">${PK.t("{n} signals to and from {partners}.", { n: s.exchange.length, partners: esc([...new Set(s.exchange.map((x) => x.partner))].join(", ")) })}</span></span><span class="chev">›</span></a>` : ""}
-            </div>
+            ${glance}
           </div>`);
       } else if (tab === "devices") {
         const q = eqQuery.trim().toLowerCase();

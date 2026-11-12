@@ -248,7 +248,7 @@ public sealed class StorageService
             var snaps = history.Snapshots(history.KeepValues, now);
             rows.Add(new StorageRow("values", "Values", "Every value, for the charts and \"what happened before the alarm\".", "memory", null,
                 snaps.Count, Plural(snaps.Count, "read"), null, history.OldestValueTime,
-                $"the last {history.KeepValues.TotalMinutes:0} minutes (History kept, above)", null));
+                $"the last {history.KeepValues.TotalMinutes:0} minutes (History kept, on the Machine and Ask tab)", null));
         }
         if (fast != null)
             rows.Add(new StorageRow("fast", "Fast recording", "Every change the PLC sends, to cut the recording around an alarm.", "memory", null,

@@ -89,8 +89,7 @@ const PKDocs = (() => {
     const builtIn = (lib.builtIn || []).reduce((n, k) => n + k.entries, 0);
     const admin = isAdmin();
     return PK.hero({
-      eyebrow: PK.t("Documents"),
-      title: PK.t("Manuals and drawings"),
+      title: PK.t("Documents"),
       sub: PK.t("Device manuals, fault lists and electrical drawings for {machine}. Ask and the alarm page look up fault codes, wiring and settings in them and name the page.", { machine: esc(lib.machine) }),
       extra: `<form class="doc-search" id="doc-search" role="search">
           <span class="ico">${icon("search")}</span>

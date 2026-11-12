@@ -67,7 +67,7 @@ const PKStart = (() => {
     if (!ready) { readiness().then((r) => r && PK.draw()); return ""; }
     // The disk nearly full: shown to administrators even when everything is set up (Setup › Settings › Storage)
     const disk = ready.disk && ready.disk.low ? `<section class="guide-sec"><div class="wrap"><div class="notice red" role="alert">${icon("info")}
-      <div class="grow">${esc(PK.srv(ready.disk.warning))}</div><a class="btn small" href="#/setup/settings">${PK.t("Open Storage")}</a></div></div></section>` : "";
+      <div class="grow">${esc(PK.srv(ready.disk.warning))}</div><a class="btn small" href="#/setup/settings/storage">${PK.t("Open Storage")}</a></div></div></section>` : "";
     if (session.get(HIDE) === "1") return disk;
     const list = items(ready);
     const need = list.filter((i) => !i.optional);
