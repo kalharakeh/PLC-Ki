@@ -78,7 +78,7 @@ const PKModel = (() => {
         ${entry.canAsk ? "" : `<span class="faint small">${PK.t("{ai} needs a Claude key (Setup, Settings).", { ai: AI })}</span>`}<span class="faint small" id="mf-wait"></span></div>
       <div id="mf-why"></div>
       <details class="more" ${entry.canAsk ? "" : "open"}><summary>${PK.t("The entry in the model (JSON)")}</summary>
-        <textarea id="mf-json" rows="14" spellcheck="false" style="font-family:var(--mono);font-size:12.5px;width:100%;margin-top:10px">${esc(entry.json)}</textarea></details>
+        <textarea id="mf-json" rows="14" spellcheck="false" style="font-family:var(--mono);font-size:var(--fs-1);width:100%;margin-top:10px">${esc(entry.json)}</textarea></details>
       <p class="m-0 faint small">${PK.t("Saving keeps a copy of the current model next to it, then restarts PLC-Ki so the pages use the corrected model.")}</p>
       <div class="row end"><button class="btn gray" data-close>${PK.t("Cancel")}</button><button class="btn" data-mfsave>${PK.t("Save and restart")}</button></div>`);
     const $ = (sel) => s.el.querySelector(sel);

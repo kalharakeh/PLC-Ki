@@ -106,7 +106,7 @@
       <p class="m-0 muted">${PK.t("It compiles in TIA. Before it goes to a real PLC, read what {ai} wrote and look at the blocks in TIA Portal.", { ai: AI })}
         ${PK.t("Then type {version} to go on. Anything else stops here and nothing is downloaded.", { version: `<b>${esc(version)}</b>` })}</p>
       <details class="more"><summary>${PK.t("{ai}'s notes (REVIEW.md)", { ai: AI })}</summary><div class="md" data-review>${PK.ui.loading("lines")}</div></details>
-      <input id="cv-text" autocomplete="off" spellcheck="false" placeholder="${PK.t("Type {version}", { version: esc(version) })}" style="font-family:var(--mono);font-size:18px">
+      <input id="cv-text" autocomplete="off" spellcheck="false" placeholder="${PK.t("Type {version}", { version: esc(version) })}" style="font-family:var(--mono);font-size:var(--fs-4)">
       <div class="row end"><button class="btn gray" data-no>${PK.t("Stop, don't download")}</button><button class="btn red" data-yes disabled>${PK.t("Download to the real PLC")}</button></div>`, { dismiss: false });
     const el = g.sheet.el, input = el.querySelector("#cv-text"), yes = el.querySelector("[data-yes]");
     input.focus();
