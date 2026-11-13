@@ -111,7 +111,10 @@
     suggestions();
     $("ask").classList.add("open");
     $("scrim").classList.add("on");
-    if (question) ask(question); else setTimeout(() => input.focus(), 250);
+    // Ask off: no question box to type in, so focus goes to the one thing to do here ("Add the key", or Done)
+    const off = PK.state.ask && !PK.state.ask.enabled;
+    if (off) setTimeout(() => ($("ask-off").querySelector("[data-add-key]") || $("ask-close")).focus(), 250);
+    else if (question) ask(question); else setTimeout(() => input.focus(), 250);
   }
   function close() {
     $("ask").classList.remove("open");
@@ -153,7 +156,7 @@
     const admin = PK.can("settings");
     const off = $("ask-off");
     const fix = s.code === "nokey"
-      ? (admin ? PK.t("Add the key under Setup, Settings (Assistant). PLC-Ki restarts by itself, then Ask works.") : PK.t("Ask an administrator to add a Claude key to PLC-Ki."))
+      ? (admin ? PK.t("Add the key under Setup, Settings (Assistant) and save it, then press Apply now. Ask works after that.") : PK.t("Ask an administrator to add a Claude key to PLC-Ki."))
       : (admin ? "" : PK.t("Ask an administrator if you need it."));
     off.innerHTML = `<div><b>${PK.t("Ask is off.")}</b> ${esc(s.reason ? PK.srv(s.reason) : PK.t("The assistant is not available."))} ${esc(fix)}</div>`
       + (admin && s.code === "nokey" ? `<div class="mt-2 row"><a class="btn small" href="#/setup/settings" data-add-key>${PK.t("Add the key")}</a></div>` : "");
