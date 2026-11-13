@@ -33,6 +33,9 @@
      1 between a label and its value, 2 inside a row, 3 between items in a card, 4 between cards, 5 between groups, 6 between sections. */
   --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-5: 24px; --sp-6: 32px;
 
+  /* Behind a sheet (Search, Help, More, a question) and the Ask panel: dark enough that what is open stands out from a busy page */
+  --scrim: rgba(0, 0, 0, 0.4);
+
   /* Screen sizes: three, the same in ui.css and in JS (PK.BP). CSS cannot read a variable in @media, so the
      numbers are written out: phone (max-width: 600px), tablet (601 to 1100px), desktop (min-width: 1101px). */
 
@@ -59,6 +62,7 @@
     --ok: #7fa880; --ok-soft: #1d2b1e; --ok-ink: #9fd0a2;
     --steel-soft: #1f2a31; --edge: var(--line); --live-flash: rgba(91, 143, 240, 0.32);
     --shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
+    --scrim: rgba(0, 0, 0, 0.5);   /* a black page needs more to set a sheet apart */
     color-scheme: dark;
   }
 }
@@ -73,6 +77,7 @@
     --ok: #7fa880; --ok-soft: #1d2b1e; --ok-ink: #9fd0a2;
     --steel-soft: #1f2a31; --edge: var(--line); --live-flash: rgba(91, 143, 240, 0.32);
     --shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
+    --scrim: rgba(0, 0, 0, 0.5);   /* a black page needs more to set a sheet apart */
     color-scheme: dark;
 }
 
@@ -326,6 +331,8 @@ details.more[open] > summary::before { transform: rotate(90deg); }
 .conds li { display: flex; gap: 10px; align-items: flex-start; }
 .mark { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; flex: none; font-size: 12px; font-weight: 800; margin-top: 2px; }
 .mark.yes { background: var(--ok-soft); color: var(--ok-ink); } .mark.no { background: var(--fault-soft); color: var(--fault-ink); } .mark.unk { background: var(--bg-alt); color: var(--muted); }
+/* A step that waits for this condition: not met yet is not a failure, so an open circle in the muted colour */
+.mark.wait { width: 16px; height: 16px; margin: 4px 2px 0; background: none; border: 2px solid var(--muted); opacity: 0.8; }
 .now { color: var(--muted); font-size: 13px; margin-left: 4px; }
 .val { font-weight: 600; font-variant-numeric: tabular-nums; }
 
@@ -490,7 +497,7 @@ html[lang="de"] .contact.blocker .nm::after { content: "↑ stoppt den Ausgang";
 .ask-foot textarea { min-height: 44px; height: 44px; border-radius: 22px; padding: 11px 16px; }
 .chips { display: flex; gap: 6px; flex-wrap: wrap; }
 .chips button { font: inherit; font-size: 13px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line-strong); background: transparent; color: var(--ink); cursor: pointer; }
-.scrim { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.18); z-index: 70; opacity: 0; pointer-events: none; transition: opacity 0.3s var(--ease); }
+.scrim { position: fixed; inset: 0; background: var(--scrim); z-index: 70; opacity: 0; pointer-events: none; transition: opacity 0.3s var(--ease); }
 .scrim.on { opacity: 1; pointer-events: auto; }
 
 /* ---------- Setup ---------- */
@@ -521,7 +528,7 @@ html[lang="de"] .contact.blocker .nm::after { content: "↑ stoppt den Ausgang";
 .md h3 { font-size: 16px; margin: 14px 0 6px; } .md p { margin: 0 0 8px; } .md ul, .md ol { margin: 0 0 8px; padding-left: 20px; }
 
 /* sheet and toast */
-.sheet-wrap { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; background: rgba(0, 0, 0, 0.3); padding: 16px; animation: fade 0.25s var(--ease); }
+.sheet-wrap { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; background: var(--scrim); padding: 16px; animation: fade 0.25s var(--ease); }
 .sheet { max-height: calc(100vh - 40px); overflow-y: auto; background: var(--panel); border-radius: 24px; box-shadow: var(--shadow-lift); width: min(520px, 100%); padding: 26px; display: grid; gap: 14px; animation: pop 0.45s var(--spring); }
 .sheet h2 { font-size: 24px; margin: 0; }
 .countdown { font-size: 48px; font-weight: 700; letter-spacing: -0.03em; color: var(--fault); text-align: center; }
@@ -1171,13 +1178,24 @@ main#page section.hero .alarm-chips { margin-bottom: 14px; }
   .sidebar .links a, .rail-btn { justify-content: center; padding: 8px 0; }
   /* No room for words: the group label becomes a thin line */
   .nav-group { height: 1px; margin: 8px 6px; padding: 0; overflow: hidden; font-size: 0; background: var(--frame-line); opacity: 1; }
-  .nav-group:first-child { margin-top: 10px; height: 0; }
+  .nav-group:first-child { margin-top: 10px; height: 0; padding: 0; }
   .sidebar .count { position: absolute; top: 1px; right: 3px; margin: 0; min-width: 16px; height: 16px; font-size: 10px; padding: 0 4px; }
   .tb-t { display: none; }   /* the ? key hint stays: it is how people learn the key (item 37) */
 }
 @media (min-width: 601px) and (max-width: 1100px) {
   .clock, #machine-sub { display: none; }
   .topbar #machine { max-width: none; }
+}
+/* 601 to 900 px, a tablet: a finger gets no tooltip, so the short name goes under each icon (Now, Docs, Blocks …) */
+@media (min-width: 601px) and (max-width: 900px) {
+  :root { --railw: 88px; }
+  .sidebar { padding-inline: 4px; }
+  .rail-brand { margin-inline: -4px; }
+  .sidebar .links a, .rail-btn { flex-direction: column; gap: 3px; min-height: 52px; padding: 7px 2px; text-align: center; }
+  .sidebar .tl { display: block; flex: none; max-width: 100%; font-size: 10.5px; line-height: 1.2; }
+  .sidebar .tl-long { display: none; }
+  .sidebar .tl-short { display: inline; }
+  .sidebar .count { right: auto; left: calc(50% + 6px); }
 }
 
 /* phone: the menu becomes the bottom tab bar; the account links move to the footer */
@@ -1480,7 +1498,7 @@ tr.on td { background: var(--accent-soft); }
 .qr-label .qr-url { font-family: var(--mono); font-size: 9.5px; color: #6e6e73; overflow-wrap: anywhere; }
 @media (max-width: 600px) { .qr-sheet, .qr-sheet.qr-small, .qr-sheet.qr-large { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media print {
-  .sidebar, .topbar, .banner, footer.foot, .ask-panel, .scrim, .toast, .dirty-bar, .no-print, .skip { display: none !important; }
+  .sidebar, .topbar, .banner, footer.foot, .ask-panel, .scrim, .toast, .dirty-bar, .no-print, .skip, .guide-sec { display: none !important; }
   body { background: #fff; padding: 0 !important; }
   .app { display: block !important; }
   main#page section { padding: 0 !important; background: none !important; }
@@ -2025,6 +2043,21 @@ html.tv:not(.tv-moved) .tv { cursor: none; }
 .tv-split .pm-sym svg { width: clamp(34px, min(6vh, 4.4vw), 90px); height: clamp(34px, min(6vh, 4.4vw), 90px); }
 .tv-split .pm-dev b { font-size: clamp(14px, min(2.3vh, 1.6vw), 32px); }
 .tv-split .pm-st, .tv-split .pm-v, .tv-split .pm-d { font-size: clamp(12px, min(1.9vh, 1.3vw), 26px); }
+/* A wide screen: beside the alarm the devices fill the right column, top to bottom. tv.js picks the columns
+   (--tv-cols) so the tiles come out about square, each station's block gets a share of the height, and each
+   tile sizes its symbol and words to itself (cqh/cqw), so nothing is cut. The key stays clear of the corner buttons. */
+@media (orientation: landscape) and (min-width: 1101px) {
+  .tv-split .tv-pic { align-content: stretch; }
+  .tv-split .pmap { min-height: 0; display: flex; flex-direction: column; padding-bottom: 52px; }
+  .tv-split .pm-grp { flex: var(--tv-rows, 1) 1 0; min-height: 0; display: flex; flex-direction: column; }
+  .tv-split .pm-devs { flex: 1; min-height: 0; grid-auto-rows: minmax(0, 1fr); }
+  .tv-split .pmap[style*="--tv-cols"] .pm-devs { grid-template-columns: repeat(var(--tv-cols), minmax(0, 1fr)); }
+  .tv-split .pm-dev { container-type: size; align-content: center; min-height: 0; overflow: hidden; padding: clamp(6px, 1.2vh, 20px) 8px; gap: clamp(2px, 0.6vh, 10px); }
+  .tv-split .pm-key { flex: none; }
+  .tv-split .pm-sym svg { width: clamp(24px, min(36cqh, 30cqw), 130px); height: clamp(24px, min(36cqh, 30cqw), 130px); }
+  .tv-split .pm-dev b { font-size: clamp(13px, min(12cqh, 11cqw), 40px); }
+  .tv-split .pm-st, .tv-split .pm-v, .tv-split .pm-d { font-size: clamp(11px, min(9.5cqh, 9cqw), 30px); }
+}
 
 /* The alarm, large */
 .tv-al { --al: var(--fault); --al-soft: var(--fault-soft); --al-ink: var(--fault-ink);

@@ -369,7 +369,7 @@
     const time = isCur ? (q.timeInStep ? PK.t("now, {time}", { time: q.timeInStep }) : PK.t("now")) : e && e.last != null ? PK.t("took {dur}", { dur: dur(e.last) }) : "";
     const condsOf = (t) => {
       const l = live.find((n) => n.to === t.to);
-      if (l) return `<ul class="conds gt-conds">${l.conditions.map(cond).join("")}</ul>`;
+      if (l) return `<ul class="conds gt-conds">${l.conditions.map(PK.condWait).join("")}</ul>`;
       const cs = t.conditions || [];
       if (!cs.length) return `<span class="gt-text faint">${PK.t("no condition")}</span>`;
       const shown = sel ? cs : cs.slice(0, 1);
@@ -655,9 +655,9 @@
     bySeq.forEach((conds, q) => parts.push(`<li class="cc cc-step"><a href="#/plant/sequence/${encodeURIComponent(q.id)}${q.step != null ? "/" + q.step : ""}"><span class="cc-t">${PK.t("Step {n} can't go on", { n: esc(q.step ?? "?") })}</span><span class="cc-n">${conds.map((c) => esc(c.text)).join("; ")}</span></a></li>`));
     return `<ol class="cchain" aria-label="${PK.t("Cause, root first")}">${parts.join("")}</ol>`;
   }
-  /** A condition line (PK.cond) that also says which blocked device it waits for. */
+  /** A step condition line (PK.condWait: not met yet is waiting, not failed) that also says which blocked device it waits for. */
   function condHeld(c, s = state.status) {
-    const html = PK.cond(c);
+    const html = PK.condWait(c);
     const d = c.heldBy && s && s.equipment.find((e) => e.id === c.heldBy);
     return d ? html.replace(/<\/span><\/li>$/, `<span class="held">${PK.t("Can't come while {link} is {word}.", { link: `<a href="#/plant/devices/${encodeURIComponent(d.id)}">${esc(d.name)}</a>`, word: esc(devWord(d)) })}</span></span></li>`) : html;
   }
@@ -693,7 +693,20 @@
       return `<div class="pm-dev lv-${esc(look.lvl)} ${e.id === selected ? "sel" : ""} ${ring && ring.includes(e.id) ? "ring" : ""}" data-eq="${esc(e.id)}" role="button" tabindex="0" aria-label="${esc(said)}" title="${esc(said)}">
         <span class="pm-sym">${symbolFor(e.kind, e.id)}</span><b>${esc(e.id)}</b><span class="pm-st">${esc(sp ? sp.head : look.word)}</span>${kv ? `<span class="pm-v" title="${esc(kv.label)}">${esc(kv.text)}</span>` : ""}${sp && sp.detail ? `<span class="pm-d">${esc(sp.detail)}</span>` : ""}</div>`;
     };
-    return `<div class="pmap">${[...groups].map(([g, list]) => `<div class="pm-grp">${many ? `<div class="pm-h">${esc(g ? (typeof PKStations !== "undefined" ? PKStations.pretty(g) : g) : PK.t("Other devices"))}</div>` : ""}<div class="pm-devs">${list.map(tile).join("")}</div></div>`).join("")}
+    // opts.fit { w, h }: the box the map fills (the TV beside an alarm). The columns that make the tiles about square,
+    // the same for every station, and each station's block as high as its rows.
+    let cols = 0;
+    if (opts.fit && opts.fit.w > 0 && opts.fit.h > 0) {
+      const lens = [...groups.values()].map((l) => l.length);
+      const h = opts.fit.h - 100 - (many ? groups.size * 36 : 0) - groups.size * 16;   // the key and the room under it, the station names, the gaps
+      let best = Infinity;
+      for (let c = 1; c <= Math.max(...lens); c++) {
+        const rows = lens.reduce((t, n) => t + Math.ceil(n / c), 0);
+        const off = Math.abs(Math.log((opts.fit.w / c) / (Math.max(h, 1) / rows) / 1.15));
+        if (off < best) { best = off; cols = c; }
+      }
+    }
+    return `<div class="pmap"${cols ? ` style="--tv-cols:${cols}"` : ""}>${[...groups].map(([g, list]) => `<div class="pm-grp"${cols ? ` style="--tv-rows:${Math.ceil(list.length / cols)}"` : ""}>${many ?`<div class="pm-h">${esc(g ? (typeof PKStations !== "undefined" ? PKStations.pretty(g) : g) : PK.t("Other devices"))}</div>` : ""}<div class="pm-devs">${list.map(tile).join("")}</div></div>`).join("")}
       <div class="pm-key small"><span class="lv-ok">${PK.t("running or fine")}</span><span class="lv-idle">${PK.t("off")}</span><span class="lv-blocked">${PK.t("asked for but blocked")}</span><span class="lv-warn">${PK.t("warning")}</span><span class="lv-fault">${PK.t("fault")}</span></div></div>`;
   }
 

@@ -248,6 +248,11 @@ const PK = (() => {
       }[shape] || (() => b("w90"));
       return `<div class="sk sk-${shape}" role="status" aria-busy="true"><span class="sr">${esc(label)}…</span>${inner()}</div>`;
     },
+    /** A whole page while PLC-Ki gets the login, the machine and the first values: a header, a row of numbers and
+     *  cards in grey, so the first seconds after login are not an empty page. */
+    loadingPage() {
+      return sec("hero", ui.loading("lines")) + sec("", ui.loading("tiles", { rows: 4 })) + sec("", ui.loading("cards", { rows: 3 }));
+    },
     /** Something went wrong: what happened and what to do, in plain words; the system's own text folded under "Details".
      *  level "warn" for "not there yet" (no program loaded), "bad" for a failure. */
     error(message, { level = "bad", action = "" } = {}) {
@@ -591,7 +596,9 @@ const PK = (() => {
   function draw() {
     if (!current || !current.view.render) return;
     let html;
-    try { html = current.view.render(current.params); }
+    // A view with guide: "setup" gets the Getting started bar and the disk notice under it (start.js says when)
+    const guide = current.view.guide && typeof PKStart !== "undefined";
+    try { html = current.view.render(current.params) + (guide ? PKStart.card(current.view.guide) : ""); }
     catch (e) { html = sec("", `<div class="notice red" role="alert">${icon("warn")}<div><b>${PK.t("This page hit a problem.")}</b> ${PK.t("Reload the page. If it happens again, tell an administrator what you clicked.")}
       <details class="pk-detail"><summary>${PK.t("Details")}</summary><code>${esc(e.message)}</code></details></div></div>`); console.error(e); }
     if (html === lastHtml) return;
@@ -618,6 +625,7 @@ const PK = (() => {
       });
     }
     if (current.view.after) current.view.after(page, current.params);
+    if (guide) PKStart.bindCard(page);
     if (keep) {
       const el = page.querySelector(keep.sel);
       if (el && el !== document.activeElement) {
@@ -1302,10 +1310,14 @@ const PK = (() => {
     });
   }
 
-  function cond(c) {
-    const [cls, sym] = c.met === true ? ["yes", "✓"] : c.met === false ? ["no", "✗"] : ["unk", "?"];
+  /** A condition line: ✓ met, red ✗ not met (an interlock, a check: something is held back by it), ? unknown. */
+  function cond(c) { return condLine(c, false); }
+  /** A step transition's condition: not met yet only means the step is still waiting for it, so a neutral open circle, not a red ✗. */
+  function condWait(c) { return condLine(c, true); }
+  function condLine(c, wait) {
+    const [cls, sym, said] = c.met === true ? ["yes", "✓", PK.t("met")] : c.met === false ? (wait ? ["wait", "", PK.t("not yet")] : ["no", "✗", PK.t("not met")]) : ["unk", "?", PK.t("unknown")];
     const now = c.values && c.values.length ? `<span class="now">${PK.t("now")} ${c.values.map((v) => esc(v.label) + " <span class=val>" + esc(v.text) + "</span>").join(", ")}</span>` : "";
-    return `<li><span class="mark ${cls}" aria-label="${cls === "yes" ? PK.t("met") : cls === "no" ? PK.t("not met") : PK.t("unknown")}">${sym}</span><span>${esc(c.text)} ${now}</span></li>`;
+    return `<li><span class="mark ${cls}" role="img" aria-label="${said}">${sym}</span><span>${esc(c.text)} ${now}</span></li>`;
   }
 
   /**
@@ -1835,6 +1847,8 @@ const PK = (() => {
   async function start() {
     let st0Language = "";
     fillIcons();
+    // Until route() below draws the first page (the login, the machine, Get started take a few seconds), #page keeps
+    // the grey page shape index.html starts with
     try {
       const st = await api("GET", "/api/auth/state");
       state.user = st.user;
@@ -1957,7 +1971,7 @@ const PK = (() => {
     navh();
     if ("ResizeObserver" in window) { const ro = new ResizeObserver(navh); ro.observe($("topnav")); ro.observe($("banner")); }
     // An administrator who has not finished setup gets Get started, but not while an alarm is on: then the
-    // alarm comes first (Active alarm still shows the Get started card).
+    // alarm comes first (the Getting started bar waits on Plant and Setup until the alarm has gone).
     const alarmOn = async () => {
       try { const s = await api("GET", "/api/status"); state.status = s; state.lastOk = Date.now(); return !!(s.activeAlarms || []).length; }
       catch { return false; }
@@ -1979,6 +1993,6 @@ const PK = (() => {
     loadHandover(); setInterval(loadHandover, 60000);
   }
 
-  return { AI, ui, t: I18N.t, T: I18N.T, srv: I18N.srv, get lang() { return I18N.lang; }, BP, can, testValues, roleTitle, prefs, startPage, startChoices, startLabel, hm, num, numText, dayMonth, weekdayDay, FORMATS, fmtKey, plantFormat, alarmWants, screenSize, dirty: setDirty, get isDirty() { return !!dirty; }, plain, connInfo, connSheet, helpSheet, screenSheet, passwordSheet, setHash, cmd, sec, hero, on, $, esc, icon, fillIcons, kindIcon, api, state, view, go, draw, route, toast, copyText, sheet, confirmSheet, cond, md, ago, clock, date, when,
+  return { AI, ui, t: I18N.t, T: I18N.T, srv: I18N.srv, get lang() { return I18N.lang; }, BP, can, testValues, roleTitle, prefs, startPage, startChoices, startLabel, hm, num, numText, dayMonth, weekdayDay, FORMATS, fmtKey, plantFormat, alarmWants, screenSize, dirty: setDirty, get isDirty() { return !!dirty; }, plain, connInfo, connSheet, helpSheet, screenSheet, passwordSheet, setHash, cmd, sec, hero, on, $, esc, icon, fillIcons, kindIcon, api, state, view, go, draw, route, toast, copyText, sheet, confirmSheet, cond, condWait, md, ago, clock, date, when,
     loadProgram, blockOf, valueBySymbol, norm, start, cpuStop, cpuSince, loadHeld, releaseAll, loadHandover, tvMode, get current() { return current; } };
 })();

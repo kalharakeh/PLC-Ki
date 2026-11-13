@@ -54,12 +54,14 @@
   const opened = Date.now();
   /** No status from PLC-Ki (yet): say so, and what to do if it stays that way. */
   function waitingPage() {
-    if (Date.now() - opened < 6000) return hero({ title: PK.t("Connecting to PLC-Ki…"), sub: PK.t("One moment.") });
+    // The first seconds: the page's shape in grey (the top bar already says it is connecting)
+    if (Date.now() - opened < 6000) return PK.ui.loadingPage();
     const i = PK.connInfo();
     return hero({ eyebrow: `<span class="pill bad"><span class="dot"></span>${PK.t("Not reachable")}</span>`, title: esc(i.title), sub: esc(i.todo),
       actions: `<button class="btn" onclick="location.reload()">${PK.t("Try again")}</button>` });
   }
-  const guide = () => (typeof PKStart !== "undefined" ? PKStart.card() : "");
+  // The bottom of a page: the disk notice, and on Plant's Overview the Getting started bar (PKStart.card says when)
+  const guide = (where) => (typeof PKStart !== "undefined" ? PKStart.card(where) : "");
 
   /** The PLC is not read (not connected, or waiting for Link): explain instead of showing old values. */
   function offlinePage() {
@@ -448,6 +450,13 @@
         const chains = PK.causeChains(s);
         const root = (chains.length && chains[0].devices.find((e) => e.blockedBy)) || blocked[0];
         const order = chains.flatMap((c) => c.devices).filter((e, i, l) => e.blockedBy && l.indexOf(e) === i);
+        const V = window.PKVis;
+        const seqCard = seq ? `<div class="card stack"><h3 class="m-0">${esc(seq.name)}</h3>${n ? `<p class="m-0 sub">${esc(sentences(seq.explanation))}</p>` : ""}${stepStrip(seq)}${chartLink(seq)}
+            ${seq.next.length ? `<div><p class="mt-0 mb-2 muted small">${PK.t("To go on it needs")}</p><ul class="conds">${seq.next.flatMap((x) => x.conditions).map((c) => PK.condHeld(c, s)).join("")}</ul></div>` : ""}</div>` : "";
+        const glance = V && s.equipment.length ? `<div class="card stack"><div class="row"><h3 class="m-0">${PK.t("The machine at a glance")}</h3><span class="spacer"></span><a class="small" href="#/plant">${PK.t("Plant ›")}</a></div>${V.plantMap(s.equipment, null)}</div>` : "";
+        // "What fixed it?" already names the alarms that went lately: then the last-alarm line would only say it again
+        const unnoted = window.PKMemory ? PKMemory.unnotedBlock() : "";
+        const last = window.PKMemory && !unnoted ? PKMemory.lastGone() : "";
         return hero({
           before: gone,
           eyebrow: n ? `<span class="pill warn"><span class="dot"></span>${PK.t("No alarm · {n} device blocked|No alarm · {n} devices blocked", { n })}</span>` : `<span class="pill ok"><span class="dot"></span>${PK.t("No alarm")}</span>`,
@@ -457,12 +466,12 @@
             : `<a class="btn" href="#/plant">${PK.t("See the plant")}</a><button class="btn b" data-ask="${esc(PK.t("What is the machine doing right now?"))}">${PK.t("Ask")}</button>`,
           extra: n ? `<div class="chains">${chains.map(PK.chainHtml).join("")}</div>` : "",
         }) + (settingsNotice(s) ? sec("", settingsNotice(s)) : "")
-        + (window.PKMemory ? PKMemory.unnotedBlock() : "")
+        + (unnoted || "")
         + (n ? sec("alt", `<h2>${PK.t("Blocked now")}</h2><p class="sub">${PK.t("The program asks for this device, but its output stays off.|The program asks for these devices, but their output stays off.", { n })} ${n > 1 ? PK.t("The cause comes first.") : ""}</p>
             <div class="stack blocked-now">${order.map((e) => `<div class="aa-dev"><div class="row"><h3 class="m-0">${esc(e.name)}</h3><span class="spacer"></span><a class="small" href="#/plant/devices/${encodeURIComponent(e.id)}">${PK.t("Details ›")}</a></div>
               ${PK.devStrip(e)}</div>`).join("")}</div>`) : "")
-        + (seq ? sec(n ? "" : "alt", `<h2>${esc(seq.name)}</h2>${n ? `<p class="sub">${esc(sentences(seq.explanation))}</p>` : ""}${stepStrip(seq)}${chartLink(seq)}
-            ${seq.next.length ? `<p class="mt-4 mb-2 muted small">${PK.t("To go on it needs")}</p><ul class="conds">${seq.next.flatMap((x) => x.conditions).map((c) => PK.condHeld(c, s)).join("")}</ul>` : ""}`) : "")
+        // The page operators leave open on a calm machine: the step and what it waits for, the last alarm, and every device
+        + ((seqCard || glance || last) ? sec(n ? "" : "alt", `<div class="${glance ? "plant-cols" : "stack"}"><div class="stack">${seqCard}${last}</div>${glance}</div>`) : "")
         + guide();
       }
 
@@ -556,6 +565,11 @@
     after(page) {
       page.querySelectorAll("[data-alarm]").forEach((b) => b.onclick = () => { selectedAlarm = b.dataset.alarm; PK.draw(); });
       page.querySelectorAll("[data-share]").forEach((b) => b.onclick = shareAlarm);
+      // The machine at a glance (no alarm): a device opens on Plant › Devices, as on Plant
+      page.querySelectorAll(".pmap [data-eq]").forEach((d) => {
+        d.onclick = () => PK.go("#/plant/devices/" + encodeURIComponent(d.dataset.eq));
+        d.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); d.click(); } };
+      });
       page.querySelectorAll("[data-fix]").forEach((b) => b.onclick = () => {
         const set = (fixDone[selectedAlarm] ||= new Set());
         const i = Number(b.dataset.fix);
@@ -790,7 +804,7 @@
       }
       return head + body
         + (Object.keys(s.tagErrors || {}).length ? sec("tight", `<details class="more"><summary>${PK.t("{n} signals could not be read", { n: Object.keys(s.tagErrors).length })}</summary><ul class="small">${Object.entries(s.tagErrors).map(([k, v]) => `<li><code>${esc(k)}</code>: ${esc(PK.srv(v))}</li>`).join("")}</ul></details>`) : "")
-        + guide();
+        + guide(tab === "overview" ? "plant" : "");
     },
     after(page) {
       // The machine at a glance: a device opens on the Devices tab

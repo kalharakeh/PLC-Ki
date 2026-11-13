@@ -152,6 +152,22 @@
     return `<div class="lastline">${icon("clock")}<span>${times > 0 ? PK.t("Seen before, nobody noted the cause") : PK.t("First time PLC-Ki sees this alarm")}</span>${hist}${btn}</div>`;
   }
 
+  /**
+   * On Active alarm when nothing is on: the alarm that went last and when, with History one tap away
+   * ("Last alarm: A02 Inlet valve XV101 did not open · cleared 12 min ago"). "" while History is loading.
+   */
+  function lastGone() {
+    const d = cached("/api/memory/occurrences?days=30&max=20", 30000);
+    if (!d) return "";
+    const o = remember(d.occurrences).filter((x) => x.went).sort((x, y) => Date.parse(y.went) - Date.parse(x.went))[0];
+    if (!o) return `<div class="lastline">${icon("clock")}<span>${PK.t("No alarm in the last 30 days.")}</span><a class="small" href="#/history">${PK.t("History ›")}</a></div>`;
+    const ms = Date.now() - Date.parse(o.went);
+    const went = ms < 86400000 ? PK.ago(o.went) : PK.when(o.went);
+    return `<div class="lastline">${icon("clock")}<span><b>${PK.t("Last alarm:")}</b> ${sevTag(o.severity, o.alarmId)} ${esc(o.text)}
+      <span class="faint">· ${esc(o.endUnknown ? PK.t("cleared {when} or earlier", { when: went }) : PK.t("cleared {when}", { when: went }))}</span></span>
+      <a class="small" href="#/history/${encodeURIComponent(o.alarmId)}">${PK.t("History ›")}</a></div>`;
+  }
+
   /** On Active alarm when nothing is on: the alarms that went lately and nobody noted what fixed them. */
   function unnotedBlock() {
     const d = cached("/api/memory?days=7", 15000);
@@ -309,5 +325,5 @@
     },
   });
 
-  window.PKMemory = { alarmBlock, lastLine, unnotedBlock, noteSheet, bind };
+  window.PKMemory = { alarmBlock, lastLine, lastGone, unnotedBlock, noteSheet, bind };
 })();
