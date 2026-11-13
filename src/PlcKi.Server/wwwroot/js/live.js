@@ -868,7 +868,7 @@
           ${open ? `<div style="flex-basis:100%;padding:10px 0 4px" class="grid two">
               <div>${a.condition ? `<h3>${PK.t("Meaning")}</h3><p class="mt-0 mb-3 muted">${esc(a.condition)}</p>` : ""}
                 ${a.causes.length ? `<h3>${PK.t("Likely causes")}</h3><ol class="causes small">${a.causes.map((c, i) => `<li><b>${i + 1}</b><span>${esc(c)}</span></li>`).join("")}</ol>` : ""}</div>
-              <div>${a.fix.length ? `<h3>${PK.t("How to fix")}</h3><ol class="fix small">${a.fix.map((c) => `<li style="font-size:15px;cursor:default">${esc(c)}</li>`).join("")}</ol>` : ""}
+              <div>${a.fix.length ? `<h3>${PK.t("How to fix")}</h3><ol class="fix small">${a.fix.map((c) => `<li style="font-size:var(--fs-3);cursor:default">${esc(c)}</li>`).join("")}</ol>` : ""}
                 <div class="mt-4 actions">${on ? `<a class="btn small" href="#/alarm">${PK.t("Open on Active alarm")}</a>` : ""}
                 ${(() => { const w = alarmWhere(a); return w.block ? `<a class="btn b small" href="${esc(w.href)}">${PK.t("Show where it is set")}</a>` : ""; })()}
                 <button class="btn b small" data-ask="${esc(PK.t("Explain alarm {id}: when does it come, why, and how is it fixed?", { id: a.id }))}">${PK.t("Ask")}</button></div></div>

@@ -1154,7 +1154,7 @@
       if (r.here) { showHere(page, r.here); return; }
       const v = resolver(sel.inst, sel.block)(op);
       PK.sheet(`<span class="eyebrow">${coil ? PK.t("Where it is used") : PK.t("What sets it")}</span>
-        <h2 class="mono" style="font-size:20px;word-break:break-all">${esc(clean(op))}${v ? " " + chip(v) : ""}</h2>
+        <h2 class="mono" style="font-size:var(--fs-5);word-break:break-all">${esc(clean(op))}${v ? " " + chip(v) : ""}</h2>
         <div class="src-answer">${r.html}</div><div class="row end"><button class="btn" data-close>${PK.t("Done")}</button></div>`);
     }
 

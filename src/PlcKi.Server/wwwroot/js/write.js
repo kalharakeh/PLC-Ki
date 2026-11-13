@@ -60,7 +60,7 @@
     const noHold = isOutput && check.target === "plcsim"
       ? PK.t("Hold on PLCSIM is not possible for an output: the program rewrites outputs every cycle, and PLCSIM only keeps inputs.") : "";
     if (!check.allowed) {
-      PK.sheet(`<span class="eyebrow">${PK.t("Change a value")}</span><h2 class="mono" style="font-size:22px;word-break:break-all">${esc(symbol)}</h2>
+      PK.sheet(`<span class="eyebrow">${PK.t("Change a value")}</span><h2 class="mono" style="font-size:var(--fs-5);word-break:break-all">${esc(symbol)}</h2>
         <div class="row">${where}</div>
         <div class="notice gold">${icon("shield")}<div>${esc(PK.srv(check.why))}</div></div>
         ${real && check.plcsimWhy && !String(check.why || "").startsWith(check.plcsimWhy) ? `<p class="m-0 faint small">${esc(PK.srv(check.plcsimWhy))} ${PK.t("So PLC-Ki uses the rules for a real PLC.")}</p>` : ""}
@@ -70,7 +70,7 @@
     const isBool = type === "Bool";
     const hint = { Time: PK.t("milliseconds, or 5s, 2m, T#1M30S"), Real: PK.t("a number, e.g. 12.5"), LReal: PK.t("a number, e.g. 12.5"), String: PK.t("text"), WString: PK.t("text") }[type] || PK.t("a whole number");
     const s = PK.sheet(`<span class="eyebrow" ${real ? 'style="color:var(--fault)"' : ""}>${real ? PK.t("Real PLC · change a value") : PK.t("Change a value")}</span>
-      <h2 class="mono" style="font-size:22px;word-break:break-all">${esc(symbol)}</h2>
+      <h2 class="mono" style="font-size:var(--fs-5);word-break:break-all">${esc(symbol)}</h2>
       <div class="row">${where}<span class="tag">${esc(type)}</span>${check.address ? `<span class="tag">${esc(check.address)}</span>` : ""}<span class="muted small">${PK.t("now")} <b>${esc(shown(now))}</b></span></div>
       ${real ? `<div class="notice red">${icon("warn")}<div><b>${PK.t("This changes the running machine.")}</b> ${PK.t("Make sure nobody is in the machine and that the change is safe. It is logged with your name and reason. Inputs, outputs and values the safety program reads are never changed.")}</div></div>` : ""}
       ${warnHtml(check.warning)}
@@ -78,7 +78,7 @@
           ${canHold ? PK.t("To keep a value, hold the simulated input instead.") : ""}</div>${canHold ? `<button type="button" class="no-shrink btn small" data-hold>${PK.t("Hold on PLCSIM")}</button>` : ""}</div>`
         : `<div class="notice gold why-stick" data-why>${noHold ? `${icon("info")}<div>${esc(noHold)}</div>` : ""}</div>`}
       ${isBool ? PK.ui.choice(PK.t("New value"), [{ label: "TRUE", on: preset === "TRUE" || (preset == null && now === false), data: { "data-b": "TRUE" } }, { label: "FALSE", on: preset === "FALSE" || (preset == null && now === true), data: { "data-b": "FALSE" } }], { cls: "start" })
-        : `<label class="field">${PK.t("New value")} <span class="hint">${esc(hint)}</span><input id="w-val" autocomplete="off" spellcheck="false" value="${esc(preset ?? (now == null ? "" : shown(now)))}" style="font-family:var(--mono);font-size:18px"></label>`}
+        : `<label class="field">${PK.t("New value")} <span class="hint">${esc(hint)}</span><input id="w-val" autocomplete="off" spellcheck="false" value="${esc(preset ?? (now == null ? "" : shown(now)))}" style="font-family:var(--mono);font-size:var(--fs-4)"></label>`}
       <label class="field">${PK.t("Why")} ${real ? `<span class="hint">${PK.t("needed on a real PLC, goes into the change log")}</span>` : `<span class="hint">${PK.t("optional")}</span>`}<input id="w-why" autocomplete="off" placeholder="${esc(real ? PK.t("e.g. test valve XV101 after repair") : PK.t("e.g. test the door alarm"))}"></label>
       ${real ? `<label class="field"><span>${PK.t("Type {plc} to confirm", { plc: `<b class="mono">${esc(check.plc)}</b>` })}</span><input id="w-ok" autocomplete="off" spellcheck="false" inputmode="decimal" style="font-family:var(--mono)"></label>` : ""}
       <p class="m-0 ink-fault small" data-err></p>
@@ -124,8 +124,8 @@
 
   function done(symbol, type, r) {
     const s = PK.sheet(`<span class="eyebrow">${r.target === "real" ? PK.t("Real PLC") : "PLCSIM"} · ${PK.t("changed")}</span>
-      <h2 class="mono" style="font-size:22px;word-break:break-all">${esc(symbol)}</h2>
-      <p style="margin:0;font-size:20px"><span class="mono">${esc(r.before)}</span> → <b class="mono">${esc(r.written)}</b></p>
+      <h2 class="mono" style="font-size:var(--fs-5);word-break:break-all">${esc(symbol)}</h2>
+      <p style="margin:0;font-size:var(--fs-5)"><span class="mono">${esc(r.before)}</span> → <b class="mono">${esc(r.written)}</b></p>
       ${r.held ? `<div class="notice green">${icon("check")}<div>${r.after != null ? PK.t("The PLC holds the new value (read back: {after}).", { after: esc(r.after) }) : PK.t("The PLC holds the new value.")}</div></div>`
         : `<div class="notice gold">${icon("warn")}<div>${esc(r.note ? PK.srv(r.note) : PK.t("The value did not stay."))}</div></div>`}
       <div class="row end"><button class="btn gray" data-back>${PK.t("Put back {value}", { value: esc(r.before) })}</button><button class="btn" data-close>${PK.t("Done")}</button></div>`);
@@ -144,7 +144,7 @@
     try { c = await api("GET", "/api/admin/hold/check?symbol=" + encodeURIComponent(symbol)); }
     catch (e) { toast(e.message, "error"); return; }
     if (!c.allowed) {
-      PK.sheet(`<span class="eyebrow">${PK.t("Hold on PLCSIM")}</span><h2 class="mono" style="font-size:22px;word-break:break-all">${esc(symbol)}</h2>
+      PK.sheet(`<span class="eyebrow">${PK.t("Hold on PLCSIM")}</span><h2 class="mono" style="font-size:var(--fs-5);word-break:break-all">${esc(symbol)}</h2>
         <div class="notice gold">${icon("shield")}<div>${esc(PK.srv(c.why))}</div></div>
         <div class="row end"><button class="btn" data-close>${PK.t("Done")}</button></div>`);
       return;
@@ -153,7 +153,7 @@
     const isBool = dt === "Bool";
     const h = c.held;
     const s = PK.sheet(`<span class="eyebrow">${PK.t("Hold on PLCSIM")}</span>
-      <h2 class="mono" style="font-size:22px;word-break:break-all">${esc(symbol)}</h2>
+      <h2 class="mono" style="font-size:var(--fs-5);word-break:break-all">${esc(symbol)}</h2>
       <div class="row"><span class="pill ok"><span class="dot"></span>PLCSIM ${esc(c.instance || "")} ${esc(c.plc)}</span><span class="tag">${esc(dt)}</span><span class="tag">${esc(c.address)}</span>
         <span class="muted small">${PK.t("now")} <b>${esc(c.now)}</b></span></div>
       ${h ? `<div class="notice gold">${icon("warn")}<div>${PK.t("Held at {value} by {user}, {time}. Release puts back {before}.", { value: `<b>${esc(h.value)}</b>`, user: esc(h.user), time: esc(PK.date(h.time)), before: `<b>${esc(h.before)}</b>` })}</div>
@@ -162,7 +162,7 @@
       ${warnHtml(c.warning)}
       <div class="notice gold why-stick" data-copies></div>
       ${isBool ? PK.ui.choice(PK.t("Value to hold"), [{ label: "TRUE", on: preset === "TRUE" || (preset == null && c.now === "FALSE"), data: { "data-b": "TRUE" } }, { label: "FALSE", on: preset === "FALSE" || (preset == null && c.now === "TRUE"), data: { "data-b": "FALSE" } }], { cls: "start" })
-        : `<label class="field">${PK.t("Value to hold")} <span class="hint">${esc(dt === "Real" ? PK.t("a number, e.g. 12.5") : PK.t("a whole number"))}</span><input id="h-val" autocomplete="off" spellcheck="false" value="${esc(preset ?? c.now ?? "")}" style="font-family:var(--mono);font-size:18px"></label>`}
+        : `<label class="field">${PK.t("Value to hold")} <span class="hint">${esc(dt === "Real" ? PK.t("a number, e.g. 12.5") : PK.t("a whole number"))}</span><input id="h-val" autocomplete="off" spellcheck="false" value="${esc(preset ?? c.now ?? "")}" style="font-family:var(--mono);font-size:var(--fs-4)"></label>`}
       <label class="field">${PK.t("Why")} <span class="hint">${PK.t("optional, goes into the change log")}</span><input id="h-why" autocomplete="off" placeholder="${esc(PK.t("e.g. test the door alarm"))}"></label>
       <p class="m-0 ink-fault small" data-err></p>
       <div class="row end"><button class="btn gray" data-close>${PK.t("Cancel")}</button><button class="btn" data-go>${PK.t("Hold")}</button></div>`);
@@ -205,8 +205,8 @@
   function heldDone(symbol, type, r) {
     const ok = r.now === r.value;
     const s = PK.sheet(`<span class="eyebrow">PLCSIM · ${PK.t("held")}</span>
-      <h2 class="mono" style="font-size:22px;word-break:break-all">${esc(symbol)}</h2>
-      <p style="margin:0;font-size:20px"><span class="mono">${esc(r.before)}</span> → <b class="mono">${esc(r.value)}</b></p>
+      <h2 class="mono" style="font-size:var(--fs-5);word-break:break-all">${esc(symbol)}</h2>
+      <p style="margin:0;font-size:var(--fs-5)"><span class="mono">${esc(r.before)}</span> → <b class="mono">${esc(r.value)}</b></p>
       ${ok ? `<div class="notice green">${icon("check")}<div>${PK.t("PLCSIM holds {address} at {value} until you release it. The strip at the top of every page shows it.", { address: esc(r.address), value: esc(r.value) })}</div></div>`
         : `<div class="notice gold">${icon("warn")}<div>${PK.t("PLCSIM reads {now}, not {value}. Something else sets this input.", { now: esc(r.now), value: esc(r.value) })}</div></div>`}
       <div class="row end"><button class="btn gray" data-rel>${PK.t("Release now")}</button><button class="btn" data-close>${PK.t("Done")}</button></div>`);
@@ -276,7 +276,7 @@
     return held + `<div class="card"><details class="more" style="border:0;margin:0;padding:0"><summary>${PK.t("Changes made from PLC-Ki ({count})", { count: log.length + (log.length >= 30 ? "+" : "") })}</summary>
       <table class="mt-2 tbl"><tr><th>${PK.t("When")}</th><th>${PK.t("Who")}</th><th>${PK.t("PLC")}</th><th>${PK.t("Value")}</th><th>${PK.t("Change|Changes", { n: 1 })}</th><th>${PK.t("Why")}</th></tr>
       ${log.map((e) => `<tr><td class="nowrap small">${esc(PK.date(e.time))}</td><td>${esc(e.user)}</td>
-        <td><span class="pill ${e.target === "real" ? "bad" : "ok"}" style="font-size:12px">${e.target === "real" ? PK.t("Real") : e.target === "plcsim" ? "PLCSIM" : "–"} ${esc(e.plc)}</span></td>
+        <td><span class="pill ${e.target === "real" ? "bad" : "ok"}" style="font-size:var(--fs-1)">${e.target === "real" ? PK.t("Real") : e.target === "plcsim" ? "PLCSIM" : "–"} ${esc(e.plc)}</span></td>
         <td class="mono small" style="word-break:break-all">${esc(e.symbol)}</td>
         <td class="small">${ACTION[e.action] ? `<span class="tag gold">${PK.t(ACTION[e.action])}</span> ` : ""}${RULE[e.rule] ? `<span class="tag red" title="${esc(e.rule)}">${PK.t(RULE[e.rule])}</span> ` : ""}${e.action === "clear" ? esc(e.value) : e.ok ? `${esc(e.before)} → <b>${esc(e.value)}</b>${e.held === false && !e.action ? ` <span class="faint">${PK.t("(set back to {value})", { value: esc(e.after) })}</span>` : ""}` : `<span class="ink-fault">${PK.t("Refused:")} ${esc(PK.srv(e.error))}</span>`}</td>
         <td class="muted small">${esc(PK.srv(e.reason || ""))}</td></tr>`).join("")}

@@ -398,7 +398,7 @@
     const table = chans.length || chQuery ? channelList(m, st, chans, tagged)
       : `<p class="mt-3 mb-0 muted">${m.kind === "cpu" ? PK.t("The CPU itself has no I/O channels.") : m.kind === "ps" || m.kind === "pm" ? PK.t("A power supply has no I/O channels.") : PK.t("No I/O channels known for this module.")}</p>`;
     return `<div class="card hw-detail">
-      <div class="row" style="gap:10px;align-items:baseline;flex-wrap:wrap"><h2 style="margin:0;font-size:24px">${esc(m.title || m.name)}</h2>
+      <div class="row" style="gap:10px;align-items:baseline;flex-wrap:wrap"><h2 style="margin:0;font-size:var(--fs-5)">${esc(m.title || m.name)}</h2>
         ${m.safety ? `<span class="tag gold">${PK.t("Fail-safe")}</span>` : ""}<span class="tag">${esc(PK.t(kindName[m.kind] || m.kind))}</span><span class="spacer"></span>
         ${chans.length ? `<span class="faint small">${PK.t("{n} channels · {tagged} with a tag", { n: chans.length, tagged })}${watchAt ? " · " + PK.t("read {time}", { time: PK.clock(watchAt) }) : ""}</span>` : ""}</div>
       ${m.name && m.name !== m.title ? `<p class="mt-1 mb-0 muted">${esc(m.name)}${m.comment ? " · " + esc(m.comment) : ""}</p>` : m.comment ? `<p class="mt-1 mb-0 muted">${esc(m.comment)}</p>` : ""}
@@ -494,7 +494,7 @@
       const k = PK.screenSize() === "phone" ? 1.7 : 2.3;
       const svg = PKDev.rack(st, { k, values, running, selected: idx, leds: ledsOf(cpu, mode) });
       const rackCard = `<div class="card hw-rack">
-        <div class="row" style="gap:10px;flex-wrap:wrap;align-items:baseline"><h2 style="margin:0;font-size:22px">${esc(st.name)}</h2>
+        <div class="row" style="gap:10px;flex-wrap:wrap;align-items:baseline"><h2 style="margin:0;font-size:var(--fs-5)">${esc(st.name)}</h2>
           <span class="muted small">${esc([st.typeName, st.orderNumber, st.ips.join(", ")].filter(Boolean).join(" · "))}</span><span class="spacer"></span>${only ? "" : readBtn}</div>
         <div class="rack-scroll" tabindex="0" aria-label="${esc(PK.t("Rack drawing, scrolls sideways"))}">${svg}</div>
         <p class="mt-2 mb-0 faint small">${PK.t("Tap a module for its channels. Channel LEDs: green is on, grey is off, dim is no live value (no tag, or not read). Pictures are drawn from the order number, not photos.")}</p></div>`;

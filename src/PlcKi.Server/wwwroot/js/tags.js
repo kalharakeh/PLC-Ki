@@ -142,7 +142,7 @@
       const nModel = dbData.values.filter((t) => inModel.has(PK.norm(t.symbol))).length;
       const mark = (t) => { const l = inModel.get(PK.norm(t.symbol)); return l ? ` <span class="tag blue in-model" title="${esc(PK.t("In the machine model: {label}", { label: l }))}">${PK.t("model")}</span>` : ""; };
       right = `<div class="card">
-        <div class="row"><h2 style="margin:0;font-size:24px">${esc(dbData.db)}</h2><span class="tag">${dbData.number != null ? "DB " + dbData.number : ""}</span>
+        <div class="row"><h2 style="margin:0;font-size:var(--fs-5)">${esc(dbData.db)}</h2><span class="tag">${dbData.number != null ? "DB " + dbData.number : ""}</span>
           ${dbData.instanceOf ? `<span class="faint small">${PK.t("instance of {name}", { name: `<a href="#/program/${encodeURIComponent(dbData.instanceOf)}">${esc(dbData.instanceOf)}</a>` })}</span>` : ""}
           <span class="spacer"></span><a class="btn plain small" href="#/program/${encodeURIComponent(dbData.db)}">${PK.t("Show in the program ›")}</a></div>
         ${startWhy && startWhy.db === dbData.db ? `<p class="mt-2 mb-0 small">${icon("bell")} ${PK.t("Opened here because of {why}.", { why: esc(startWhy.why) })}</p>` : ""}

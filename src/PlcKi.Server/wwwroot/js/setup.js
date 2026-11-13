@@ -208,7 +208,7 @@ const PKSetup = (() => {
     const lines = (job.log || "").split("\n").filter((l) => l.trim() && !l.startsWith("> "));
     const lastLine = lines.slice(-1)[0] || PK.t("Starting…");
     return `<div class="card job">
-      <div class="row"><b style="font-size:16px">${esc(PK.srv(job.title))}</b><span class="pill ${cls}"><span class="dot"></span>${PK.t(t)}</span><span class="spacer"></span>
+      <div class="row"><b style="font-size:var(--fs-3)">${esc(PK.srv(job.title))}</b><span class="pill ${cls}"><span class="dot"></span>${PK.t(t)}</span><span class="spacer"></span>
         ${job.state === "running" ? `<button class="btn red-tinted small" data-stop="${esc(job.id)}">${icon("stop")}${PK.t("Stop")}</button>` : actions}</div>
       ${extra}
       ${job.state === "running" ? progressHtml(job, lastLine) : ""}
