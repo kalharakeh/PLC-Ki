@@ -742,7 +742,7 @@
     const wait = next.length ? next.map((n, k) => {
       const to = esc(String(n.to)) + (n.toName ? " " + PK.t("“{name}”", { name: esc(n.toName) }) : "");
       return `<p class="pg-wait">${k ? PK.t("Or, to go on to step {to} it waits for:", { to }) : PK.t("To go on to step {to} it waits for:", { to })}</p>
-        <ul class="conds">${n.conditions.map(PK.cond).join("")}</ul>`;
+        <ul class="conds">${n.conditions.map(PK.condWait).join("")}</ul>`;
     }).join("") : "";
     const halted = stop ? `<div class="mt-3 notice red">${icon("warn")}<div>${esc(PK.srv(q.explanation))}</div></div>`
       : q.halted ? `<div class="mt-3 notice red">${icon("warn")}<div><b>${PK.t("The sequence is halted.")}</b>${q.haltReasons && q.haltReasons.length ? " " + q.haltReasons.map(esc).join(" ") : ""}</div></div>` : "";

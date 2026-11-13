@@ -261,6 +261,7 @@ const PKStations = (() => {
 
   PK.view("setup/qr", {
     live: false,
+    guide: "setup",
     async mount() {
       try { phone = await PK.api("GET", "/api/admin/phone-address"); phoneErr = null; } catch (e) { phoneErr = e.message; }
       PK.draw();

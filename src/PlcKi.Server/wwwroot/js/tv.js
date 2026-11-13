@@ -109,7 +109,11 @@
   function pictureHtml(equipment, ring, { dim = false } = {}) {
     const V = window.PKVis;
     if (!V || !equipment.length) return `<div class="tv-pic tv-none">${dim ? "" : PK.t("No devices in the model for this screen.")}</div>`;
-    return `<div class="tv-pic ${dim ? "dim" : ""}" inert>${V.plantMap(equipment, null, ring, { split: true })}</div>`;
+    // The box the picture fills, as drawn a second ago (the right column beside an alarm); before that, a guess
+    const box = document.querySelector(".tv-split .tv-pic");
+    const r = box ? box.getBoundingClientRect() : null;
+    const fit = r && r.width ? { w: r.width, h: r.height } : { w: innerWidth * 0.4, h: innerHeight * 0.7 };
+    return `<div class="tv-pic ${dim ? "dim" : ""}" inert>${V.plantMap(equipment, null, ring, { split: true, fit })}</div>`;
   }
 
   /** The alarm, large: text, station, since when, first or not, what else is on, the first steps of the fix. */

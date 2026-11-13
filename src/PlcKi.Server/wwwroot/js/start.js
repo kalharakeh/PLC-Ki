@@ -1,5 +1,6 @@
 // Get started (administrators): a step-by-step setup that asks one thing per page, and a "Getting started" card on
-// the machine pages that shows what is done and what comes next, until PLC-Ki is fully set up.
+// Plant and the Setup pages that shows what is done and what comes next, until PLC-Ki is fully set up (not while an
+// alarm is on).
 "use strict";
 
 const PKStart = (() => {
@@ -61,13 +62,21 @@ const PKStart = (() => {
         : `<a class="btn small ${compact ? "b" : ""}" href="${i.href}">${esc(i.btn)}</a>`}</li>`).join("")}</ul>`;
   }
 
-  /** The "Getting started" card at the top of the machine pages, for administrators, until everything needed is done. */
-  function card() {
+  /**
+   * The bottom of a page, for administrators: the disk-nearly-full notice on every page that asks, and the "Getting
+   * started" bar until everything needed is done. where: "plant" or "setup" may show the bar; anything else
+   * (Active alarm, the other Plant tabs) only the disk notice. Never while an alarm is on or the CPU is stopped:
+   * set-up reminders don't belong on a breakdown.
+   */
+  function card(where) {
     if (!PK.can("settings")) return "";
     if (!ready) { readiness().then((r) => r && PK.draw()); return ""; }
     // The disk nearly full: shown to administrators even when everything is set up (Setup › Settings › Storage)
     const disk = ready.disk && ready.disk.low ? `<section class="guide-sec"><div class="wrap"><div class="notice red" role="alert">${icon("info")}
       <div class="grow">${esc(PK.srv(ready.disk.warning))}</div><a class="btn small" href="#/setup/settings/storage">${PK.t("Open Storage")}</a></div></div></section>` : "";
+    if (where !== "plant" && where !== "setup") return disk;
+    const s = state.status;
+    if (s && ((s.activeAlarms || []).length || PK.cpuStop(s))) return disk;
     if (session.get(HIDE) === "1") return disk;
     const list = items(ready);
     const need = list.filter((i) => !i.optional);

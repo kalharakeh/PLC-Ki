@@ -445,6 +445,7 @@ const PKSetup = (() => {
 
   PK.view("setup/connections", {
     live: true,      // the diagram follows the PLC state
+    guide: "setup",
     leave() { clearInterval(linkTimer); linkTimer = null; },
     async mount() {
       conn = null; tiaStatus = null; plcTest = null; linkKey = null;
@@ -640,6 +641,7 @@ const PKSetup = (() => {
 
   PK.view("setup/program", {
     live: false,
+    guide: "setup",
     async mount() {
       await refreshFiles().catch((e) => toast(e.message, "error"));
       loadRefresh();
@@ -882,6 +884,7 @@ const PKSetup = (() => {
   }
 
   PK.view("setup/settings", {
+    guide: "setup",
     async mount(page, params) {
       const tab = setTab(params), seq = ++mountSeq;
       // Back on a tab already seen: draw it at once, then refresh
