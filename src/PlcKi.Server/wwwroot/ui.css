@@ -36,8 +36,9 @@
   /* Text sizes: six steps. Text uses these, not loose pixel values (half-pixel steps can't be seen).
      1 captions, pills, small labels (never smaller) · 2 helper text, small buttons, table headings · 3 the usual size in cards, lists, buttons and inputs
      4 body text (the page) and card headings · 5 page and section headings · 6 the big page title and the largest numbers.
-     Not in the scale on purpose: clamp() sizes (the TV screen and the hero headings), the CPU drawing (--dev-*), the label sheet (QR) and the state word on the countdown. */
-  --fs-1: 12px; --fs-2: 13px; --fs-3: 15px; --fs-4: 17px; --fs-5: 22px; --fs-6: 28px;
+     Not in the scale on purpose: clamp() sizes (the TV screen and the hero headings), the CPU drawing (--dev-*), the label sheet (QR) and the state word on the countdown.
+     Written in rem, as are the page headings: a larger text size set in the browser (or for the whole PC) makes them all larger. */
+  --fs-1: 0.75rem; --fs-2: 0.8125rem; --fs-3: 0.9375rem; --fs-4: 1.0625rem; --fs-5: 1.375rem; --fs-6: 1.75rem;   /* 12 13 15 17 22 28 px at the default size */
 
   /* Behind a sheet (Search, Help, More, a question) and the Ask panel: dark enough that what is open stands out from a busy page */
   --scrim: rgba(0, 0, 0, 0.4);
@@ -113,10 +114,10 @@ section.tight { padding-block: 32px; }
 section.alt { background: var(--bg-alt); }
 section.dark { background: var(--bg-dark); color: var(--ink-dark); }
 section.dark .sub, section.dark .muted { color: var(--muted-dark); }
-h1 { font-size: clamp(32px, 4.4vw, 54px); line-height: 1.05; letter-spacing: -0.026em; font-weight: 700; margin: 0 0 14px; max-width: 24ch; }
-h2 { font-size: clamp(24px, 3vw, 36px); line-height: 1.08; letter-spacing: -0.022em; font-weight: 700; margin: 0 0 10px; }
+h1 { font-size: clamp(2rem, 4.4vw, 3.375rem); line-height: 1.05; letter-spacing: -0.026em; font-weight: 700; margin: 0 0 14px; max-width: 24ch; }
+h2 { font-size: clamp(1.5rem, 3vw, 2.25rem); line-height: 1.08; letter-spacing: -0.022em; font-weight: 700; margin: 0 0 10px; }
 h3 { font-size: var(--fs-4); font-weight: 600; letter-spacing: -0.01em; margin: 0 0 6px; }
-.sub { font-size: clamp(17px, 1.6vw, 20px); color: var(--muted); max-width: 60ch; margin: 0 0 22px; }
+.sub { font-size: clamp(1.0625rem, 1.6vw, 1.25rem); color: var(--muted); max-width: 60ch; margin: 0 0 22px; }
 .eyebrow { font-size: var(--fs-2); font-weight: 600; letter-spacing: 0.01em; color: var(--accent); margin-bottom: 8px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .muted { color: var(--muted); }
 .faint { color: var(--muted); font-size: var(--fs-2); }
@@ -304,6 +305,12 @@ section.dark .step p { color: var(--muted-dark); }
 .list > li.click { cursor: pointer; transition: background 0.15s var(--ease); }
 .list > li.click:hover { background: var(--bg-alt); }
 .list > li.sel { background: var(--accent-soft); }
+/* A row that opens (Alarms): its header line is the button, so clicking or selecting text in the opened part leaves it open */
+.row-head { flex: 1 1 100%; min-width: 0; display: flex; gap: 12px; align-items: center; margin: 0; padding: 0; border: 0; background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; border-radius: 8px; }
+.row-head .faint { display: block; }
+.list > li:has(> .row-head) { transition: background 0.15s var(--ease); }
+.list > li:has(> .row-head[aria-expanded="false"]:hover) { background: var(--bg-alt); }
+.row-head:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; }
 .chev { color: var(--muted); margin-left: auto; }
 .kv { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 16px; font-size: var(--fs-3); }
 .kv > * { overflow-wrap: anywhere; }
@@ -468,6 +475,7 @@ a.op { color: inherit; }
 .contact .tmp-tag { display: block; font-family: var(--font); font-size: var(--fs-1); letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
 .lg.tmp { border-style: dotted; background: transparent; }
 .chip.tmp { background: var(--bg-alt); color: var(--muted); font-weight: 600; }
+.code .chip { user-select: none; -webkit-user-select: none; }   /* copying the code gives the code, not the live values after each signal */
 /* A rung wider than its card: a soft fade on the right says there is more to scroll to */
 .rung.more-right { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 56px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 56px), transparent); }
 .contact.blocker .nm { color: var(--warn-ink); font-weight: 700; }
@@ -537,7 +545,7 @@ html[lang="de"] .contact.blocker .nm::after { content: "↑ stoppt den Ausgang";
 .sheet-wrap { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; background: var(--scrim); padding: 16px; animation: fade 0.25s var(--ease); }
 .sheet { max-height: calc(100vh - 40px); overflow-y: auto; background: var(--panel); border-radius: 24px; box-shadow: var(--shadow-lift); width: min(520px, 100%); padding: 26px; display: grid; gap: 14px; animation: pop 0.45s var(--spring); }
 .sheet h2 { font-size: var(--fs-5); margin: 0; }
-.countdown { font-size: 48px; font-weight: 700; letter-spacing: -0.03em; color: var(--fault); text-align: center; }
+.countdown { font-size: 3rem; font-weight: 700; letter-spacing: -0.03em; color: var(--fault); text-align: center; }
 @keyframes fade { from { opacity: 0; } }
 @keyframes pop { from { opacity: 0; transform: scale(0.94) translateY(10px); } }
 .toast { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%) translateY(20px); opacity: 0; z-index: 95; transition: 0.35s var(--ease);
@@ -773,7 +781,7 @@ section.guide-sec { padding-block: 28px; }
 /* Work pages people use every day: a compact header, wider text */
 html { scroll-padding-top: calc(var(--navh, 60px) + var(--bannerh, 0px) + 12px); }
 section.hero.compact { padding-block: 28px 24px; }
-section.hero.compact h1 { font-size: clamp(26px, 2.6vw, 34px); max-width: none; margin-bottom: 8px; }
+section.hero.compact h1 { font-size: clamp(1.625rem, 2.6vw, 2.125rem); max-width: none; margin-bottom: 8px; }
 section.hero.compact .sub { font-size: var(--fs-4); max-width: 80ch; margin-bottom: 14px; }
 /* Markdown: code blocks and tables in Claude's answers and REVIEW.md */
 .md-code { font-family: var(--mono); font-size: var(--fs-2); line-height: 1.6; background: var(--bg-alt); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; overflow-x: auto; margin: 6px 0 10px; white-space: pre; }
@@ -1162,7 +1170,7 @@ main .segmented :is(button, a).on { background: var(--panel); }
 
 /* compact page headers: a title, one status line, the main actions on the right */
 main#page section.hero { padding-block: 20px 6px; }
-main#page section.hero h1 { font-size: clamp(22px, 2vw, 28px); line-height: 1.18; letter-spacing: -0.02em; margin: 0 0 4px; max-width: none; }
+main#page section.hero h1 { font-size: clamp(1.375rem, 2vw, 1.75rem); line-height: 1.18; letter-spacing: -0.02em; margin: 0 0 4px; max-width: none; }
 main#page section.hero .sub { font-size: var(--fs-3); margin: 0 0 10px; }
 main#page section.hero .eyebrow { margin-bottom: 6px; }
 main#page section.hero > .wrap > .tabs:first-child { margin-bottom: var(--sp-4); }
@@ -1395,7 +1403,7 @@ main#page { overflow-wrap: break-word; }
 .pkd-single, .pkd-rack { display: block; font-family: var(--font); }
 .pkd-single { max-width: 100%; height: auto; filter: drop-shadow(0 14px 26px rgba(0, 0, 0, 0.22)); }
 .plc-pages { margin-top: 14px; }
-.plc-mode-big { display: flex; align-items: center; gap: 12px; font-size: clamp(34px, 4vw, 48px); font-weight: 700; letter-spacing: -0.02em; line-height: 1.05; }
+.plc-mode-big { display: flex; align-items: center; gap: 12px; font-size: clamp(2.125rem, 4vw, 3rem); font-weight: 700; letter-spacing: -0.02em; line-height: 1.05; }
 .plc-mode-big .dot { width: 18px; height: 18px; border-radius: 50%; background: var(--muted); flex: none; }
 .plc-mode-big.ok { color: var(--ok-ink); } .plc-mode-big.ok .dot { background: var(--dev-lcd-ok); box-shadow: 0 0 0 6px color-mix(in srgb, var(--dev-lcd-ok) 18%, transparent); animation: beat 2s infinite; }
 .plc-mode-big.warn { color: var(--warn-ink); } .plc-mode-big.warn .dot { background: var(--warn); box-shadow: 0 0 0 6px color-mix(in srgb, var(--warn) 18%, transparent); }
@@ -1725,7 +1733,7 @@ section.hero.aa { padding-block: 26px 30px; }
 .aa-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 26px; align-items: start; }
 .aa-main, .aa-side { display: grid; gap: 14px; min-width: 0; }
 .aa-main > * { margin: 0; }
-.aa-main h1 { font-size: clamp(28px, 2.5vw, 40px); max-width: none; }
+.aa-main h1 { font-size: clamp(1.75rem, 2.5vw, 2.5rem); max-width: none; }
 .aa-main .sub { font-size: var(--fs-4); max-width: none; }
 .aa-main .eyebrow { margin-bottom: -6px; }
 .aa-side { position: sticky; top: 72px; }
