@@ -861,11 +861,13 @@
       const faults = m.alarms.filter((a) => a.severity !== "WARNING").length;
       const rows = all.map((a) => {
         const on = active.has(a.id), open = openAlarm === a.id;
-        return `<li class="click" data-open="${esc(a.id)}" id="alarm-${esc(a.id)}" style="flex-wrap:wrap" tabindex="0" aria-expanded="${open}">
+        // The header line is the one control that opens and closes the row; clicks and text selection in the opened part leave it open
+        return `<li id="alarm-${esc(a.id)}" style="flex-wrap:wrap">
+          <button type="button" class="row-head" data-open="${esc(a.id)}" aria-expanded="${open}"${open ? ` aria-controls="alarm-${esc(a.id)}-more"` : ""}>
           <span class="tag ${a.severity === "WARNING" ? "gold" : "red"}">${esc(a.id)}</span>
-          <span style="flex:1;min-width:200px"><b class="semibold">${esc(a.text)}</b>${a.location ? `<div class="faint">${esc(a.location)}</div>` : ""}</span>
-          ${on ? `<span class="pill ${a.severity === "WARNING" ? "warn" : "bad"}"><span class="dot"></span>${PK.t("Active")}</span>` : ""}<span class="chev">${open ? "⌄" : "›"}</span>
-          ${open ? `<div style="flex-basis:100%;padding:10px 0 4px" class="grid two">
+          <span style="flex:1;min-width:200px"><b class="semibold">${esc(a.text)}</b>${a.location ? `<span class="faint">${esc(a.location)}</span>` : ""}</span>
+          ${on ? `<span class="pill ${a.severity === "WARNING" ? "warn" : "bad"}"><span class="dot"></span>${PK.t("Active")}</span>` : ""}<span class="chev" aria-hidden="true">${open ? "⌄" : "›"}</span></button>
+          ${open ? `<div id="alarm-${esc(a.id)}-more" style="flex-basis:100%;padding:10px 0 4px" class="grid two">
               <div>${a.condition ? `<h3>${PK.t("Meaning")}</h3><p class="mt-0 mb-3 muted">${esc(a.condition)}</p>` : ""}
                 ${a.causes.length ? `<h3>${PK.t("Likely causes")}</h3><ol class="causes small">${a.causes.map((c, i) => `<li><b>${i + 1}</b><span>${esc(c)}</span></li>`).join("")}</ol>` : ""}</div>
               <div>${a.fix.length ? `<h3>${PK.t("How to fix")}</h3><ol class="fix small">${a.fix.map((c) => `<li style="font-size:var(--fs-3);cursor:default">${esc(c)}</li>`).join("")}</ol>` : ""}
@@ -898,15 +900,13 @@
       page.querySelectorAll("[data-akind]").forEach((b) => b.onclick = () => { alarmKind = b.dataset.akind; PK.draw(); });
       const ar = page.querySelector("[data-areset]");
       if (ar) ar.onclick = () => { alarmFilter = ""; alarmKind = "all"; PK.draw(); };
-      page.querySelectorAll("[data-open]").forEach((li) => {
-        li.onclick = (e) => {
-          if (e.target.closest("a,button,.mem-in-row")) return;
-          openAlarm = openAlarm === li.dataset.open ? null : li.dataset.open;
+      page.querySelectorAll("[data-open]").forEach((b) => {
+        b.onclick = () => {
+          openAlarm = openAlarm === b.dataset.open ? null : b.dataset.open;
           PK.setHash(openAlarm ? "#/alarms/" + encodeURIComponent(openAlarm) : "#/alarms");
           deepLink = openAlarm;
           PK.draw();
         };
-        li.onkeydown = (e) => { if ((e.key === "Enter" || e.key === " ") && e.target === li) { e.preventDefault(); li.click(); } };
       });
       bindAsk(page);
       if (window.PKMemory) PKMemory.bind(page);

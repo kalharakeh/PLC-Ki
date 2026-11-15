@@ -1716,9 +1716,14 @@ const PK = (() => {
     transient: true,      // the back chip skips it: it only says where to go
     render() {
       const start = /^#\/setup(\/|$)/.test(startPage()) ? "#/alarm" : startPage();
+      const open = (cls) => `<a class="btn${cls}" href="${esc(start)}">${PK.t("Open {page}", { page: esc(startLabel(start)) })}</a>`;
+      // A visitor (viewing without a login) has no login to blame: offer to log in, then come back to this address
+      if (!state.user) return hero({ title: PK.t("Setup is for administrators"),
+        sub: PK.t("Setup needs an administrator login."),
+        actions: `<a class="btn" href="/login.html?next=${encodeURIComponent("/" + location.hash)}">${PK.t("Log in")}</a>${open(" gray")}` });
       return hero({ title: PK.t("Setup is for administrators"),
         sub: PK.t("This login sees the machine pages, not Setup. If something in Setup needs changing, ask an administrator."),
-        actions: `<a class="btn" href="${esc(start)}">${PK.t("Open {page}", { page: esc(startLabel(start)) })}</a>` });
+        actions: open("") });
     },
   });
 
